@@ -50,6 +50,7 @@ const panelHTML = `<!doctype html>
       <button id="load-client-links" type="button">Load client links</button>
       <button id="load-client-subscription" type="button">Load base64 subscription</button>
       <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
+      <button id="copy-client-links" class="secondary" type="button">Copy output</button>
       <pre id="client-links-output">Not loaded</pre>
     </div>
 
@@ -446,6 +447,21 @@ const panelHTML = `<!doctype html>
       }
     }
 
+    async function copyClientLinksOutput() {
+      const output = document.getElementById('client-links-output');
+      const text = output.textContent || '';
+      if (!text || text === 'Not loaded') {
+        output.textContent = 'Nothing to copy yet';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        output.textContent = text + '\n\nCopied to clipboard';
+      } catch (err) {
+        output.textContent = text + '\n\nCopy failed: ' + String(err);
+      }
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -560,6 +576,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
     document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
+    document.getElementById('copy-client-links').addEventListener('click', copyClientLinksOutput);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
