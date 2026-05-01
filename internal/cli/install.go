@@ -15,6 +15,9 @@ func newInstallCommand() *cobra.Command {
 	var domain string
 	var email string
 	var dryRun bool
+	var yes bool
+	var etcDir string
+	var varDir string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -52,8 +55,19 @@ func newInstallCommand() *cobra.Command {
 				return err
 			}
 			printRURecommended(cmd, built, dryRun)
-			if !dryRun {
-				return fmt.Errorf("apply mode is not implemented yet; rerun with --dry-run")
+			if dryRun {
+				return nil
+			}
+			if !yes {
+				return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
+			}
+			result, err := installer.ApplyRURecommendedProfile(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
+			for _, path := range result.WrittenFiles {
+				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
 			}
 			return nil
 		},
@@ -62,6 +76,9 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")
+	cmd.Flags().BoolVar(&yes, "yes", false, "confirm writing generated files")
+	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
+	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	return cmd
 }
 

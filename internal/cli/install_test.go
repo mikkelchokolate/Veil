@@ -43,3 +43,30 @@ func TestInstallRURecommendedRequiresDomain(t *testing.T) {
 		t.Fatalf("expected error without domain")
 	}
 }
+
+func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
+	dir := t.TempDir()
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--etc-dir", dir + "/etc/veil",
+		"--var-dir", dir + "/var/lib/veil",
+		"--yes",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}

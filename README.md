@@ -2,6 +2,78 @@
 
 Veil is an open-source management panel and CLI for NaiveProxy and Hysteria2.
 
-The core feature is running NaiveProxy on TCP and Hysteria2 on UDP using the same numeric port, for example TCP/443 + UDP/443.
+The core feature is running NaiveProxy on TCP and Hysteria2 on UDP using the same numeric port, for example:
 
-Status: early skeleton.
+- TCP/443: NaiveProxy via Caddy forward_proxy
+- UDP/443: Hysteria2
+
+Status: early development skeleton. Do not use on production servers yet.
+
+## Current capabilities
+
+- Go CLI binary named `veil`
+- Transport-aware shared-port planning
+- 443 -> 8443 -> random high port fallback
+- RU recommended profile builder
+- NaiveProxy Caddyfile renderer
+- Hysteria2 server.yaml renderer
+- Generated fallback website
+- Safe atomic writes for generated config files
+- Unit tests and GitHub Actions CI
+
+## Build
+
+```bash
+make test
+make build
+./bin/veil version
+```
+
+## RU recommended dry run
+
+```bash
+./bin/veil install \
+  --profile ru-recommended \
+  --domain example.com \
+  --email admin@example.com \
+  --dry-run
+```
+
+The dry run prints:
+
+- selected shared port
+- NaiveProxy client URL
+- Hysteria2 client URI
+- generated Caddyfile
+- generated Hysteria2 server.yaml
+
+## Local apply test
+
+This writes generated files into custom directories instead of system paths:
+
+```bash
+./bin/veil install \
+  --profile ru-recommended \
+  --domain example.com \
+  --email admin@example.com \
+  --etc-dir /tmp/veil/etc \
+  --var-dir /tmp/veil/var \
+  --yes
+```
+
+Default production paths will be:
+
+- /etc/veil/generated/caddy/Caddyfile
+- /etc/veil/generated/hysteria2/server.yaml
+- /var/lib/veil/www/index.html
+
+## Roadmap
+
+Next milestones:
+
+1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
+2. Add systemd install/apply flow.
+3. Add config validation before restart.
+4. Add backend API and web panel.
+5. Add WARP outbound management.
+6. Add routing rule editor.
