@@ -61,10 +61,11 @@ const panelHTML = `<!doctype html>
     <div class="card">
       <h2>Apply plan</h2>
       <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
+      <p>Service reload also runs fixed health checks and automatically rolls live configs back if reload or health fails.</p>
       <button id="build-apply-plan" type="button">Build apply plan</button>
       <button id="apply-staged-files" type="button">Apply staged files</button>
       <button id="apply-live-configs" type="button">Apply live configs</button>
-      <button id="reload-services" type="button">Reload services</button>
+      <button id="reload-services" type="button">Reload and health check services</button>
       <pre id="apply-plan-output">Not planned</pre>
     </div>
     <div class="card">

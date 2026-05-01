@@ -68,12 +68,16 @@ type ApplyResponse struct {
 	Applied         bool                     `json:"applied"`
 	LiveApplied     bool                     `json:"liveApplied"`
 	ServicesApplied bool                     `json:"servicesApplied"`
+	RolledBack      bool                     `json:"rolledBack,omitempty"`
 	Plan            ApplyPlanResponse        `json:"plan"`
 	WrittenFiles    []string                 `json:"writtenFiles"`
 	LiveFiles       []string                 `json:"liveFiles,omitempty"`
 	BackupFiles     []string                 `json:"backupFiles,omitempty"`
+	RollbackFiles   []string                 `json:"rollbackFiles,omitempty"`
 	Validations     []ConfigValidationResult `json:"validations,omitempty"`
 	ServiceActions  []ServiceActionResult    `json:"serviceActions,omitempty"`
+	HealthChecks    []ServiceHealthResult    `json:"healthChecks,omitempty"`
+	RollbackActions []ServiceActionResult    `json:"rollbackActions,omitempty"`
 }
 
 type ConfigValidationResult struct {
@@ -88,6 +92,7 @@ type ConfigValidationResult struct {
 
 var stagedConfigValidator = runStagedConfigValidators
 var serviceActionRunner = runFixedServiceAction
+var serviceHealthChecker = runFixedServiceHealthCheck
 
 type ServiceActionResult struct {
 	Name    string   `json:"name"`
@@ -95,6 +100,20 @@ type ServiceActionResult struct {
 	Success bool     `json:"success"`
 	Output  string   `json:"output,omitempty"`
 	Error   string   `json:"error,omitempty"`
+}
+
+type ServiceHealthResult struct {
+	Name    string   `json:"name"`
+	Command []string `json:"command"`
+	Healthy bool     `json:"healthy"`
+	Output  string   `json:"output,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+type livePromotionRecord struct {
+	LivePath    string
+	BackupPath  string
+	HadPrevious bool
 }
 
 type managementSnapshot struct {
@@ -318,7 +337,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, response)
 			return
 		}
-		liveFiles, backupFiles, err := s.promoteStagedConfigsLocked(renderedPaths)
+		liveFiles, backupFiles, promotionRecords, err := s.promoteStagedConfigsLocked(renderedPaths)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -330,6 +349,21 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			serviceActions := s.reloadPromotedServicesLocked(liveFiles)
 			response.ServiceActions = serviceActions
 			if err := requireSuccessfulServiceActions(serviceActions); err != nil {
+				rollbackFiles, rollbackActions := s.rollbackPromotedConfigsLocked(promotionRecords, liveFiles)
+				response.RolledBack = len(rollbackFiles) > 0
+				response.RollbackFiles = rollbackFiles
+				response.RollbackActions = rollbackActions
+				w.WriteHeader(http.StatusBadRequest)
+				writeJSON(w, response)
+				return
+			}
+			healthChecks := checkServiceHealth(serviceActions)
+			response.HealthChecks = healthChecks
+			if err := requireHealthyServices(healthChecks); err != nil {
+				rollbackFiles, rollbackActions := s.rollbackPromotedConfigsLocked(promotionRecords, liveFiles)
+				response.RolledBack = len(rollbackFiles) > 0
+				response.RollbackFiles = rollbackFiles
+				response.RollbackActions = rollbackActions
 				w.WriteHeader(http.StatusBadRequest)
 				writeJSON(w, response)
 				return
@@ -469,9 +503,10 @@ func requirePassedValidations(validations []ConfigValidationResult) error {
 	return nil
 }
 
-func (s *managementState) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, error) {
+func (s *managementState) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
 	liveFiles := []string{}
 	backupFiles := []string{}
+	records := []livePromotionRecord{}
 	backupRoot := filepath.Join(s.applyRoot, "backups", time.Now().UTC().Format("20060102T150405.000000000Z"))
 	for _, stagedPath := range stagedPaths {
 		livePath, ok := s.livePathForStagedConfig(stagedPath)
@@ -480,25 +515,30 @@ func (s *managementState) promoteStagedConfigsLocked(stagedPaths []string) ([]st
 		}
 		body, err := os.ReadFile(stagedPath)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
+		record := livePromotionRecord{LivePath: livePath}
 		if existing, err := os.ReadFile(livePath); err == nil {
 			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(livePath), "/"))
 			if err := writeAtomicFile(backupPath, existing, 0o600); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
+			record.HadPrevious = true
+			record.BackupPath = backupPath
 			backupFiles = append(backupFiles, backupPath)
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if err := writeAtomicFile(livePath, body, 0o600); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		liveFiles = append(liveFiles, livePath)
+		records = append(records, record)
 	}
 	sort.Strings(liveFiles)
 	sort.Strings(backupFiles)
-	return liveFiles, backupFiles, nil
+	sort.Slice(records, func(i, j int) bool { return records[i].LivePath < records[j].LivePath })
+	return liveFiles, backupFiles, records, nil
 }
 
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
@@ -540,6 +580,55 @@ func (s *managementState) reloadPromotedServicesLocked(liveFiles []string) []Ser
 		}
 	}
 	return results
+}
+
+func (s *managementState) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+	rollbackFiles := []string{}
+	for _, record := range records {
+		if record.HadPrevious {
+			body, err := os.ReadFile(record.BackupPath)
+			if err != nil {
+				continue
+			}
+			if err := writeAtomicFile(record.LivePath, body, 0o600); err != nil {
+				continue
+			}
+			rollbackFiles = append(rollbackFiles, record.LivePath)
+			continue
+		}
+		if err := os.Remove(record.LivePath); err == nil || errors.Is(err, os.ErrNotExist) {
+			rollbackFiles = append(rollbackFiles, record.LivePath)
+		}
+	}
+	sort.Strings(rollbackFiles)
+	rollbackActions := []ServiceActionResult{}
+	if len(rollbackFiles) > 0 {
+		rollbackActions = s.reloadPromotedServicesLocked(liveFiles)
+	}
+	return rollbackFiles, rollbackActions
+}
+
+func checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
+	checks := []ServiceHealthResult{}
+	for _, action := range actions {
+		if !action.Success || action.Name == "" {
+			continue
+		}
+		checks = append(checks, serviceHealthChecker(action.Name))
+	}
+	return checks
+}
+
+func requireHealthyServices(checks []ServiceHealthResult) error {
+	for _, check := range checks {
+		if !check.Healthy {
+			if check.Error != "" {
+				return errors.New(check.Error)
+			}
+			return fmt.Errorf("%s health check failed", check.Name)
+		}
+	}
+	return nil
 }
 
 func containsPath(paths []string, want string) bool {
@@ -594,11 +683,44 @@ func runFixedServiceAction(command []string) ServiceActionResult {
 	return result
 }
 
+func runFixedServiceHealthCheck(service string) ServiceHealthResult {
+	command := []string{"systemctl", "is-active", "--quiet", service}
+	result := ServiceHealthResult{Name: service, Command: command}
+	if !isAllowedHealthService(service) {
+		result.Error = "service health check is not allowed"
+		return result
+	}
+	binary, err := exec.LookPath(command[0])
+	if err != nil {
+		result.Error = command[0] + " not found"
+		return result
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, command[1:]...)
+	out, err := cmd.CombinedOutput()
+	result.Output = strings.TrimSpace(string(out))
+	if ctx.Err() == context.DeadlineExceeded {
+		result.Error = "service health check timed out"
+		return result
+	}
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Healthy = true
+	return result
+}
+
 func isAllowedServiceCommand(command []string) bool {
 	if len(command) != 3 || command[0] != "systemctl" || command[1] != "reload" {
 		return false
 	}
-	return command[2] == "veil-naive.service" || command[2] == "veil-hysteria2.service"
+	return isAllowedHealthService(command[2])
+}
+
+func isAllowedHealthService(service string) bool {
+	return service == "veil-naive.service" || service == "veil-hysteria2.service"
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {

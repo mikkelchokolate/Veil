@@ -92,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload services") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -1005,9 +1005,11 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	applyRoot := t.TempDir()
 	oldValidator := stagedConfigValidator
 	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
 	}()
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		results := make([]ConfigValidationResult, 0, len(paths))
@@ -1020,6 +1022,9 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	serviceActionRunner = func(command []string) ServiceActionResult {
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
 		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
@@ -1053,9 +1058,11 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	}
 	oldValidator := stagedConfigValidator
 	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
 	}()
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		results := make([]ConfigValidationResult, 0, len(paths))
@@ -1081,8 +1088,109 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.ServicesApplied || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 1 {
-		t.Fatalf("expected one failed service action and no subsequent reloads: response=%+v calls=%+v", response, serviceCalls)
+	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 2 {
+		t.Fatalf("expected failed service action followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
+	}
+}
+
+func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	healthCalls := [][]string{}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		healthCalls = append(healthCalls, []string{"systemctl", "is-active", "--quiet", service})
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.HealthChecks) != 1 || !response.HealthChecks[0].Healthy || len(healthCalls) != 1 {
+		t.Fatalf("expected one successful health check: response=%+v calls=%+v", response.HealthChecks, healthCalls)
+	}
+	if !stringSlicesEqual(healthCalls[0], []string{"systemctl", "is-active", "--quiet", "veil-naive.service"}) {
+		t.Fatalf("unexpected health command: %+v", healthCalls)
+	}
+}
+
+func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
+	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+		t.Fatalf("write existing live caddy: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ServicesApplied || !response.RolledBack || len(response.RollbackFiles) != 1 || len(response.RollbackActions) != 1 {
+		t.Fatalf("expected rollback response after failed health check: %+v", response)
+	}
+	body, err := os.ReadFile(liveCaddy)
+	if err != nil {
+		t.Fatalf("read live caddy: %v", err)
+	}
+	if string(body) != "old caddy\n" {
+		t.Fatalf("expected rollback to restore old live config, got %q", string(body))
+	}
+	expected := [][]string{{"systemctl", "reload", "veil-naive.service"}, {"systemctl", "reload", "veil-naive.service"}}
+	if len(serviceCalls) != len(expected) || !stringSlicesEqual(serviceCalls[0], expected[0]) || !stringSlicesEqual(serviceCalls[1], expected[1]) {
+		t.Fatalf("expected reload before and after rollback: %+v", serviceCalls)
 	}
 }
 
