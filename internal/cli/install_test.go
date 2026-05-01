@@ -25,6 +25,10 @@ func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 		"Hysteria2 client URI:",
 		"Generated Caddyfile",
 		"Generated Hysteria2 server.yaml",
+		"Panel port:",
+		"(random)",
+		"ufw allow ",
+		"/tcp comment Veil panel",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
@@ -58,6 +62,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",
+		"--panel-port", "2096",
 		"--yes",
 	})
 
@@ -65,7 +70,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html", "veil.service", "veil-naive.service", "veil-hysteria2.service"} {
+	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html", "veil.service", "veil-naive.service", "veil-hysteria2.service", "Panel port: 2096 (user selected)"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}

@@ -61,6 +61,7 @@ This writes generated files into custom directories instead of system paths:
   --etc-dir /tmp/veil/etc \
   --var-dir /tmp/veil/var \
   --systemd-dir /tmp/veil/systemd \
+  --panel-port 0 \
   --yes
 ```
 
@@ -72,6 +73,12 @@ Default production paths will be:
 - optional /etc/systemd/system/veil.service
 - optional /etc/systemd/system/veil-naive.service
 - optional /etc/systemd/system/veil-hysteria2.service
+
+Panel port behavior:
+
+- `--panel-port 0` selects a random high port
+- `--panel-port 2096` uses the user-selected port
+- future interactive installer will ask whether to customize it, following the 3x-ui installer pattern
 
 ## Roadmap
 

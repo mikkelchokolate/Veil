@@ -19,6 +19,7 @@ func newInstallCommand() *cobra.Command {
 	var etcDir string
 	var varDir string
 	var systemdDir string
+	var panelPort int
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -45,6 +46,10 @@ func newInstallCommand() *cobra.Command {
 				}
 				return port
 			}
+			panelListenPort, panelRandom, err := installer.SelectPanelPort(panelPort, installer.RandomHighPort)
+			if err != nil {
+				return err
+			}
 			built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 				Domain:       domain,
 				Email:        email,
@@ -56,11 +61,16 @@ func newInstallCommand() *cobra.Command {
 				return err
 			}
 			printRURecommended(cmd, built, dryRun)
+			if panelRandom {
+				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (random)\n", panelListenPort)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
+			}
 			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
 				Platform:        installer.CurrentPlatform(),
 				HysteriaVersion: "v2.6.0",
 				SystemdUnits:    []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"},
-				PanelPort:       2096,
+				PanelPort:       panelListenPort,
 			})
 			if planErr == nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
@@ -92,6 +102,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
+	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	return cmd
 }
 
