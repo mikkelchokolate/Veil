@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +31,7 @@ func newInstallCommand() *cobra.Command {
 	var systemdDir string
 	var panelPort int
 	var publicIP string
+	var interactive bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -36,6 +39,11 @@ func newInstallCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if profile != "ru-recommended" {
 				return fmt.Errorf("profile %q is not implemented yet", profile)
+			}
+			if interactive {
+				if err := promptInstallOptions(cmd, &domain, &email, &panelPort); err != nil {
+					return err
+				}
 			}
 			if domain == "" {
 				return fmt.Errorf("--domain is required for ru-recommended profile")
@@ -139,7 +147,50 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
+	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	return cmd
+}
+
+func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, panelPort *int) error {
+	reader := bufio.NewReader(cmd.InOrStdin())
+	out := cmd.OutOrStdout()
+	if strings.TrimSpace(*domain) == "" {
+		fmt.Fprint(out, "Domain for Veil/ACME: ")
+		value, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		*domain = strings.TrimSpace(value)
+	}
+	if strings.TrimSpace(*email) == "" {
+		fmt.Fprint(out, "ACME email: ")
+		value, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		*email = strings.TrimSpace(value)
+	}
+	if *panelPort == 0 {
+		fmt.Fprint(out, "Customize panel port? If no, Veil will choose a random high port. [y/N]: ")
+		value, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		answer := strings.ToLower(strings.TrimSpace(value))
+		if answer == "y" || answer == "yes" {
+			fmt.Fprint(out, "Panel TCP port: ")
+			value, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			parsed, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil {
+				return fmt.Errorf("invalid panel port: %w", err)
+			}
+			*panelPort = parsed
+		}
+	}
+	return nil
 }
 
 func printDNSCheck(cmd *cobra.Command, check installer.DNSCheck) {

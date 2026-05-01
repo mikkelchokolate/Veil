@@ -78,7 +78,8 @@ Panel port behavior:
 
 - `--panel-port 0` selects a random high port
 - `--panel-port 2096` uses the user-selected port
-- future interactive installer will ask whether to customize it, following the 3x-ui installer pattern
+- `--interactive` asks whether to customize the panel port; no means random
+- future curl installer will call the same interactive flow, following the 3x-ui installer pattern
 
 ## Roadmap
 

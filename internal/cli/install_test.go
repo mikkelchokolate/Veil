@@ -9,6 +9,50 @@ import (
 	"testing"
 )
 
+func TestInstallInteractivePromptsForDomainEmailAndRandomPanelPort(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\nn\n"))
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Domain for Veil/ACME:",
+		"ACME email:",
+		"Customize panel port?",
+		"Domain: example.com",
+		"Email: admin@example.com",
+		"Panel port:",
+		"(random)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\ny\n2096\n"))
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Panel port: 2096 (user selected)") {
+		t.Fatalf("expected custom panel port output:\n%s", got)
+	}
+}
+
 func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
