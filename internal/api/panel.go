@@ -430,7 +430,7 @@ const panelHTML = `<!doctype html>
     }
 
     async function loadClientSubscription() {
-      await loadClientSubscriptionPath('/api/client-links/subscription');
+      await loadClientSubscriptionPath('/api/client-links/subscription?format=base64');
     }
 
     async function loadRawClientSubscription() {
@@ -603,7 +603,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
     document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
-    document.getElementById('download-client-subscription').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription', 'veil-subscription.txt'));
+    document.getElementById('download-client-subscription').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=base64', 'veil-subscription.txt'));
     document.getElementById('download-client-subscription-raw').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=raw', 'veil-subscription-raw.txt'));
     document.getElementById('copy-client-links').addEventListener('click', copyClientLinksOutput);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
