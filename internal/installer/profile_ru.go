@@ -9,9 +9,31 @@ import (
 
 type SecretFunc func(label string) string
 
+type Stack string
+
+const (
+	StackBoth      Stack = "both"
+	StackNaive     Stack = "naive"
+	StackHysteria2 Stack = "hysteria2"
+)
+
+func normalizeStack(stack Stack) (installNaive bool, installHysteria2 bool, err error) {
+	switch stack {
+	case "", StackBoth:
+		return true, true, nil
+	case StackNaive:
+		return true, false, nil
+	case StackHysteria2:
+		return false, true, nil
+	default:
+		return false, false, fmt.Errorf("unsupported stack %q", stack)
+	}
+}
+
 type RURecommendedInput struct {
 	Domain       string
 	Email        string
+	Stack        Stack
 	Availability PortAvailability
 	Secret       SecretFunc
 	RandomPort   func() int
@@ -23,6 +45,8 @@ type RURecommendedProfile struct {
 	Username           string
 	NaivePassword      string
 	Hysteria2Password  string
+	InstallNaive       bool
+	InstallHysteria2   bool
 	PortPlan           SharedPortPlan
 	Caddyfile          string
 	Hysteria2YAML      string
@@ -45,33 +69,49 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 	if input.RandomPort == nil {
 		input.RandomPort = func() int { return 443 }
 	}
-
-	plan := PlanSharedPort(input.Availability, []int{443, 8443}, input.RandomPort)
-	username := "veil"
-	naivePassword := input.Secret("naive")
-	hysteriaPassword := input.Secret("hysteria2")
-	masqueradeURL := "https://www.bing.com/"
-	fallbackRoot := "/var/lib/veil/www"
-
-	caddyfile, err := renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
-		Domain:       input.Domain,
-		Email:        input.Email,
-		ListenPort:   plan.Port,
-		Username:     username,
-		Password:     naivePassword,
-		FallbackRoot: fallbackRoot,
-	})
+	installNaive, installHysteria2, err := normalizeStack(input.Stack)
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
-	hysteriaYAML, err := renderer.RenderHysteria2(renderer.Hysteria2Config{
-		ListenPort:    plan.Port,
-		Domain:        input.Domain,
-		Password:      hysteriaPassword,
-		MasqueradeURL: masqueradeURL,
-	})
-	if err != nil {
-		return RURecommendedProfile{}, err
+
+	plan := PlanStackPort(input.Availability, []int{443, 8443}, input.RandomPort, installNaive, installHysteria2)
+	username := "veil"
+	masqueradeURL := "https://www.bing.com/"
+	fallbackRoot := "/var/lib/veil/www"
+	var naivePassword string
+	var hysteriaPassword string
+	var caddyfile string
+	var hysteriaYAML string
+	var naiveClientURL string
+	var hysteriaClientURI string
+
+	if installNaive {
+		naivePassword = input.Secret("naive")
+		caddyfile, err = renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
+			Domain:       input.Domain,
+			Email:        input.Email,
+			ListenPort:   plan.Port,
+			Username:     username,
+			Password:     naivePassword,
+			FallbackRoot: fallbackRoot,
+		})
+		if err != nil {
+			return RURecommendedProfile{}, err
+		}
+		naiveClientURL = naiveURL(username, naivePassword, input.Domain, plan.Port)
+	}
+	if installHysteria2 {
+		hysteriaPassword = input.Secret("hysteria2")
+		hysteriaYAML, err = renderer.RenderHysteria2(renderer.Hysteria2Config{
+			ListenPort:    plan.Port,
+			Domain:        input.Domain,
+			Password:      hysteriaPassword,
+			MasqueradeURL: masqueradeURL,
+		})
+		if err != nil {
+			return RURecommendedProfile{}, err
+		}
+		hysteriaClientURI = hysteria2URI(hysteriaPassword, input.Domain, plan.Port)
 	}
 
 	return RURecommendedProfile{
@@ -80,11 +120,13 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		Username:           username,
 		NaivePassword:      naivePassword,
 		Hysteria2Password:  hysteriaPassword,
+		InstallNaive:       installNaive,
+		InstallHysteria2:   installHysteria2,
 		PortPlan:           plan,
 		Caddyfile:          caddyfile,
 		Hysteria2YAML:      hysteriaYAML,
-		NaiveClientURL:     naiveURL(username, naivePassword, input.Domain, plan.Port),
-		Hysteria2ClientURI: hysteria2URI(hysteriaPassword, input.Domain, plan.Port),
+		NaiveClientURL:     naiveClientURL,
+		Hysteria2ClientURI: hysteriaClientURI,
 		MasqueradeURL:      masqueradeURL,
 		FallbackRoot:       fallbackRoot,
 	}, nil

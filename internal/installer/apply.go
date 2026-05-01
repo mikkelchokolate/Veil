@@ -33,21 +33,32 @@ func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (
 		Hysteria2Path:     filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(paths.VarDir, "www", "index.html"),
 	}
-	if err := writeManagedFile(result.CaddyfilePath, profile.Caddyfile, 0o600); err != nil {
-		return ApplyResult{}, err
+	if profile.InstallNaive {
+		if err := writeManagedFile(result.CaddyfilePath, profile.Caddyfile, 0o600); err != nil {
+			return ApplyResult{}, err
+		}
+		result.WrittenFiles = append(result.WrittenFiles, result.CaddyfilePath)
+		if err := writeManagedFile(result.FallbackIndexPath, fallbackIndexHTML(profile.Domain), 0o644); err != nil {
+			return ApplyResult{}, err
+		}
+		result.WrittenFiles = append(result.WrittenFiles, result.FallbackIndexPath)
 	}
-	result.WrittenFiles = append(result.WrittenFiles, result.CaddyfilePath)
-	if err := writeManagedFile(result.Hysteria2Path, profile.Hysteria2YAML, 0o600); err != nil {
-		return ApplyResult{}, err
+	if profile.InstallHysteria2 {
+		if err := writeManagedFile(result.Hysteria2Path, profile.Hysteria2YAML, 0o600); err != nil {
+			return ApplyResult{}, err
+		}
+		result.WrittenFiles = append(result.WrittenFiles, result.Hysteria2Path)
 	}
-	result.WrittenFiles = append(result.WrittenFiles, result.Hysteria2Path)
-	if err := writeManagedFile(result.FallbackIndexPath, fallbackIndexHTML(profile.Domain), 0o644); err != nil {
-		return ApplyResult{}, err
-	}
-	result.WrittenFiles = append(result.WrittenFiles, result.FallbackIndexPath)
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
-		for _, name := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"} {
+		unitNames := []string{"veil.service"}
+		if profile.InstallNaive {
+			unitNames = append(unitNames, "veil-naive.service")
+		}
+		if profile.InstallHysteria2 {
+			unitNames = append(unitNames, "veil-hysteria2.service")
+		}
+		for _, name := range unitNames {
 			path := filepath.Join(paths.SystemdDir, name)
 			if err := writeManagedFile(path, units[name], 0o644); err != nil {
 				return ApplyResult{}, err

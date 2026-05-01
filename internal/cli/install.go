@@ -22,6 +22,7 @@ var installPublicIPEndpoints []string
 
 func newInstallCommand() *cobra.Command {
 	var profile string
+	var stack string
 	var domain string
 	var email string
 	var dryRun bool
@@ -87,6 +88,7 @@ func newInstallCommand() *cobra.Command {
 			built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 				Domain:       domain,
 				Email:        email,
+				Stack:        installer.Stack(stack),
 				Availability: availability,
 				Secret:       randomSecret,
 				RandomPort:   randomPort,
@@ -112,7 +114,7 @@ func newInstallCommand() *cobra.Command {
 			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
 				Platform:        installer.CurrentPlatform(),
 				HysteriaVersion: "v2.6.0",
-				SystemdUnits:    []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"},
+				SystemdUnits:    systemdUnitsForProfile(built),
 				PanelPort:       panelListenPort,
 			})
 			if planErr == nil {
@@ -138,6 +140,7 @@ func newInstallCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "default", "install profile: default or ru-recommended")
+	cmd.Flags().StringVar(&stack, "stack", "both", "proxy stack to install: both, naive, or hysteria2")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")
@@ -149,6 +152,17 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	return cmd
+}
+
+func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
+	units := []string{"veil.service"}
+	if profile.InstallNaive {
+		units = append(units, "veil-naive.service")
+	}
+	if profile.InstallHysteria2 {
+		units = append(units, "veil-hysteria2.service")
+	}
+	return units
 }
 
 func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, panelPort *int) error {
@@ -220,20 +234,46 @@ func printRURecommended(cmd *cobra.Command, profile installer.RURecommendedProfi
 	fmt.Fprintf(out, "Veil ru-recommended %s\n", mode)
 	fmt.Fprintf(out, "Domain: %s\n", profile.Domain)
 	fmt.Fprintf(out, "Email: %s\n", profile.Email)
+	fmt.Fprintf(out, "Stack: %s\n", stackName(profile))
 	if profile.PortPlan.Changed {
 		fmt.Fprintf(out, "Port changed: %s\n", profile.PortPlan.Reason)
 	}
-	fmt.Fprintf(out, "NaiveProxy TCP port: %d\n", profile.PortPlan.Naive.Port)
-	fmt.Fprintf(out, "Hysteria2 UDP port: %d\n", profile.PortPlan.Hysteria2.Port)
-	fmt.Fprintf(out, "NaiveProxy client URL: %s\n", profile.NaiveClientURL)
-	fmt.Fprintf(out, "Hysteria2 client URI: %s\n", profile.Hysteria2ClientURI)
+	if profile.InstallNaive {
+		fmt.Fprintf(out, "NaiveProxy TCP port: %d\n", profile.PortPlan.Naive.Port)
+	}
+	if profile.InstallHysteria2 {
+		fmt.Fprintf(out, "Hysteria2 UDP port: %d\n", profile.PortPlan.Hysteria2.Port)
+	}
+	if profile.InstallNaive {
+		fmt.Fprintf(out, "NaiveProxy client URL: %s\n", profile.NaiveClientURL)
+	}
+	if profile.InstallHysteria2 {
+		fmt.Fprintf(out, "Hysteria2 client URI: %s\n", profile.Hysteria2ClientURI)
+	}
 	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Generated Caddyfile")
-	fmt.Fprintln(out, strings.Repeat("-", 24))
-	fmt.Fprintln(out, profile.Caddyfile)
-	fmt.Fprintln(out, "Generated Hysteria2 server.yaml")
-	fmt.Fprintln(out, strings.Repeat("-", 32))
-	fmt.Fprintln(out, profile.Hysteria2YAML)
+	if profile.InstallNaive {
+		fmt.Fprintln(out, "Generated Caddyfile")
+		fmt.Fprintln(out, strings.Repeat("-", 24))
+		fmt.Fprintln(out, profile.Caddyfile)
+	}
+	if profile.InstallHysteria2 {
+		fmt.Fprintln(out, "Generated Hysteria2 server.yaml")
+		fmt.Fprintln(out, strings.Repeat("-", 32))
+		fmt.Fprintln(out, profile.Hysteria2YAML)
+	}
+}
+
+func stackName(profile installer.RURecommendedProfile) string {
+	switch {
+	case profile.InstallNaive && profile.InstallHysteria2:
+		return string(installer.StackBoth)
+	case profile.InstallNaive:
+		return string(installer.StackNaive)
+	case profile.InstallHysteria2:
+		return string(installer.StackHysteria2)
+	default:
+		return "none"
+	}
 }
 
 func randomSecret(label string) string {

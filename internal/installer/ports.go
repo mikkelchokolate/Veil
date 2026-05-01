@@ -35,14 +35,31 @@ func PlanSharedPort(availability PortAvailability, preferred []int, randomPort f
 	return sharedPlan(port, true, true, reason(original, port, true))
 }
 
+func PlanStackPort(availability PortAvailability, preferred []int, randomPort func() int, needTCP, needUDP bool) SharedPortPlan {
+	if needTCP && needUDP {
+		return PlanSharedPort(availability, preferred, randomPort)
+	}
+	if len(preferred) == 0 {
+		preferred = []int{443, 8443}
+	}
+	original := preferred[0]
+	for _, port := range preferred {
+		if (!needTCP || !availability.TCPBusy[port]) && (!needUDP || !availability.UDPBusy[port]) {
+			return sharedPlan(port, port != original, false, reason(original, port, false))
+		}
+	}
+	port := randomPort()
+	return sharedPlan(port, true, true, reason(original, port, true))
+}
+
 func sharedPlan(port int, changed bool, random bool, why string) SharedPortPlan {
 	return SharedPortPlan{
-		Port: port,
-		Naive: EndpointPlan{Port: port, Transport: "tcp"},
+		Port:      port,
+		Naive:     EndpointPlan{Port: port, Transport: "tcp"},
 		Hysteria2: EndpointPlan{Port: port, Transport: "udp"},
-		Changed: changed,
-		Random: random,
-		Reason: why,
+		Changed:   changed,
+		Random:    random,
+		Reason:    why,
 	}
 }
 

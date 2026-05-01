@@ -15,6 +15,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Transport-aware shared-port planning
 - 443 -> 8443 -> random high port fallback
 - RU recommended profile builder
+- Stack selection: `--stack both`, `--stack naive`, or `--stack hysteria2`
 - NaiveProxy Caddyfile renderer
 - Hysteria2 server.yaml renderer
 - Generated fallback website
@@ -38,6 +39,7 @@ make build
   --profile ru-recommended \
   --domain example.com \
   --email admin@example.com \
+  --stack both \
   --dry-run
 ```
 

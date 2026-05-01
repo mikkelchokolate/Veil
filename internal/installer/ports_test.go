@@ -52,3 +52,19 @@ func TestPlanSharedPortUsesRandomWhenPreferredPortsBusy(t *testing.T) {
 		t.Fatalf("expected random changed plan: %+v", plan)
 	}
 }
+
+func TestPlanStackPortIgnoresUnusedTransport(t *testing.T) {
+	naiveOnly := PlanStackPort(PortAvailability{
+		UDPBusy: map[int]bool{443: true},
+	}, []int{443, 8443}, func() int { return 31000 }, true, false)
+	if naiveOnly.Port != 443 {
+		t.Fatalf("expected naive-only port plan to ignore UDP/443, got %d", naiveOnly.Port)
+	}
+
+	hysteriaOnly := PlanStackPort(PortAvailability{
+		TCPBusy: map[int]bool{443: true},
+	}, []int{443, 8443}, func() int { return 31000 }, false, true)
+	if hysteriaOnly.Port != 443 {
+		t.Fatalf("expected hysteria-only port plan to ignore TCP/443, got %d", hysteriaOnly.Port)
+	}
+}

@@ -83,6 +83,42 @@ func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	}
 }
 
+func TestInstallDryRunHonorsStackSelection(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--stack", "hysteria2", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Stack: hysteria2",
+		"Hysteria2 UDP port:",
+		"Hysteria2 client URI:",
+		"Generated Hysteria2 server.yaml",
+		"ufw allow ",
+		"/udp comment Veil Hysteria2",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{
+		"NaiveProxy TCP port:",
+		"NaiveProxy client URL:",
+		"Generated Caddyfile",
+		"Caddy/NaiveProxy build:",
+		"/tcp comment Veil NaiveProxy",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("output should not contain %q:\n%s", unwanted, got)
+		}
+	}
+}
+
 func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 	oldResolver := installDNSResolver
 	installDNSResolver = staticDNSResolver{ips: []net.IP{net.ParseIP("203.0.113.10")}}
