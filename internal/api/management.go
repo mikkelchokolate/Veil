@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,8 +69,9 @@ type RoutingSource struct {
 }
 
 type RoutingSourceFile struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	SHA256URL string `json:"sha256Url,omitempty"`
 }
 
 type WarpConfig struct {
@@ -467,8 +470,8 @@ func routeDatSource() RoutingSource {
 	return RoutingSource{
 		Repository: routingRulesRepository,
 		Files: []RoutingSourceFile{
-			{Name: "geoip.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"},
-			{Name: "geosite.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat"},
+			{Name: "geoip.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat", SHA256URL: "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat.sha256sum"},
+			{Name: "geosite.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat", SHA256URL: "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat.sha256sum"},
 		},
 	}
 }
@@ -560,6 +563,51 @@ func downloadRouteDat(url string) ([]byte, error) {
 		return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
+}
+
+func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
+	body, err := routeDatDownloader(file.URL)
+	if err != nil {
+		return nil, err
+	}
+	if file.SHA256URL == "" {
+		return body, nil
+	}
+	checksumBody, err := routeDatDownloader(file.SHA256URL)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyRouteDatChecksum(file.Name, body, string(checksumBody)); err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func verifyRouteDatChecksum(name string, body []byte, checksumText string) error {
+	fields := strings.Fields(checksumText)
+	if len(fields) == 0 {
+		return fmt.Errorf("checksum for %s is empty", name)
+	}
+	expected := ""
+	for i := 0; i < len(fields); i++ {
+		if fields[i] == name && i > 0 {
+			expected = fields[i-1]
+			break
+		}
+	}
+	if expected == "" {
+		expected = fields[0]
+	}
+	expected = strings.TrimPrefix(strings.ToLower(expected), "sha256:")
+	decoded, err := hex.DecodeString(expected)
+	if err != nil || len(decoded) != sha256.Size {
+		return fmt.Errorf("invalid checksum for %s", name)
+	}
+	actual := sha256.Sum256(body)
+	if !strings.EqualFold(hex.EncodeToString(actual[:]), expected) {
+		return fmt.Errorf("checksum mismatch for %s", name)
+	}
+	return nil
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
@@ -961,7 +1009,7 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 		written = append(written, path)
 	}
 	for _, file := range s.routingSource.Files {
-		body, err := routeDatDownloader(file.URL)
+		body, err := fetchVerifiedRouteDatFile(file)
 		if err != nil {
 			return nil, nil, nil, err
 		}

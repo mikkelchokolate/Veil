@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -689,7 +691,7 @@ func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("routing presets expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{"all", "all-except-Russia", "RU-blocked", "runetfreedom/russia-v2ray-rules-dat", "geoip.dat", "geosite.dat"} {
+	for _, want := range []string{"all", "all-except-Russia", "RU-blocked", "runetfreedom/russia-v2ray-rules-dat", "geoip.dat", "geoip.dat.sha256sum", "geosite.dat", "geosite.dat.sha256sum"} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("routing presets response missing %q: %s", want, w.Body.String())
 		}
@@ -726,8 +728,14 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("fake geoip dat"), nil
 		}
+		if strings.HasSuffix(url, "/geoip.dat.sha256sum") {
+			return []byte(testSHA256Line("fake geoip dat", "geoip.dat")), nil
+		}
 		if strings.HasSuffix(url, "/geosite.dat") {
 			return []byte("fake geosite dat"), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
+			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
 		}
 		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
 	}
@@ -789,6 +797,53 @@ func TestManagementAPIRejectsUnknownRoutingPreset(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown routing preset expected 404, got %d: %s", w.Code, w.Body.String())
 	}
+}
+
+func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
+	oldDownloader := routeDatDownloader
+	routeDatDownloader = func(url string) ([]byte, error) {
+		if strings.HasSuffix(url, "/geoip.dat") {
+			return []byte("tampered geoip dat"), nil
+		}
+		if strings.HasSuffix(url, "/geoip.dat.sha256sum") {
+			return []byte(testSHA256Line("expected geoip dat", "geoip.dat")), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat") {
+			return []byte("fake geosite dat"), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
+			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
+		}
+		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
+	}
+	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	warp := httptest.NewRecorder()
+	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
+	if warp.Code != http.StatusOK {
+		t.Fatalf("enable WARP expected 200, got %d: %s", warp.Code, warp.Body.String())
+	}
+	applyPreset := httptest.NewRecorder()
+	r.ServeHTTP(applyPreset, httptest.NewRequest(http.MethodPost, "/api/routing/presets/RU-blocked", nil))
+	if applyPreset.Code != http.StatusOK {
+		t.Fatalf("apply RU-blocked preset expected 200, got %d: %s", applyPreset.Code, applyPreset.Body.String())
+	}
+
+	apply := httptest.NewRecorder()
+	r.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+	if apply.Code != http.StatusInternalServerError || !strings.Contains(apply.Body.String(), "checksum mismatch") {
+		t.Fatalf("apply expected checksum mismatch 500, got %d: %s", apply.Code, apply.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "rules", "geoip.dat")); !os.IsNotExist(err) {
+		t.Fatalf("geoip.dat should not be staged after checksum mismatch, stat err: %v", err)
+	}
+}
+
+func testSHA256Line(body string, name string) string {
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:]) + "  " + name + "\n"
 }
 
 func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
