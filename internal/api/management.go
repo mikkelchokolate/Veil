@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -235,6 +236,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
+	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
@@ -669,6 +671,27 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, response)
+}
+
+func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	response, err := buildClientLinks(s.settings, s.inbounds)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	uris := make([]string, 0, len(response.Links))
+	for _, link := range response.Links {
+		uris = append(uris, link.URI)
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(strings.Join(uris, "\n") + "\n"))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(encoded + "\n"))
 }
 
 func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksResponse, error) {

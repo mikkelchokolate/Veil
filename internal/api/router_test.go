@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -104,6 +105,39 @@ func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
 	}
 }
 
+func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(w.Body.String()))
+	if err != nil {
+		t.Fatalf("decode subscription: %v; body=%q", err, w.Body.String())
+	}
+	lines := strings.Split(strings.TrimSpace(string(decoded)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 subscription links, got %q", string(decoded))
+	}
+	if lines[0] != "https://veil:naive-secret@vpn.example.com:443" {
+		t.Fatalf("unexpected first subscription link: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "hysteria2://hy2-secret@vpn.example.com:443/") || !strings.Contains(lines[1], "sni=vpn.example.com") {
+		t.Fatalf("unexpected second subscription link: %q", lines[1])
+	}
+}
+
 func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	old := serviceStatusReader
 	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
@@ -185,7 +219,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") || !strings.Contains(body, "Client links") || !strings.Contains(body, "/api/client-links") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") || !strings.Contains(body, "Client links") || !strings.Contains(body, "/api/client-links") || !strings.Contains(body, "/api/client-links/subscription") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }

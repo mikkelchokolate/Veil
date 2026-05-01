@@ -48,6 +48,7 @@ const panelHTML = `<!doctype html>
       <h2>Client links</h2>
       <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
       <button id="load-client-links" type="button">Load client links</button>
+      <button id="load-client-subscription" type="button">Load base64 subscription</button>
       <pre id="client-links-output">Not loaded</pre>
     </div>
 
@@ -424,6 +425,18 @@ const panelHTML = `<!doctype html>
       await loadJSON('/api/client-links', 'client-links-output');
     }
 
+    async function loadClientSubscription() {
+      const output = document.getElementById('client-links-output');
+      output.textContent = 'Loading /api/client-links/subscription...';
+      try {
+        const response = await fetch('/api/client-links/subscription', { headers: requestHeaders() });
+        const text = await response.text();
+        output.textContent = response.ok ? text : (text || ('HTTP ' + response.status));
+      } catch (err) {
+        output.textContent = String(err);
+      }
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -536,6 +549,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
+    document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
