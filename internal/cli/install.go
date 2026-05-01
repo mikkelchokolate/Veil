@@ -245,22 +245,32 @@ func printRURecommended(cmd *cobra.Command, profile installer.RURecommendedProfi
 		fmt.Fprintf(out, "Hysteria2 UDP port: %d\n", profile.PortPlan.Hysteria2.Port)
 	}
 	if profile.InstallNaive {
-		fmt.Fprintf(out, "NaiveProxy client URL: %s\n", profile.NaiveClientURL)
+		fmt.Fprintf(out, "NaiveProxy client URL: %s\n", redactProfileSecrets(profile, profile.NaiveClientURL))
 	}
 	if profile.InstallHysteria2 {
-		fmt.Fprintf(out, "Hysteria2 client URI: %s\n", profile.Hysteria2ClientURI)
+		fmt.Fprintf(out, "Hysteria2 client URI: %s\n", redactProfileSecrets(profile, profile.Hysteria2ClientURI))
 	}
 	fmt.Fprintln(out, "")
 	if profile.InstallNaive {
 		fmt.Fprintln(out, "Generated Caddyfile")
 		fmt.Fprintln(out, strings.Repeat("-", 24))
-		fmt.Fprintln(out, profile.Caddyfile)
+		fmt.Fprintln(out, redactProfileSecrets(profile, profile.Caddyfile))
 	}
 	if profile.InstallHysteria2 {
 		fmt.Fprintln(out, "Generated Hysteria2 server.yaml")
 		fmt.Fprintln(out, strings.Repeat("-", 32))
-		fmt.Fprintln(out, profile.Hysteria2YAML)
+		fmt.Fprintln(out, redactProfileSecrets(profile, profile.Hysteria2YAML))
 	}
+}
+
+func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
+	for _, secret := range []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken} {
+		if secret == "" {
+			continue
+		}
+		text = strings.ReplaceAll(text, secret, "[REDACTED]")
+	}
+	return text
 }
 
 func stackName(profile installer.RURecommendedProfile) string {

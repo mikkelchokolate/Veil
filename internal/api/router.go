@@ -125,13 +125,23 @@ func NewRouter(info ServerInfo) http.Handler {
 			Email:              profile.Email,
 			Stack:              string(profile.Stack),
 			Port:               profile.PortPlan.Port,
-			NaiveClientURL:     profile.NaiveClientURL,
-			Hysteria2ClientURI: profile.Hysteria2ClientURI,
-			Caddyfile:          profile.Caddyfile,
-			Hysteria2YAML:      profile.Hysteria2YAML,
+			NaiveClientURL:     redactProfileSecrets(profile, profile.NaiveClientURL),
+			Hysteria2ClientURI: redactProfileSecrets(profile, profile.Hysteria2ClientURI),
+			Caddyfile:          redactProfileSecrets(profile, profile.Caddyfile),
+			Hysteria2YAML:      redactProfileSecrets(profile, profile.Hysteria2YAML),
 		})
 	})
 	return authMiddleware(info.AuthToken, mux)
+}
+
+func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
+	for _, secret := range []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken} {
+		if secret == "" {
+			continue
+		}
+		text = strings.ReplaceAll(text, secret, "[REDACTED]")
+	}
+	return text
 }
 
 func authMiddleware(token string, next http.Handler) http.Handler {

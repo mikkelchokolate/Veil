@@ -116,6 +116,13 @@ func TestRURecommendedPreviewEndpoint(t *testing.T) {
 	if response["caddyfile"] == "" || response["hysteria2YAML"] == "" {
 		t.Fatalf("expected rendered configs: %+v", response)
 	}
+	encoded, _ := json.Marshal(response)
+	if strings.Contains(string(encoded), "preview-naive") || strings.Contains(string(encoded), "preview-hysteria2") || strings.Contains(string(encoded), "preview-panel") {
+		t.Fatalf("preview response leaked generated secrets: %s", string(encoded))
+	}
+	if !strings.Contains(string(encoded), "[REDACTED]") {
+		t.Fatalf("preview response should include redaction markers: %s", string(encoded))
+	}
 }
 
 func TestRURecommendedPreviewEndpointHonorsStack(t *testing.T) {

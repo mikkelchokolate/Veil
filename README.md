@@ -49,10 +49,10 @@ make build
 The dry run prints:
 
 - selected shared port
-- NaiveProxy client URL
-- Hysteria2 client URI
-- generated Caddyfile
-- generated Hysteria2 server.yaml
+- NaiveProxy client URL with generated password redacted
+- Hysteria2 client URI with generated password redacted
+- generated Caddyfile with generated password redacted
+- generated Hysteria2 server.yaml with generated password redacted
 
 ## Local apply test
 
