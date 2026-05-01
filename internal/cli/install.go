@@ -1,14 +1,22 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/installer"
 )
+
+var installDNSResolver installer.DNSResolver = installer.NetResolver{}
+var installPublicIPClient *http.Client
+var installPublicIPEndpoints []string
 
 func newInstallCommand() *cobra.Command {
 	var profile string
@@ -20,6 +28,7 @@ func newInstallCommand() *cobra.Command {
 	var varDir string
 	var systemdDir string
 	var panelPort int
+	var publicIP string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -33,6 +42,23 @@ func newInstallCommand() *cobra.Command {
 			}
 			if email == "" {
 				return fmt.Errorf("--email is required for ru-recommended profile")
+			}
+			var parsedPublicIP net.IP
+			if publicIP != "" {
+				if publicIP == "auto" {
+					ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+					defer cancel()
+					var detectErr error
+					parsedPublicIP, detectErr = installer.DetectPublicIP(ctx, installPublicIPClient, installPublicIPEndpoints)
+					if detectErr != nil {
+						return detectErr
+					}
+				} else {
+					parsedPublicIP = net.ParseIP(publicIP)
+					if parsedPublicIP == nil {
+						return fmt.Errorf("--public-ip must be a valid IPv4 or IPv6 address, or auto")
+					}
+				}
 			}
 
 			availability, err := installer.DetectPortAvailability([]int{443, 8443})
@@ -61,6 +87,15 @@ func newInstallCommand() *cobra.Command {
 				return err
 			}
 			printRURecommended(cmd, built, dryRun)
+			if parsedPublicIP != nil {
+				ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+				defer cancel()
+				dnsCheck, err := installer.CheckDomainDNS(ctx, installDNSResolver, domain, parsedPublicIP)
+				if err != nil {
+					return err
+				}
+				printDNSCheck(cmd, dnsCheck)
+			}
 			if panelRandom {
 				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (random)\n", panelListenPort)
 			} else {
@@ -103,7 +138,26 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
+	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	return cmd
+}
+
+func printDNSCheck(cmd *cobra.Command, check installer.DNSCheck) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintln(out, "DNS check")
+	fmt.Fprintln(out, strings.Repeat("-", 9))
+	fmt.Fprintf(out, "Domain: %s\n", check.Domain)
+	if check.PublicIP != "" {
+		fmt.Fprintf(out, "Public IP: %s\n", check.PublicIP)
+	}
+	if len(check.ResolvedIPs) > 0 {
+		fmt.Fprintf(out, "Resolved IPs: %s\n", strings.Join(check.ResolvedIPs, ", "))
+	} else {
+		fmt.Fprintln(out, "Resolved IPs: none")
+	}
+	for _, warning := range check.Warnings {
+		fmt.Fprintf(out, "Warning: %s\n", warning)
+	}
 }
 
 func printRURecommended(cmd *cobra.Command, profile installer.RURecommendedProfile, dryRun bool) {
