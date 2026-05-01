@@ -699,9 +699,11 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	case "", "base64":
 		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="veil-subscription.txt"`)
 		_, _ = w.Write([]byte(encoded + "\n"))
 	case "raw":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="veil-subscription-raw.txt"`)
 		_, _ = w.Write([]byte(payload))
 	default:
 		http.Error(w, "format must be base64 or raw", http.StatusBadRequest)

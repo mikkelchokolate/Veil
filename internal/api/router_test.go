@@ -128,6 +128,9 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for secret-bearing subscription, got %q", cc)
 	}
+	if cd := w.Header().Get("Content-Disposition"); cd != `attachment; filename="veil-subscription.txt"` {
+		t.Fatalf("unexpected content-disposition: %q", cd)
+	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(w.Body.String()))
 	if err != nil {
 		t.Fatalf("decode subscription: %v; body=%q", err, w.Body.String())
@@ -151,6 +154,9 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	if cd := w.Header().Get("Content-Disposition"); cd != `attachment; filename="veil-subscription-raw.txt"` {
+		t.Fatalf("unexpected raw content-disposition: %q", cd)
 	}
 	if _, err := base64.StdEncoding.DecodeString(strings.TrimSpace(w.Body.String())); err == nil {
 		t.Fatalf("raw subscription should not be base64 encoded: %q", w.Body.String())
