@@ -17,16 +17,16 @@ const (
 	StackHysteria2 Stack = "hysteria2"
 )
 
-func normalizeStack(stack Stack) (installNaive bool, installHysteria2 bool, err error) {
+func normalizeStack(stack Stack) (normalized Stack, installNaive bool, installHysteria2 bool, err error) {
 	switch stack {
 	case "", StackBoth:
-		return true, true, nil
+		return StackBoth, true, true, nil
 	case StackNaive:
-		return true, false, nil
+		return StackNaive, true, false, nil
 	case StackHysteria2:
-		return false, true, nil
+		return StackHysteria2, false, true, nil
 	default:
-		return false, false, fmt.Errorf("unsupported stack %q", stack)
+		return "", false, false, fmt.Errorf("unsupported stack %q", stack)
 	}
 }
 
@@ -45,6 +45,7 @@ type RURecommendedProfile struct {
 	Username           string
 	NaivePassword      string
 	Hysteria2Password  string
+	Stack              Stack
 	InstallNaive       bool
 	InstallHysteria2   bool
 	PortPlan           SharedPortPlan
@@ -69,7 +70,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 	if input.RandomPort == nil {
 		input.RandomPort = func() int { return 443 }
 	}
-	installNaive, installHysteria2, err := normalizeStack(input.Stack)
+	stack, installNaive, installHysteria2, err := normalizeStack(input.Stack)
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
@@ -120,6 +121,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		Username:           username,
 		NaivePassword:      naivePassword,
 		Hysteria2Password:  hysteriaPassword,
+		Stack:              stack,
 		InstallNaive:       installNaive,
 		InstallHysteria2:   installHysteria2,
 		PortPlan:           plan,

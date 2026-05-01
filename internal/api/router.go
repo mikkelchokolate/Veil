@@ -28,11 +28,13 @@ type ServiceStatus struct {
 type RURecommendedPreviewRequest struct {
 	Domain string `json:"domain"`
 	Email  string `json:"email"`
+	Stack  string `json:"stack,omitempty"`
 }
 
 type RURecommendedPreviewResponse struct {
 	Domain             string `json:"domain"`
 	Email              string `json:"email"`
+	Stack              string `json:"stack"`
 	Port               int    `json:"port"`
 	NaiveClientURL     string `json:"naiveClientURL"`
 	Hysteria2ClientURI string `json:"hysteria2ClientURI"`
@@ -77,6 +79,18 @@ func NewRouter(info ServerInfo) http.Handler {
 			},
 		})
 	})
+	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		result, err := speedtestRunner(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, result)
+	})
 	mux.HandleFunc("/api/profiles/ru-recommended/preview", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -90,6 +104,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 			Domain: req.Domain,
 			Email:  req.Email,
+			Stack:  installer.Stack(req.Stack),
 			Availability: installer.PortAvailability{
 				TCPBusy: map[int]bool{},
 				UDPBusy: map[int]bool{},
@@ -104,6 +119,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		writeJSON(w, RURecommendedPreviewResponse{
 			Domain:             profile.Domain,
 			Email:              profile.Email,
+			Stack:              string(profile.Stack),
 			Port:               profile.PortPlan.Port,
 			NaiveClientURL:     profile.NaiveClientURL,
 			Hysteria2ClientURI: profile.Hysteria2ClientURI,

@@ -22,6 +22,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Safe atomic writes for generated config files
 - Optional systemd unit rendering/writing
 - Initial HTTP API and embedded panel shell
+- Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
 - Unit tests and GitHub Actions CI
 
 ## Build
@@ -90,6 +91,6 @@ Next milestones:
 1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
 2. Wire safe systemd plan execution after binary/config validation.
 3. Add config validation before restart.
-4. Add backend API and web panel.
+4. Add authentication and persistence for the web panel.
 5. Add WARP outbound management.
 6. Add routing rule editor.
