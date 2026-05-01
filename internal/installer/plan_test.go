@@ -29,6 +29,8 @@ func TestBuildInstallPlanSummaryIncludesBinariesAndSystemd(t *testing.T) {
 	for _, want := range []string{
 		"Shared port: 443",
 		"Hysteria2 asset: https://github.com/apernet/hysteria/releases/download/app%2Fv2.6.0/hysteria-linux-amd64",
+		"Hysteria2 install path: /usr/local/bin/hysteria",
+		"Hysteria2 sha256: required before binary download",
 		"Caddy/NaiveProxy build: /usr/local/bin/caddy",
 		"systemctl daemon-reload",
 		"systemctl restart veil-hysteria2.service",

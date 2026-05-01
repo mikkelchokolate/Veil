@@ -225,6 +225,29 @@ func TestInstallRURecommendedRequiresDomain(t *testing.T) {
 	}
 }
 
+func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--hysteria-sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"--dry-run",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Hysteria2 sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
+		t.Fatalf("expected supplied checksum in install plan:\n%s", got)
+	}
+}
+
 func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 	dir := t.TempDir()
 	cmd := NewRootCommand("test")

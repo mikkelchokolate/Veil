@@ -1,16 +1,35 @@
 package installer
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
 type BuildHint struct {
 	BinaryPath string
 	Commands   []string
+}
+
+type DownloadRequest struct {
+	URL         string
+	Destination string
+	SHA256      string
+	Mode        os.FileMode
+}
+
+type DownloadResult struct {
+	URL         string
+	Destination string
+	SHA256      string
+	Bytes       int64
 }
 
 func Hysteria2ReleaseAssetURL(version, goos, arch string) (string, error) {
@@ -54,6 +73,63 @@ func VerifySHA256Hex(data []byte, expected string) error {
 		return fmt.Errorf("sha256 mismatch: expected %s, got %s", expected, actual)
 	}
 	return nil
+}
+
+func DownloadVerifiedBinary(ctx context.Context, client *http.Client, req DownloadRequest) (DownloadResult, error) {
+	if strings.TrimSpace(req.URL) == "" {
+		return DownloadResult{}, fmt.Errorf("download url is required")
+	}
+	if strings.TrimSpace(req.Destination) == "" {
+		return DownloadResult{}, fmt.Errorf("download destination is required")
+	}
+	if strings.TrimSpace(req.SHA256) == "" {
+		return DownloadResult{}, fmt.Errorf("sha256 checksum is required")
+	}
+	if req.Mode == 0 {
+		req.Mode = 0o755
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, req.URL, nil)
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return DownloadResult{}, fmt.Errorf("download failed: %s", resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	actual, err := SHA256Hex(body)
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	if err := VerifySHA256Hex(body, req.SHA256); err != nil {
+		return DownloadResult{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(req.Destination), 0o755); err != nil {
+		return DownloadResult{}, err
+	}
+	tmp := req.Destination + ".tmp"
+	if err := os.WriteFile(tmp, body, req.Mode); err != nil {
+		return DownloadResult{}, err
+	}
+	if err := os.Chmod(tmp, req.Mode); err != nil {
+		_ = os.Remove(tmp)
+		return DownloadResult{}, err
+	}
+	if err := os.Rename(tmp, req.Destination); err != nil {
+		_ = os.Remove(tmp)
+		return DownloadResult{}, err
+	}
+	return DownloadResult{URL: req.URL, Destination: req.Destination, SHA256: actual, Bytes: int64(len(body))}, nil
 }
 
 func CaddyNaiveBuildHint(binaryPath string) BuildHint {

@@ -33,6 +33,7 @@ func newInstallCommand() *cobra.Command {
 	var panelPort int
 	var publicIP string
 	var interactive bool
+	var hysteriaSHA256 string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -114,6 +115,7 @@ func newInstallCommand() *cobra.Command {
 			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
 				Platform:        installer.CurrentPlatform(),
 				HysteriaVersion: "v2.6.0",
+				HysteriaSHA256:  hysteriaSHA256,
 				SystemdUnits:    systemdUnitsForProfile(built),
 				PanelPort:       panelListenPort,
 			})
@@ -150,6 +152,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
+	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	return cmd
 }

@@ -20,6 +20,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Hysteria2 server.yaml renderer
 - Generated fallback website
 - Safe atomic writes for generated config files
+- Hysteria2 release asset planning with an explicit sha256 requirement and verified atomic binary downloader
 - Optional systemd unit rendering/writing
 - Initial HTTP API and embedded panel shell
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
@@ -49,13 +50,17 @@ make build
   --dry-run
 ```
 
-The dry run prints:
+The dry-run output includes:
 
 - selected shared port
 - NaiveProxy client URL with generated password redacted
 - Hysteria2 client URI with generated password redacted
 - generated Caddyfile with generated password redacted
 - generated Hysteria2 server.yaml with generated password redacted
+- Hysteria2 release asset URL and install path
+- sha256 status: either the supplied `--hysteria-sha256` value or `required before binary download`
+
+Binary acquisition is intentionally checksum-first. Veil will not download or replace a binary unless a sha256 checksum is supplied for the requested asset. Verified downloads write a temporary file, chmod it, and atomically rename it into place only after the checksum matches.
 
 ## Local apply test
 
@@ -115,7 +120,6 @@ Panel API auth:
 
 Next milestones:
 
-1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
-2. Add install/update/repair workflows around generated configs and services.
-3. Add WARP outbound implementation.
-4. Add richer routing rule editor.
+1. Add install/update/repair workflows around generated configs, services, and verified binary acquisition.
+2. Add WARP outbound implementation.
+3. Add richer routing rule editor.
