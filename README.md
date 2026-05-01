@@ -26,8 +26,10 @@ Status: early development skeleton. Do not use on production servers yet.
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
+- WARP outbound sidecar rendering via sing-box WireGuard config with a local SOCKS inbound for proxy chaining
+- Routing-rule validation for supported outbounds (`direct` and enabled `warp`)
 - Apply-plan API and panel control to validate state before staged config/reload work
-- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, reports fixed-command syntax validation results, can explicitly promote validated configs to live files with backups, can explicitly run allowlisted service reloads with health checks and rollback, and records file-backed apply history
+- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2/sing-box WARP candidate configs from management state, reports fixed-command syntax validation results, can explicitly promote validated configs to live files with backups, can explicitly run allowlisted service reloads with health checks and rollback, and records file-backed apply history
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -90,6 +92,7 @@ Default production paths will be:
 - optional /etc/systemd/system/veil.service
 - optional /etc/systemd/system/veil-naive.service
 - optional /etc/systemd/system/veil-hysteria2.service
+- optional /etc/systemd/system/veil-warp.service for the sing-box WARP sidecar
 
 Panel port behavior:
 
@@ -124,9 +127,11 @@ Panel API auth:
 - `VEIL_APPLY_ROOT=/path/to/root veil serve` is the environment-file friendly apply root form.
 - The default apply root is `/etc/veil`; staged plan/state artifacts are written under `generated/veil/`.
 - When management settings include render inputs (`domain`, `email`, `naiveUsername`, `naivePassword`, `hysteria2Password`, optional `masqueradeURL`/`fallbackRoot`), confirmed staged apply also writes candidate configs under `<apply-root>/generated/caddy/Caddyfile` and `<apply-root>/generated/hysteria2/server.yaml` according to the selected stack.
-- After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>` and `hysteria server --config <candidate> --check`. Missing binaries are reported as skipped validations.
-- `POST /api/apply` remains staged-only by default with `{ "confirm": true }`. Passing `{ "confirm": true, "applyLive": true }` additionally promotes only successfully validated candidate configs into `<apply-root>/live/caddy/Caddyfile` and `<apply-root>/live/hysteria2/server.yaml`, backing up any replaced files under `<apply-root>/backups/`. Failed or skipped validation prevents live promotion.
-- Passing `{ "confirm": true, "applyLive": true, "applyServices": true }` additionally runs fixed allowlisted service reloads only after live promotion succeeds: `systemctl reload veil-naive.service` and/or `systemctl reload veil-hysteria2.service` according to the promoted live configs. After reload, Veil runs fixed health checks with `systemctl is-active --quiet <service>`. If reload or health fails, Veil restores promoted live config files from the backup set and reloads the affected services again. Arbitrary commands are not accepted.
+- When `/api/warp` is enabled with WireGuard fields (`privateKey`, `localAddress`, `peerPublicKey`, optional `reserved`, `socksListen`, `socksPort`, `mtu`), confirmed staged apply writes a sing-box WARP sidecar config at `<apply-root>/generated/sing-box/warp.json`. API responses redact `privateKey` and `licenseKey` as `[REDACTED]`.
+- Enabled routing rules support `direct` and `warp` outbounds. A rule using `warp` is rejected by `/api/apply/plan` unless WARP is enabled and renderable.
+- After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>`, `hysteria server --config <candidate> --check`, and `sing-box check -c <candidate>`. Missing binaries are reported as skipped validations.
+- `POST /api/apply` remains staged-only by default with `{ "confirm": true }`. Passing `{ "confirm": true, "applyLive": true }` additionally promotes only successfully validated candidate configs into `<apply-root>/live/caddy/Caddyfile`, `<apply-root>/live/hysteria2/server.yaml`, and `<apply-root>/live/sing-box/warp.json`, backing up any replaced files under `<apply-root>/backups/`. Failed or skipped validation prevents live promotion.
+- Passing `{ "confirm": true, "applyLive": true, "applyServices": true }` additionally runs fixed allowlisted service reloads only after live promotion succeeds: `systemctl reload veil-naive.service`, `systemctl reload veil-hysteria2.service`, and/or `systemctl reload veil-warp.service` according to the promoted live configs. After reload, Veil runs fixed health checks with `systemctl is-active --quiet <service>`. If reload or health fails, Veil restores promoted live config files from the backup set and reloads the affected services again. Arbitrary commands are not accepted.
 - Successful staged/live/service applies and failed validation/rollback outcomes are appended newest-first to `<apply-root>/generated/veil/apply-history.json`; `GET /api/apply/history` returns that audit history for the panel without exposing proxy secrets.
 - `GET/PUT /api/settings` redact proxy passwords in API responses as `[REDACTED]`; persisted state and staged/live config files keep the real values with restrictive file permissions so rendering can work.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
@@ -137,5 +142,5 @@ Panel API auth:
 
 Next milestones:
 
-1. Add WARP outbound implementation.
-2. Add richer routing rule editor.
+1. Add richer routing rule editor.
+2. Add release/curl installer workflow.

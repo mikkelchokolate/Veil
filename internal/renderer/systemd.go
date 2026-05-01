@@ -6,6 +6,7 @@ type SystemdConfig struct {
 	VeilBinary     string
 	CaddyBinary    string
 	HysteriaBinary string
+	SingBoxBinary  string
 	EtcDir         string
 }
 
@@ -19,11 +20,15 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.HysteriaBinary == "" {
 		cfg.HysteriaBinary = "/usr/local/bin/hysteria"
 	}
+	if cfg.SingBoxBinary == "" {
+		cfg.SingBoxBinary = "/usr/local/bin/sing-box"
+	}
 	if cfg.EtcDir == "" {
 		cfg.EtcDir = "/etc/veil"
 	}
 	caddyfile := filepath.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
 	hysteriaConfig := filepath.Join(cfg.EtcDir, "generated", "hysteria2", "server.yaml")
+	warpConfig := filepath.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
 	return map[string]string{
 		"veil.service": `[Unit]
 Description=Veil panel
@@ -63,6 +68,21 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+`,
+		"veil-warp.service": `[Unit]
+Description=Veil managed WARP/sing-box outbound
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
+ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
 Restart=on-failure
 RestartSec=3
 

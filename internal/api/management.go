@@ -46,9 +46,16 @@ type RoutingRule struct {
 }
 
 type WarpConfig struct {
-	Enabled    bool   `json:"enabled"`
-	LicenseKey string `json:"licenseKey,omitempty"`
-	Endpoint   string `json:"endpoint"`
+	Enabled       bool   `json:"enabled"`
+	LicenseKey    string `json:"licenseKey,omitempty"`
+	Endpoint      string `json:"endpoint"`
+	PrivateKey    string `json:"privateKey,omitempty"`
+	LocalAddress  string `json:"localAddress,omitempty"`
+	PeerPublicKey string `json:"peerPublicKey,omitempty"`
+	Reserved      []int  `json:"reserved,omitempty"`
+	SocksListen   string `json:"socksListen,omitempty"`
+	SocksPort     int    `json:"socksPort,omitempty"`
+	MTU           int    `json:"mtu,omitempty"`
 }
 
 type ApplyPlanResponse struct {
@@ -219,6 +226,32 @@ func redactedSettings(settings Settings) Settings {
 	return redacted
 }
 
+func redactedWarp(warp WarpConfig) WarpConfig {
+	redacted := warp
+	if redacted.PrivateKey != "" {
+		redacted.PrivateKey = "[REDACTED]"
+	}
+	if redacted.LicenseKey != "" {
+		redacted.LicenseKey = "[REDACTED]"
+	}
+	return redacted
+}
+
+func setWarpDefaults(warp *WarpConfig) {
+	if warp.Endpoint == "" {
+		warp.Endpoint = "engage.cloudflareclient.com:2408"
+	}
+	if warp.SocksListen == "" {
+		warp.SocksListen = "127.0.0.1"
+	}
+	if warp.SocksPort == 0 {
+		warp.SocksPort = 40000
+	}
+	if warp.MTU == 0 {
+		warp.MTU = 1280
+	}
+}
+
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -284,22 +317,20 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.warp)
+		writeJSON(w, redactedWarp(s.warp))
 	case http.MethodPut:
 		var warp WarpConfig
 		if err := json.NewDecoder(r.Body).Decode(&warp); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if warp.Endpoint == "" {
-			warp.Endpoint = "engage.cloudflareclient.com:2408"
-		}
+		setWarpDefaults(&warp)
 		s.warp = warp
 		if err := s.saveLocked(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, s.warp)
+		writeJSON(w, redactedWarp(s.warp))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -460,6 +491,31 @@ func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
 			if inbound.Protocol != "" {
 				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
 			}
+		}
+	}
+	if s.warp.Enabled {
+		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
+		plan.Actions = appendUnique(plan.Actions, "reload veil-warp.service")
+		if _, err := s.renderWarpConfigLocked(); err != nil {
+			plan.Errors = append(plan.Errors, err.Error())
+		}
+	}
+	for _, rule := range s.rules {
+		if !rule.Enabled {
+			continue
+		}
+		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
+			plan.Errors = append(plan.Errors, "enabled routing rules require name, match, and outbound")
+			continue
+		}
+		switch rule.Outbound {
+		case "direct":
+		case "warp":
+			if !s.warp.Enabled {
+				plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" requires WARP to be enabled")
+			}
+		default:
+			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)
 		}
 	}
 	if len(plan.Configs) > 0 {
@@ -656,7 +712,7 @@ func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bo
 	}
 	rel := strings.TrimPrefix(slashPath, prefix)
 	switch rel {
-	case "caddy/Caddyfile", "hysteria2/server.yaml":
+	case "caddy/Caddyfile", "hysteria2/server.yaml", "sing-box/warp.json":
 		return filepath.Join(s.applyRoot, "live", filepath.FromSlash(rel)), true
 	default:
 		return "", false
@@ -670,6 +726,9 @@ func (s *managementState) reloadPromotedServicesLocked(liveFiles []string) []Ser
 	}
 	if containsPath(liveFiles, filepath.Join(s.applyRoot, "live", "hysteria2", "server.yaml")) {
 		commands = append(commands, []string{"systemctl", "reload", "veil-hysteria2.service"})
+	}
+	if containsPath(liveFiles, filepath.Join(s.applyRoot, "live", "sing-box", "warp.json")) {
+		commands = append(commands, []string{"systemctl", "reload", "veil-warp.service"})
 	}
 	results := make([]ServiceActionResult, 0, len(commands))
 	for _, command := range commands {
@@ -826,7 +885,7 @@ func isAllowedServiceCommand(command []string) bool {
 }
 
 func isAllowedHealthService(service string) bool {
-	return service == "veil-naive.service" || service == "veil-hysteria2.service"
+	return service == "veil-naive.service" || service == "veil-hysteria2.service" || service == "veil-warp.service"
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
@@ -852,6 +911,13 @@ func (s *managementState) renderManagementConfigsLocked() (map[string]string, er
 			}
 			configs[filepath.Join(s.applyRoot, "generated", "hysteria2", "server.yaml")] = body
 		}
+	}
+	if s.warp.Enabled {
+		body, err := s.renderWarpConfigLocked()
+		if err != nil {
+			return nil, err
+		}
+		configs[filepath.Join(s.applyRoot, "generated", "sing-box", "warp.json")] = body
 	}
 	return configs, nil
 }
@@ -880,6 +946,21 @@ func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, 
 	})
 }
 
+func (s *managementState) renderWarpConfigLocked() (string, error) {
+	warp := s.warp
+	setWarpDefaults(&warp)
+	return renderer.RenderWarpSingBox(renderer.WarpSingBoxConfig{
+		Endpoint:      warp.Endpoint,
+		PrivateKey:    warp.PrivateKey,
+		LocalAddress:  warp.LocalAddress,
+		PeerPublicKey: warp.PeerPublicKey,
+		Reserved:      append([]int(nil), warp.Reserved...),
+		SocksListen:   warp.SocksListen,
+		SocksPort:     warp.SocksPort,
+		MTU:           warp.MTU,
+	})
+}
+
 func runStagedConfigValidators(paths []string) []ConfigValidationResult {
 	results := []ConfigValidationResult{}
 	for _, path := range paths {
@@ -889,6 +970,8 @@ func runStagedConfigValidators(paths []string) []ConfigValidationResult {
 			results = append(results, runFixedConfigValidation("caddy", path, []string{"caddy", "validate", "--config", path}))
 		case strings.HasSuffix(slashPath, "/generated/hysteria2/server.yaml"):
 			results = append(results, runFixedConfigValidation("hysteria2", path, []string{"hysteria", "server", "--config", path, "--check"}))
+		case strings.HasSuffix(slashPath, "/generated/sing-box/warp.json"):
+			results = append(results, runFixedConfigValidation("warp", path, []string{"sing-box", "check", "-c", path}))
 		}
 	}
 	return results

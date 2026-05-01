@@ -289,7 +289,7 @@ func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 
 func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408"}`)
+	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
 
@@ -302,8 +302,11 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !response.Enabled || response.Endpoint != "engage.cloudflareclient.com:2408" {
+	if !response.Enabled || response.Endpoint != "engage.cloudflareclient.com:2408" || response.SocksPort != 40000 {
 		t.Fatalf("unexpected warp config: %+v", response)
+	}
+	if response.PrivateKey != "[REDACTED]" {
+		t.Fatalf("WARP private key should be redacted in API response: %+v", response)
 	}
 }
 
@@ -557,6 +560,60 @@ func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
 	}
 }
 
+func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"hysteria2","mode":"dev","domain":"vpn.example.com","hysteria2Password":"hy2-secret"},
+		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
+		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:geolocation-!ru","outbound":"warp","enabled":true}],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Valid || !strings.Contains(strings.Join(response.Errors, ";"), "requires WARP to be enabled") {
+		t.Fatalf("expected disabled WARP routing validation error: %+v", response)
+	}
+}
+
+func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"hysteria2","mode":"dev","domain":"vpn.example.com","hysteria2Password":"hy2-secret"},
+		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
+		"routingRules":[{"name":"bad-outbound","match":"geosite:example","outbound":"shell","enabled":true}],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Valid || !strings.Contains(strings.Join(response.Errors, ";"), "unsupported routing outbound") {
+		t.Fatalf("expected unsupported outbound validation error: %+v", response)
+	}
+}
+
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
@@ -662,6 +719,64 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	}
 	if !strings.Contains(string(hy2Body), "listen: :443") || !strings.Contains(string(hy2Body), "password: hy2-secret") || !strings.Contains(string(hy2Body), "vpn.example.com") {
 		t.Fatalf("unexpected hysteria2 config: %s", string(hy2Body))
+	}
+}
+
+func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"stack":"hysteria2",
+			"mode":"dev",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"hysteria2Password":"hy2-secret"
+		},
+		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
+		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:geolocation-!ru","outbound":"warp","enabled":true}],
+		"warp":{
+			"enabled":true,
+			"endpoint":"engage.cloudflareclient.com:2408",
+			"privateKey":"warp-private-key",
+			"localAddress":"172.16.0.2/32",
+			"peerPublicKey":"warp-peer-key",
+			"reserved":[1,2,3],
+			"socksListen":"127.0.0.1",
+			"socksPort":40000,
+			"mtu":1280
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	warpPath := filepath.Join(applyRoot, "generated", "sing-box", "warp.json")
+	if !containsString(response.WrittenFiles, warpPath) {
+		t.Fatalf("apply response missing WARP config: %+v", response.WrittenFiles)
+	}
+	warpBody, err := os.ReadFile(warpPath)
+	if err != nil {
+		t.Fatalf("read WARP config: %v", err)
+	}
+	for _, want := range []string{`"type": "wireguard"`, `"tag": "warp"`, `"server": "engage.cloudflareclient.com"`, `"server_port": 2408`, `"private_key": "warp-private-key"`, `"type": "socks"`, `"listen_port": 40000`} {
+		if !strings.Contains(string(warpBody), want) {
+			t.Fatalf("WARP config missing %q: %s", want, string(warpBody))
+		}
+	}
+	if !containsString(response.Plan.Configs, "/etc/veil/generated/sing-box/warp.json") || !containsString(response.Plan.Actions, "reload veil-warp.service") {
+		t.Fatalf("plan missing WARP config/action: %+v", response.Plan)
 	}
 }
 
