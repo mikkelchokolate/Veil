@@ -90,6 +90,7 @@ type WarpConfig struct {
 }
 
 type ClientLinksResponse struct {
+	SchemaVersion              string       `json:"schemaVersion"`
 	Domain                     string       `json:"domain"`
 	Stack                      string       `json:"stack"`
 	SubscriptionURL            string       `json:"subscriptionUrl"`
@@ -728,6 +729,7 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		return ClientLinksResponse{}, errors.New("domain is required to build client links")
 	}
 	response := ClientLinksResponse{
+		SchemaVersion:              "v1",
 		Domain:                     settings.Domain,
 		Stack:                      settings.Stack,
 		SubscriptionURL:            "/api/client-links/subscription",
