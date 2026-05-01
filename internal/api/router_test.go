@@ -78,6 +78,9 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for secret-bearing client links, got %q", cc)
 	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff for secret-bearing client links, got %q", nosniff)
+	}
 	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.Base64SubscriptionURL != "/api/client-links/subscription?format=base64" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" || response.Count != 2 {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
@@ -128,6 +131,9 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for secret-bearing subscription, got %q", cc)
 	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff for secret-bearing subscription, got %q", nosniff)
+	}
 	if cd := w.Header().Get("Content-Disposition"); cd != `attachment; filename="veil-subscription.txt"` {
 		t.Fatalf("unexpected content-disposition: %q", cd)
 	}
@@ -154,6 +160,12 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for secret-bearing raw subscription, got %q", cc)
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff for secret-bearing raw subscription, got %q", nosniff)
 	}
 	if cd := w.Header().Get("Content-Disposition"); cd != `attachment; filename="veil-subscription-raw.txt"` {
 		t.Fatalf("unexpected raw content-disposition: %q", cd)
