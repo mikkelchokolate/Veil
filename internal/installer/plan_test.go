@@ -20,6 +20,7 @@ func TestBuildInstallPlanSummaryIncludesBinariesAndSystemd(t *testing.T) {
 		Platform:        Platform{OS: "linux", Arch: "amd64"},
 		HysteriaVersion: "v2.6.0",
 		SystemdUnits:    []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"},
+		PanelPort:       2096,
 	})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
@@ -31,6 +32,9 @@ func TestBuildInstallPlanSummaryIncludesBinariesAndSystemd(t *testing.T) {
 		"Caddy/NaiveProxy build: /usr/local/bin/caddy",
 		"systemctl daemon-reload",
 		"systemctl restart veil-hysteria2.service",
+		"ufw allow 443/tcp comment Veil NaiveProxy",
+		"ufw allow 443/udp comment Veil Hysteria2",
+		"ufw allow 2096/tcp comment Veil panel",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)

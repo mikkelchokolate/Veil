@@ -60,6 +60,7 @@ func newInstallCommand() *cobra.Command {
 				Platform:        installer.CurrentPlatform(),
 				HysteriaVersion: "v2.6.0",
 				SystemdUnits:    []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"},
+				PanelPort:       2096,
 			})
 			if planErr == nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "Install plan")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/veil-panel/veil/internal/firewall"
 	"github.com/veil-panel/veil/internal/service"
 )
 
@@ -11,14 +12,16 @@ type InstallPlanInput struct {
 	Platform        Platform
 	HysteriaVersion string
 	SystemdUnits    []string
+	PanelPort       int
 }
 
 type InstallPlan struct {
-	Profile        RURecommendedProfile
-	Platform       Platform
-	HysteriaURL    string
-	CaddyBuild     BuildHint
-	SystemdActions []service.SystemdAction
+	Profile         RURecommendedProfile
+	Platform        Platform
+	HysteriaURL     string
+	CaddyBuild      BuildHint
+	SystemdActions  []service.SystemdAction
+	FirewallActions []firewall.Rule
 }
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {
@@ -40,11 +43,12 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		return InstallPlan{}, err
 	}
 	return InstallPlan{
-		Profile:        profile,
-		Platform:       Platform{OS: input.Platform.OS, Arch: arch},
-		HysteriaURL:    hysteriaURL,
-		CaddyBuild:     CaddyNaiveBuildHint("/usr/local/bin/caddy"),
-		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
+		Profile:         profile,
+		Platform:        Platform{OS: input.Platform.OS, Arch: arch},
+		HysteriaURL:     hysteriaURL,
+		CaddyBuild:      CaddyNaiveBuildHint("/usr/local/bin/caddy"),
+		SystemdActions:  service.SystemdApplyPlan(input.SystemdUnits),
+		FirewallActions: firewall.UFWPlan(firewall.Config{SharedPort: profile.PortPlan.Port, PanelPort: input.PanelPort}),
 	}, nil
 }
 
@@ -59,6 +63,9 @@ func (p InstallPlan) Summary() string {
 		fmt.Fprintf(&b, "- %s\n", command)
 	}
 	for _, action := range p.SystemdActions {
+		fmt.Fprintf(&b, "%s %s\n", action.Command, strings.Join(action.Args, " "))
+	}
+	for _, action := range p.FirewallActions {
 		fmt.Fprintf(&b, "%s %s\n", action.Command, strings.Join(action.Args, " "))
 	}
 	return b.String()
