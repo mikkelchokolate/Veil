@@ -181,6 +181,7 @@ func newManagementState(info ServerInfo) *managementState {
 func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/inbounds", s.handleInbounds)
+	mux.HandleFunc("/api/inbounds/", s.handleInboundByName)
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
 	mux.HandleFunc("/api/routing/rules/", s.handleRoutingRuleByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
@@ -204,6 +205,12 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {
 			http.Error(w, "panelListen, stack, and mode are required", http.StatusBadRequest)
 			return
+		}
+		if settings.NaivePassword == "[REDACTED]" {
+			settings.NaivePassword = s.settings.NaivePassword
+		}
+		if settings.Hysteria2Password == "[REDACTED]" {
+			settings.Hysteria2Password = s.settings.Hysteria2Password
 		}
 		s.settings = settings
 		if err := s.saveLocked(); err != nil {
@@ -269,6 +276,10 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
 			return
 		}
+		if s.inboundIndex(inbound.Name) >= 0 {
+			http.Error(w, "inbound name already exists", http.StatusConflict)
+			return
+		}
 		if s.hasInboundTransportPort(inbound.Transport, inbound.Port) {
 			http.Error(w, "inbound transport/port already exists", http.StatusConflict)
 			return
@@ -280,6 +291,53 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 		}
 		w.WriteHeader(http.StatusCreated)
 		writeJSON(w, inbound)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/api/inbounds/")
+	if name == "" || strings.Contains(name, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx := s.inboundIndex(name)
+	if idx < 0 {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var update Inbound
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if update.Protocol == "" || update.Transport == "" || update.Port <= 0 {
+			http.Error(w, "protocol, transport, and positive port are required", http.StatusBadRequest)
+			return
+		}
+		if s.hasInboundTransportPortExcept(update.Transport, update.Port, idx) {
+			http.Error(w, "inbound transport/port already exists", http.StatusConflict)
+			return
+		}
+		update.Name = name
+		s.inbounds[idx] = update
+		if err := s.saveLocked(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, update)
+	case http.MethodDelete:
+		s.inbounds = append(s.inbounds[:idx], s.inbounds[idx+1:]...)
+		if err := s.saveLocked(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -1097,8 +1155,24 @@ func writeAtomicFile(path string, body []byte, mode os.FileMode) error {
 	return os.Rename(tmp, path)
 }
 
+func (s *managementState) inboundIndex(name string) int {
+	for idx, inbound := range s.inbounds {
+		if inbound.Name == name {
+			return idx
+		}
+	}
+	return -1
+}
+
 func (s *managementState) hasInboundTransportPort(transport string, port int) bool {
-	for _, existing := range s.inbounds {
+	return s.hasInboundTransportPortExcept(transport, port, -1)
+}
+
+func (s *managementState) hasInboundTransportPortExcept(transport string, port int, exceptIndex int) bool {
+	for idx, existing := range s.inbounds {
+		if idx == exceptIndex {
+			continue
+		}
 		if existing.Transport == transport && existing.Port == port {
 			return true
 		}

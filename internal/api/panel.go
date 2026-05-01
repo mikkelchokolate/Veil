@@ -43,13 +43,99 @@ const panelHTML = `<!doctype html>
       <div class="card">
         <h2>Settings</h2>
         <p>Panel/global settings endpoint: <code>/api/settings</code></p>
-        <button type="button" data-load="/api/settings" data-output="settings-output">Load settings</button>
+        <p class="hint">Redacted proxy passwords are preserved by the API when saved back as [REDACTED].</p>
+        <form id="settings-form">
+          <div class="form-grid">
+            <div>
+              <label for="settings-panel-listen">Panel listen</label>
+              <input id="settings-panel-listen" autocomplete="off" placeholder="127.0.0.1:2096">
+            </div>
+            <div>
+              <label for="settings-stack">Stack</label>
+              <select id="settings-stack">
+                <option value="both">both</option>
+                <option value="naive">naive</option>
+                <option value="hysteria2">hysteria2</option>
+              </select>
+            </div>
+            <div>
+              <label for="settings-mode">Mode</label>
+              <input id="settings-mode" autocomplete="off" placeholder="server">
+            </div>
+            <div>
+              <label for="settings-domain">Domain</label>
+              <input id="settings-domain" autocomplete="off" placeholder="vpn.example.com">
+            </div>
+            <div>
+              <label for="settings-email">Email</label>
+              <input id="settings-email" type="email" autocomplete="off" placeholder="admin@example.com">
+            </div>
+            <div>
+              <label for="settings-naive-username">Naive username</label>
+              <input id="settings-naive-username" autocomplete="off" placeholder="veil">
+            </div>
+            <div>
+              <label for="settings-naive-password">Naive password</label>
+              <input id="settings-naive-password" type="password" autocomplete="off" placeholder="NaiveProxy password">
+            </div>
+            <div>
+              <label for="settings-hysteria2-password">Hysteria2 password</label>
+              <input id="settings-hysteria2-password" type="password" autocomplete="off" placeholder="Hysteria2 password">
+            </div>
+            <div>
+              <label for="settings-masquerade-url">Masquerade URL</label>
+              <input id="settings-masquerade-url" autocomplete="off" placeholder="https://example.com">
+            </div>
+            <div>
+              <label for="settings-fallback-root">Fallback root</label>
+              <input id="settings-fallback-root" autocomplete="off" placeholder="/var/lib/veil/www">
+            </div>
+          </div>
+          <div class="actions">
+            <button id="save-settings" type="submit">Save settings</button>
+            <button class="secondary" id="load-settings" type="button">Load settings</button>
+          </div>
+        </form>
         <pre id="settings-output">Not loaded</pre>
       </div>
       <div class="card">
         <h2>Inbounds</h2>
-        <p>NaiveProxy and Hysteria2 inbound definitions: <code>/api/inbounds</code></p>
-        <button type="button" data-load="/api/inbounds" data-output="inbounds-output">Load inbounds</button>
+        <p>Create, update, or delete NaiveProxy and Hysteria2 inbound definitions through <code>/api/inbounds</code>.</p>
+        <form id="inbound-form">
+          <div class="form-grid">
+            <div>
+              <label for="inbound-name">Name</label>
+              <input id="inbound-name" autocomplete="off" placeholder="naive">
+            </div>
+            <div>
+              <label for="inbound-protocol">Protocol</label>
+              <select id="inbound-protocol">
+                <option value="naiveproxy">naiveproxy</option>
+                <option value="hysteria2">hysteria2</option>
+              </select>
+            </div>
+            <div>
+              <label for="inbound-transport">Transport</label>
+              <select id="inbound-transport">
+                <option value="tcp">tcp</option>
+                <option value="udp">udp</option>
+              </select>
+            </div>
+            <div>
+              <label for="inbound-port">Port</label>
+              <input id="inbound-port" type="number" min="1" max="65535" placeholder="443">
+            </div>
+            <div>
+              <label for="inbound-enabled">Enabled</label>
+              <input id="inbound-enabled" type="checkbox" checked> enabled
+            </div>
+          </div>
+          <div class="actions">
+            <button id="save-inbound" type="submit">Save inbound</button>
+            <button id="delete-inbound" class="danger" type="button">Delete inbound</button>
+            <button class="secondary" id="load-inbounds" type="button">Load inbounds</button>
+          </div>
+        </form>
         <pre id="inbounds-output">Not loaded</pre>
       </div>
     </div>
@@ -212,6 +298,79 @@ const panelHTML = `<!doctype html>
       return value === '' ? 0 : Number(value);
     }
 
+    async function loadSettingsIntoForm() {
+      const data = await loadJSON('/api/settings', 'settings-output');
+      if (!data) {
+        return;
+      }
+      document.getElementById('settings-panel-listen').value = data.panelListen || '';
+      document.getElementById('settings-stack').value = data.stack || 'both';
+      document.getElementById('settings-mode').value = data.mode || '';
+      document.getElementById('settings-domain').value = data.domain || '';
+      document.getElementById('settings-email').value = data.email || '';
+      document.getElementById('settings-naive-username').value = data.naiveUsername || '';
+      document.getElementById('settings-naive-password').value = data.naivePassword || '';
+      document.getElementById('settings-hysteria2-password').value = data.hysteria2Password || '';
+      document.getElementById('settings-masquerade-url').value = data.masqueradeURL || '';
+      document.getElementById('settings-fallback-root').value = data.fallbackRoot || '';
+    }
+
+    async function saveSettings(event) {
+      event.preventDefault();
+      await loadJSON('/api/settings', 'settings-output', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          panelListen: document.getElementById('settings-panel-listen').value,
+          stack: document.getElementById('settings-stack').value,
+          mode: document.getElementById('settings-mode').value,
+          domain: document.getElementById('settings-domain').value,
+          email: document.getElementById('settings-email').value,
+          naiveUsername: document.getElementById('settings-naive-username').value,
+          naivePassword: document.getElementById('settings-naive-password').value,
+          hysteria2Password: document.getElementById('settings-hysteria2-password').value,
+          masqueradeURL: document.getElementById('settings-masquerade-url').value,
+          fallbackRoot: document.getElementById('settings-fallback-root').value
+        })
+      });
+    }
+
+    async function loadInboundsIntoOutput() {
+      await loadJSON('/api/inbounds', 'inbounds-output');
+    }
+
+    async function saveInbound(event) {
+      event.preventDefault();
+      const name = document.getElementById('inbound-name').value.trim();
+      if (!name) {
+        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        return;
+      }
+      const payload = {
+        name: name,
+        protocol: document.getElementById('inbound-protocol').value,
+        transport: document.getElementById('inbound-transport').value,
+        port: numberOrZero('inbound-port'),
+        enabled: document.getElementById('inbound-enabled').checked
+      };
+      const inbounds = await loadJSON('/api/inbounds', 'inbounds-output');
+      const exists = Array.isArray(inbounds) && inbounds.some((inbound) => inbound.name === name);
+      await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
+        method: exists ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    async function deleteInbound() {
+      const name = document.getElementById('inbound-name').value.trim();
+      if (!name) {
+        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        return;
+      }
+      await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+    }
+
     async function loadWarpIntoForm() {
       const data = await loadJSON('/api/warp', 'warp-output');
       if (!data) {
@@ -283,6 +442,11 @@ const panelHTML = `<!doctype html>
     document.querySelectorAll('[data-load]').forEach((button) => {
       button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
     });
+    document.getElementById('settings-form').addEventListener('submit', saveSettings);
+    document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
+    document.getElementById('inbound-form').addEventListener('submit', saveInbound);
+    document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
+    document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
     document.getElementById('routing-rule-form').addEventListener('submit', saveRoutingRule);
     document.getElementById('delete-routing-rule').addEventListener('click', deleteRoutingRule);
     document.getElementById('warp-form').addEventListener('submit', saveWarpConfig);

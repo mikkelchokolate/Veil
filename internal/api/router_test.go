@@ -260,7 +260,7 @@ func TestRouterServesPanelShellWithTokenControls(t *testing.T) {
 	}
 }
 
-func TestRouterServesPanelShellWithRoutingAndWarpForms(t *testing.T) {
+func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -269,6 +269,17 @@ func TestRouterServesPanelShellWithRoutingAndWarpForms(t *testing.T) {
 
 	body := w.Body.String()
 	for _, want := range []string{
+		"settings-form",
+		"settings-domain",
+		"settings-naive-password",
+		"saveSettings",
+		"loadSettingsIntoForm",
+		"inbound-form",
+		"inbound-name",
+		"inbound-protocol",
+		"inbound-transport",
+		"saveInbound",
+		"deleteInbound",
 		"routing-rule-form",
 		"routing-rule-name",
 		"routing-rule-match",
@@ -283,7 +294,7 @@ func TestRouterServesPanelShellWithRoutingAndWarpForms(t *testing.T) {
 		"saveWarpConfig",
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("panel shell missing routing/WARP form control %q: %s", want, body)
+			t.Fatalf("panel shell missing management form control %q: %s", want, body)
 		}
 	}
 }
@@ -388,6 +399,33 @@ func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
 	}
 }
 
+func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
+	if create.Code != http.StatusOK {
+		t.Fatalf("initial settings update expected 200, got %d: %s", create.Code, create.Body.String())
+	}
+
+	update := httptest.NewRecorder()
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3096","stack":"naive","mode":"server","domain":"vpn2.example.com","email":"ops@example.com","naiveUsername":"veil2","naivePassword":"[REDACTED]","hysteria2Password":"[REDACTED]"}`)))
+	if update.Code != http.StatusOK {
+		t.Fatalf("redacted settings update expected 200, got %d: %s", update.Code, update.Body.String())
+	}
+
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"naivePassword": "naive-secret"`, `"hysteria2Password": "hy2-secret"`, `"panelListen": "127.0.0.1:3096"`, `"domain": "vpn2.example.com"`} {
+		if !strings.Contains(string(stateBody), want) {
+			t.Fatalf("persisted settings state missing %q after redacted update: %s", want, string(stateBody))
+		}
+	}
+}
+
 func TestManagementAPICreatesInbound(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)
@@ -405,6 +443,19 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 	}
 	if response.Name != "hy2-alt" || response.Port != 8443 {
 		t.Fatalf("unexpected inbound: %+v", response)
+	}
+}
+
+func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 duplicate inbound name, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -458,6 +509,59 @@ func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 duplicate transport/port, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create inbound expected 201, got %d: %s", create.Code, create.Body.String())
+	}
+
+	update := httptest.NewRecorder()
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/hy2-alt", strings.NewReader(`{"protocol":"hysteria2","transport":"udp","port":9443,"enabled":false}`)))
+	if update.Code != http.StatusOK {
+		t.Fatalf("update inbound expected 200, got %d: %s", update.Code, update.Body.String())
+	}
+	var updated Inbound
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode updated inbound: %v", err)
+	}
+	if updated.Name != "hy2-alt" || updated.Port != 9443 || updated.Enabled {
+		t.Fatalf("unexpected updated inbound: %+v", updated)
+	}
+
+	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	readAfterUpdate := httptest.NewRecorder()
+	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/inbounds", nil))
+	if !strings.Contains(readAfterUpdate.Body.String(), `"port":9443`) || strings.Contains(readAfterUpdate.Body.String(), `"port":8443`) {
+		t.Fatalf("persisted inbound update missing: %s", readAfterUpdate.Body.String())
+	}
+
+	deleteRecorder := httptest.NewRecorder()
+	restarted.ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodDelete, "/api/inbounds/hy2-alt", nil))
+	if deleteRecorder.Code != http.StatusNoContent {
+		t.Fatalf("delete inbound expected 204, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+
+	readAfterDelete := httptest.NewRecorder()
+	restarted.ServeHTTP(readAfterDelete, httptest.NewRequest(http.MethodGet, "/api/inbounds", nil))
+	if strings.Contains(readAfterDelete.Body.String(), "hy2-alt") {
+		t.Fatalf("deleted inbound still present: %s", readAfterDelete.Body.String())
+	}
+}
+
+func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	update := httptest.NewRecorder()
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/hysteria2", strings.NewReader(`{"protocol":"hysteria2","transport":"tcp","port":443,"enabled":true}`)))
+	if update.Code != http.StatusConflict {
+		t.Fatalf("expected 409 duplicate transport/port on update, got %d: %s", update.Code, update.Body.String())
 	}
 }
 
