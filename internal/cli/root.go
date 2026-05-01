@@ -28,5 +28,6 @@ func NewRootCommand(version string) *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "doctor checks are not implemented yet")
 		},
 	})
+	cmd.AddCommand(newInstallCommand())
 	return cmd
 }
