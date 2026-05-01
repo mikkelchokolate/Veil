@@ -4,11 +4,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 type ApplyPaths struct {
-	EtcDir string
-	VarDir string
+	EtcDir     string
+	VarDir     string
+	SystemdDir string
 }
 
 type ApplyResult struct {
@@ -42,6 +45,16 @@ func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (
 		return ApplyResult{}, err
 	}
 	result.WrittenFiles = append(result.WrittenFiles, result.FallbackIndexPath)
+	if paths.SystemdDir != "" {
+		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
+		for _, name := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"} {
+			path := filepath.Join(paths.SystemdDir, name)
+			if err := writeManagedFile(path, units[name], 0o644); err != nil {
+				return ApplyResult{}, err
+			}
+			result.WrittenFiles = append(result.WrittenFiles, path)
+		}
+	}
 	return result, nil
 }
 

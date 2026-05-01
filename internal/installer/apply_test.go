@@ -21,8 +21,9 @@ func TestApplyRURecommendedProfileWritesGeneratedFiles(t *testing.T) {
 	}
 
 	result, err := ApplyRURecommendedProfile(profile, ApplyPaths{
-		EtcDir: filepath.Join(dir, "etc", "veil"),
-		VarDir: filepath.Join(dir, "var", "lib", "veil"),
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
 	})
 	if err != nil {
 		t.Fatalf("apply profile: %v", err)
@@ -31,8 +32,9 @@ func TestApplyRURecommendedProfileWritesGeneratedFiles(t *testing.T) {
 	assertFileContains(t, result.CaddyfilePath, "forward_proxy")
 	assertFileContains(t, result.Hysteria2Path, "listen: :443")
 	assertFileContains(t, result.FallbackIndexPath, "Veil")
-	if len(result.WrittenFiles) != 3 {
-		t.Fatalf("expected 3 written files, got %+v", result.WrittenFiles)
+	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
+	if len(result.WrittenFiles) != 6 {
+		t.Fatalf("expected 6 written files, got %+v", result.WrittenFiles)
 	}
 }
 
