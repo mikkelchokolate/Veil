@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "Apply plan") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -409,6 +410,137 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	if !strings.Contains(routingRead.Body.String(), "ru-sites") {
 		t.Fatalf("persisted routing rules missing ru-sites: %s", routingRead.Body.String())
 	}
+}
+
+func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Valid {
+		t.Fatalf("expected valid plan: %+v", response)
+	}
+	if len(response.Errors) != 0 {
+		t.Fatalf("expected no validation errors: %+v", response.Errors)
+	}
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") {
+		t.Fatalf("expected caddy config in plan: %+v", response.Configs)
+	}
+	if !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+		t.Fatalf("expected hysteria2 config in plan: %+v", response.Configs)
+	}
+	if !containsString(response.Actions, "validate management state") || !containsString(response.Actions, "stage generated configs") || !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2.service") {
+		t.Fatalf("expected staged validation/write/reload actions: %+v", response.Actions)
+	}
+}
+
+func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev"},
+		"inbounds":[{"name":"bad","protocol":"hysteria2","transport":"udp","port":0,"enabled":true}],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Valid {
+		t.Fatalf("expected invalid plan: %+v", response)
+	}
+	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "positive port") {
+		t.Fatalf("expected positive port validation error: %+v", response.Errors)
+	}
+}
+
+func TestManagementApplyPlanHonorsSelectedStack(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev"},
+		"inbounds":[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") {
+		t.Fatalf("expected caddy config in naive stack plan: %+v", response.Configs)
+	}
+	if containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") || containsString(response.Actions, "reload veil-hysteria2.service") {
+		t.Fatalf("did not expect hysteria2 in naive-only stack plan: %+v %+v", response.Configs, response.Actions)
+	}
+}
+
+func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"bad","mode":"dev"},
+		"inbounds":[],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "unsupported stack") {
+		t.Fatalf("expected unsupported stack error: %+v", response.Errors)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRouterStatus(t *testing.T) {

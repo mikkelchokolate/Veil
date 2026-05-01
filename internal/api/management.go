@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,6 +35,13 @@ type WarpConfig struct {
 	Enabled    bool   `json:"enabled"`
 	LicenseKey string `json:"licenseKey,omitempty"`
 	Endpoint   string `json:"endpoint"`
+}
+
+type ApplyPlanResponse struct {
+	Valid   bool     `json:"valid"`
+	Errors  []string `json:"errors,omitempty"`
+	Configs []string `json:"configs"`
+	Actions []string `json:"actions"`
 }
 
 type managementSnapshot struct {
@@ -74,6 +82,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/inbounds", s.handleInbounds)
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
 	mux.HandleFunc("/api/warp", s.handleWarp)
+	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 }
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -187,6 +196,89 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	plan := s.buildApplyPlanLocked()
+	if !plan.Valid {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	writeJSON(w, plan)
+}
+
+func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
+	plan := ApplyPlanResponse{
+		Valid:   true,
+		Configs: []string{},
+		Actions: []string{"validate management state"},
+	}
+	if s.settings.Stack != "both" && s.settings.Stack != "naive" && s.settings.Stack != "hysteria2" {
+		plan.Errors = append(plan.Errors, "unsupported stack: "+s.settings.Stack)
+	}
+	seen := map[string]bool{}
+	for _, inbound := range s.inbounds {
+		if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
+			continue
+		}
+		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" {
+			plan.Errors = append(plan.Errors, "enabled inbounds require name, protocol, and transport")
+		}
+		if inbound.Port <= 0 {
+			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
+		}
+		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
+		if seen[key] {
+			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
+		}
+		seen[key] = true
+		switch inbound.Protocol {
+		case "naiveproxy":
+			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
+			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
+		case "hysteria2":
+			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml")
+			plan.Actions = appendUnique(plan.Actions, "reload veil-hysteria2.service")
+		default:
+			if inbound.Protocol != "" {
+				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
+			}
+		}
+	}
+	if len(plan.Configs) > 0 {
+		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
+	}
+	if len(plan.Errors) > 0 {
+		plan.Valid = false
+	}
+	return plan
+}
+
+func stackIncludesProtocol(stack string, protocol string) bool {
+	switch stack {
+	case "both":
+		return true
+	case "naive":
+		return protocol == "naiveproxy"
+	case "hysteria2":
+		return protocol == "hysteria2"
+	default:
+		return false
+	}
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 func (s *managementState) hasInboundTransportPort(transport string, port int) bool {

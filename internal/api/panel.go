@@ -59,6 +59,12 @@ const panelHTML = `<!doctype html>
       </div>
     </div>
     <div class="card">
+      <h2>Apply plan</h2>
+      <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
+      <button id="build-apply-plan" type="button">Build apply plan</button>
+      <pre id="apply-plan-output">Not planned</pre>
+    </div>
+    <div class="card">
       <h2>Speedtest</h2>
       <p>Run server-side speedtest-cli/Ookla speedtest from the panel.</p>
       <button id="run-speedtest" type="button">Run speedtest</button>
@@ -97,6 +103,10 @@ const panelHTML = `<!doctype html>
 
     document.querySelectorAll('[data-load]').forEach((button) => {
       button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
+    });
+
+    document.getElementById('build-apply-plan').addEventListener('click', async () => {
+      await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
     });
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {

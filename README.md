@@ -25,6 +25,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
+- Apply-plan API and panel control to validate state before staged config/reload work
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
