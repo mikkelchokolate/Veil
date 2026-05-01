@@ -90,9 +90,10 @@ type WarpConfig struct {
 }
 
 type ClientLinksResponse struct {
-	Domain string       `json:"domain"`
-	Stack  string       `json:"stack"`
-	Links  []ClientLink `json:"links"`
+	Domain          string       `json:"domain"`
+	Stack           string       `json:"stack"`
+	SubscriptionURL string       `json:"subscriptionUrl"`
+	Links           []ClientLink `json:"links"`
 }
 
 type ClientLink struct {
@@ -698,7 +699,7 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 	if strings.TrimSpace(settings.Domain) == "" {
 		return ClientLinksResponse{}, errors.New("domain is required to build client links")
 	}
-	response := ClientLinksResponse{Domain: settings.Domain, Stack: settings.Stack}
+	response := ClientLinksResponse{Domain: settings.Domain, Stack: settings.Stack, SubscriptionURL: "/api/client-links/subscription"}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {
 			continue

@@ -75,7 +75,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode client links: %v", err)
 	}
-	if response.Domain != "vpn.example.com" || response.Stack != "both" {
+	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
 	if len(response.Links) != 2 {
