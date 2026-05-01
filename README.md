@@ -67,6 +67,26 @@ The dry-run output includes:
 
 Binary acquisition is intentionally checksum-first. Veil will not download or replace a binary unless a sha256 checksum is supplied for the requested asset. Verified downloads write a temporary file, chmod it, and atomically rename it into place only after the checksum matches.
 
+## Curl installer and releases
+
+After a tagged release is published, install the latest Linux release with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash
+```
+
+The curl installer downloads `veil_linux_amd64.tar.gz` or `veil_linux_arm64.tar.gz` from GitHub Releases, downloads `checksums.txt`, verifies the archive with `sha256sum -c`, installs `veil` into `/usr/local/bin`, then runs `veil install`. It does not default the shared proxy port; omit `--port` to let interactive `veil install` ask for it, or pass it explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- \
+  --profile ru-recommended \
+  --domain example.com \
+  --email admin@example.com \
+  --port 443
+```
+
+Tagged pushes matching `v*` run the release workflow, building Linux amd64/arm64 archives plus `checksums.txt` and publishing them with `gh release create`.
+
 ## Local apply test
 
 This writes generated files into custom directories instead of system paths:
@@ -103,7 +123,7 @@ Panel port behavior:
 - `--panel-port 0` selects a random high port
 - `--panel-port 2096` uses the user-selected port
 - `--interactive` asks whether to customize the panel port; no means random
-- future curl installer will call the same interactive flow, following the 3x-ui installer pattern
+- the curl installer downloads a verified release binary and then calls the same interactive `veil install` flow unless `--yes` is provided
 
 ## Repair dry run
 
@@ -144,5 +164,5 @@ Panel API auth:
 
 Next milestones:
 
-1. Add release/curl installer workflow.
-2. Add richer browser forms for settings/inbounds and apply-history filtering.
+1. Add richer browser forms for settings/inbounds and apply-history filtering.
+2. Add first tagged prerelease once binaries and installer are ready to exercise end-to-end.
