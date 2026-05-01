@@ -1,0 +1,14 @@
+[Unit]
+Description=Veil managed NaiveProxy/Caddy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/Caddyfile --adapter caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

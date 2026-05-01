@@ -1,0 +1,54 @@
+package renderer
+
+import (
+	"bytes"
+	"errors"
+	"text/template"
+)
+
+type NaiveConfig struct {
+	Domain       string
+	Email        string
+	ListenPort   int
+	Username     string
+	Password     string
+	FallbackRoot string
+}
+
+func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
+	if cfg.Domain == "" {
+		return "", errors.New("domain is required")
+	}
+	if cfg.ListenPort <= 0 {
+		return "", errors.New("listen port is required")
+	}
+	if cfg.Username == "" || cfg.Password == "" {
+		return "", errors.New("naive username and password are required")
+	}
+	if cfg.FallbackRoot == "" {
+		cfg.FallbackRoot = "/var/lib/veil/www"
+	}
+	const tpl = `{
+  order forward_proxy before file_server
+}
+
+:{{ .ListenPort }}, {{ .Domain }} {
+  tls {{ .Email }}
+
+  forward_proxy {
+    basic_auth {{ .Username }} {{ .Password }}
+    hide_ip
+    hide_via
+    probe_resistance
+  }
+
+  root * {{ .FallbackRoot }}
+  file_server
+}
+`
+	var out bytes.Buffer
+	if err := template.Must(template.New("caddy").Parse(tpl)).Execute(&out, cfg); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}

@@ -1,0 +1,9 @@
+# Veil
+/bin/
+/dist/
+/coverage.out
+*.db
+*.log
+.env
+node_modules/
+web/dist/
