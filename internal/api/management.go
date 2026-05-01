@@ -681,6 +681,11 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	format := r.URL.Query().Get("format")
+	if format != "" && format != "base64" && format != "raw" {
+		http.Error(w, "format must be base64 or raw", http.StatusBadRequest)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, err := buildClientLinks(s.settings, s.inbounds)
@@ -693,7 +698,6 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		uris = append(uris, link.URI)
 	}
 	payload := strings.Join(uris, "\n") + "\n"
-	format := r.URL.Query().Get("format")
 	w.Header().Set("Cache-Control", "no-store")
 	switch format {
 	case "", "base64":

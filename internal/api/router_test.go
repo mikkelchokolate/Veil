@@ -175,6 +175,21 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
+	assertInvalidSubscriptionFormat(t, w)
+}
+
+func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidation(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	assertInvalidSubscriptionFormat(t, w)
+}
+
+func assertInvalidSubscriptionFormat(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid subscription format, got %d: %s", w.Code, w.Body.String())
 	}
