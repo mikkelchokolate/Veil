@@ -50,6 +50,8 @@ const panelHTML = `<!doctype html>
       <button id="load-client-links" type="button">Load client links</button>
       <button id="load-client-subscription" type="button">Load base64 subscription</button>
       <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
+      <a id="download-client-subscription" href="/api/client-links/subscription">Download base64 subscription</a>
+      <a id="download-client-subscription-raw" href="/api/client-links/subscription?format=raw">Download raw subscription</a>
       <button id="copy-client-links" class="secondary" type="button">Copy output</button>
       <pre id="client-links-output">Not loaded</pre>
     </div>
