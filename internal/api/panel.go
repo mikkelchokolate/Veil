@@ -49,6 +49,7 @@ const panelHTML = `<!doctype html>
       <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
       <button id="load-client-links" type="button">Load client links</button>
       <button id="load-client-subscription" type="button">Load base64 subscription</button>
+      <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
       <pre id="client-links-output">Not loaded</pre>
     </div>
 
@@ -426,10 +427,18 @@ const panelHTML = `<!doctype html>
     }
 
     async function loadClientSubscription() {
+      await loadClientSubscriptionPath('/api/client-links/subscription');
+    }
+
+    async function loadRawClientSubscription() {
+      await loadClientSubscriptionPath('/api/client-links/subscription?format=raw');
+    }
+
+    async function loadClientSubscriptionPath(path) {
       const output = document.getElementById('client-links-output');
-      output.textContent = 'Loading /api/client-links/subscription...';
+      output.textContent = 'Loading ' + path + '...';
       try {
-        const response = await fetch('/api/client-links/subscription', { headers: requestHeaders() });
+        const response = await fetch(path, { headers: requestHeaders() });
         const text = await response.text();
         output.textContent = response.ok ? text : (text || ('HTTP ' + response.status));
       } catch (err) {
@@ -550,6 +559,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
+    document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);

@@ -690,7 +690,13 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	for _, link := range response.Links {
 		uris = append(uris, link.URI)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte(strings.Join(uris, "\n") + "\n"))
+	payload := strings.Join(uris, "\n") + "\n"
+	if r.URL.Query().Get("format") == "raw" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+		return
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(payload))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(encoded + "\n"))
 }
