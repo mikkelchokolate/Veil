@@ -75,6 +75,9 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode client links: %v", err)
 	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for secret-bearing client links, got %q", cc)
+	}
 	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
@@ -121,6 +124,9 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for secret-bearing subscription, got %q", cc)
 	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(w.Body.String()))
 	if err != nil {

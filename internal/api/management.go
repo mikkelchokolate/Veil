@@ -672,6 +672,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, response)
 }
 
@@ -693,6 +694,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	}
 	payload := strings.Join(uris, "\n") + "\n"
 	format := r.URL.Query().Get("format")
+	w.Header().Set("Cache-Control", "no-store")
 	switch format {
 	case "", "base64":
 		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
