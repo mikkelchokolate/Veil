@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -322,6 +323,91 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 	}
 	if response.Name != "hy2-alt" || response.Port != 8443 {
 		t.Fatalf("unexpected inbound: %+v", response)
+	}
+}
+
+func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	createInbound := httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`))
+	createInboundRecorder := httptest.NewRecorder()
+	r.ServeHTTP(createInboundRecorder, createInbound)
+	if createInboundRecorder.Code != http.StatusCreated {
+		t.Fatalf("create inbound expected 201, got %d: %s", createInboundRecorder.Code, createInboundRecorder.Body.String())
+	}
+
+	updateWarp := httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`))
+	updateWarpRecorder := httptest.NewRecorder()
+	r.ServeHTTP(updateWarpRecorder, updateWarp)
+	if updateWarpRecorder.Code != http.StatusOK {
+		t.Fatalf("update warp expected 200, got %d: %s", updateWarpRecorder.Code, updateWarpRecorder.Body.String())
+	}
+
+	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	inboundsReq := httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
+	inboundsRecorder := httptest.NewRecorder()
+	restarted.ServeHTTP(inboundsRecorder, inboundsReq)
+	if inboundsRecorder.Code != http.StatusOK {
+		t.Fatalf("get inbounds expected 200, got %d: %s", inboundsRecorder.Code, inboundsRecorder.Body.String())
+	}
+	if !strings.Contains(inboundsRecorder.Body.String(), "hy2-alt") {
+		t.Fatalf("persisted inbounds missing hy2-alt: %s", inboundsRecorder.Body.String())
+	}
+
+	warpReq := httptest.NewRequest(http.MethodGet, "/api/warp", nil)
+	warpRecorder := httptest.NewRecorder()
+	restarted.ServeHTTP(warpRecorder, warpReq)
+	if warpRecorder.Code != http.StatusOK {
+		t.Fatalf("get warp expected 200, got %d: %s", warpRecorder.Code, warpRecorder.Body.String())
+	}
+	if !strings.Contains(warpRecorder.Body.String(), `"enabled":true`) {
+		t.Fatalf("persisted warp missing enabled=true: %s", warpRecorder.Body.String())
+	}
+}
+
+func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"name":"duplicate-naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 duplicate transport/port, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	settingsReq := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3000","stack":"naive","mode":"server"}`))
+	settingsRecorder := httptest.NewRecorder()
+	r.ServeHTTP(settingsRecorder, settingsReq)
+	if settingsRecorder.Code != http.StatusOK {
+		t.Fatalf("update settings expected 200, got %d: %s", settingsRecorder.Code, settingsRecorder.Body.String())
+	}
+
+	routingReq := httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`))
+	routingRecorder := httptest.NewRecorder()
+	r.ServeHTTP(routingRecorder, routingReq)
+	if routingRecorder.Code != http.StatusCreated {
+		t.Fatalf("create routing rule expected 201, got %d: %s", routingRecorder.Code, routingRecorder.Body.String())
+	}
+
+	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	settingsRead := httptest.NewRecorder()
+	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if !strings.Contains(settingsRead.Body.String(), `"stack":"naive"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
+		t.Fatalf("persisted settings missing updates: %s", settingsRead.Body.String())
+	}
+
+	routingRead := httptest.NewRecorder()
+	restarted.ServeHTTP(routingRead, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
+	if !strings.Contains(routingRead.Body.String(), "ru-sites") {
+		t.Fatalf("persisted routing rules missing ru-sites: %s", routingRead.Body.String())
 	}
 }
 

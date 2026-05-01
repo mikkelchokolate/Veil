@@ -13,6 +13,7 @@ type ServerInfo struct {
 	Version   string
 	Mode      string
 	AuthToken string
+	StatePath string
 }
 
 type StatusResponse struct {

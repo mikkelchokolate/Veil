@@ -24,6 +24,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial HTTP API and embedded panel shell
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
 - Initial API sections for settings, inbounds, routing rules, and WARP
+- File-backed management state persistence for panel settings/inbounds/routing/WARP
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -75,6 +76,7 @@ Default production paths will be:
 - /etc/veil/generated/caddy/Caddyfile
 - /etc/veil/generated/hysteria2/server.yaml
 - /etc/veil/veil.env with `VEIL_API_TOKEN` for the panel service
+- /var/lib/veil/state.json for management API persistence
 - /var/lib/veil/www/index.html
 - optional /etc/systemd/system/veil.service
 - optional /etc/systemd/system/veil-naive.service
@@ -91,6 +93,9 @@ Panel API auth:
 
 - `veil serve --auth-token ...` protects `/api/*` with bearer-token auth.
 - `VEIL_API_TOKEN=... veil serve` is the environment-file friendly form.
+- `veil serve --state /path/to/state.json` controls where settings/inbounds/routing/WARP state is persisted.
+- `VEIL_STATE_PATH=/path/to/state.json veil serve` is the environment-file friendly state path form.
+- The default state path is `/var/lib/veil/state.json`.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
 - `/healthz` remains public for service health checks.
 - The embedded panel can store the token in browser `localStorage` and sends it as `X-Veil-Token`.
@@ -102,6 +107,6 @@ Next milestones:
 1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
 2. Wire safe systemd plan execution after binary/config validation.
 3. Add config validation before restart.
-4. Add persistence for the web panel.
-5. Add WARP outbound management.
-6. Add routing rule editor.
+4. Wire management changes into config rendering and safe service reloads.
+5. Add WARP outbound implementation.
+6. Add richer routing rule editor.
