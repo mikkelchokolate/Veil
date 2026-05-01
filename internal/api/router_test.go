@@ -78,7 +78,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for secret-bearing client links, got %q", cc)
 	}
-	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" {
+	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" || response.Count != 2 {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
 	if len(response.Links) != 2 {
