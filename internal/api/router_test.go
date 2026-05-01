@@ -92,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -1191,6 +1191,150 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	expected := [][]string{{"systemctl", "reload", "veil-naive.service"}, {"systemctl", "reload", "veil-naive.service"}}
 	if len(serviceCalls) != len(expected) || !stringSlicesEqual(serviceCalls[0], expected[0]) || !stringSlicesEqual(serviceCalls[1], expected[1]) {
 		t.Fatalf("expected reload before and after rollback: %+v", serviceCalls)
+	}
+}
+
+func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	historyPath := filepath.Join(applyRoot, "generated", "veil", "apply-history.json")
+	body, err := os.ReadFile(historyPath)
+	if err != nil {
+		t.Fatalf("read history file: %v", err)
+	}
+	if strings.Contains(string(body), "naive-secret") || strings.Contains(string(body), "hy2-secret") {
+		t.Fatalf("history must not leak proxy secrets: %s", string(body))
+	}
+	var history []ApplyHistoryEntry
+	if err := json.Unmarshal(body, &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected one history entry, got %+v", history)
+	}
+	entry := history[0]
+	if entry.ID == "" || entry.Timestamp == "" || !entry.Success || entry.Stage != "services" || !entry.Applied || !entry.LiveApplied || !entry.ServicesApplied || entry.RolledBack {
+		t.Fatalf("unexpected history entry: %+v", entry)
+	}
+	if len(entry.WrittenFiles) == 0 || len(entry.LiveFiles) != 1 || len(entry.ServiceActions) != 1 || len(entry.HealthChecks) != 1 {
+		t.Fatalf("history entry missing apply details: %+v", entry)
+	}
+}
+
+func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouters(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	oldValidator := stagedConfigValidator
+	defer func() { stagedConfigValidator = oldValidator }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+		if w.Code != http.StatusOK {
+			t.Fatalf("apply %d expected 200, got %d: %s", i, w.Code, w.Body.String())
+		}
+	}
+	freshRouter := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+	freshRouter.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var history []ApplyHistoryEntry
+	if err := json.NewDecoder(w.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected two history entries, got %+v", history)
+	}
+	if history[0].ID == history[1].ID || history[0].Timestamp < history[1].Timestamp {
+		t.Fatalf("expected unique newest-first entries: %+v", history)
+	}
+	if history[0].Stage != "staged" || !history[0].Success || history[0].LiveApplied || history[0].ServicesApplied {
+		t.Fatalf("unexpected staged history entry: %+v", history[0])
+	}
+}
+
+func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
+	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+		t.Fatalf("write live caddy: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var history []ApplyHistoryEntry
+	body, err := os.ReadFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if err := json.Unmarshal(body, &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || !history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) != 1 {
+		t.Fatalf("expected rollback history entry: %+v", history)
 	}
 }
 

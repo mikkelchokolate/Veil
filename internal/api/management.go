@@ -80,6 +80,26 @@ type ApplyResponse struct {
 	RollbackActions []ServiceActionResult    `json:"rollbackActions,omitempty"`
 }
 
+type ApplyHistoryEntry struct {
+	ID              string                   `json:"id"`
+	Timestamp       string                   `json:"timestamp"`
+	Stage           string                   `json:"stage"`
+	Success         bool                     `json:"success"`
+	Applied         bool                     `json:"applied"`
+	LiveApplied     bool                     `json:"liveApplied"`
+	ServicesApplied bool                     `json:"servicesApplied"`
+	RolledBack      bool                     `json:"rolledBack,omitempty"`
+	Plan            ApplyPlanResponse        `json:"plan"`
+	WrittenFiles    []string                 `json:"writtenFiles,omitempty"`
+	LiveFiles       []string                 `json:"liveFiles,omitempty"`
+	BackupFiles     []string                 `json:"backupFiles,omitempty"`
+	RollbackFiles   []string                 `json:"rollbackFiles,omitempty"`
+	Validations     []ConfigValidationResult `json:"validations,omitempty"`
+	ServiceActions  []ServiceActionResult    `json:"serviceActions,omitempty"`
+	HealthChecks    []ServiceHealthResult    `json:"healthChecks,omitempty"`
+	RollbackActions []ServiceActionResult    `json:"rollbackActions,omitempty"`
+}
+
 type ConfigValidationResult struct {
 	Name    string   `json:"name"`
 	Config  string   `json:"config"`
@@ -157,6 +177,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
 	mux.HandleFunc("/api/warp", s.handleWarp)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
+	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
 }
 
@@ -298,6 +319,21 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	writeJSON(w, plan)
 }
 
+func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	history, err := s.loadApplyHistoryLocked()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, history)
+}
+
 func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -333,6 +369,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	response := ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations}
 	if req.ApplyLive {
 		if err := requirePassedValidations(validations); err != nil {
+			_ = s.appendApplyHistoryLocked("validation", false, response)
 			w.WriteHeader(http.StatusBadRequest)
 			writeJSON(w, response)
 			return
@@ -353,6 +390,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 				response.RolledBack = len(rollbackFiles) > 0
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
+				_ = s.appendApplyHistoryLocked("rollback", false, response)
 				w.WriteHeader(http.StatusBadRequest)
 				writeJSON(w, response)
 				return
@@ -364,6 +402,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 				response.RolledBack = len(rollbackFiles) > 0
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
+				_ = s.appendApplyHistoryLocked("rollback", false, response)
 				w.WriteHeader(http.StatusBadRequest)
 				writeJSON(w, response)
 				return
@@ -371,6 +410,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			response.ServicesApplied = len(serviceActions) > 0
 		}
 	}
+	_ = s.appendApplyHistoryLocked(applyHistoryStage(response), true, response)
 	writeJSON(w, response)
 }
 
@@ -451,6 +491,72 @@ func appendUnique(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func (s *managementState) applyHistoryPathLocked() string {
+	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
+}
+
+func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) {
+	path := s.applyHistoryPathLocked()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []ApplyHistoryEntry{}, nil
+		}
+		return nil, err
+	}
+	var history []ApplyHistoryEntry
+	if err := json.Unmarshal(body, &history); err != nil {
+		return nil, err
+	}
+	return history, nil
+}
+
+func (s *managementState) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
+	history, err := s.loadApplyHistoryLocked()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	entry := ApplyHistoryEntry{
+		ID:              now.Format("20060102T150405.000000000Z"),
+		Timestamp:       now.Format(time.RFC3339Nano),
+		Stage:           stage,
+		Success:         success,
+		Applied:         response.Applied,
+		LiveApplied:     response.LiveApplied,
+		ServicesApplied: response.ServicesApplied,
+		RolledBack:      response.RolledBack,
+		Plan:            response.Plan,
+		WrittenFiles:    append([]string(nil), response.WrittenFiles...),
+		LiveFiles:       append([]string(nil), response.LiveFiles...),
+		BackupFiles:     append([]string(nil), response.BackupFiles...),
+		RollbackFiles:   append([]string(nil), response.RollbackFiles...),
+		Validations:     append([]ConfigValidationResult(nil), response.Validations...),
+		ServiceActions:  append([]ServiceActionResult(nil), response.ServiceActions...),
+		HealthChecks:    append([]ServiceHealthResult(nil), response.HealthChecks...),
+		RollbackActions: append([]ServiceActionResult(nil), response.RollbackActions...),
+	}
+	history = append([]ApplyHistoryEntry{entry}, history...)
+	body, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeAtomicFile(s.applyHistoryPathLocked(), append(body, '\n'), 0o600)
+}
+
+func applyHistoryStage(response ApplyResponse) string {
+	switch {
+	case response.RolledBack:
+		return "rollback"
+	case response.ServicesApplied:
+		return "services"
+	case response.LiveApplied:
+		return "live"
+	default:
+		return "staged"
+	}
 }
 
 func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {

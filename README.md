@@ -26,7 +26,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
 - Apply-plan API and panel control to validate state before staged config/reload work
-- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, reports fixed-command syntax validation results, can explicitly promote validated configs to live files with backups, and can explicitly run allowlisted service reloads with health checks and rollback
+- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, reports fixed-command syntax validation results, can explicitly promote validated configs to live files with backups, can explicitly run allowlisted service reloads with health checks and rollback, and records file-backed apply history
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -105,6 +105,7 @@ Panel API auth:
 - After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>` and `hysteria server --config <candidate> --check`. Missing binaries are reported as skipped validations.
 - `POST /api/apply` remains staged-only by default with `{ "confirm": true }`. Passing `{ "confirm": true, "applyLive": true }` additionally promotes only successfully validated candidate configs into `<apply-root>/live/caddy/Caddyfile` and `<apply-root>/live/hysteria2/server.yaml`, backing up any replaced files under `<apply-root>/backups/`. Failed or skipped validation prevents live promotion.
 - Passing `{ "confirm": true, "applyLive": true, "applyServices": true }` additionally runs fixed allowlisted service reloads only after live promotion succeeds: `systemctl reload veil-naive.service` and/or `systemctl reload veil-hysteria2.service` according to the promoted live configs. After reload, Veil runs fixed health checks with `systemctl is-active --quiet <service>`. If reload or health fails, Veil restores promoted live config files from the backup set and reloads the affected services again. Arbitrary commands are not accepted.
+- Successful staged/live/service applies and failed validation/rollback outcomes are appended newest-first to `<apply-root>/generated/veil/apply-history.json`; `GET /api/apply/history` returns that audit history for the panel without exposing proxy secrets.
 - `GET/PUT /api/settings` redact proxy passwords in API responses as `[REDACTED]`; persisted state and staged/live config files keep the real values with restrictive file permissions so rendering can work.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
 - `/healthz` remains public for service health checks.
@@ -115,7 +116,6 @@ Panel API auth:
 Next milestones:
 
 1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
-2. Add apply history/audit log for staged/live/reload/rollback operations.
-3. Add install/update/repair workflows around generated configs and services.
-4. Add WARP outbound implementation.
-5. Add richer routing rule editor.
+2. Add install/update/repair workflows around generated configs and services.
+3. Add WARP outbound implementation.
+4. Add richer routing rule editor.

@@ -66,6 +66,7 @@ const panelHTML = `<!doctype html>
       <button id="apply-staged-files" type="button">Apply staged files</button>
       <button id="apply-live-configs" type="button">Apply live configs</button>
       <button id="reload-services" type="button">Reload and health check services</button>
+      <button id="load-apply-history" type="button">Load apply history</button>
       <pre id="apply-plan-output">Not planned</pre>
     </div>
     <div class="card">
@@ -135,6 +136,10 @@ const panelHTML = `<!doctype html>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ confirm: true, applyLive: true, applyServices: true })
       });
+    });
+
+    document.getElementById('load-apply-history').addEventListener('click', async () => {
+      await loadJSON('/api/apply/history', 'apply-plan-output');
     });
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
