@@ -97,6 +97,27 @@ func TestRouterServesPanelShell(t *testing.T) {
 	}
 }
 
+func TestRouterServesPanelShellWithApplyHistoryFilters(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{
+		"apply-history-stage",
+		"apply-history-success",
+		"apply-history-limit",
+		"loadApplyHistory",
+		"/api/apply/history?",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("panel shell missing apply history filter control %q: %s", want, body)
+		}
+	}
+}
+
 func TestRURecommendedPreviewEndpoint(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
@@ -1619,6 +1640,54 @@ func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouter
 	}
 	if history[0].Stage != "staged" || !history[0].Success || history[0].LiveApplied || history[0].ServicesApplied {
 		t.Fatalf("unexpected staged history entry: %+v", history[0])
+	}
+}
+
+func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T) {
+	applyRoot := t.TempDir()
+	history := []ApplyHistoryEntry{
+		{ID: "4", Timestamp: "2026-05-01T00:00:04Z", Stage: "rollback", Success: false},
+		{ID: "3", Timestamp: "2026-05-01T00:00:03Z", Stage: "rollback", Success: false},
+		{ID: "2", Timestamp: "2026-05-01T00:00:02Z", Stage: "live", Success: true},
+		{ID: "1", Timestamp: "2026-05-01T00:00:01Z", Stage: "staged", Success: true},
+	}
+	body, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal history: %v", err)
+	}
+	if err := writeAtomicFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history?stage=rollback&success=false&limit=1", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var filtered []ApplyHistoryEntry
+	if err := json.NewDecoder(w.Body).Decode(&filtered); err != nil {
+		t.Fatalf("decode filtered history: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ID != "4" || filtered[0].Stage != "rollback" || filtered[0].Success {
+		t.Fatalf("unexpected filtered history: %+v", filtered)
+	}
+}
+
+func TestManagementApplyHistoryEndpointRejectsInvalidFilterValues(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+	cases := []string{
+		"/api/apply/history?success=maybe",
+		"/api/apply/history?limit=-1",
+		"/api/apply/history?limit=abc",
+	}
+	for _, path := range cases {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s expected 400, got %d: %s", path, w.Code, w.Body.String())
+		}
 	}
 }
 

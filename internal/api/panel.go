@@ -239,6 +239,31 @@ const panelHTML = `<!doctype html>
       <button id="apply-staged-files" type="button">Apply staged files</button>
       <button id="apply-live-configs" type="button">Apply live configs</button>
       <button id="reload-services" type="button">Reload and health check services</button>
+      <div class="form-grid">
+        <div>
+          <label for="apply-history-stage">History stage</label>
+          <select id="apply-history-stage">
+            <option value="">all</option>
+            <option value="staged">staged</option>
+            <option value="live">live</option>
+            <option value="services">services</option>
+            <option value="validation">validation</option>
+            <option value="rollback">rollback</option>
+          </select>
+        </div>
+        <div>
+          <label for="apply-history-success">History success</label>
+          <select id="apply-history-success">
+            <option value="">all</option>
+            <option value="true">success</option>
+            <option value="false">failed</option>
+          </select>
+        </div>
+        <div>
+          <label for="apply-history-limit">History limit</label>
+          <input id="apply-history-limit" type="number" min="0" placeholder="50">
+        </div>
+      </div>
       <button id="load-apply-history" type="button">Load apply history</button>
       <pre id="apply-plan-output">Not planned</pre>
     </div>
@@ -337,6 +362,28 @@ const panelHTML = `<!doctype html>
 
     async function loadInboundsIntoOutput() {
       await loadJSON('/api/inbounds', 'inbounds-output');
+    }
+
+    function applyHistoryPath() {
+      const params = new URLSearchParams();
+      const stage = document.getElementById('apply-history-stage').value;
+      const success = document.getElementById('apply-history-success').value;
+      const limit = document.getElementById('apply-history-limit').value;
+      if (stage) {
+        params.set('stage', stage);
+      }
+      if (success) {
+        params.set('success', success);
+      }
+      if (limit) {
+        params.set('limit', limit);
+      }
+      const query = params.toString();
+      return '/api/apply/history?' + query;
+    }
+
+    async function loadApplyHistory() {
+      await loadJSON(applyHistoryPath(), 'apply-plan-output');
     }
 
     async function saveInbound(event) {
@@ -480,9 +527,7 @@ const panelHTML = `<!doctype html>
       });
     });
 
-    document.getElementById('load-apply-history').addEventListener('click', async () => {
-      await loadJSON('/api/apply/history', 'apply-plan-output');
-    });
+    document.getElementById('load-apply-history').addEventListener('click', loadApplyHistory);
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });

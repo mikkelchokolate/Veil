@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -483,6 +484,11 @@ func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	history, err = filterApplyHistory(history, r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	writeJSON(w, history)
 }
 
@@ -688,6 +694,49 @@ func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) 
 		return nil, err
 	}
 	return history, nil
+}
+
+func filterApplyHistory(history []ApplyHistoryEntry, values map[string][]string) ([]ApplyHistoryEntry, error) {
+	stage := firstQueryValue(values, "stage")
+	successText := firstQueryValue(values, "success")
+	limitText := firstQueryValue(values, "limit")
+	var successFilter *bool
+	if successText != "" {
+		parsed, err := strconv.ParseBool(successText)
+		if err != nil {
+			return nil, fmt.Errorf("invalid success filter: %s", successText)
+		}
+		successFilter = &parsed
+	}
+	limit := 0
+	if limitText != "" {
+		parsed, err := strconv.Atoi(limitText)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("invalid limit: %s", limitText)
+		}
+		limit = parsed
+	}
+	filtered := make([]ApplyHistoryEntry, 0, len(history))
+	for _, entry := range history {
+		if stage != "" && entry.Stage != stage {
+			continue
+		}
+		if successFilter != nil && entry.Success != *successFilter {
+			continue
+		}
+		filtered = append(filtered, entry)
+		if limit > 0 && len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered, nil
+}
+
+func firstQueryValue(values map[string][]string, key string) string {
+	if values == nil || len(values[key]) == 0 {
+		return ""
+	}
+	return values[key][0]
 }
 
 func (s *managementState) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
