@@ -54,3 +54,39 @@ func TestRenderWarpSingBoxConfigWritesWireGuardOutboundAndLocalSocksInbound(t *t
 		}
 	}
 }
+
+func TestRenderWarpSingBoxConfigIncludesRoutingRules(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "warp-peer-key",
+		SocksPort:     40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "geoip:ru", Outbound: "direct"},
+			{Match: "geosite:ru-blocked", Outbound: "warp"},
+			{Match: "all", Outbound: "warp"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box with routing rules: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		t.Fatalf("rendered config should be valid JSON: %v\n%s", err, body)
+	}
+	for _, want := range []string{
+		`"route":`,
+		`"geoip":`,
+		`"ru"`,
+		`"geosite":`,
+		`"ru-blocked"`,
+		`"outbound": "direct"`,
+		`"outbound": "warp"`,
+		`"final": "warp"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("rendered WARP routing config missing %q:\n%s", want, body)
+		}
+	}
+}

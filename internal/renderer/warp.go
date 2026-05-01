@@ -18,6 +18,12 @@ type WarpSingBoxConfig struct {
 	SocksListen   string
 	SocksPort     int
 	MTU           int
+	RoutingRules  []WarpRoutingRule
+}
+
+type WarpRoutingRule struct {
+	Match    string
+	Outbound string
 }
 
 func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
@@ -85,11 +91,40 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 			},
 		},
 	}
+	if route := renderWarpRoute(cfg.RoutingRules); route != nil {
+		body["route"] = route
+	}
 	encoded, err := json.MarshalIndent(body, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	return string(encoded) + "\n", nil
+}
+
+func renderWarpRoute(rules []WarpRoutingRule) map[string]any {
+	rendered := []map[string]any{}
+	for _, rule := range rules {
+		if rule.Outbound == "" || rule.Match == "" {
+			continue
+		}
+		if rule.Match == "all" {
+			return map[string]any{"rules": rendered, "final": rule.Outbound}
+		}
+		item := map[string]any{"outbound": rule.Outbound}
+		switch {
+		case strings.HasPrefix(rule.Match, "geoip:"):
+			item["geoip"] = strings.TrimPrefix(rule.Match, "geoip:")
+		case strings.HasPrefix(rule.Match, "geosite:"):
+			item["geosite"] = strings.TrimPrefix(rule.Match, "geosite:")
+		default:
+			item["domain"] = rule.Match
+		}
+		rendered = append(rendered, item)
+	}
+	if len(rendered) == 0 {
+		return nil
+	}
+	return map[string]any{"rules": rendered}
 }
 
 func splitCSV(value string) []string {

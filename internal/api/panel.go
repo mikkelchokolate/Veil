@@ -172,6 +172,24 @@ const panelHTML = `<!doctype html>
             <button class="secondary" type="button" data-load="/api/routing/rules" data-output="routing-output">Load routing</button>
           </div>
         </form>
+        <div class="form-grid">
+          <div>
+            <label for="routing-preset-profile">Preset profile</label>
+            <select id="routing-preset-profile">
+              <option value="all">all</option>
+              <option value="all-except-Russia">all-except-Russia</option>
+              <option value="RU-blocked">RU-blocked</option>
+            </select>
+          </div>
+          <div>
+            <label>Rules source</label>
+            <p class="hint">Russian geo/site data is pulled from runetfreedom/russia-v2ray-rules-dat when a Russia-aware preset is applied.</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="apply-routing-preset" class="secondary" type="button">Apply routing preset</button>
+          <button class="secondary" type="button" data-load="/api/routing/presets" data-output="routing-output">Load presets</button>
+        </div>
         <pre id="routing-output">Not loaded</pre>
       </div>
 
@@ -486,6 +504,11 @@ const panelHTML = `<!doctype html>
       await loadJSON('/api/routing/rules/' + encodeURIComponent(name), 'routing-output', { method: 'DELETE' });
     }
 
+    async function applyRoutingPreset() {
+      const profile = document.getElementById('routing-preset-profile').value;
+      await loadJSON('/api/routing/presets/' + encodeURIComponent(profile), 'routing-output', { method: 'POST' });
+    }
+
     document.querySelectorAll('[data-load]').forEach((button) => {
       button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
     });
@@ -496,6 +519,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
     document.getElementById('routing-rule-form').addEventListener('submit', saveRoutingRule);
     document.getElementById('delete-routing-rule').addEventListener('click', deleteRoutingRule);
+    document.getElementById('apply-routing-preset').addEventListener('click', applyRoutingPreset);
     document.getElementById('warp-form').addEventListener('submit', saveWarpConfig);
     document.getElementById('load-warp-config').addEventListener('click', loadWarpIntoForm);
 

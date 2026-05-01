@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -305,6 +306,9 @@ func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
 		"routing-rule-name",
 		"routing-rule-match",
 		"routing-rule-outbound",
+		"routing-preset-profile",
+		"applyRoutingPreset",
+		"/api/routing/presets",
 		"saveRoutingRule",
 		"deleteRoutingRule",
 		"warp-form",
@@ -673,6 +677,117 @@ func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
 	r.ServeHTTP(duplicate, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geoip:ru","outbound":"direct","enabled":true}`)))
 	if duplicate.Code != http.StatusConflict {
 		t.Fatalf("duplicate routing rule expected 409, got %d: %s", duplicate.Code, duplicate.Body.String())
+	}
+}
+
+func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/presets", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("routing presets expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"all", "all-except-Russia", "RU-blocked", "runetfreedom/russia-v2ray-rules-dat", "geoip.dat", "geosite.dat"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("routing presets response missing %q: %s", want, w.Body.String())
+		}
+	}
+}
+
+func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/all-except-Russia", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("apply preset expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"all-except-Russia", "geoip:ru", "geosite:category-ru", `"match":"all"`, `"outbound":"warp"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("preset response missing %q: %s", want, w.Body.String())
+		}
+	}
+
+	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	read := httptest.NewRecorder()
+	restarted.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
+	if !strings.Contains(read.Body.String(), "preset-all-except-russia") || !strings.Contains(read.Body.String(), "geosite:category-ru") {
+		t.Fatalf("persisted preset routing rules missing: %s", read.Body.String())
+	}
+}
+
+func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
+	oldDownloader := routeDatDownloader
+	routeDatDownloader = func(url string) ([]byte, error) {
+		if strings.HasSuffix(url, "/geoip.dat") {
+			return []byte("fake geoip dat"), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat") {
+			return []byte("fake geosite dat"), nil
+		}
+		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
+	}
+	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	warp := httptest.NewRecorder()
+	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
+	if warp.Code != http.StatusOK {
+		t.Fatalf("enable WARP expected 200, got %d: %s", warp.Code, warp.Body.String())
+	}
+	applyPreset := httptest.NewRecorder()
+	r.ServeHTTP(applyPreset, httptest.NewRequest(http.MethodPost, "/api/routing/presets/RU-blocked", nil))
+	if applyPreset.Code != http.StatusOK {
+		t.Fatalf("apply RU-blocked preset expected 200, got %d: %s", applyPreset.Code, applyPreset.Body.String())
+	}
+
+	plan := httptest.NewRecorder()
+	r.ServeHTTP(plan, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+	if plan.Code != http.StatusOK || !strings.Contains(plan.Body.String(), "/etc/veil/generated/rules/geoip.dat") || !strings.Contains(plan.Body.String(), "/etc/veil/generated/rules/geosite.dat") {
+		t.Fatalf("apply plan missing routing dat configs, status %d: %s", plan.Code, plan.Body.String())
+	}
+
+	apply := httptest.NewRecorder()
+	r.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply expected 200, got %d: %s", apply.Code, apply.Body.String())
+	}
+	for path, want := range map[string]string{
+		filepath.Join(applyRoot, "generated", "rules", "geoip.dat"):   "fake geoip dat",
+		filepath.Join(applyRoot, "generated", "rules", "geosite.dat"): "fake geosite dat",
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected staged routing dat file %s: %v", path, err)
+		}
+		if string(body) != want {
+			t.Fatalf("unexpected staged routing dat body for %s: %q", path, string(body))
+		}
+	}
+	warpConfig, err := os.ReadFile(filepath.Join(applyRoot, "generated", "sing-box", "warp.json"))
+	if err != nil {
+		t.Fatalf("expected staged WARP config: %v", err)
+	}
+	for _, want := range []string{`"route":`, `"geoip": "ru-blocked"`, `"geosite": "ru-blocked"`} {
+		if !strings.Contains(string(warpConfig), want) {
+			t.Fatalf("staged WARP config missing routing preset fragment %q:\n%s", want, string(warpConfig))
+		}
+	}
+}
+
+func TestManagementAPIRejectsUnknownRoutingPreset(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/not-real", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown routing preset expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

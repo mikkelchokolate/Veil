@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -44,6 +45,30 @@ type RoutingRule struct {
 	Match    string `json:"match"`
 	Outbound string `json:"outbound"`
 	Enabled  bool   `json:"enabled"`
+}
+
+type RoutingPreset struct {
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Source      RoutingSource `json:"source"`
+	Rules       []RoutingRule `json:"rules"`
+}
+
+type RoutingPresetResponse struct {
+	ActivePreset string          `json:"activePreset,omitempty"`
+	Source       RoutingSource   `json:"source"`
+	Rules        []RoutingRule   `json:"rules"`
+	Presets      []RoutingPreset `json:"presets,omitempty"`
+}
+
+type RoutingSource struct {
+	Repository string              `json:"repository,omitempty"`
+	Files      []RoutingSourceFile `json:"files,omitempty"`
+}
+
+type RoutingSourceFile struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 type WarpConfig struct {
@@ -145,20 +170,24 @@ type livePromotionRecord struct {
 }
 
 type managementSnapshot struct {
-	Settings Settings      `json:"settings"`
-	Inbounds []Inbound     `json:"inbounds"`
-	Rules    []RoutingRule `json:"routingRules"`
-	Warp     WarpConfig    `json:"warp"`
+	Settings      Settings      `json:"settings"`
+	Inbounds      []Inbound     `json:"inbounds"`
+	Rules         []RoutingRule `json:"routingRules"`
+	RoutingPreset string        `json:"routingPreset,omitempty"`
+	RoutingSource RoutingSource `json:"routingSource,omitempty"`
+	Warp          WarpConfig    `json:"warp"`
 }
 
 type managementState struct {
-	mu        sync.Mutex
-	statePath string
-	applyRoot string
-	settings  Settings
-	inbounds  []Inbound
-	rules     []RoutingRule
-	warp      WarpConfig
+	mu            sync.Mutex
+	statePath     string
+	applyRoot     string
+	settings      Settings
+	inbounds      []Inbound
+	rules         []RoutingRule
+	routingPreset string
+	routingSource RoutingSource
+	warp          WarpConfig
 }
 
 func newManagementState(info ServerInfo) *managementState {
@@ -185,6 +214,8 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/inbounds/", s.handleInboundByName)
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
 	mux.HandleFunc("/api/routing/rules/", s.handleRoutingRuleByName)
+	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
+	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
@@ -428,6 +459,109 @@ func (s *managementState) routingRuleIndex(name string) int {
 	return -1
 }
 
+const routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
+
+var routeDatDownloader = downloadRouteDat
+
+func routeDatSource() RoutingSource {
+	return RoutingSource{
+		Repository: routingRulesRepository,
+		Files: []RoutingSourceFile{
+			{Name: "geoip.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"},
+			{Name: "geosite.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat"},
+		},
+	}
+}
+
+func routingPresetProfiles() []RoutingPreset {
+	source := routeDatSource()
+	return []RoutingPreset{
+		{
+			Name:        "all",
+			Description: "Route all traffic through WARP.",
+			Rules:       []RoutingRule{{Name: "preset-all-through-warp", Match: "all", Outbound: "warp", Enabled: true}},
+		},
+		{
+			Name:        "all-except-Russia",
+			Description: "Route Russian geo/site categories direct and everything else through WARP.",
+			Source:      source,
+			Rules: []RoutingRule{
+				{Name: "preset-all-except-russia-private", Match: "geoip:private", Outbound: "direct", Enabled: true},
+				{Name: "preset-all-except-russia-geoip", Match: "geoip:ru", Outbound: "direct", Enabled: true},
+				{Name: "preset-all-except-russia-geosite", Match: "geosite:category-ru", Outbound: "direct", Enabled: true},
+				{Name: "preset-all-except-russia-rest", Match: "all", Outbound: "warp", Enabled: true},
+			},
+		},
+		{
+			Name:        "RU-blocked",
+			Description: "Route domains and IPs blocked in Russia through WARP; leave everything else direct.",
+			Source:      source,
+			Rules: []RoutingRule{
+				{Name: "preset-ru-blocked-geoip", Match: "geoip:ru-blocked", Outbound: "warp", Enabled: true},
+				{Name: "preset-ru-blocked-geosite", Match: "geosite:ru-blocked", Outbound: "warp", Enabled: true},
+			},
+		},
+	}
+}
+
+func routingPresetByName(name string) (RoutingPreset, bool) {
+	for _, preset := range routingPresetProfiles() {
+		if preset.Name == name {
+			return preset, true
+		}
+	}
+	return RoutingPreset{}, false
+}
+
+func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	writeJSON(w, RoutingPresetResponse{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: append([]RoutingRule(nil), s.rules...), Presets: routingPresetProfiles()})
+}
+
+func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/api/routing/presets/")
+	if name == "" || strings.Contains(name, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	preset, ok := routingPresetByName(name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routingPreset = preset.Name
+	s.routingSource = preset.Source
+	s.rules = append([]RoutingRule(nil), preset.Rules...)
+	if err := s.saveLocked(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, RoutingPresetResponse{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: append([]RoutingRule(nil), s.rules...)})
+}
+
+func downloadRouteDat(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -645,6 +779,13 @@ func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
 			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)
 		}
 	}
+	for _, file := range s.routingSource.Files {
+		if file.Name == "" || file.URL == "" {
+			plan.Errors = append(plan.Errors, "routing source files require name and URL")
+			continue
+		}
+		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/rules/"+file.Name)
+	}
 	if len(plan.Configs) > 0 {
 		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
 	}
@@ -815,6 +956,17 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 	sort.Strings(renderedPaths)
 	for _, path := range renderedPaths {
 		if err := writeAtomicFile(path, []byte(rendered[path]), 0o600); err != nil {
+			return nil, nil, nil, err
+		}
+		written = append(written, path)
+	}
+	for _, file := range s.routingSource.Files {
+		body, err := routeDatDownloader(file.URL)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		path := filepath.Join(s.applyRoot, "generated", "rules", file.Name)
+		if err := writeAtomicFile(path, body, 0o600); err != nil {
 			return nil, nil, nil, err
 		}
 		written = append(written, path)
@@ -1060,26 +1212,25 @@ func isAllowedHealthService(service string) bool {
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
 	configs := map[string]string{}
-	if !s.hasRenderSettingsLocked() {
-		return configs, nil
-	}
-	for _, inbound := range s.inbounds {
-		if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
-			continue
-		}
-		switch inbound.Protocol {
-		case "naiveproxy":
-			body, err := s.renderNaiveConfigLocked(inbound)
-			if err != nil {
-				return nil, err
+	if s.hasRenderSettingsLocked() {
+		for _, inbound := range s.inbounds {
+			if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
+				continue
 			}
-			configs[filepath.Join(s.applyRoot, "generated", "caddy", "Caddyfile")] = body
-		case "hysteria2":
-			body, err := s.renderHysteria2ConfigLocked(inbound)
-			if err != nil {
-				return nil, err
+			switch inbound.Protocol {
+			case "naiveproxy":
+				body, err := s.renderNaiveConfigLocked(inbound)
+				if err != nil {
+					return nil, err
+				}
+				configs[filepath.Join(s.applyRoot, "generated", "caddy", "Caddyfile")] = body
+			case "hysteria2":
+				body, err := s.renderHysteria2ConfigLocked(inbound)
+				if err != nil {
+					return nil, err
+				}
+				configs[filepath.Join(s.applyRoot, "generated", "hysteria2", "server.yaml")] = body
 			}
-			configs[filepath.Join(s.applyRoot, "generated", "hysteria2", "server.yaml")] = body
 		}
 	}
 	if s.warp.Enabled {
@@ -1128,7 +1279,19 @@ func (s *managementState) renderWarpConfigLocked() (string, error) {
 		SocksListen:   warp.SocksListen,
 		SocksPort:     warp.SocksPort,
 		MTU:           warp.MTU,
+		RoutingRules:  renderWarpRoutingRules(s.rules),
 	})
+}
+
+func renderWarpRoutingRules(rules []RoutingRule) []renderer.WarpRoutingRule {
+	rendered := []renderer.WarpRoutingRule{}
+	for _, rule := range rules {
+		if !rule.Enabled {
+			continue
+		}
+		rendered = append(rendered, renderer.WarpRoutingRule{Match: rule.Match, Outbound: rule.Outbound})
+	}
+	return rendered
 }
 
 func runStagedConfigValidators(paths []string) []ConfigValidationResult {
@@ -1179,10 +1342,12 @@ func runFixedConfigValidation(name string, config string, command []string) Conf
 
 func (s *managementState) snapshotLocked() managementSnapshot {
 	return managementSnapshot{
-		Settings: s.settings,
-		Inbounds: append([]Inbound(nil), s.inbounds...),
-		Rules:    append([]RoutingRule(nil), s.rules...),
-		Warp:     s.warp,
+		Settings:      s.settings,
+		Inbounds:      append([]Inbound(nil), s.inbounds...),
+		Rules:         append([]RoutingRule(nil), s.rules...),
+		RoutingPreset: s.routingPreset,
+		RoutingSource: s.routingSource,
+		Warp:          s.warp,
 	}
 }
 
@@ -1252,6 +1417,12 @@ func (s *managementState) load() error {
 	}
 	if snapshot.Rules != nil {
 		s.rules = snapshot.Rules
+	}
+	if snapshot.RoutingPreset != "" {
+		s.routingPreset = snapshot.RoutingPreset
+	}
+	if snapshot.RoutingSource.Repository != "" || len(snapshot.RoutingSource.Files) > 0 {
+		s.routingSource = snapshot.RoutingSource
 	}
 	if snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "" {
 		s.warp = snapshot.Warp
