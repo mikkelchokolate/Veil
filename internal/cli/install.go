@@ -56,6 +56,16 @@ func newInstallCommand() *cobra.Command {
 				return err
 			}
 			printRURecommended(cmd, built, dryRun)
+			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
+				Platform:        installer.CurrentPlatform(),
+				HysteriaVersion: "v2.6.0",
+				SystemdUnits:    []string{"veil.service", "veil-naive.service", "veil-hysteria2.service"},
+			})
+			if planErr == nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
+				fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))
+				fmt.Fprintln(cmd.OutOrStdout(), plan.Summary())
+			}
 			if dryRun {
 				return nil
 			}
