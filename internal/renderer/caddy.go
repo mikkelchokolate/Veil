@@ -30,6 +30,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	}
 	const tpl = `{
   order forward_proxy before file_server
+  servers {
+    protocols h1 h2
+  }
 }
 
 :{{ .ListenPort }}, {{ .Domain }} {

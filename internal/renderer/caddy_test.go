@@ -7,11 +7,11 @@ import (
 
 func TestRenderNaiveCaddyfile(t *testing.T) {
 	cfg, err := RenderNaiveCaddyfile(NaiveConfig{
-		Domain: "example.com",
-		Email: "admin@example.com",
-		ListenPort: 443,
-		Username: "alice",
-		Password: "secret",
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		ListenPort:   443,
+		Username:     "alice",
+		Password:     "secret",
 		FallbackRoot: "/var/lib/veil/www",
 	})
 	if err != nil {
@@ -19,6 +19,8 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 	}
 	for _, want := range []string{
 		"order forward_proxy before file_server",
+		"servers {",
+		"protocols h1 h2",
 		":443, example.com",
 		"tls admin@example.com",
 		"basic_auth alice secret",
