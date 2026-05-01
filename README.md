@@ -25,6 +25,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial HTTP API and embedded panel shell
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
 - Initial API sections for settings, inbounds, routing rules, and WARP
+- Embedded panel forms for creating/updating/deleting routing rules and editing WARP settings
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
 - WARP outbound sidecar rendering via sing-box WireGuard config with a local SOCKS inbound for proxy chaining
 - Routing-rule validation for supported outbounds (`direct` and enabled `warp`)
@@ -128,8 +129,8 @@ Panel API auth:
 - `VEIL_APPLY_ROOT=/path/to/root veil serve` is the environment-file friendly apply root form.
 - The default apply root is `/etc/veil`; staged plan/state artifacts are written under `generated/veil/`.
 - When management settings include render inputs (`domain`, `email`, `naiveUsername`, `naivePassword`, `hysteria2Password`, optional `masqueradeURL`/`fallbackRoot`), confirmed staged apply also writes candidate configs under `<apply-root>/generated/caddy/Caddyfile` and `<apply-root>/generated/hysteria2/server.yaml` according to the selected stack.
-- When `/api/warp` is enabled with WireGuard fields (`privateKey`, `localAddress`, `peerPublicKey`, optional `reserved`, `socksListen`, `socksPort`, `mtu`), confirmed staged apply writes a sing-box WARP sidecar config at `<apply-root>/generated/sing-box/warp.json`. API responses redact `privateKey` and `licenseKey` as `[REDACTED]`.
-- Enabled routing rules support `direct` and `warp` outbounds. `POST /api/routing/rules` creates a unique rule name, `PUT /api/routing/rules/{name}` updates match/outbound/enabled fields while preserving the name, and `DELETE /api/routing/rules/{name}` removes it. A rule using `warp` is rejected by `/api/apply/plan` unless WARP is enabled and renderable.
+- When `/api/warp` is enabled with WireGuard fields (`privateKey`, `localAddress`, `peerPublicKey`, optional `reserved`, `socksListen`, `socksPort`, `mtu`), confirmed staged apply writes a sing-box WARP sidecar config at `<apply-root>/generated/sing-box/warp.json`. API responses redact `privateKey` and `licenseKey` as `[REDACTED]`; `PUT /api/warp` preserves existing stored secret values when a panel round-trip sends `[REDACTED]` back.
+- Enabled routing rules support `direct` and `warp` outbounds. `POST /api/routing/rules` creates a unique rule name, `PUT /api/routing/rules/{name}` updates match/outbound/enabled fields while preserving the name, and `DELETE /api/routing/rules/{name}` removes it. The embedded panel exposes forms for these operations and for WARP settings. A rule using `warp` is rejected by `/api/apply/plan` unless WARP is enabled and renderable.
 - After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>`, `hysteria server --config <candidate> --check`, and `sing-box check -c <candidate>`. Missing binaries are reported as skipped validations.
 - `POST /api/apply` remains staged-only by default with `{ "confirm": true }`. Passing `{ "confirm": true, "applyLive": true }` additionally promotes only successfully validated candidate configs into `<apply-root>/live/caddy/Caddyfile`, `<apply-root>/live/hysteria2/server.yaml`, and `<apply-root>/live/sing-box/warp.json`, backing up any replaced files under `<apply-root>/backups/`. Failed or skipped validation prevents live promotion.
 - Passing `{ "confirm": true, "applyLive": true, "applyServices": true }` additionally runs fixed allowlisted service reloads only after live promotion succeeds: `systemctl reload veil-naive.service`, `systemctl reload veil-hysteria2.service`, and/or `systemctl reload veil-warp.service` according to the promoted live configs. After reload, Veil runs fixed health checks with `systemctl is-active --quiet <service>`. If reload or health fails, Veil restores promoted live config files from the backup set and reloads the affected services again. Arbitrary commands are not accepted.
@@ -143,5 +144,5 @@ Panel API auth:
 
 Next milestones:
 
-1. Add browser forms for routing/WARP editing in the embedded panel.
-2. Add release/curl installer workflow.
+1. Add release/curl installer workflow.
+2. Add richer browser forms for settings/inbounds and apply-history filtering.

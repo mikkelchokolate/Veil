@@ -381,6 +381,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if warp.LicenseKey == "[REDACTED]" {
+			warp.LicenseKey = s.warp.LicenseKey
+		}
+		if warp.PrivateKey == "[REDACTED]" {
+			warp.PrivateKey = s.warp.PrivateKey
+		}
 		setWarpDefaults(&warp)
 		s.warp = warp
 		if err := s.saveLocked(); err != nil {

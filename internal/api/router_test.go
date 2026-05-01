@@ -260,6 +260,34 @@ func TestRouterServesPanelShellWithTokenControls(t *testing.T) {
 	}
 }
 
+func TestRouterServesPanelShellWithRoutingAndWarpForms(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{
+		"routing-rule-form",
+		"routing-rule-name",
+		"routing-rule-match",
+		"routing-rule-outbound",
+		"saveRoutingRule",
+		"deleteRoutingRule",
+		"warp-form",
+		"warp-enabled",
+		"warp-private-key",
+		"warp-local-address",
+		"warp-peer-public-key",
+		"saveWarpConfig",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("panel shell missing routing/WARP form control %q: %s", want, body)
+		}
+	}
+}
+
 func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
@@ -307,6 +335,33 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	}
 	if response.PrivateKey != "[REDACTED]" {
 		t.Fatalf("WARP private key should be redacted in API response: %+v", response)
+	}
+}
+
+func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"licenseKey":"warp-license","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
+	if create.Code != http.StatusOK {
+		t.Fatalf("initial warp update expected 200, got %d: %s", create.Code, create.Body.String())
+	}
+
+	update := httptest.NewRecorder()
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"licenseKey":"[REDACTED]","endpoint":"162.159.193.10:2408","privateKey":"[REDACTED]","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40001}`)))
+	if update.Code != http.StatusOK {
+		t.Fatalf("redacted warp update expected 200, got %d: %s", update.Code, update.Body.String())
+	}
+
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"licenseKey": "warp-license"`, `"privateKey": "warp-private-key"`, `"socksPort": 40001`, `"endpoint": "162.159.193.10:2408"`} {
+		if !strings.Contains(string(stateBody), want) {
+			t.Fatalf("persisted WARP state missing %q after redacted update: %s", want, string(stateBody))
+		}
 	}
 }
 

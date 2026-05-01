@@ -8,14 +8,20 @@ const panelHTML = `<!doctype html>
   <title>Veil Panel</title>
   <style>
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #070a12; color: #e6edf3; }
-    main { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    main { max-width: 1180px; margin: 0 auto; padding: 48px 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
     .card { border: 1px solid #263043; border-radius: 16px; padding: 24px; margin: 16px 0; background: #0d111c; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     code { color: #8be9fd; }
     label { display: block; margin-bottom: 8px; color: #9fb0c3; }
-    input { box-sizing: border-box; width: 100%; border: 1px solid #263043; border-radius: 10px; padding: 10px 12px; background: #070a12; color: #e6edf3; }
+    input, select { box-sizing: border-box; width: 100%; border: 1px solid #263043; border-radius: 10px; padding: 10px 12px; background: #070a12; color: #e6edf3; }
+    input[type="checkbox"] { width: auto; margin-right: 8px; }
     button { border: 0; border-radius: 10px; padding: 10px 14px; background: #4f46e5; color: white; cursor: pointer; }
+    button.secondary { background: #334155; }
+    button.danger { background: #dc2626; }
     pre { overflow: auto; border-radius: 10px; padding: 12px; background: #070a12; color: #c9d1d9; min-height: 72px; }
+    .hint { color: #9fb0c3; font-size: 0.92rem; }
   </style>
 </head>
 <body>
@@ -32,6 +38,7 @@ const panelHTML = `<!doctype html>
       <label for="api-token">Token</label>
       <input id="api-token" type="password" autocomplete="off" placeholder="Optional API token">
     </div>
+
     <div class="grid">
       <div class="card">
         <h2>Settings</h2>
@@ -45,19 +52,99 @@ const panelHTML = `<!doctype html>
         <button type="button" data-load="/api/inbounds" data-output="inbounds-output">Load inbounds</button>
         <pre id="inbounds-output">Not loaded</pre>
       </div>
+    </div>
+
+    <div class="grid">
       <div class="card">
         <h2>Routing rules</h2>
-        <p>Routing rules endpoint: <code>/api/routing/rules</code></p>
-        <button type="button" data-load="/api/routing/rules" data-output="routing-output">Load routing</button>
+        <p>List, create, update, or delete routing rules through <code>/api/routing/rules</code>.</p>
+        <form id="routing-rule-form">
+          <div class="form-grid">
+            <div>
+              <label for="routing-rule-name">Name</label>
+              <input id="routing-rule-name" autocomplete="off" placeholder="non-ru-through-warp">
+            </div>
+            <div>
+              <label for="routing-rule-match">Match</label>
+              <input id="routing-rule-match" autocomplete="off" placeholder="geosite:geolocation-!ru">
+            </div>
+            <div>
+              <label for="routing-rule-outbound">Outbound</label>
+              <select id="routing-rule-outbound">
+                <option value="direct">direct</option>
+                <option value="warp">warp</option>
+              </select>
+            </div>
+            <div>
+              <label for="routing-rule-enabled">Enabled</label>
+              <input id="routing-rule-enabled" type="checkbox" checked> enabled
+            </div>
+          </div>
+          <div class="actions">
+            <button id="save-routing-rule" type="submit">Save routing rule</button>
+            <button id="delete-routing-rule" class="danger" type="button">Delete routing rule</button>
+            <button class="secondary" type="button" data-load="/api/routing/rules" data-output="routing-output">Load routing</button>
+          </div>
+        </form>
         <pre id="routing-output">Not loaded</pre>
       </div>
+
       <div class="card">
         <h2>WARP</h2>
-        <p>WARP outbound configuration: <code>/api/warp</code></p>
-        <button type="button" data-load="/api/warp" data-output="warp-output">Load WARP</button>
+        <p>Configure the optional sing-box WireGuard/WARP sidecar through <code>/api/warp</code>.</p>
+        <p class="hint">Redacted private/license keys are preserved by the API when saved back as [REDACTED].</p>
+        <form id="warp-form">
+          <div class="form-grid">
+            <div>
+              <label for="warp-enabled">Enabled</label>
+              <input id="warp-enabled" type="checkbox"> enabled
+            </div>
+            <div>
+              <label for="warp-endpoint">Endpoint</label>
+              <input id="warp-endpoint" autocomplete="off" placeholder="engage.cloudflareclient.com:2408">
+            </div>
+            <div>
+              <label for="warp-local-address">Local address</label>
+              <input id="warp-local-address" autocomplete="off" placeholder="172.16.0.2/32">
+            </div>
+            <div>
+              <label for="warp-peer-public-key">Peer public key</label>
+              <input id="warp-peer-public-key" autocomplete="off" placeholder="Cloudflare peer public key">
+            </div>
+            <div>
+              <label for="warp-private-key">Private key</label>
+              <input id="warp-private-key" type="password" autocomplete="off" placeholder="WireGuard private key">
+            </div>
+            <div>
+              <label for="warp-license-key">License key</label>
+              <input id="warp-license-key" type="password" autocomplete="off" placeholder="Optional WARP+ license">
+            </div>
+            <div>
+              <label for="warp-reserved">Reserved bytes</label>
+              <input id="warp-reserved" autocomplete="off" placeholder="1,2,3">
+            </div>
+            <div>
+              <label for="warp-socks-listen">SOCKS listen</label>
+              <input id="warp-socks-listen" autocomplete="off" placeholder="127.0.0.1">
+            </div>
+            <div>
+              <label for="warp-socks-port">SOCKS port</label>
+              <input id="warp-socks-port" type="number" min="1" max="65535" placeholder="40000">
+            </div>
+            <div>
+              <label for="warp-mtu">MTU</label>
+              <input id="warp-mtu" type="number" min="576" max="9000" placeholder="1280">
+            </div>
+          </div>
+          <div class="actions">
+            <button id="save-warp-config" type="submit">Save WARP config</button>
+            <button class="secondary" id="load-warp-config" type="button">Load WARP</button>
+          </div>
+        </form>
         <pre id="warp-output">Not loaded</pre>
       </div>
     </div>
+
     <div class="card">
       <h2>Apply plan</h2>
       <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
@@ -88,27 +175,118 @@ const panelHTML = `<!doctype html>
       return token ? { 'X-Veil-Token': token } : {};
     }
 
+    function requestHeaders(extra) {
+      return Object.assign({}, extra || {}, authHeaders());
+    }
+
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = 'Loading ' + path + '...';
       const requestOptions = options || {};
-      requestOptions.headers = Object.assign({}, requestOptions.headers || {}, authHeaders());
+      requestOptions.headers = requestHeaders(requestOptions.headers || {});
       try {
         const response = await fetch(path, requestOptions);
         const text = await response.text();
         if (!response.ok) {
           output.textContent = text || ('HTTP ' + response.status);
-          return;
+          return null;
         }
-        output.textContent = JSON.stringify(JSON.parse(text), null, 2);
+        const parsed = text ? JSON.parse(text) : null;
+        output.textContent = parsed === null ? 'OK' : JSON.stringify(parsed, null, 2);
+        return parsed;
       } catch (err) {
         output.textContent = String(err);
+        return null;
       }
+    }
+
+    function parseReserved(value) {
+      if (!value.trim()) {
+        return [];
+      }
+      return value.split(',').map((part) => Number(part.trim())).filter((value) => Number.isInteger(value));
+    }
+
+    function numberOrZero(id) {
+      const value = document.getElementById(id).value;
+      return value === '' ? 0 : Number(value);
+    }
+
+    async function loadWarpIntoForm() {
+      const data = await loadJSON('/api/warp', 'warp-output');
+      if (!data) {
+        return;
+      }
+      document.getElementById('warp-enabled').checked = Boolean(data.enabled);
+      document.getElementById('warp-endpoint').value = data.endpoint || '';
+      document.getElementById('warp-local-address').value = data.localAddress || '';
+      document.getElementById('warp-peer-public-key').value = data.peerPublicKey || '';
+      document.getElementById('warp-private-key').value = data.privateKey || '';
+      document.getElementById('warp-license-key').value = data.licenseKey || '';
+      document.getElementById('warp-reserved').value = Array.isArray(data.reserved) ? data.reserved.join(',') : '';
+      document.getElementById('warp-socks-listen').value = data.socksListen || '';
+      document.getElementById('warp-socks-port').value = data.socksPort || '';
+      document.getElementById('warp-mtu').value = data.mtu || '';
+    }
+
+    async function saveWarpConfig(event) {
+      event.preventDefault();
+      await loadJSON('/api/warp', 'warp-output', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: document.getElementById('warp-enabled').checked,
+          licenseKey: document.getElementById('warp-license-key').value,
+          endpoint: document.getElementById('warp-endpoint').value,
+          privateKey: document.getElementById('warp-private-key').value,
+          localAddress: document.getElementById('warp-local-address').value,
+          peerPublicKey: document.getElementById('warp-peer-public-key').value,
+          reserved: parseReserved(document.getElementById('warp-reserved').value),
+          socksListen: document.getElementById('warp-socks-listen').value,
+          socksPort: numberOrZero('warp-socks-port'),
+          mtu: numberOrZero('warp-mtu')
+        })
+      });
+    }
+
+    async function saveRoutingRule(event) {
+      event.preventDefault();
+      const name = document.getElementById('routing-rule-name').value.trim();
+      if (!name) {
+        document.getElementById('routing-output').textContent = 'Routing rule name is required';
+        return;
+      }
+      const payload = {
+        name: name,
+        match: document.getElementById('routing-rule-match').value,
+        outbound: document.getElementById('routing-rule-outbound').value,
+        enabled: document.getElementById('routing-rule-enabled').checked
+      };
+      const rules = await loadJSON('/api/routing/rules', 'routing-output');
+      const exists = Array.isArray(rules) && rules.some((rule) => rule.name === name);
+      await loadJSON(exists ? '/api/routing/rules/' + encodeURIComponent(name) : '/api/routing/rules', 'routing-output', {
+        method: exists ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    async function deleteRoutingRule() {
+      const name = document.getElementById('routing-rule-name').value.trim();
+      if (!name) {
+        document.getElementById('routing-output').textContent = 'Routing rule name is required';
+        return;
+      }
+      await loadJSON('/api/routing/rules/' + encodeURIComponent(name), 'routing-output', { method: 'DELETE' });
     }
 
     document.querySelectorAll('[data-load]').forEach((button) => {
       button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
     });
+    document.getElementById('routing-rule-form').addEventListener('submit', saveRoutingRule);
+    document.getElementById('delete-routing-rule').addEventListener('click', deleteRoutingRule);
+    document.getElementById('warp-form').addEventListener('submit', saveWarpConfig);
+    document.getElementById('load-warp-config').addEventListener('click', loadWarpIntoForm);
 
     document.getElementById('build-apply-plan').addEventListener('click', async () => {
       await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
