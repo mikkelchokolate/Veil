@@ -35,6 +35,7 @@ func TestBuildInstallPlanSummaryIncludesBinariesAndSystemd(t *testing.T) {
 		"ufw allow 443/tcp comment Veil NaiveProxy",
 		"ufw allow 443/udp comment Veil Hysteria2",
 		"ufw allow 2096/tcp comment Veil panel",
+		"Panel speedtest tool: speedtest-cli or speedtest",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)
@@ -69,6 +70,7 @@ func TestBuildInstallPlanSummaryHonorsSelectedStack(t *testing.T) {
 		"Hysteria2 asset:",
 		"ufw allow 443/udp comment Veil Hysteria2",
 		"ufw allow 2096/tcp comment Veil panel",
+		"Panel speedtest tool: speedtest-cli or speedtest",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)

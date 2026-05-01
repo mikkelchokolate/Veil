@@ -22,6 +22,7 @@ type InstallPlan struct {
 	CaddyBuild      BuildHint
 	SystemdActions  []service.SystemdAction
 	FirewallActions []firewall.Rule
+	PanelTools      []string
 }
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {
@@ -61,6 +62,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 			EnableTCP:  profile.InstallNaive,
 			EnableUDP:  profile.InstallHysteria2,
 		}),
+		PanelTools: []string{"speedtest-cli or speedtest"},
 	}, nil
 }
 
@@ -79,6 +81,9 @@ func (p InstallPlan) Summary() string {
 		for _, command := range p.CaddyBuild.Commands {
 			fmt.Fprintf(&b, "- %s\n", command)
 		}
+	}
+	for _, tool := range p.PanelTools {
+		fmt.Fprintf(&b, "Panel speedtest tool: %s\n", tool)
 	}
 	for _, action := range p.SystemdActions {
 		fmt.Fprintf(&b, "%s %s\n", action.Command, strings.Join(action.Args, " "))
