@@ -1,11 +1,8 @@
 package installer
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-
-	"github.com/veil-panel/veil/internal/renderer"
 )
 
 type ApplyPaths struct {
@@ -22,56 +19,20 @@ type ApplyResult struct {
 }
 
 func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (ApplyResult, error) {
-	if paths.EtcDir == "" {
-		return ApplyResult{}, errors.New("etc dir is required")
-	}
-	if paths.VarDir == "" {
-		return ApplyResult{}, errors.New("var dir is required")
+	files, err := desiredManagedFiles(profile, paths)
+	if err != nil {
+		return ApplyResult{}, err
 	}
 	result := ApplyResult{
 		CaddyfilePath:     filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"),
 		Hysteria2Path:     filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(paths.VarDir, "www", "index.html"),
 	}
-	if profile.InstallNaive {
-		if err := writeManagedFile(result.CaddyfilePath, profile.Caddyfile, 0o600); err != nil {
+	for _, file := range files {
+		if err := writeManagedFile(file.Path, file.Content, file.Mode); err != nil {
 			return ApplyResult{}, err
 		}
-		result.WrittenFiles = append(result.WrittenFiles, result.CaddyfilePath)
-		if err := writeManagedFile(result.FallbackIndexPath, fallbackIndexHTML(profile.Domain), 0o644); err != nil {
-			return ApplyResult{}, err
-		}
-		result.WrittenFiles = append(result.WrittenFiles, result.FallbackIndexPath)
-	}
-	if profile.InstallHysteria2 {
-		if err := writeManagedFile(result.Hysteria2Path, profile.Hysteria2YAML, 0o600); err != nil {
-			return ApplyResult{}, err
-		}
-		result.WrittenFiles = append(result.WrittenFiles, result.Hysteria2Path)
-	}
-	if profile.PanelAuthToken != "" {
-		envPath := filepath.Join(paths.EtcDir, "veil.env")
-		if err := writeManagedFile(envPath, "VEIL_API_TOKEN="+profile.PanelAuthToken+"\n", 0o600); err != nil {
-			return ApplyResult{}, err
-		}
-		result.WrittenFiles = append(result.WrittenFiles, envPath)
-	}
-	if paths.SystemdDir != "" {
-		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
-		unitNames := []string{"veil.service"}
-		if profile.InstallNaive {
-			unitNames = append(unitNames, "veil-naive.service")
-		}
-		if profile.InstallHysteria2 {
-			unitNames = append(unitNames, "veil-hysteria2.service")
-		}
-		for _, name := range unitNames {
-			path := filepath.Join(paths.SystemdDir, name)
-			if err := writeManagedFile(path, units[name], 0o644); err != nil {
-				return ApplyResult{}, err
-			}
-			result.WrittenFiles = append(result.WrittenFiles, path)
-		}
+		result.WrittenFiles = append(result.WrittenFiles, file.Path)
 	}
 	return result, nil
 }

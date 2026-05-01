@@ -9,10 +9,10 @@ import (
 	"testing"
 )
 
-func TestInstallInteractivePromptsForDomainEmailAndRandomPanelPort(t *testing.T) {
+func TestInstallInteractivePromptsForDomainEmailPortAndRandomPanelPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\nn\n"))
+	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n31874\nn\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -24,6 +24,7 @@ func TestInstallInteractivePromptsForDomainEmailAndRandomPanelPort(t *testing.T)
 	for _, want := range []string{
 		"Domain for Veil/ACME:",
 		"ACME email:",
+		"Shared proxy port:",
 		"Customize panel port?",
 		"Domain: example.com",
 		"Email: admin@example.com",
@@ -39,7 +40,7 @@ func TestInstallInteractivePromptsForDomainEmailAndRandomPanelPort(t *testing.T)
 func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\ny\n2096\n"))
+	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n31874\ny\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -58,7 +59,7 @@ func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
@@ -88,7 +89,7 @@ func TestInstallDryRunHonorsStackSelection(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--stack", "hysteria2", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--stack", "hysteria2", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
@@ -132,7 +133,7 @@ func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com",
+		"--email", "admin@example.com", "--port", "31874",
 		"--public-ip", "198.51.100.25",
 		"--dry-run",
 	})
@@ -179,7 +180,7 @@ func TestInstallDryRunDetectsPublicIPWhenRequested(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com",
+		"--email", "admin@example.com", "--port", "31874",
 		"--public-ip", "auto",
 		"--dry-run",
 	})
@@ -206,7 +207,7 @@ func TestInstallRURecommendedRejectsInvalidPublicIP(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--public-ip", "not-an-ip", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--public-ip", "not-an-ip", "--dry-run"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatalf("expected error with invalid public IP")
@@ -218,10 +219,22 @@ func TestInstallRURecommendedRequiresDomain(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--email", "admin@example.com", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--email", "admin@example.com", "--port", "31874", "--dry-run"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatalf("expected error without domain")
+	}
+}
+
+func TestInstallRURecommendedRequiresPort(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--dry-run"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatalf("expected error without explicit shared proxy port")
 	}
 }
 
@@ -234,7 +247,7 @@ func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com",
+		"--email", "admin@example.com", "--port", "31874",
 		"--hysteria-sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"--dry-run",
 	})
@@ -248,6 +261,46 @@ func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
 	}
 }
 
+func TestRepairDryRunReportsMissingManagedFiles(t *testing.T) {
+	dir := t.TempDir()
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--etc-dir", dir + "/etc/veil",
+		"--var-dir", dir + "/var/lib/veil",
+		"--systemd-dir", dir + "/etc/systemd/system",
+		"--dry-run",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{"Veil repair plan", "repair missing", "Caddyfile", "server.yaml", "veil.service"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRepairApplyRequiresYes(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatalf("expected repair without --dry-run or --yes to fail")
+	}
+}
+
 func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 	dir := t.TempDir()
 	cmd := NewRootCommand("test")
@@ -258,7 +311,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com",
+		"--email", "admin@example.com", "--port", "31874",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",

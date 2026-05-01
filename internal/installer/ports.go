@@ -52,6 +52,19 @@ func PlanStackPort(availability PortAvailability, preferred []int, randomPort fu
 	return sharedPlan(port, true, true, reason(original, port, true))
 }
 
+func PlanExplicitStackPort(availability PortAvailability, port int, needTCP, needUDP bool) (SharedPortPlan, error) {
+	if port <= 0 || port > 65535 {
+		return SharedPortPlan{}, fmt.Errorf("invalid shared proxy port %d", port)
+	}
+	if needTCP && availability.TCPBusy[port] {
+		return SharedPortPlan{}, fmt.Errorf("shared proxy port %d/tcp is already in use", port)
+	}
+	if needUDP && availability.UDPBusy[port] {
+		return SharedPortPlan{}, fmt.Errorf("shared proxy port %d/udp is already in use", port)
+	}
+	return sharedPlan(port, false, false, "user selected shared proxy port"), nil
+}
+
 func sharedPlan(port int, changed bool, random bool, why string) SharedPortPlan {
 	return SharedPortPlan{
 		Port:      port,

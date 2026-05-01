@@ -81,6 +81,140 @@ func TestApplyRURecommendedProfileRejectsMissingPaths(t *testing.T) {
 	}
 }
 
+func TestBuildRepairPlanDetectsMissingAndDriftedFiles(t *testing.T) {
+	dir := t.TempDir()
+	profile := mustRUProfile(t, StackBoth)
+	paths := ApplyPaths{
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
+	}
+	result, err := ApplyRURecommendedProfile(profile, paths)
+	if err != nil {
+		t.Fatalf("apply profile: %v", err)
+	}
+	if err := os.WriteFile(result.CaddyfilePath, []byte("drifted"), 0o600); err != nil {
+		t.Fatalf("drift caddyfile: %v", err)
+	}
+	if err := os.Remove(result.Hysteria2Path); err != nil {
+		t.Fatalf("remove hysteria config: %v", err)
+	}
+
+	plan, err := BuildRepairPlan(profile, paths)
+
+	if err != nil {
+		t.Fatalf("build repair plan: %v", err)
+	}
+	if len(plan.Actions) != 2 {
+		t.Fatalf("expected 2 repair actions, got %+v", plan.Actions)
+	}
+	assertRepairAction(t, plan, result.CaddyfilePath, RepairReasonDrifted)
+	assertRepairAction(t, plan, result.Hysteria2Path, RepairReasonMissing)
+	if plan.HasChanges() != true {
+		t.Fatalf("expected plan to report changes")
+	}
+	if !strings.Contains(plan.Summary(), "repair drifted") || !strings.Contains(plan.Summary(), "repair missing") {
+		t.Fatalf("summary missing repair reasons:\n%s", plan.Summary())
+	}
+}
+
+func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
+	dir := t.TempDir()
+	profile := mustRUProfile(t, StackBoth)
+	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd")}
+	result, err := ApplyRURecommendedProfile(profile, paths)
+	if err != nil {
+		t.Fatalf("apply profile: %v", err)
+	}
+	if err := os.WriteFile(result.CaddyfilePath, []byte("drifted"), 0o600); err != nil {
+		t.Fatalf("drift caddyfile: %v", err)
+	}
+	plan, err := BuildRepairPlan(profile, paths)
+	if err != nil {
+		t.Fatalf("build repair plan: %v", err)
+	}
+
+	repairResult, err := ApplyRepairPlan(plan)
+
+	if err != nil {
+		t.Fatalf("apply repair: %v", err)
+	}
+	if len(repairResult.WrittenFiles) != 1 || repairResult.WrittenFiles[0] != result.CaddyfilePath {
+		t.Fatalf("unexpected repaired files: %+v", repairResult.WrittenFiles)
+	}
+	assertFileContains(t, result.CaddyfilePath, "forward_proxy")
+}
+
+func TestBuildBinaryRepairPlanRequiresChecksumAndDetectsMissingBinary(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "hysteria")
+	_, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", URL: "https://example.com/hysteria", Destination: dest})
+	if err == nil {
+		t.Fatalf("expected checksum requirement error")
+	}
+	checksum, err := SHA256Hex([]byte("binary-body"))
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+
+	plan, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", URL: "https://example.com/hysteria", Destination: dest, SHA256: checksum})
+
+	if err != nil {
+		t.Fatalf("build binary repair plan: %v", err)
+	}
+	if len(plan.Actions) != 1 || plan.Actions[0].Reason != RepairReasonMissing || plan.Actions[0].Destination != dest {
+		t.Fatalf("unexpected binary repair plan: %+v", plan)
+	}
+	if !strings.Contains(plan.Summary(), "repair missing binary hysteria2") {
+		t.Fatalf("summary missing binary repair action:\n%s", plan.Summary())
+	}
+}
+
+func TestBuildBinaryRepairPlanDetectsChecksumDrift(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "hysteria")
+	if err := os.WriteFile(dest, []byte("old-body"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	checksum, err := SHA256Hex([]byte("new-body"))
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+
+	plan, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", URL: "https://example.com/hysteria", Destination: dest, SHA256: checksum})
+
+	if err != nil {
+		t.Fatalf("build binary repair plan: %v", err)
+	}
+	if len(plan.Actions) != 1 || plan.Actions[0].Reason != RepairReasonDrifted {
+		t.Fatalf("expected drifted binary action, got %+v", plan)
+	}
+}
+
+func mustRUProfile(t *testing.T, stack Stack) RURecommendedProfile {
+	t.Helper()
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		Stack:        stack,
+		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
+		Secret:       func(label string) string { return "secret-" + label },
+		RandomPort:   func() int { return 31874 },
+	})
+	if err != nil {
+		t.Fatalf("build profile: %v", err)
+	}
+	return profile
+}
+
+func assertRepairAction(t *testing.T, plan RepairPlan, path string, reason RepairReason) {
+	t.Helper()
+	for _, action := range plan.Actions {
+		if action.Path == path && action.Reason == reason {
+			return
+		}
+	}
+	t.Fatalf("missing repair action path=%s reason=%s in %+v", path, reason, plan.Actions)
+}
+
 func assertFileMissing(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); err == nil {

@@ -13,7 +13,7 @@ Status: early development skeleton. Do not use on production servers yet.
 
 - Go CLI binary named `veil`
 - Transport-aware shared-port planning
-- 443 -> 8443 -> random high port fallback
+- Installation CLI requires an explicit user-selected shared proxy port via `--port`
 - RU recommended profile builder
 - Stack selection: `--stack both`, `--stack naive`, or `--stack hysteria2`
 - NaiveProxy Caddyfile renderer
@@ -46,13 +46,14 @@ make build
   --profile ru-recommended \
   --domain example.com \
   --email admin@example.com \
+  --port 443 \
   --stack both \
   --dry-run
 ```
 
 The dry-run output includes:
 
-- selected shared port
+- user-selected shared proxy port from `--port` (for `both`, NaiveProxy uses TCP and Hysteria2 uses UDP on the same numeric port)
 - NaiveProxy client URL with generated password redacted
 - Hysteria2 client URI with generated password redacted
 - generated Caddyfile with generated password redacted
@@ -71,6 +72,7 @@ This writes generated files into custom directories instead of system paths:
   --profile ru-recommended \
   --domain example.com \
   --email admin@example.com \
+  --port 443 \
   --etc-dir /tmp/veil/etc \
   --var-dir /tmp/veil/var \
   --systemd-dir /tmp/veil/systemd \
@@ -91,10 +93,25 @@ Default production paths will be:
 
 Panel port behavior:
 
+- `--port <1-65535>` is required for installation/repair and is the shared proxy port; Veil no longer auto-falls back from 443 to 8443/random in the installer CLI
+- `--interactive` prompts for the shared proxy port if it was not supplied
 - `--panel-port 0` selects a random high port
 - `--panel-port 2096` uses the user-selected port
 - `--interactive` asks whether to customize the panel port; no means random
 - future curl installer will call the same interactive flow, following the 3x-ui installer pattern
+
+## Repair dry run
+
+```bash
+./bin/veil repair \
+  --profile ru-recommended \
+  --domain example.com \
+  --email admin@example.com \
+  --port 443 \
+  --dry-run
+```
+
+`veil repair` compares the expected managed files with the current files and reports only missing or drifted files. Applying repair still requires `--yes`; it rewrites only planned managed files and does not run arbitrary service commands.
 
 Panel API auth:
 
@@ -120,6 +137,5 @@ Panel API auth:
 
 Next milestones:
 
-1. Add install/update/repair workflows around generated configs, services, and verified binary acquisition.
-2. Add WARP outbound implementation.
-3. Add richer routing rule editor.
+1. Add WARP outbound implementation.
+2. Add richer routing rule editor.

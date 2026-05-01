@@ -31,6 +31,7 @@ func newInstallCommand() *cobra.Command {
 	var varDir string
 	var systemdDir string
 	var panelPort int
+	var sharedPort int
 	var publicIP string
 	var interactive bool
 	var hysteriaSHA256 string
@@ -43,7 +44,7 @@ func newInstallCommand() *cobra.Command {
 				return fmt.Errorf("profile %q is not implemented yet", profile)
 			}
 			if interactive {
-				if err := promptInstallOptions(cmd, &domain, &email, &panelPort); err != nil {
+				if err := promptInstallOptions(cmd, &domain, &email, &sharedPort, &panelPort); err != nil {
 					return err
 				}
 			}
@@ -52,6 +53,9 @@ func newInstallCommand() *cobra.Command {
 			}
 			if email == "" {
 				return fmt.Errorf("--email is required for ru-recommended profile")
+			}
+			if sharedPort <= 0 || sharedPort > 65535 {
+				return fmt.Errorf("--port is required and must be between 1 and 65535")
 			}
 			var parsedPublicIP net.IP
 			if publicIP != "" {
@@ -90,6 +94,7 @@ func newInstallCommand() *cobra.Command {
 				Domain:       domain,
 				Email:        email,
 				Stack:        installer.Stack(stack),
+				Port:         sharedPort,
 				Availability: availability,
 				Secret:       randomSecret,
 				RandomPort:   randomPort,
@@ -150,6 +155,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
+	cmd.Flags().IntVar(&sharedPort, "port", 0, "required shared proxy port for NaiveProxy TCP and/or Hysteria2 UDP")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
@@ -168,7 +174,7 @@ func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
 	return units
 }
 
-func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, panelPort *int) error {
+func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, sharedPort *int, panelPort *int) error {
 	reader := bufio.NewReader(cmd.InOrStdin())
 	out := cmd.OutOrStdout()
 	if strings.TrimSpace(*domain) == "" {
@@ -186,6 +192,18 @@ func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, pan
 			return err
 		}
 		*email = strings.TrimSpace(value)
+	}
+	if *sharedPort == 0 {
+		fmt.Fprint(out, "Shared proxy port: ")
+		value, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("invalid shared proxy port: %w", err)
+		}
+		*sharedPort = parsed
 	}
 	if *panelPort == 0 {
 		fmt.Fprint(out, "Customize panel port? If no, Veil will choose a random high port. [y/N]: ")

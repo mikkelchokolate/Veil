@@ -34,6 +34,7 @@ type RURecommendedInput struct {
 	Domain       string
 	Email        string
 	Stack        Stack
+	Port         int
 	Availability PortAvailability
 	Secret       SecretFunc
 	RandomPort   func() int
@@ -77,6 +78,12 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 	}
 
 	plan := PlanStackPort(input.Availability, []int{443, 8443}, input.RandomPort, installNaive, installHysteria2)
+	if input.Port > 0 {
+		plan, err = PlanExplicitStackPort(input.Availability, input.Port, installNaive, installHysteria2)
+		if err != nil {
+			return RURecommendedProfile{}, err
+		}
+	}
 	username := "veil"
 	masqueradeURL := "https://www.bing.com/"
 	fallbackRoot := "/var/lib/veil/www"
