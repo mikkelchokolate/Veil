@@ -307,6 +307,29 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	}
 }
 
+func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
+	put := httptest.NewRecorder()
+
+	r.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/api/settings", body))
+
+	if put.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", put.Code, put.Body.String())
+	}
+	if strings.Contains(put.Body.String(), "naive-secret") || strings.Contains(put.Body.String(), "hy2-secret") || !strings.Contains(put.Body.String(), "[REDACTED]") {
+		t.Fatalf("PUT /api/settings leaked secrets: %s", put.Body.String())
+	}
+	get := httptest.NewRecorder()
+	r.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if get.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", get.Code, get.Body.String())
+	}
+	if strings.Contains(get.Body.String(), "naive-secret") || strings.Contains(get.Body.String(), "hy2-secret") || !strings.Contains(get.Body.String(), "[REDACTED]") {
+		t.Fatalf("GET /api/settings leaked secrets: %s", get.Body.String())
+	}
+}
+
 func TestManagementAPICreatesInbound(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)
@@ -581,6 +604,91 @@ func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	}
 	if !strings.Contains(string(stateBody), `"inbounds"`) || !strings.Contains(string(stateBody), `"warp"`) {
 		t.Fatalf("state file missing management state: %s", string(stateBody))
+	}
+}
+
+func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"stack":"both",
+			"mode":"dev",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"naiveUsername":"veil",
+			"naivePassword":"naive-secret",
+			"hysteria2Password":"hy2-secret",
+			"masqueradeURL":"https://www.bing.com/",
+			"fallbackRoot":"/var/lib/veil/www"
+		},
+		"inbounds":[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")
+	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml")
+	if !containsString(response.WrittenFiles, caddyPath) || !containsString(response.WrittenFiles, hy2Path) {
+		t.Fatalf("apply response missing rendered configs: %+v", response.WrittenFiles)
+	}
+	caddyBody, err := os.ReadFile(caddyPath)
+	if err != nil {
+		t.Fatalf("read caddy config: %v", err)
+	}
+	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "basic_auth veil naive-secret") || !strings.Contains(string(caddyBody), "protocols h1 h2") {
+		t.Fatalf("unexpected caddy config: %s", string(caddyBody))
+	}
+	hy2Body, err := os.ReadFile(hy2Path)
+	if err != nil {
+		t.Fatalf("read hysteria2 config: %v", err)
+	}
+	if !strings.Contains(string(hy2Body), "listen: :443") || !strings.Contains(string(hy2Body), "password: hy2-secret") || !strings.Contains(string(hy2Body), "vpn.example.com") {
+		t.Fatalf("unexpected hysteria2 config: %s", string(hy2Body))
+	}
+}
+
+func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com"},
+		"inbounds":[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyPlanResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive username and password are required") {
+		t.Fatalf("expected missing naive credentials validation error: %+v", response)
 	}
 }
 

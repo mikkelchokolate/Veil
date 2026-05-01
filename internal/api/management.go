@@ -8,12 +8,21 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 type Settings struct {
-	PanelListen string `json:"panelListen"`
-	Stack       string `json:"stack"`
-	Mode        string `json:"mode"`
+	PanelListen       string `json:"panelListen"`
+	Stack             string `json:"stack"`
+	Mode              string `json:"mode"`
+	Domain            string `json:"domain,omitempty"`
+	Email             string `json:"email,omitempty"`
+	NaiveUsername     string `json:"naiveUsername,omitempty"`
+	NaivePassword     string `json:"naivePassword,omitempty"`
+	Hysteria2Password string `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
+	FallbackRoot      string `json:"fallbackRoot,omitempty"`
 }
 
 type Inbound struct {
@@ -103,7 +112,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 	defer s.mu.Unlock()
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.settings)
+		writeJSON(w, redactedSettings(s.settings))
 	case http.MethodPut:
 		var settings Settings
 		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
@@ -119,10 +128,21 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, s.settings)
+		writeJSON(w, redactedSettings(s.settings))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func redactedSettings(settings Settings) Settings {
+	redacted := settings
+	if redacted.NaivePassword != "" {
+		redacted.NaivePassword = "[REDACTED]"
+	}
+	if redacted.Hysteria2Password != "" {
+		redacted.Hysteria2Password = "[REDACTED]"
+	}
+	return redacted
 }
 
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
@@ -284,9 +304,19 @@ func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
 		case "naiveproxy":
 			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
 			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
+			if s.hasRenderSettingsLocked() {
+				if _, err := s.renderNaiveConfigLocked(inbound); err != nil {
+					plan.Errors = append(plan.Errors, err.Error())
+				}
+			}
 		case "hysteria2":
 			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml")
 			plan.Actions = appendUnique(plan.Actions, "reload veil-hysteria2.service")
+			if s.hasRenderSettingsLocked() {
+				if _, err := s.renderHysteria2ConfigLocked(inbound); err != nil {
+					plan.Errors = append(plan.Errors, err.Error())
+				}
+			}
 		default:
 			if inbound.Protocol != "" {
 				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
@@ -342,7 +372,69 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 	if err := writeAtomicFile(statePath, append(snapshotBody, '\n'), 0o600); err != nil {
 		return nil, err
 	}
-	return []string{planPath, statePath}, nil
+	written := []string{planPath, statePath}
+	rendered, err := s.renderManagementConfigsLocked()
+	if err != nil {
+		return nil, err
+	}
+	for path, body := range rendered {
+		if err := writeAtomicFile(path, []byte(body), 0o600); err != nil {
+			return nil, err
+		}
+		written = append(written, path)
+	}
+	return written, nil
+}
+
+func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
+	configs := map[string]string{}
+	if !s.hasRenderSettingsLocked() {
+		return configs, nil
+	}
+	for _, inbound := range s.inbounds {
+		if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
+			continue
+		}
+		switch inbound.Protocol {
+		case "naiveproxy":
+			body, err := s.renderNaiveConfigLocked(inbound)
+			if err != nil {
+				return nil, err
+			}
+			configs[filepath.Join(s.applyRoot, "generated", "caddy", "Caddyfile")] = body
+		case "hysteria2":
+			body, err := s.renderHysteria2ConfigLocked(inbound)
+			if err != nil {
+				return nil, err
+			}
+			configs[filepath.Join(s.applyRoot, "generated", "hysteria2", "server.yaml")] = body
+		}
+	}
+	return configs, nil
+}
+
+func (s *managementState) hasRenderSettingsLocked() bool {
+	return s.settings.Domain != "" || s.settings.Email != "" || s.settings.NaiveUsername != "" || s.settings.NaivePassword != "" || s.settings.Hysteria2Password != "" || s.settings.MasqueradeURL != "" || s.settings.FallbackRoot != ""
+}
+
+func (s *managementState) renderNaiveConfigLocked(inbound Inbound) (string, error) {
+	return renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
+		Domain:       s.settings.Domain,
+		Email:        s.settings.Email,
+		ListenPort:   inbound.Port,
+		Username:     s.settings.NaiveUsername,
+		Password:     s.settings.NaivePassword,
+		FallbackRoot: s.settings.FallbackRoot,
+	})
+}
+
+func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, error) {
+	return renderer.RenderHysteria2(renderer.Hysteria2Config{
+		ListenPort:    inbound.Port,
+		Domain:        s.settings.Domain,
+		Password:      s.settings.Hysteria2Password,
+		MasqueradeURL: s.settings.MasqueradeURL,
+	})
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {
