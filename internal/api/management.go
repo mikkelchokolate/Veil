@@ -59,13 +59,17 @@ type ApplyPlanResponse struct {
 }
 
 type ApplyRequest struct {
-	Confirm bool `json:"confirm"`
+	Confirm   bool `json:"confirm"`
+	ApplyLive bool `json:"applyLive"`
 }
 
 type ApplyResponse struct {
 	Applied      bool                     `json:"applied"`
+	LiveApplied  bool                     `json:"liveApplied"`
 	Plan         ApplyPlanResponse        `json:"plan"`
 	WrittenFiles []string                 `json:"writtenFiles"`
+	LiveFiles    []string                 `json:"liveFiles,omitempty"`
+	BackupFiles  []string                 `json:"backupFiles,omitempty"`
 	Validations  []ConfigValidationResult `json:"validations,omitempty"`
 }
 
@@ -285,12 +289,28 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
 		return
 	}
-	written, validations, err := s.writeApplyStageLocked(plan)
+	written, validations, renderedPaths, err := s.writeApplyStageLocked(plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations})
+	response := ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations}
+	if req.ApplyLive {
+		if err := requirePassedValidations(validations); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeJSON(w, response)
+			return
+		}
+		liveFiles, backupFiles, err := s.promoteStagedConfigsLocked(renderedPaths)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		response.LiveApplied = true
+		response.LiveFiles = liveFiles
+		response.BackupFiles = backupFiles
+	}
+	writeJSON(w, response)
 }
 
 func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
@@ -372,28 +392,28 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, error) {
+func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
 	stageDir := filepath.Join(s.applyRoot, "generated", "veil")
 	planPath := filepath.Join(stageDir, "apply-plan.json")
 	statePath := filepath.Join(stageDir, "management-state.json")
 	planBody, err := json.MarshalIndent(plan, "", "  ")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	snapshotBody, err := json.MarshalIndent(s.snapshotLocked(), "", "  ")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := writeAtomicFile(statePath, append(snapshotBody, '\n'), 0o600); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	written := []string{planPath, statePath}
 	rendered, err := s.renderManagementConfigsLocked()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	renderedPaths := make([]string, 0, len(rendered))
 	for path := range rendered {
@@ -402,12 +422,72 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 	sort.Strings(renderedPaths)
 	for _, path := range renderedPaths {
 		if err := writeAtomicFile(path, []byte(rendered[path]), 0o600); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		written = append(written, path)
 	}
 	validations := stagedConfigValidator(renderedPaths)
-	return written, validations, nil
+	return written, validations, renderedPaths, nil
+}
+
+func requirePassedValidations(validations []ConfigValidationResult) error {
+	for _, validation := range validations {
+		if validation.Skipped || !validation.Valid {
+			if validation.Error != "" {
+				return errors.New(validation.Error)
+			}
+			return fmt.Errorf("%s validation did not pass", validation.Name)
+		}
+	}
+	return nil
+}
+
+func (s *managementState) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, error) {
+	liveFiles := []string{}
+	backupFiles := []string{}
+	backupRoot := filepath.Join(s.applyRoot, "backups", time.Now().UTC().Format("20060102T150405.000000000Z"))
+	for _, stagedPath := range stagedPaths {
+		livePath, ok := s.livePathForStagedConfig(stagedPath)
+		if !ok {
+			continue
+		}
+		body, err := os.ReadFile(stagedPath)
+		if err != nil {
+			return nil, nil, err
+		}
+		if existing, err := os.ReadFile(livePath); err == nil {
+			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(livePath), "/"))
+			if err := writeAtomicFile(backupPath, existing, 0o600); err != nil {
+				return nil, nil, err
+			}
+			backupFiles = append(backupFiles, backupPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, err
+		}
+		if err := writeAtomicFile(livePath, body, 0o600); err != nil {
+			return nil, nil, err
+		}
+		liveFiles = append(liveFiles, livePath)
+	}
+	sort.Strings(liveFiles)
+	sort.Strings(backupFiles)
+	return liveFiles, backupFiles, nil
+}
+
+func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
+	slashPath := filepath.ToSlash(stagedPath)
+	slashRoot := filepath.ToSlash(s.applyRoot)
+	prefix := strings.TrimRight(slashRoot, "/") + "/generated/"
+	if !strings.HasPrefix(slashPath, prefix) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(slashPath, prefix)
+	switch rel {
+	case "caddy/Caddyfile", "hysteria2/server.yaml":
+		return filepath.Join(s.applyRoot, "live", filepath.FromSlash(rel)), true
+	default:
+		return "", false
+	}
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {

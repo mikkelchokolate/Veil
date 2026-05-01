@@ -26,7 +26,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
 - Apply-plan API and panel control to validate state before staged config/reload work
-- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, and reports fixed-command syntax validation results before future privileged reloads
+- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, reports fixed-command syntax validation results, and can explicitly promote validated configs to live files with backups before future service reloads
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -103,7 +103,8 @@ Panel API auth:
 - The default apply root is `/etc/veil`; staged plan/state artifacts are written under `generated/veil/`.
 - When management settings include render inputs (`domain`, `email`, `naiveUsername`, `naivePassword`, `hysteria2Password`, optional `masqueradeURL`/`fallbackRoot`), confirmed staged apply also writes candidate configs under `<apply-root>/generated/caddy/Caddyfile` and `<apply-root>/generated/hysteria2/server.yaml` according to the selected stack.
 - After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>` and `hysteria server --config <candidate> --check`. Missing binaries are reported as skipped validations; systemd is still not called.
-- `GET/PUT /api/settings` redact proxy passwords in API responses as `[REDACTED]`; persisted state and staged config files keep the real values with restrictive file permissions so rendering can work.
+- `POST /api/apply` remains staged-only by default with `{ "confirm": true }`. Passing `{ "confirm": true, "applyLive": true }` additionally promotes only successfully validated candidate configs into `<apply-root>/live/caddy/Caddyfile` and `<apply-root>/live/hysteria2/server.yaml`, backing up any replaced files under `<apply-root>/backups/`. Failed or skipped validation prevents live promotion.
+- `GET/PUT /api/settings` redact proxy passwords in API responses as `[REDACTED]`; persisted state and staged/live config files keep the real values with restrictive file permissions so rendering can work.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
 - `/healthz` remains public for service health checks.
 - The embedded panel can store the token in browser `localStorage` and sends it as `X-Veil-Token`.

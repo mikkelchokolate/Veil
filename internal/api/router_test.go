@@ -92,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -786,6 +786,141 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 	}
 }
 
+func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	old := stagedConfigValidator
+	defer func() { stagedConfigValidator = old }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.LiveApplied {
+		t.Fatalf("live apply should be false unless applyLive=true: %+v", response)
+	}
+	if len(response.LiveFiles) != 0 || len(response.BackupFiles) != 0 {
+		t.Fatalf("staged-only apply should not report live files/backups: %+v", response)
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "live", "caddy", "Caddyfile")); !os.IsNotExist(err) {
+		t.Fatalf("staged-only apply should not write live caddy config, stat err: %v", err)
+	}
+}
+
+func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	existingCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
+	if err := writeAtomicFile(existingCaddy, []byte("old caddy\n"), 0o600); err != nil {
+		t.Fatalf("write existing live caddy: %v", err)
+	}
+	old := stagedConfigValidator
+	defer func() { stagedConfigValidator = old }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
+	liveHysteria := filepath.Join(applyRoot, "live", "hysteria2", "server.yaml")
+	if !response.LiveApplied || !containsString(response.LiveFiles, liveCaddy) || !containsString(response.LiveFiles, liveHysteria) {
+		t.Fatalf("expected live files in response: %+v", response)
+	}
+	if len(response.BackupFiles) != 1 {
+		t.Fatalf("expected one backup for existing caddy config: %+v", response.BackupFiles)
+	}
+	backupBody, err := os.ReadFile(response.BackupFiles[0])
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if string(backupBody) != "old caddy\n" {
+		t.Fatalf("unexpected backup body: %q", string(backupBody))
+	}
+	caddyBody, err := os.ReadFile(liveCaddy)
+	if err != nil {
+		t.Fatalf("read live caddy: %v", err)
+	}
+	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "basic_auth veil naive-secret") {
+		t.Fatalf("unexpected live caddy config: %s", string(caddyBody))
+	}
+	if _, err := os.Stat(liveHysteria); err != nil {
+		t.Fatalf("expected live hysteria config: %v", err)
+	}
+}
+
+func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
+	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+		t.Fatalf("write existing live caddy: %v", err)
+	}
+	old := stagedConfigValidator
+	defer func() { stagedConfigValidator = old }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: false, Error: "invalid caddy"}}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.LiveApplied || len(response.LiveFiles) != 0 || len(response.BackupFiles) != 0 {
+		t.Fatalf("failed validation must not promote live files: %+v", response)
+	}
+	body, err := os.ReadFile(liveCaddy)
+	if err != nil {
+		t.Fatalf("read live caddy: %v", err)
+	}
+	if string(body) != "old caddy\n" {
+		t.Fatalf("live caddy was modified despite failed validation: %q", string(body))
+	}
+}
+
 func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
@@ -817,6 +952,29 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func writeRenderableManagementState(path string, stack string) error {
+	return os.WriteFile(path, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"stack":"`+stack+`",
+			"mode":"dev",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"naiveUsername":"veil",
+			"naivePassword":"naive-secret",
+			"hysteria2Password":"hy2-secret",
+			"masqueradeURL":"https://www.bing.com/",
+			"fallbackRoot":"/var/lib/veil/www"
+		},
+		"inbounds":[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600)
 }
 
 func TestRouterStatus(t *testing.T) {
