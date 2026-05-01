@@ -50,8 +50,8 @@ const panelHTML = `<!doctype html>
       <button id="load-client-links" type="button">Load client links</button>
       <button id="load-client-subscription" type="button">Load base64 subscription</button>
       <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
-      <a id="download-client-subscription" href="/api/client-links/subscription">Download base64 subscription</a>
-      <a id="download-client-subscription-raw" href="/api/client-links/subscription?format=raw">Download raw subscription</a>
+      <button id="download-client-subscription" class="secondary" type="button">Download base64 subscription</button>
+      <button id="download-client-subscription-raw" class="secondary" type="button">Download raw subscription</button>
       <button id="copy-client-links" class="secondary" type="button">Copy output</button>
       <pre id="client-links-output">Not loaded</pre>
     </div>
@@ -464,6 +464,31 @@ const panelHTML = `<!doctype html>
       }
     }
 
+    async function downloadClientSubscriptionPath(path, filename) {
+      const output = document.getElementById('client-links-output');
+      output.textContent = 'Downloading ' + path + '...';
+      try {
+        const response = await fetch(path, { headers: requestHeaders() });
+        const text = await response.text();
+        if (!response.ok) {
+          output.textContent = text || ('HTTP ' + response.status);
+          return;
+        }
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        output.textContent = 'Downloaded ' + filename;
+      } catch (err) {
+        output.textContent = 'Download failed: ' + String(err);
+      }
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -578,6 +603,8 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
     document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
+    document.getElementById('download-client-subscription').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription', 'veil-subscription.txt'));
+    document.getElementById('download-client-subscription-raw').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=raw', 'veil-subscription-raw.txt'));
     document.getElementById('copy-client-links').addEventListener('click', copyClientLinksOutput);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
