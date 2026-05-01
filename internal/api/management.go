@@ -95,6 +95,7 @@ type ClientLinksResponse struct {
 	SubscriptionURL       string       `json:"subscriptionUrl"`
 	Base64SubscriptionURL string       `json:"base64SubscriptionUrl"`
 	RawSubscriptionURL    string       `json:"rawSubscriptionUrl"`
+	SubscriptionFormats   []string     `json:"subscriptionFormats"`
 	Count                 int          `json:"count"`
 	Links                 []ClientLink `json:"links"`
 }
@@ -728,6 +729,7 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		SubscriptionURL:       "/api/client-links/subscription",
 		Base64SubscriptionURL: "/api/client-links/subscription?format=base64",
 		RawSubscriptionURL:    "/api/client-links/subscription?format=raw",
+		SubscriptionFormats:   []string{"base64", "raw"},
 	}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {

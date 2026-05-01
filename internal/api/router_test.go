@@ -84,6 +84,9 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.Base64SubscriptionURL != "/api/client-links/subscription?format=base64" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" || response.Count != 2 {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
+	if got := strings.Join(response.SubscriptionFormats, ","); got != "base64,raw" {
+		t.Fatalf("unexpected subscription formats: %q", got)
+	}
 	if len(response.Links) != 2 {
 		t.Fatalf("expected 2 client links, got %+v", response.Links)
 	}
