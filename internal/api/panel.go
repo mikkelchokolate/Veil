@@ -38,6 +38,12 @@ const panelHTML = `<!doctype html>
       <label for="api-token">Token</label>
       <input id="api-token" type="password" autocomplete="off" placeholder="Optional API token">
     </div>
+    <div class="card">
+      <h2>Service status</h2>
+      <p>Read live systemd state for Veil, NaiveProxy/Caddy, Hysteria2, and WARP/sing-box through <code>/api/status</code>.</p>
+      <button id="load-service-status" type="button">Load service status</button>
+      <pre id="service-status-output">Not loaded</pre>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -404,6 +410,10 @@ const panelHTML = `<!doctype html>
       await loadJSON(applyHistoryPath(), 'apply-plan-output');
     }
 
+    async function loadServiceStatus() {
+      await loadJSON('/api/status', 'service-status-output');
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -514,6 +524,7 @@ const panelHTML = `<!doctype html>
     });
     document.getElementById('settings-form').addEventListener('submit', saveSettings);
     document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
+    document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);

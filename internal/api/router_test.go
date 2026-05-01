@@ -56,6 +56,48 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
+	old := serviceStatusReader
+	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
+		switch unit {
+		case "veil.service":
+			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running"}
+		case "caddy.service":
+			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "inactive", SubState: "dead"}
+		default:
+			return ServiceRuntimeStatus{Unit: unit, LoadState: "not-found", ActiveState: "unknown", SubState: "unknown", Error: "unit not found"}
+		}
+	}
+	t.Cleanup(func() { serviceStatusReader = old })
+
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response StatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+	services := map[string]ServiceStatus{}
+	for _, service := range response.Services {
+		services[service.Name] = service
+	}
+	if services["veil"].Unit != "veil.service" || services["veil"].ActiveState != "active" || services["veil"].SubState != "running" {
+		t.Fatalf("veil runtime status not included: %+v", services["veil"])
+	}
+	if services["naive"].Unit != "caddy.service" || services["naive"].ActiveState != "inactive" || services["naive"].SubState != "dead" {
+		t.Fatalf("naive/caddy runtime status not included: %+v", services["naive"])
+	}
+	if services["hysteria2"].Unit != "hysteria2.service" || services["hysteria2"].ActiveState != "unknown" || services["hysteria2"].Error == "" {
+		t.Fatalf("hysteria2 runtime status error not included: %+v", services["hysteria2"])
+	}
+}
+
 func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)
@@ -95,7 +137,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -1994,7 +2036,7 @@ func TestRouterStatus(t *testing.T) {
 	if body.Name != "Veil" || body.Version != "test" || body.Mode != "dev" {
 		t.Fatalf("unexpected status: %+v", body)
 	}
-	if len(body.Services) != 3 {
-		t.Fatalf("expected 3 services, got %+v", body.Services)
+	if len(body.Services) != 4 {
+		t.Fatalf("expected 4 services, got %+v", body.Services)
 	}
 }
