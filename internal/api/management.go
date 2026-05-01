@@ -692,14 +692,18 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		uris = append(uris, link.URI)
 	}
 	payload := strings.Join(uris, "\n") + "\n"
-	if r.URL.Query().Get("format") == "raw" {
+	format := r.URL.Query().Get("format")
+	switch format {
+	case "", "base64":
+		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(encoded + "\n"))
+	case "raw":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(payload))
-		return
+	default:
+		http.Error(w, "format must be base64 or raw", http.StatusBadRequest)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte(payload))
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte(encoded + "\n"))
 }
 
 func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksResponse, error) {

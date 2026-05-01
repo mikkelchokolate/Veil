@@ -152,6 +152,25 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	assertClientSubscriptionLines(t, w.Body.String())
 }
 
+func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid subscription format, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "format must be base64 or raw") {
+		t.Fatalf("unexpected invalid format error: %q", w.Body.String())
+	}
+}
+
 func assertClientSubscriptionLines(t *testing.T, body string) {
 	t.Helper()
 	lines := strings.Split(strings.TrimSpace(body), "\n")
