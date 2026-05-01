@@ -87,6 +87,9 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if response.DefaultSubscriptionFormat != "base64" {
 		t.Fatalf("unexpected default subscription format: %q", response.DefaultSubscriptionFormat)
 	}
+	if response.Base64SubscriptionFilename != "veil-subscription.txt" || response.RawSubscriptionFilename != "veil-subscription-raw.txt" {
+		t.Fatalf("unexpected subscription filenames: base64=%q raw=%q", response.Base64SubscriptionFilename, response.RawSubscriptionFilename)
+	}
 	if got := strings.Join(response.SubscriptionFormats, ","); got != "base64,raw" {
 		t.Fatalf("unexpected subscription formats: %q", got)
 	}
