@@ -44,6 +44,12 @@ const panelHTML = `<!doctype html>
       <button id="load-service-status" type="button">Load service status</button>
       <pre id="service-status-output">Not loaded</pre>
     </div>
+    <div class="card">
+      <h2>Client links</h2>
+      <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
+      <button id="load-client-links" type="button">Load client links</button>
+      <pre id="client-links-output">Not loaded</pre>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -414,6 +420,10 @@ const panelHTML = `<!doctype html>
       await loadJSON('/api/status', 'service-status-output');
     }
 
+    async function loadClientLinks() {
+      await loadJSON('/api/client-links', 'client-links-output');
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -525,6 +535,7 @@ const panelHTML = `<!doctype html>
     document.getElementById('settings-form').addEventListener('submit', saveSettings);
     document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
+    document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);

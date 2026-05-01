@@ -56,6 +56,54 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ClientLinksResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode client links: %v", err)
+	}
+	if response.Domain != "vpn.example.com" || response.Stack != "both" {
+		t.Fatalf("unexpected client link metadata: %+v", response)
+	}
+	if len(response.Links) != 2 {
+		t.Fatalf("expected 2 client links, got %+v", response.Links)
+	}
+	links := map[string]ClientLink{}
+	for _, link := range response.Links {
+		links[link.Name] = link
+	}
+	if links["naive"].Protocol != "naiveproxy" || links["naive"].Transport != "tcp" || links["naive"].Port != 443 || links["naive"].URI != "https://veil:naive-secret@vpn.example.com:443" {
+		t.Fatalf("unexpected naive link: %+v", links["naive"])
+	}
+	if links["hysteria2"].Protocol != "hysteria2" || links["hysteria2"].Transport != "udp" || links["hysteria2"].Port != 443 || !strings.HasPrefix(links["hysteria2"].URI, "hysteria2://hy2-secret@vpn.example.com:443/") || !strings.Contains(links["hysteria2"].URI, "sni=vpn.example.com") {
+		t.Fatalf("unexpected hysteria2 link: %+v", links["hysteria2"])
+	}
+}
+
+func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for incomplete client links config, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	old := serviceStatusReader
 	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
@@ -137,7 +185,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") || !strings.Contains(body, "Client links") || !strings.Contains(body, "/api/client-links") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }

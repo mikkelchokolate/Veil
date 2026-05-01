@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,20 @@ type WarpConfig struct {
 	SocksListen   string `json:"socksListen,omitempty"`
 	SocksPort     int    `json:"socksPort,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
+}
+
+type ClientLinksResponse struct {
+	Domain string       `json:"domain"`
+	Stack  string       `json:"stack"`
+	Links  []ClientLink `json:"links"`
+}
+
+type ClientLink struct {
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"`
+	Transport string `json:"transport"`
+	Port      int    `json:"port"`
+	URI       string `json:"uri"`
 }
 
 type ApplyPlanResponse struct {
@@ -220,6 +235,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
+	mux.HandleFunc("/api/client-links", s.handleClientLinks)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
@@ -638,6 +654,76 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	response, err := buildClientLinks(s.settings, s.inbounds)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, response)
+}
+
+func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksResponse, error) {
+	if strings.TrimSpace(settings.Domain) == "" {
+		return ClientLinksResponse{}, errors.New("domain is required to build client links")
+	}
+	response := ClientLinksResponse{Domain: settings.Domain, Stack: settings.Stack}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {
+			continue
+		}
+		link := ClientLink{Name: inbound.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
+		switch inbound.Protocol {
+		case "naiveproxy":
+			if settings.NaiveUsername == "" || settings.NaivePassword == "" {
+				return ClientLinksResponse{}, errors.New("naive username and password are required to build client links")
+			}
+			link.URI = naiveClientURI(settings.Domain, inbound.Port, settings.NaiveUsername, settings.NaivePassword)
+		case "hysteria2":
+			if settings.Hysteria2Password == "" {
+				return ClientLinksResponse{}, errors.New("hysteria2 password is required to build client links")
+			}
+			link.URI = hysteria2ClientURI(settings.Domain, inbound.Port, settings.Hysteria2Password, inbound.Name)
+		default:
+			continue
+		}
+		response.Links = append(response.Links, link)
+	}
+	if len(response.Links) == 0 {
+		return ClientLinksResponse{}, errors.New("no enabled client links are available")
+	}
+	return response, nil
+}
+
+func stackAllowsProtocol(stack string, protocol string) bool {
+	switch stack {
+	case "naive":
+		return protocol == "naiveproxy"
+	case "hysteria2":
+		return protocol == "hysteria2"
+	default:
+		return true
+	}
+}
+
+func naiveClientURI(domain string, port int, username string, password string) string {
+	userinfo := url.UserPassword(username, password).String()
+	return fmt.Sprintf("https://%s@%s:%d", userinfo, domain, port)
+}
+
+func hysteria2ClientURI(domain string, port int, password string, name string) string {
+	query := url.Values{}
+	query.Set("sni", domain)
+	fragment := url.QueryEscape(name)
+	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", url.QueryEscape(password), domain, port, query.Encode(), fragment)
 }
 
 func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request) {
