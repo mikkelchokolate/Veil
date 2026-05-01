@@ -44,6 +44,16 @@ type ApplyPlanResponse struct {
 	Actions []string `json:"actions"`
 }
 
+type ApplyRequest struct {
+	Confirm bool `json:"confirm"`
+}
+
+type ApplyResponse struct {
+	Applied      bool              `json:"applied"`
+	Plan         ApplyPlanResponse `json:"plan"`
+	WrittenFiles []string          `json:"writtenFiles"`
+}
+
 type managementSnapshot struct {
 	Settings Settings      `json:"settings"`
 	Inbounds []Inbound     `json:"inbounds"`
@@ -54,6 +64,7 @@ type managementSnapshot struct {
 type managementState struct {
 	mu        sync.Mutex
 	statePath string
+	applyRoot string
 	settings  Settings
 	inbounds  []Inbound
 	rules     []RoutingRule
@@ -63,6 +74,7 @@ type managementState struct {
 func newManagementState(info ServerInfo) *managementState {
 	state := &managementState{
 		statePath: info.StatePath,
+		applyRoot: defaultApplyRoot(info.ApplyRoot),
 		settings:  Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: info.Mode},
 		inbounds: []Inbound{
 			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
@@ -83,6 +95,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
 	mux.HandleFunc("/api/warp", s.handleWarp)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
+	mux.HandleFunc("/api/apply", s.handleApply)
 }
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +225,36 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	writeJSON(w, plan)
 }
 
+func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req ApplyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	plan := s.buildApplyPlanLocked()
+	if !plan.Valid {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, ApplyResponse{Applied: false, Plan: plan})
+		return
+	}
+	if !req.Confirm {
+		http.Error(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
+		return
+	}
+	written, err := s.writeApplyStageLocked(plan)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written})
+}
+
 func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
 	plan := ApplyPlanResponse{
 		Valid:   true,
@@ -281,6 +324,54 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
+func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, error) {
+	stageDir := filepath.Join(s.applyRoot, "generated", "veil")
+	planPath := filepath.Join(stageDir, "apply-plan.json")
+	statePath := filepath.Join(stageDir, "management-state.json")
+	planBody, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
+		return nil, err
+	}
+	snapshotBody, err := json.MarshalIndent(s.snapshotLocked(), "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := writeAtomicFile(statePath, append(snapshotBody, '\n'), 0o600); err != nil {
+		return nil, err
+	}
+	return []string{planPath, statePath}, nil
+}
+
+func (s *managementState) snapshotLocked() managementSnapshot {
+	return managementSnapshot{
+		Settings: s.settings,
+		Inbounds: append([]Inbound(nil), s.inbounds...),
+		Rules:    append([]RoutingRule(nil), s.rules...),
+		Warp:     s.warp,
+	}
+}
+
+func defaultApplyRoot(root string) string {
+	if root != "" {
+		return root
+	}
+	return "/etc/veil"
+}
+
+func writeAtomicFile(path string, body []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, mode); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 func (s *managementState) hasInboundTransportPort(transport string, port int) bool {
 	for _, existing := range s.inbounds {
 		if existing.Transport == transport && existing.Port == port {
@@ -327,12 +418,7 @@ func (s *managementState) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(s.statePath), 0o700); err != nil {
 		return err
 	}
-	snapshot := managementSnapshot{
-		Settings: s.settings,
-		Inbounds: append([]Inbound(nil), s.inbounds...),
-		Rules:    append([]RoutingRule(nil), s.rules...),
-		Warp:     s.warp,
-	}
+	snapshot := s.snapshotLocked()
 	body, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return err

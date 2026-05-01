@@ -92,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "Apply plan") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -531,6 +531,80 @@ func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
 	}
 	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "unsupported stack") {
 		t.Fatalf("expected unsupported stack error: %+v", response.Errors)
+	}
+}
+
+func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":false}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("apply should not write files without confirm, stat err: %v", err)
+	}
+}
+
+func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	planPath := filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")
+	statePath := filepath.Join(applyRoot, "generated", "veil", "management-state.json")
+	if !response.Applied || !containsString(response.WrittenFiles, planPath) || !containsString(response.WrittenFiles, statePath) {
+		t.Fatalf("unexpected apply response: %+v", response)
+	}
+	planBody, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatalf("read plan file: %v", err)
+	}
+	if !strings.Contains(string(planBody), "reload veil-naive.service") || !strings.Contains(string(planBody), "reload veil-hysteria2.service") {
+		t.Fatalf("plan file missing staged actions: %s", string(planBody))
+	}
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state file: %v", err)
+	}
+	if !strings.Contains(string(stateBody), `"inbounds"`) || !strings.Contains(string(stateBody), `"warp"`) {
+		t.Fatalf("state file missing management state: %s", string(stateBody))
+	}
+}
+
+func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"bad","mode":"dev"},
+		"inbounds":[],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("invalid apply should not write files, stat err: %v", err)
 	}
 }
 

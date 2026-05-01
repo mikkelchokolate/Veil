@@ -26,6 +26,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
 - Apply-plan API and panel control to validate state before staged config/reload work
+- Confirmed staged apply API writes plan/state artifacts before future privileged reloads
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -97,6 +98,9 @@ Panel API auth:
 - `veil serve --state /path/to/state.json` controls where settings/inbounds/routing/WARP state is persisted.
 - `VEIL_STATE_PATH=/path/to/state.json veil serve` is the environment-file friendly state path form.
 - The default state path is `/var/lib/veil/state.json`.
+- `veil serve --apply-root /path/to/root` controls where confirmed staged apply artifacts are written.
+- `VEIL_APPLY_ROOT=/path/to/root veil serve` is the environment-file friendly apply root form.
+- The default apply root is `/etc/veil`; staged artifacts are written under `generated/veil/`.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
 - `/healthz` remains public for service health checks.
 - The embedded panel can store the token in browser `localStorage` and sends it as `X-Veil-Token`.

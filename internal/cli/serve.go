@@ -15,6 +15,7 @@ func newServeCommand(version string) *cobra.Command {
 	var listen string
 	var authToken string
 	var statePath string
+	var applyRoot string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
@@ -24,12 +25,14 @@ func newServeCommand(version string) *cobra.Command {
 			}
 			token, tokenSource := resolveServeAuthToken(authToken)
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
+			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
 			server := &http.Server{
 				Addr:    listen,
-				Handler: api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: token, StatePath: resolvedStatePath}),
+				Handler: api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: token, StatePath: resolvedStatePath, ApplyRoot: resolvedApplyRoot}),
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s\n", listen)
 			fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", resolvedStatePath, stateSource)
+			fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", resolvedApplyRoot, applyRootSource)
 			if tokenSource == "disabled" {
 				fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 			} else {
@@ -41,6 +44,7 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:2096", "HTTP listen address")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
+	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
 	return cmd
 }
 
@@ -62,4 +66,14 @@ func resolveServeStatePath(flagValue string) (path string, source string) {
 		return path, "VEIL_STATE_PATH"
 	}
 	return "/var/lib/veil/state.json", "default"
+}
+
+func resolveServeApplyRoot(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--apply-root"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_APPLY_ROOT")); path != "" {
+		return path, "VEIL_APPLY_ROOT"
+	}
+	return "/etc/veil", "default"
 }

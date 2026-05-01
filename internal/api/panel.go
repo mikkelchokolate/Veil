@@ -62,6 +62,7 @@ const panelHTML = `<!doctype html>
       <h2>Apply plan</h2>
       <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
       <button id="build-apply-plan" type="button">Build apply plan</button>
+      <button id="apply-staged-files" type="button">Apply staged files</button>
       <pre id="apply-plan-output">Not planned</pre>
     </div>
     <div class="card">
@@ -107,6 +108,14 @@ const panelHTML = `<!doctype html>
 
     document.getElementById('build-apply-plan').addEventListener('click', async () => {
       await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
+    });
+
+    document.getElementById('apply-staged-files').addEventListener('click', async () => {
+      await loadJSON('/api/apply', 'apply-plan-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
     });
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {

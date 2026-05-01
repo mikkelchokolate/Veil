@@ -14,6 +14,7 @@ type ServerInfo struct {
 	Mode      string
 	AuthToken string
 	StatePath string
+	ApplyRoot string
 }
 
 type StatusResponse struct {
