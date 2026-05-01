@@ -26,7 +26,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Initial API sections for settings, inbounds, routing rules, and WARP
 - File-backed management state persistence for panel settings/inbounds/routing/WARP
 - Apply-plan API and panel control to validate state before staged config/reload work
-- Confirmed staged apply API writes plan/state artifacts and can stage rendered Caddy/Hysteria2 candidate configs from management state before future privileged reloads
+- Confirmed staged apply API writes plan/state artifacts, stages rendered Caddy/Hysteria2 candidate configs from management state, and reports fixed-command syntax validation results before future privileged reloads
 - Optional token protection for `/api/*` via `--auth-token` or `VEIL_API_TOKEN`
 - Unit tests and GitHub Actions CI
 
@@ -102,6 +102,7 @@ Panel API auth:
 - `VEIL_APPLY_ROOT=/path/to/root veil serve` is the environment-file friendly apply root form.
 - The default apply root is `/etc/veil`; staged plan/state artifacts are written under `generated/veil/`.
 - When management settings include render inputs (`domain`, `email`, `naiveUsername`, `naivePassword`, `hysteria2Password`, optional `masqueradeURL`/`fallbackRoot`), confirmed staged apply also writes candidate configs under `<apply-root>/generated/caddy/Caddyfile` and `<apply-root>/generated/hysteria2/server.yaml` according to the selected stack.
+- After staging candidate configs, Veil reports syntax validation results using fixed server-side commands only: `caddy validate --config <candidate>` and `hysteria server --config <candidate> --check`. Missing binaries are reported as skipped validations; systemd is still not called.
 - `GET/PUT /api/settings` redact proxy passwords in API responses as `[REDACTED]`; persisted state and staged config files keep the real values with restrictive file permissions so rendering can work.
 - The generated `veil.service` reads `/etc/veil/veil.env` when present.
 - `/healthz` remains public for service health checks.
@@ -112,8 +113,7 @@ Panel API auth:
 Next milestones:
 
 1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
-2. Add config syntax validation before restart.
-3. Wire safe systemd plan execution after binary/config validation.
-4. Add atomic replace, health checks, and rollback for staged configs.
-5. Add WARP outbound implementation.
-6. Add richer routing rule editor.
+2. Wire safe systemd plan execution after binary/config validation.
+3. Add atomic replace, health checks, and rollback for staged configs.
+4. Add WARP outbound implementation.
+5. Add richer routing rule editor.

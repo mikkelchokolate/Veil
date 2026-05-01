@@ -1,13 +1,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/veil-panel/veil/internal/renderer"
 )
@@ -58,10 +63,23 @@ type ApplyRequest struct {
 }
 
 type ApplyResponse struct {
-	Applied      bool              `json:"applied"`
-	Plan         ApplyPlanResponse `json:"plan"`
-	WrittenFiles []string          `json:"writtenFiles"`
+	Applied      bool                     `json:"applied"`
+	Plan         ApplyPlanResponse        `json:"plan"`
+	WrittenFiles []string                 `json:"writtenFiles"`
+	Validations  []ConfigValidationResult `json:"validations,omitempty"`
 }
+
+type ConfigValidationResult struct {
+	Name    string   `json:"name"`
+	Config  string   `json:"config"`
+	Command []string `json:"command"`
+	Valid   bool     `json:"valid"`
+	Skipped bool     `json:"skipped,omitempty"`
+	Output  string   `json:"output,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+var stagedConfigValidator = runStagedConfigValidators
 
 type managementSnapshot struct {
 	Settings Settings      `json:"settings"`
@@ -267,12 +285,12 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
 		return
 	}
-	written, err := s.writeApplyStageLocked(plan)
+	written, validations, err := s.writeApplyStageLocked(plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written})
+	writeJSON(w, ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations})
 }
 
 func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
@@ -354,36 +372,42 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, error) {
+func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, error) {
 	stageDir := filepath.Join(s.applyRoot, "generated", "veil")
 	planPath := filepath.Join(stageDir, "apply-plan.json")
 	statePath := filepath.Join(stageDir, "management-state.json")
 	planBody, err := json.MarshalIndent(plan, "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snapshotBody, err := json.MarshalIndent(s.snapshotLocked(), "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := writeAtomicFile(statePath, append(snapshotBody, '\n'), 0o600); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	written := []string{planPath, statePath}
 	rendered, err := s.renderManagementConfigsLocked()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	for path, body := range rendered {
-		if err := writeAtomicFile(path, []byte(body), 0o600); err != nil {
-			return nil, err
+	renderedPaths := make([]string, 0, len(rendered))
+	for path := range rendered {
+		renderedPaths = append(renderedPaths, path)
+	}
+	sort.Strings(renderedPaths)
+	for _, path := range renderedPaths {
+		if err := writeAtomicFile(path, []byte(rendered[path]), 0o600); err != nil {
+			return nil, nil, err
 		}
 		written = append(written, path)
 	}
-	return written, nil
+	validations := stagedConfigValidator(renderedPaths)
+	return written, validations, nil
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
@@ -435,6 +459,50 @@ func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, 
 		Password:      s.settings.Hysteria2Password,
 		MasqueradeURL: s.settings.MasqueradeURL,
 	})
+}
+
+func runStagedConfigValidators(paths []string) []ConfigValidationResult {
+	results := []ConfigValidationResult{}
+	for _, path := range paths {
+		slashPath := filepath.ToSlash(path)
+		switch {
+		case strings.HasSuffix(slashPath, "/generated/caddy/Caddyfile"):
+			results = append(results, runFixedConfigValidation("caddy", path, []string{"caddy", "validate", "--config", path}))
+		case strings.HasSuffix(slashPath, "/generated/hysteria2/server.yaml"):
+			results = append(results, runFixedConfigValidation("hysteria2", path, []string{"hysteria", "server", "--config", path, "--check"}))
+		}
+	}
+	return results
+}
+
+func runFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
+	result := ConfigValidationResult{Name: name, Config: config, Command: command}
+	if len(command) == 0 {
+		result.Skipped = true
+		result.Error = "validator command is empty"
+		return result
+	}
+	binary, err := exec.LookPath(command[0])
+	if err != nil {
+		result.Skipped = true
+		result.Error = command[0] + " not found; syntax validation skipped"
+		return result
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, command[1:]...)
+	out, err := cmd.CombinedOutput()
+	result.Output = strings.TrimSpace(string(out))
+	if ctx.Err() == context.DeadlineExceeded {
+		result.Error = "validation timed out"
+		return result
+	}
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Valid = true
+	return result
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {

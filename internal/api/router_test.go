@@ -692,6 +692,100 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 	}
 }
 
+func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"stack":"both",
+			"mode":"dev",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"naiveUsername":"veil",
+			"naivePassword":"naive-secret",
+			"hysteria2Password":"hy2-secret"
+		},
+		"inbounds":[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	old := stagedConfigValidator
+	defer func() { stagedConfigValidator = old }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{
+			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")}, Valid: true},
+			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), "--check"}, Valid: true},
+		}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Validations) != 2 {
+		t.Fatalf("expected two validation results: %+v", response.Validations)
+	}
+	if response.Validations[0].Name != "caddy" || !containsString(response.Validations[0].Command, "validate") || response.Validations[1].Name != "hysteria2" || !containsString(response.Validations[1].Command, "--check") {
+		t.Fatalf("unexpected fixed validation commands: %+v", response.Validations)
+	}
+}
+
+func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"stack":"naive",
+			"mode":"dev",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"naiveUsername":"veil",
+			"naivePassword":"naive-secret"
+		},
+		"inbounds":[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	old := stagedConfigValidator
+	defer func() { stagedConfigValidator = old }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Command: []string{"caddy", "validate", "--config", paths[0]}, Valid: false, Error: "caddy validation failed"}}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected staged apply response despite validation report, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Validations) != 1 || response.Validations[0].Valid || response.Validations[0].Error != "caddy validation failed" {
+		t.Fatalf("expected validation failure result: %+v", response.Validations)
+	}
+	if !containsString(response.Plan.Actions, "stage generated configs") || containsString(response.Plan.Actions, "systemctl restart") {
+		t.Fatalf("staged apply should not include systemd side effects: %+v", response.Plan.Actions)
+	}
+}
+
 func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
