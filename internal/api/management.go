@@ -59,18 +59,21 @@ type ApplyPlanResponse struct {
 }
 
 type ApplyRequest struct {
-	Confirm   bool `json:"confirm"`
-	ApplyLive bool `json:"applyLive"`
+	Confirm       bool `json:"confirm"`
+	ApplyLive     bool `json:"applyLive"`
+	ApplyServices bool `json:"applyServices"`
 }
 
 type ApplyResponse struct {
-	Applied      bool                     `json:"applied"`
-	LiveApplied  bool                     `json:"liveApplied"`
-	Plan         ApplyPlanResponse        `json:"plan"`
-	WrittenFiles []string                 `json:"writtenFiles"`
-	LiveFiles    []string                 `json:"liveFiles,omitempty"`
-	BackupFiles  []string                 `json:"backupFiles,omitempty"`
-	Validations  []ConfigValidationResult `json:"validations,omitempty"`
+	Applied         bool                     `json:"applied"`
+	LiveApplied     bool                     `json:"liveApplied"`
+	ServicesApplied bool                     `json:"servicesApplied"`
+	Plan            ApplyPlanResponse        `json:"plan"`
+	WrittenFiles    []string                 `json:"writtenFiles"`
+	LiveFiles       []string                 `json:"liveFiles,omitempty"`
+	BackupFiles     []string                 `json:"backupFiles,omitempty"`
+	Validations     []ConfigValidationResult `json:"validations,omitempty"`
+	ServiceActions  []ServiceActionResult    `json:"serviceActions,omitempty"`
 }
 
 type ConfigValidationResult struct {
@@ -84,6 +87,15 @@ type ConfigValidationResult struct {
 }
 
 var stagedConfigValidator = runStagedConfigValidators
+var serviceActionRunner = runFixedServiceAction
+
+type ServiceActionResult struct {
+	Name    string   `json:"name"`
+	Command []string `json:"command"`
+	Success bool     `json:"success"`
+	Output  string   `json:"output,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
 
 type managementSnapshot struct {
 	Settings Settings      `json:"settings"`
@@ -289,6 +301,11 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
 		return
 	}
+	if req.ApplyServices && !req.ApplyLive {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, ApplyResponse{Applied: false, Plan: plan})
+		return
+	}
 	written, validations, renderedPaths, err := s.writeApplyStageLocked(plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -309,6 +326,16 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		response.LiveApplied = true
 		response.LiveFiles = liveFiles
 		response.BackupFiles = backupFiles
+		if req.ApplyServices {
+			serviceActions := s.reloadPromotedServicesLocked(liveFiles)
+			response.ServiceActions = serviceActions
+			if err := requireSuccessfulServiceActions(serviceActions); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				writeJSON(w, response)
+				return
+			}
+			response.ServicesApplied = len(serviceActions) > 0
+		}
 	}
 	writeJSON(w, response)
 }
@@ -488,6 +515,90 @@ func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bo
 	default:
 		return "", false
 	}
+}
+
+func (s *managementState) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
+	commands := [][]string{}
+	if containsPath(liveFiles, filepath.Join(s.applyRoot, "live", "caddy", "Caddyfile")) {
+		commands = append(commands, []string{"systemctl", "reload", "veil-naive.service"})
+	}
+	if containsPath(liveFiles, filepath.Join(s.applyRoot, "live", "hysteria2", "server.yaml")) {
+		commands = append(commands, []string{"systemctl", "reload", "veil-hysteria2.service"})
+	}
+	results := make([]ServiceActionResult, 0, len(commands))
+	for _, command := range commands {
+		result := serviceActionRunner(command)
+		if result.Name == "" && len(command) > 0 {
+			result.Name = command[len(command)-1]
+		}
+		if result.Command == nil {
+			result.Command = append([]string(nil), command...)
+		}
+		results = append(results, result)
+		if !result.Success {
+			break
+		}
+	}
+	return results
+}
+
+func containsPath(paths []string, want string) bool {
+	for _, path := range paths {
+		if path == want {
+			return true
+		}
+	}
+	return false
+}
+
+func requireSuccessfulServiceActions(actions []ServiceActionResult) error {
+	for _, action := range actions {
+		if !action.Success {
+			if action.Error != "" {
+				return errors.New(action.Error)
+			}
+			return fmt.Errorf("%s service action failed", action.Name)
+		}
+	}
+	return nil
+}
+
+func runFixedServiceAction(command []string) ServiceActionResult {
+	result := ServiceActionResult{Command: append([]string(nil), command...)}
+	if len(command) > 0 {
+		result.Name = command[len(command)-1]
+	}
+	if !isAllowedServiceCommand(command) {
+		result.Error = "service command is not allowed"
+		return result
+	}
+	binary, err := exec.LookPath(command[0])
+	if err != nil {
+		result.Error = command[0] + " not found"
+		return result
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, command[1:]...)
+	out, err := cmd.CombinedOutput()
+	result.Output = strings.TrimSpace(string(out))
+	if ctx.Err() == context.DeadlineExceeded {
+		result.Error = "service action timed out"
+		return result
+	}
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Success = true
+	return result
+}
+
+func isAllowedServiceCommand(command []string) bool {
+	if len(command) != 3 || command[0] != "systemctl" || command[1] != "reload" {
+		return false
+	}
+	return command[2] == "veil-naive.service" || command[2] == "veil-hysteria2.service"
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {

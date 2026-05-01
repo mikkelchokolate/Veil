@@ -92,7 +92,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
-	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") {
+	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload services") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
 }
@@ -921,6 +921,171 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 	}
 }
 
+func TestManagementApplyDoesNotRunServiceActionsWithoutExplicitFlag(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Command: command, Success: true}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ServicesApplied || len(response.ServiceActions) != 0 || len(serviceCalls) != 0 {
+		t.Fatalf("service actions should not run without applyServices=true: response=%+v calls=%+v", response, serviceCalls)
+	}
+}
+
+func TestManagementApplyServicesRequiresLiveApply(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		t.Fatalf("service action should not run when applyLive=false: %+v", command)
+		return ServiceActionResult{}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ServicesApplied || len(response.ServiceActions) != 0 {
+		t.Fatalf("service actions must not run without live promotion: %+v", response)
+	}
+}
+
+func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	expectedNaive := []string{"systemctl", "reload", "veil-naive.service"}
+	expectedHy2 := []string{"systemctl", "reload", "veil-hysteria2.service"}
+	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 2 {
+		t.Fatalf("expected two service actions: response=%+v calls=%+v", response, serviceCalls)
+	}
+	if !stringSlicesEqual(serviceCalls[0], expectedNaive) || !stringSlicesEqual(serviceCalls[1], expectedHy2) {
+		t.Fatalf("unexpected service calls: %+v", serviceCalls)
+	}
+	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success {
+		t.Fatalf("expected successful service action results: %+v", response.ServiceActions)
+	}
+}
+
+func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: false, Error: "reload failed"}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ServicesApplied || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 1 {
+		t.Fatalf("expected one failed service action and no subsequent reloads: response=%+v calls=%+v", response, serviceCalls)
+	}
+}
+
 func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
@@ -952,6 +1117,18 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func stringSlicesEqual(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func writeRenderableManagementState(path string, stack string) error {

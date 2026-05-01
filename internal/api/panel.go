@@ -61,10 +61,11 @@ const panelHTML = `<!doctype html>
     <div class="card">
       <h2>Apply plan</h2>
       <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
-          <button id="build-apply-plan" type="button">Build apply plan</button>
-          <button id="apply-staged-files" type="button">Apply staged files</button>
-          <button id="apply-live-configs" type="button">Apply live configs</button>
-          <pre id="apply-plan-output">Not planned</pre>
+      <button id="build-apply-plan" type="button">Build apply plan</button>
+      <button id="apply-staged-files" type="button">Apply staged files</button>
+      <button id="apply-live-configs" type="button">Apply live configs</button>
+      <button id="reload-services" type="button">Reload services</button>
+      <pre id="apply-plan-output">Not planned</pre>
     </div>
     <div class="card">
       <h2>Speedtest</h2>
@@ -111,21 +112,29 @@ const panelHTML = `<!doctype html>
       await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
     });
 
-        document.getElementById('apply-staged-files').addEventListener('click', async () => {
-          await loadJSON('/api/apply', 'apply-plan-output', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ confirm: true })
-          });
-        });
+    document.getElementById('apply-staged-files').addEventListener('click', async () => {
+      await loadJSON('/api/apply', 'apply-plan-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
+    });
 
-        document.getElementById('apply-live-configs').addEventListener('click', async () => {
-          await loadJSON('/api/apply', 'apply-plan-output', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ confirm: true, applyLive: true })
-          });
-        });
+    document.getElementById('apply-live-configs').addEventListener('click', async () => {
+      await loadJSON('/api/apply', 'apply-plan-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, applyLive: true })
+      });
+    });
+
+    document.getElementById('reload-services').addEventListener('click', async () => {
+      await loadJSON('/api/apply', 'apply-plan-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, applyLive: true, applyServices: true })
+      });
+    });
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
