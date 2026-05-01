@@ -438,6 +438,64 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	}
 }
 
+func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"non-ru","match":"geosite:geolocation-!ru","outbound":"warp","enabled":false}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create routing rule expected 201, got %d: %s", create.Code, create.Body.String())
+	}
+
+	update := httptest.NewRecorder()
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/routing/rules/non-ru", strings.NewReader(`{"match":"geosite:openai","outbound":"direct","enabled":true}`)))
+	if update.Code != http.StatusOK {
+		t.Fatalf("update routing rule expected 200, got %d: %s", update.Code, update.Body.String())
+	}
+	var updated RoutingRule
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode updated rule: %v", err)
+	}
+	if updated.Name != "non-ru" || updated.Match != "geosite:openai" || updated.Outbound != "direct" || !updated.Enabled {
+		t.Fatalf("unexpected updated rule: %+v", updated)
+	}
+
+	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	readAfterUpdate := httptest.NewRecorder()
+	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
+	if !strings.Contains(readAfterUpdate.Body.String(), "geosite:openai") {
+		t.Fatalf("persisted routing rule update missing: %s", readAfterUpdate.Body.String())
+	}
+
+	deleteRecorder := httptest.NewRecorder()
+	restarted.ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodDelete, "/api/routing/rules/non-ru", nil))
+	if deleteRecorder.Code != http.StatusNoContent {
+		t.Fatalf("delete routing rule expected 204, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+
+	readAfterDelete := httptest.NewRecorder()
+	restarted.ServeHTTP(readAfterDelete, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
+	if strings.Contains(readAfterDelete.Body.String(), "non-ru") {
+		t.Fatalf("deleted routing rule still present: %s", readAfterDelete.Body.String())
+	}
+}
+
+func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	first := httptest.NewRecorder()
+	r.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
+	if first.Code != http.StatusCreated {
+		t.Fatalf("create routing rule expected 201, got %d: %s", first.Code, first.Body.String())
+	}
+
+	duplicate := httptest.NewRecorder()
+	r.ServeHTTP(duplicate, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geoip:ru","outbound":"direct","enabled":true}`)))
+	if duplicate.Code != http.StatusConflict {
+		t.Fatalf("duplicate routing rule expected 409, got %d: %s", duplicate.Code, duplicate.Body.String())
+	}
+}
+
 func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil)

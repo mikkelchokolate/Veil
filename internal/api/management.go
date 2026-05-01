@@ -182,6 +182,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/inbounds", s.handleInbounds)
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)
+	mux.HandleFunc("/api/routing/rules/", s.handleRoutingRuleByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
@@ -300,6 +301,10 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "name, match, and outbound are required", http.StatusBadRequest)
 			return
 		}
+		if s.routingRuleIndex(rule.Name) >= 0 {
+			http.Error(w, "routing rule name already exists", http.StatusConflict)
+			return
+		}
 		s.rules = append(s.rules, rule)
 		if err := s.saveLocked(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -310,6 +315,58 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/api/routing/rules/")
+	if name == "" || strings.Contains(name, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx := s.routingRuleIndex(name)
+	if idx < 0 {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var update RoutingRule
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if update.Match == "" || update.Outbound == "" {
+			http.Error(w, "match and outbound are required", http.StatusBadRequest)
+			return
+		}
+		update.Name = name
+		s.rules[idx] = update
+		if err := s.saveLocked(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, update)
+	case http.MethodDelete:
+		s.rules = append(s.rules[:idx], s.rules[idx+1:]...)
+		if err := s.saveLocked(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *managementState) routingRuleIndex(name string) int {
+	for idx, rule := range s.rules {
+		if rule.Name == name {
+			return idx
+		}
+	}
+	return -1
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
