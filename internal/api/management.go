@@ -98,6 +98,7 @@ type ClientLinksResponse struct {
 	DefaultSubscriptionFormat  string       `json:"defaultSubscriptionFormat"`
 	Base64SubscriptionFilename string       `json:"base64SubscriptionFilename"`
 	RawSubscriptionFilename    string       `json:"rawSubscriptionFilename"`
+	SubscriptionContentType    string       `json:"subscriptionContentType"`
 	SubscriptionFormats        []string     `json:"subscriptionFormats"`
 	Count                      int          `json:"count"`
 	Links                      []ClientLink `json:"links"`
@@ -735,6 +736,7 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		DefaultSubscriptionFormat:  "base64",
 		Base64SubscriptionFilename: "veil-subscription.txt",
 		RawSubscriptionFilename:    "veil-subscription-raw.txt",
+		SubscriptionContentType:    "text/plain; charset=utf-8",
 		SubscriptionFormats:        []string{"base64", "raw"},
 	}
 	for _, inbound := range inbounds {
