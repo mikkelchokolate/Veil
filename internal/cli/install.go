@@ -18,6 +18,7 @@ func newInstallCommand() *cobra.Command {
 	var yes bool
 	var etcDir string
 	var varDir string
+	var systemdDir string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -61,7 +62,7 @@ func newInstallCommand() *cobra.Command {
 			if !yes {
 				return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
 			}
-			result, err := installer.ApplyRURecommendedProfile(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir})
+			result, err := installer.ApplyRURecommendedProfile(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 			if err != nil {
 				return err
 			}
@@ -79,6 +80,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm writing generated files")
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
+	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	return cmd
 }
 

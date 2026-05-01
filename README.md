@@ -19,6 +19,8 @@ Status: early development skeleton. Do not use on production servers yet.
 - Hysteria2 server.yaml renderer
 - Generated fallback website
 - Safe atomic writes for generated config files
+- Optional systemd unit rendering/writing
+- Initial HTTP API and embedded panel shell
 - Unit tests and GitHub Actions CI
 
 ## Build
@@ -58,6 +60,7 @@ This writes generated files into custom directories instead of system paths:
   --email admin@example.com \
   --etc-dir /tmp/veil/etc \
   --var-dir /tmp/veil/var \
+  --systemd-dir /tmp/veil/systemd \
   --yes
 ```
 
@@ -66,13 +69,16 @@ Default production paths will be:
 - /etc/veil/generated/caddy/Caddyfile
 - /etc/veil/generated/hysteria2/server.yaml
 - /var/lib/veil/www/index.html
+- optional /etc/systemd/system/veil.service
+- optional /etc/systemd/system/veil-naive.service
+- optional /etc/systemd/system/veil-hysteria2.service
 
 ## Roadmap
 
 Next milestones:
 
 1. Download and verify Caddy/NaiveProxy and Hysteria2 binaries.
-2. Add systemd install/apply flow.
+2. Wire safe systemd plan execution after binary/config validation.
 3. Add config validation before restart.
 4. Add backend API and web panel.
 5. Add WARP outbound management.

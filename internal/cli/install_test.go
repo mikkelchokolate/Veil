@@ -57,6 +57,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		"--email", "admin@example.com",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
+		"--systemd-dir", dir + "/etc/systemd/system",
 		"--yes",
 	})
 
@@ -64,7 +65,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html"} {
+	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html", "veil.service", "veil-naive.service", "veil-hysteria2.service"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
