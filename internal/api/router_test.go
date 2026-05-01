@@ -167,6 +167,88 @@ func TestRouterServesPanelShellWithSpeedtestControl(t *testing.T) {
 	}
 }
 
+func TestRouterServesPanelShellWithManagementSections(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{"Settings", "Inbounds", "Routing rules", "WARP", "/api/settings", "/api/inbounds", "/api/routing/rules", "/api/warp"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("panel shell missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	cases := []struct {
+		path string
+		want string
+	}{
+		{path: "/api/settings", want: "panelListen"},
+		{path: "/api/inbounds", want: "naive"},
+		{path: "/api/routing/rules", want: "direct"},
+		{path: "/api/warp", want: "enabled"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s expected 200, got %d: %s", tc.path, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), tc.want) {
+			t.Fatalf("%s response missing %q: %s", tc.path, tc.want, w.Body.String())
+		}
+	}
+}
+
+func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response WarpConfig
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Enabled || response.Endpoint != "engage.cloudflareclient.com:2408" {
+		t.Fatalf("unexpected warp config: %+v", response)
+	}
+}
+
+func TestManagementAPICreatesInbound(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var response Inbound
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Name != "hy2-alt" || response.Port != 8443 {
+		t.Fatalf("unexpected inbound: %+v", response)
+	}
+}
+
 func TestRouterStatus(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)

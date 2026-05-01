@@ -23,6 +23,7 @@ Status: early development skeleton. Do not use on production servers yet.
 - Optional systemd unit rendering/writing
 - Initial HTTP API and embedded panel shell
 - Panel speedtest action via `speedtest-cli` or Ookla `speedtest`
+- Initial API sections for settings, inbounds, routing rules, and WARP
 - Unit tests and GitHub Actions CI
 
 ## Build

@@ -9,10 +9,11 @@ const panelHTML = `<!doctype html>
   <style>
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #070a12; color: #e6edf3; }
     main { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
     .card { border: 1px solid #263043; border-radius: 16px; padding: 24px; margin: 16px 0; background: #0d111c; }
     code { color: #8be9fd; }
     button { border: 0; border-radius: 10px; padding: 10px 14px; background: #4f46e5; color: white; cursor: pointer; }
-    pre { overflow: auto; border-radius: 10px; padding: 12px; background: #070a12; color: #c9d1d9; }
+    pre { overflow: auto; border-radius: 10px; padding: 12px; background: #070a12; color: #c9d1d9; min-height: 72px; }
   </style>
 </head>
 <body>
@@ -23,6 +24,32 @@ const panelHTML = `<!doctype html>
       <p>Status API: <code>/api/status</code></p>
       <p>Health: <code>/healthz</code></p>
     </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Settings</h2>
+        <p>Panel/global settings endpoint: <code>/api/settings</code></p>
+        <button type="button" data-load="/api/settings" data-output="settings-output">Load settings</button>
+        <pre id="settings-output">Not loaded</pre>
+      </div>
+      <div class="card">
+        <h2>Inbounds</h2>
+        <p>NaiveProxy and Hysteria2 inbound definitions: <code>/api/inbounds</code></p>
+        <button type="button" data-load="/api/inbounds" data-output="inbounds-output">Load inbounds</button>
+        <pre id="inbounds-output">Not loaded</pre>
+      </div>
+      <div class="card">
+        <h2>Routing rules</h2>
+        <p>Routing rules endpoint: <code>/api/routing/rules</code></p>
+        <button type="button" data-load="/api/routing/rules" data-output="routing-output">Load routing</button>
+        <pre id="routing-output">Not loaded</pre>
+      </div>
+      <div class="card">
+        <h2>WARP</h2>
+        <p>WARP outbound configuration: <code>/api/warp</code></p>
+        <button type="button" data-load="/api/warp" data-output="warp-output">Load WARP</button>
+        <pre id="warp-output">Not loaded</pre>
+      </div>
+    </div>
     <div class="card">
       <h2>Speedtest</h2>
       <p>Run server-side speedtest-cli/Ookla speedtest from the panel.</p>
@@ -31,26 +58,28 @@ const panelHTML = `<!doctype html>
     </div>
   </main>
   <script>
-    const output = document.getElementById('speedtest-output');
-    document.getElementById('run-speedtest').addEventListener('click', async () => {
-      output.textContent = 'Running speedtest...';
+    async function loadJSON(path, outputId, options) {
+      const output = document.getElementById(outputId);
+      output.textContent = 'Loading ' + path + '...';
       try {
-        const response = await fetch('/api/tools/speedtest', { method: 'POST' });
+        const response = await fetch(path, options || {});
         const text = await response.text();
         if (!response.ok) {
           output.textContent = text || ('HTTP ' + response.status);
           return;
         }
-        const result = JSON.parse(text);
-        output.textContent = [
-          'Server: ' + (result.server || 'n/a'),
-          'Ping: ' + result.pingMs + ' ms',
-          'Download: ' + result.downloadMbps + ' Mbps',
-          'Upload: ' + result.uploadMbps + ' Mbps'
-        ].join('\n');
+        output.textContent = JSON.stringify(JSON.parse(text), null, 2);
       } catch (err) {
         output.textContent = String(err);
       }
+    }
+
+    document.querySelectorAll('[data-load]').forEach((button) => {
+      button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
+    });
+
+    document.getElementById('run-speedtest').addEventListener('click', async () => {
+      await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
     });
   </script>
 </body>
