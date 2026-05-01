@@ -45,6 +45,7 @@ type RURecommendedProfile struct {
 	Username           string
 	NaivePassword      string
 	Hysteria2Password  string
+	PanelAuthToken     string
 	Stack              Stack
 	InstallNaive       bool
 	InstallHysteria2   bool
@@ -81,6 +82,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 	fallbackRoot := "/var/lib/veil/www"
 	var naivePassword string
 	var hysteriaPassword string
+	panelAuthToken := input.Secret("panel")
 	var caddyfile string
 	var hysteriaYAML string
 	var naiveClientURL string
@@ -121,6 +123,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		Username:           username,
 		NaivePassword:      naivePassword,
 		Hysteria2Password:  hysteriaPassword,
+		PanelAuthToken:     panelAuthToken,
 		Stack:              stack,
 		InstallNaive:       installNaive,
 		InstallHysteria2:   installHysteria2,

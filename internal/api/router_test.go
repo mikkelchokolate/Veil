@@ -23,6 +23,60 @@ func TestRouterHealthz(t *testing.T) {
 	}
 }
 
+func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("WWW-Authenticate"); !strings.Contains(got, "Bearer") {
+		t.Fatalf("expected Bearer challenge, got %q", got)
+	}
+}
+
+func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
+	req.Header.Set("X-Veil-Token", "secret-token")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected public healthz 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestRouterServesPanelShell(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -178,6 +232,21 @@ func TestRouterServesPanelShellWithManagementSections(t *testing.T) {
 	for _, want := range []string{"Settings", "Inbounds", "Routing rules", "WARP", "/api/settings", "/api/inbounds", "/api/routing/rules", "/api/warp"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("panel shell missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestRouterServesPanelShellWithTokenControls(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{"API token", "localStorage", "veil_api_token", "X-Veil-Token"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("panel shell missing auth control %q: %s", want, body)
 		}
 	}
 }

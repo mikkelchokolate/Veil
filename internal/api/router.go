@@ -1,15 +1,18 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/veil-panel/veil/internal/installer"
 )
 
 type ServerInfo struct {
-	Version string
-	Mode    string
+	Version   string
+	Mode      string
+	AuthToken string
 }
 
 type StatusResponse struct {
@@ -128,7 +131,43 @@ func NewRouter(info ServerInfo) http.Handler {
 			Hysteria2YAML:      profile.Hysteria2YAML,
 		})
 	})
-	return mux
+	return authMiddleware(info.AuthToken, mux)
+}
+
+func authMiddleware(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !validAuthToken(r, token) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="Veil API"`)
+			http.Error(w, "missing or invalid API token", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validAuthToken(r *http.Request, want string) bool {
+	provided := r.Header.Get("X-Veil-Token")
+	if provided == "" {
+		provided = bearerToken(r.Header.Get("Authorization"))
+	}
+	if provided == "" || len(provided) != len(want) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(want)) == 1
+}
+
+func bearerToken(header string) string {
+	if header == "" {
+		return ""
+	}
+	prefix := "Bearer "
+	if !strings.HasPrefix(header, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

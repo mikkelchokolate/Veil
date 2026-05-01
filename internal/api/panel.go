@@ -12,6 +12,8 @@ const panelHTML = `<!doctype html>
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
     .card { border: 1px solid #263043; border-radius: 16px; padding: 24px; margin: 16px 0; background: #0d111c; }
     code { color: #8be9fd; }
+    label { display: block; margin-bottom: 8px; color: #9fb0c3; }
+    input { box-sizing: border-box; width: 100%; border: 1px solid #263043; border-radius: 10px; padding: 10px 12px; background: #070a12; color: #e6edf3; }
     button { border: 0; border-radius: 10px; padding: 10px 14px; background: #4f46e5; color: white; cursor: pointer; }
     pre { overflow: auto; border-radius: 10px; padding: 12px; background: #070a12; color: #c9d1d9; min-height: 72px; }
   </style>
@@ -23,6 +25,12 @@ const panelHTML = `<!doctype html>
       <p>Early web panel shell for NaiveProxy TCP + Hysteria2 UDP management.</p>
       <p>Status API: <code>/api/status</code></p>
       <p>Health: <code>/healthz</code></p>
+    </div>
+    <div class="card">
+      <h2>API token</h2>
+      <p>If the server was started with <code>--auth-token</code> or <code>VEIL_API_TOKEN</code>, paste the token here. The browser stores it only in <code>localStorage</code> and sends it as <code>X-Veil-Token</code>.</p>
+      <label for="api-token">Token</label>
+      <input id="api-token" type="password" autocomplete="off" placeholder="Optional API token">
     </div>
     <div class="grid">
       <div class="card">
@@ -58,11 +66,24 @@ const panelHTML = `<!doctype html>
     </div>
   </main>
   <script>
+    const tokenInput = document.getElementById('api-token');
+    tokenInput.value = localStorage.getItem('veil_api_token') || '';
+    tokenInput.addEventListener('input', () => {
+      localStorage.setItem('veil_api_token', tokenInput.value);
+    });
+
+    function authHeaders() {
+      const token = localStorage.getItem('veil_api_token') || '';
+      return token ? { 'X-Veil-Token': token } : {};
+    }
+
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = 'Loading ' + path + '...';
+      const requestOptions = options || {};
+      requestOptions.headers = Object.assign({}, requestOptions.headers || {}, authHeaders());
       try {
-        const response = await fetch(path, options || {});
+        const response = await fetch(path, requestOptions);
         const text = await response.text();
         if (!response.ok) {
           output.textContent = text || ('HTTP ' + response.status);

@@ -32,6 +32,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=-` + filepath.Join(cfg.EtcDir, "veil.env") + `
 ExecStart=` + cfg.VeilBinary + ` serve
 Restart=on-failure
 RestartSec=3

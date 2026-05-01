@@ -23,6 +23,9 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil.service"], "ExecStart=/usr/local/bin/veil serve") {
 		t.Fatalf("bad veil unit:\n%s", units["veil.service"])
 	}
+	if !strings.Contains(units["veil.service"], "EnvironmentFile=-/etc/veil/veil.env") {
+		t.Fatalf("expected veil env file in unit:\n%s", units["veil.service"])
+	}
 	if !strings.Contains(units["veil-naive.service"], "/etc/veil/generated/caddy/Caddyfile") {
 		t.Fatalf("bad naive unit:\n%s", units["veil-naive.service"])
 	}

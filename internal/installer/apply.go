@@ -49,6 +49,13 @@ func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (
 		}
 		result.WrittenFiles = append(result.WrittenFiles, result.Hysteria2Path)
 	}
+	if profile.PanelAuthToken != "" {
+		envPath := filepath.Join(paths.EtcDir, "veil.env")
+		if err := writeManagedFile(envPath, "VEIL_API_TOKEN="+profile.PanelAuthToken+"\n", 0o600); err != nil {
+			return ApplyResult{}, err
+		}
+		result.WrittenFiles = append(result.WrittenFiles, envPath)
+	}
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
 		unitNames := []string{"veil.service"}

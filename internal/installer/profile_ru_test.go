@@ -31,6 +31,9 @@ func TestBuildRURecommendedProfileCreatesSamePortConfigsAndLinks(t *testing.T) {
 	if !strings.Contains(profile.Hysteria2ClientURI, "hysteria2://secret-hysteria2@example.com:443") {
 		t.Fatalf("bad hysteria2 uri: %s", profile.Hysteria2ClientURI)
 	}
+	if profile.PanelAuthToken != "secret-panel" {
+		t.Fatalf("panel auth token not wired into profile: %+v", profile)
+	}
 }
 
 func TestBuildRURecommendedProfileSupportsNaiveOnly(t *testing.T) {
