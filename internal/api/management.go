@@ -90,14 +90,15 @@ type WarpConfig struct {
 }
 
 type ClientLinksResponse struct {
-	Domain                string       `json:"domain"`
-	Stack                 string       `json:"stack"`
-	SubscriptionURL       string       `json:"subscriptionUrl"`
-	Base64SubscriptionURL string       `json:"base64SubscriptionUrl"`
-	RawSubscriptionURL    string       `json:"rawSubscriptionUrl"`
-	SubscriptionFormats   []string     `json:"subscriptionFormats"`
-	Count                 int          `json:"count"`
-	Links                 []ClientLink `json:"links"`
+	Domain                    string       `json:"domain"`
+	Stack                     string       `json:"stack"`
+	SubscriptionURL           string       `json:"subscriptionUrl"`
+	Base64SubscriptionURL     string       `json:"base64SubscriptionUrl"`
+	RawSubscriptionURL        string       `json:"rawSubscriptionUrl"`
+	DefaultSubscriptionFormat string       `json:"defaultSubscriptionFormat"`
+	SubscriptionFormats       []string     `json:"subscriptionFormats"`
+	Count                     int          `json:"count"`
+	Links                     []ClientLink `json:"links"`
 }
 
 type ClientLink struct {
@@ -724,12 +725,13 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		return ClientLinksResponse{}, errors.New("domain is required to build client links")
 	}
 	response := ClientLinksResponse{
-		Domain:                settings.Domain,
-		Stack:                 settings.Stack,
-		SubscriptionURL:       "/api/client-links/subscription",
-		Base64SubscriptionURL: "/api/client-links/subscription?format=base64",
-		RawSubscriptionURL:    "/api/client-links/subscription?format=raw",
-		SubscriptionFormats:   []string{"base64", "raw"},
+		Domain:                    settings.Domain,
+		Stack:                     settings.Stack,
+		SubscriptionURL:           "/api/client-links/subscription",
+		Base64SubscriptionURL:     "/api/client-links/subscription?format=base64",
+		RawSubscriptionURL:        "/api/client-links/subscription?format=raw",
+		DefaultSubscriptionFormat: "base64",
+		SubscriptionFormats:       []string{"base64", "raw"},
 	}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {
