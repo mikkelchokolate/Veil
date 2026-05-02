@@ -97,6 +97,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if r.Method == http.MethodGet {
 			_, _ = w.Write([]byte("ok\n"))
