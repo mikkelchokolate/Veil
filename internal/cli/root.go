@@ -2,11 +2,17 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"runtime"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	errCommandNotFound = errors.New("command not found")
+	commandLookPath    = exec.LookPath
 )
 
 func NewRootCommand(version string) *cobra.Command {
@@ -43,6 +49,7 @@ func NewRootCommand(version string) *cobra.Command {
 type doctorSummary struct {
 	Version  string                `json:"version"`
 	Runtime  string                `json:"runtime"`
+	Ready    bool                  `json:"ready"`
 	Commands []doctorCommandStatus `json:"commands"`
 }
 
@@ -62,6 +69,11 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	fmt.Fprintln(out, "Veil doctor")
 	fmt.Fprintf(out, "Version: %s\n", summary.Version)
 	fmt.Fprintf(out, "Runtime: %s\n", summary.Runtime)
+	if summary.Ready {
+		fmt.Fprintln(out, "Ready: yes")
+	} else {
+		fmt.Fprintln(out, "Ready: no")
+	}
 	fmt.Fprintln(out, "Required commands:")
 	for _, command := range summary.Commands {
 		if !command.Present {
@@ -76,13 +88,16 @@ func buildDoctorSummary(version string) doctorSummary {
 	summary := doctorSummary{
 		Version: version,
 		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
+		Ready:   true,
 	}
 	for _, name := range []string{"caddy", "hysteria", "systemctl"} {
 		status := doctorCommandStatus{Name: name}
-		path, err := exec.LookPath(name)
+		path, err := commandLookPath(name)
 		if err == nil {
 			status.Path = path
 			status.Present = true
+		} else {
+			summary.Ready = false
 		}
 		summary.Commands = append(summary.Commands, status)
 	}
