@@ -295,6 +295,9 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for JSON API response, got %q", cc)
 	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Fatalf("expected JSON API content-type with charset, got %q", ct)
+	}
 	var response StatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode status response: %v", err)
