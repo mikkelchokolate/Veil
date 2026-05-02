@@ -2136,6 +2136,55 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 	}
 }
 
+func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	seed := make([]ApplyHistoryEntry, 100)
+	for i := range seed {
+		seed[i] = ApplyHistoryEntry{ID: fmt.Sprintf("old-%03d", i), Timestamp: fmt.Sprintf("2026-05-01T00:00:%02dZ", i%60), Stage: "staged", Success: true}
+	}
+	body, err := json.MarshalIndent(seed, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal seed history: %v", err)
+	}
+	if err := writeAtomicFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600); err != nil {
+		t.Fatalf("write seed history: %v", err)
+	}
+	oldValidator := stagedConfigValidator
+	defer func() { stagedConfigValidator = oldValidator }()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
+	}
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var history []ApplyHistoryEntry
+	body, err = os.ReadFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if err := json.Unmarshal(body, &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history) != 100 {
+		t.Fatalf("expected capped history length 100, got %d", len(history))
+	}
+	if history[0].ID == "" || !history[0].Success || history[0].Stage != "staged" {
+		t.Fatalf("expected newest apply entry first, got %+v", history[0])
+	}
+	if history[len(history)-1].ID != "old-098" {
+		t.Fatalf("expected oldest retained entry to be old-098 after trimming old-099, got %+v", history[len(history)-1])
+	}
+}
+
 func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouters(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := writeRenderableManagementState(statePath, "naive"); err != nil {

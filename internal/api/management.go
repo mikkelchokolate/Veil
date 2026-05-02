@@ -23,6 +23,8 @@ import (
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
+const maxApplyHistoryEntries = 100
+
 type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	Stack             string `json:"stack"`
@@ -1099,6 +1101,9 @@ func (s *managementState) appendApplyHistoryLocked(stage string, success bool, r
 		RollbackActions: append([]ServiceActionResult(nil), response.RollbackActions...),
 	}
 	history = append([]ApplyHistoryEntry{entry}, history...)
+	if len(history) > maxApplyHistoryEntries {
+		history = history[:maxApplyHistoryEntries]
+	}
 	body, err := json.MarshalIndent(history, "", "  ")
 	if err != nil {
 		return err
