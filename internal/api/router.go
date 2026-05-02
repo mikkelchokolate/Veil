@@ -91,8 +91,8 @@ func NewRouter(info ServerInfo) http.Handler {
 		_, _ = w.Write([]byte(panelHTML))
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

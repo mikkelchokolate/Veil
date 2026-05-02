@@ -16,25 +16,29 @@ import (
 
 func TestRouterHealthz(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test"})
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	w := httptest.NewRecorder()
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/healthz", nil)
+			w := httptest.NewRecorder()
 
-	r.ServeHTTP(w, req)
+			r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	if w.Body.String() != "ok\n" {
-		t.Fatalf("unexpected body: %q", w.Body.String())
-	}
-	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
-		t.Fatalf("unexpected healthz content-type: %q", ct)
-	}
-	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
-		t.Fatalf("expected no-store cache-control for healthz, got %q", cc)
-	}
-	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
-		t.Fatalf("expected nosniff for healthz, got %q", nosniff)
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", w.Code)
+			}
+			if method == http.MethodGet && w.Body.String() != "ok\n" {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
+			if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+				t.Fatalf("unexpected healthz content-type: %q", ct)
+			}
+			if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+				t.Fatalf("expected no-store cache-control for healthz, got %q", cc)
+			}
+			if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+				t.Fatalf("expected nosniff for healthz, got %q", nosniff)
+			}
+		})
 	}
 }
 
