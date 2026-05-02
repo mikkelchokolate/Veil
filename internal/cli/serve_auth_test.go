@@ -50,4 +50,7 @@ func TestNewServeHTTPServerSetsProductionTimeouts(t *testing.T) {
 	if server.IdleTimeout != 120*time.Second {
 		t.Fatalf("unexpected IdleTimeout: %s", server.IdleTimeout)
 	}
+	if server.MaxHeaderBytes != 1<<20 {
+		t.Fatalf("unexpected MaxHeaderBytes: %d", server.MaxHeaderBytes)
+	}
 }

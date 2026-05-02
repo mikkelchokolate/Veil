@@ -54,6 +54,7 @@ func newServeHTTPServer(listen string, version string, authToken string, statePa
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 
