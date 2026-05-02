@@ -59,6 +59,10 @@ Notes:
 - The panel runs on a separate TCP port; use `--panel-port` to choose it explicitly.
 - The curl installer downloads a GitHub Release archive, verifies it with `checksums.txt`, installs `veil`, then runs `veil install`.
 
+## Special thanks
+
+Veil is being shaped with the help of [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+
 ## Roadmap
 
 - Finish the first production-ready installer flow.
