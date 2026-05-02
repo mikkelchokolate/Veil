@@ -923,6 +923,42 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	}
 }
 
+func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	oversizedMatch := "geosite:" + strings.Repeat("a", 1024*1024+1)
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{
+			name:   "create",
+			method: http.MethodPost,
+			path:   "/api/routing/rules",
+			body:   `{"name":"huge-rule","match":"` + oversizedMatch + `","outbound":"direct","enabled":true}`,
+		},
+		{
+			name:   "update",
+			method: http.MethodPut,
+			path:   "/api/routing/rules/default-direct",
+			body:   `{"match":"` + oversizedMatch + `","outbound":"direct","enabled":true}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("expected 413 for oversized routing rule body, got %d with response length %d", w.Code, w.Body.Len())
+			}
+		})
+	}
+}
+
 func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})

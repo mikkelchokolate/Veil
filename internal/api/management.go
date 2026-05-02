@@ -411,8 +411,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, s.rules)
 	case http.MethodPost:
 		var rule RoutingRule
-		if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &rule) {
 			return
 		}
 		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
@@ -451,8 +450,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 	switch r.Method {
 	case http.MethodPut:
 		var update RoutingRule
-		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &update) {
 			return
 		}
 		if update.Match == "" || update.Outbound == "" {
