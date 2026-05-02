@@ -265,6 +265,9 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 		t.Fatalf("expected nosniff for JSON API response, got %q", nosniff)
 	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for JSON API response, got %q", cc)
+	}
 	var response StatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode status response: %v", err)
