@@ -2481,6 +2481,25 @@ func TestRouterStatus(t *testing.T) {
 	}
 }
 
+func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"","mode":""}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing required settings fields, got %d: %s", w.Code, w.Body.String())
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on management error, got %q", nosniff)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on management error, got %q", cc)
+	}
+}
+
 func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`not json`)

@@ -275,7 +275,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {
-			http.Error(w, "panelListen, stack, and mode are required", http.StatusBadRequest)
+			writeError(w, "panelListen, stack, and mode are required", http.StatusBadRequest)
 			return
 		}
 		if settings.NaivePassword == "[REDACTED]" {
@@ -286,7 +286,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		}
 		s.settings = settings
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, redactedSettings(s.settings))
@@ -344,20 +344,20 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
-			http.Error(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
+			writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
 			return
 		}
 		if s.inboundIndex(inbound.Name) >= 0 {
-			http.Error(w, "inbound name already exists", http.StatusConflict)
+			writeError(w, "inbound name already exists", http.StatusConflict)
 			return
 		}
 		if s.hasInboundTransportPort(inbound.Transport, inbound.Port) {
-			http.Error(w, "inbound transport/port already exists", http.StatusConflict)
+			writeError(w, "inbound transport/port already exists", http.StatusConflict)
 			return
 		}
 		s.inbounds = append(s.inbounds, inbound)
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -387,24 +387,24 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 			return
 		}
 		if update.Protocol == "" || update.Transport == "" || update.Port <= 0 {
-			http.Error(w, "protocol, transport, and positive port are required", http.StatusBadRequest)
+			writeError(w, "protocol, transport, and positive port are required", http.StatusBadRequest)
 			return
 		}
 		if s.hasInboundTransportPortExcept(update.Transport, update.Port, idx) {
-			http.Error(w, "inbound transport/port already exists", http.StatusConflict)
+			writeError(w, "inbound transport/port already exists", http.StatusConflict)
 			return
 		}
 		update.Name = name
 		s.inbounds[idx] = update
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, update)
 	case http.MethodDelete:
 		s.inbounds = append(s.inbounds[:idx], s.inbounds[idx+1:]...)
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -425,16 +425,16 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
-			http.Error(w, "name, match, and outbound are required", http.StatusBadRequest)
+			writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
 			return
 		}
 		if s.routingRuleIndex(rule.Name) >= 0 {
-			http.Error(w, "routing rule name already exists", http.StatusConflict)
+			writeError(w, "routing rule name already exists", http.StatusConflict)
 			return
 		}
 		s.rules = append(s.rules, rule)
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -464,20 +464,20 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 			return
 		}
 		if update.Match == "" || update.Outbound == "" {
-			http.Error(w, "match and outbound are required", http.StatusBadRequest)
+			writeError(w, "match and outbound are required", http.StatusBadRequest)
 			return
 		}
 		update.Name = name
 		s.rules[idx] = update
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, update)
 	case http.MethodDelete:
 		s.rules = append(s.rules[:idx], s.rules[idx+1:]...)
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -580,7 +580,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	s.routingSource = preset.Source
 	s.rules = append([]RoutingRule(nil), preset.Rules...)
 	if err := s.saveLocked(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, RoutingPresetResponse{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: append([]RoutingRule(nil), s.rules...)})
@@ -663,7 +663,7 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 		setWarpDefaults(&warp)
 		s.warp = warp
 		if err := s.saveLocked(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, redactedWarp(s.warp))
@@ -681,7 +681,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 	defer s.mu.Unlock()
 	response, err := buildClientLinks(s.settings, s.inbounds)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -696,14 +696,14 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	}
 	format := r.URL.Query().Get("format")
 	if format != "" && format != "base64" && format != "raw" {
-		http.Error(w, "format must be base64 or raw", http.StatusBadRequest)
+		writeError(w, "format must be base64 or raw", http.StatusBadRequest)
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, err := buildClientLinks(s.settings, s.inbounds)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	uris := make([]string, 0, len(response.Links))
@@ -724,7 +724,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		w.Header().Set("Content-Disposition", `attachment; filename="veil-subscription-raw.txt"`)
 		_, _ = w.Write([]byte(payload))
 	default:
-		http.Error(w, "format must be base64 or raw", http.StatusBadRequest)
+		writeError(w, "format must be base64 or raw", http.StatusBadRequest)
 	}
 }
 
@@ -819,12 +819,12 @@ func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Requ
 	defer s.mu.Unlock()
 	history, err := s.loadApplyHistoryLocked()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	history, err = filterApplyHistory(history, r.URL.Query())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, history)
@@ -848,7 +848,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !req.Confirm {
-		http.Error(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
+		writeError(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
 		return
 	}
 	if req.ApplyServices && !req.ApplyLive {
@@ -858,7 +858,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	written, validations, renderedPaths, err := s.writeApplyStageLocked(plan)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	response := ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations}
@@ -871,7 +871,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		}
 		liveFiles, backupFiles, promotionRecords, err := s.promoteStagedConfigsLocked(renderedPaths)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		response.LiveApplied = true

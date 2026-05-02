@@ -108,7 +108,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		}
 		result, err := speedtestRunner(r)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			writeError(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		writeJSON(w, result)
@@ -134,7 +134,7 @@ func NewRouter(info ServerInfo) http.Handler {
 			RandomPort: func() int { return 31874 },
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, RURecommendedPreviewResponse{
