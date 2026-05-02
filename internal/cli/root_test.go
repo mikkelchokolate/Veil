@@ -24,6 +24,7 @@ func TestDoctorCommandPrintsReadinessSummary(t *testing.T) {
 		"Required commands:",
 		"caddy:",
 		"hysteria:",
+		"sing-box:",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("doctor output missing %q:\n%s", want, got)
@@ -61,6 +62,7 @@ func TestDoctorCommandPrintsJSONReadinessSummary(t *testing.T) {
 		`"commands"`,
 		`"name":"caddy"`,
 		`"name":"hysteria"`,
+		`"name":"sing-box"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("doctor JSON output missing %q:\n%s", want, got)

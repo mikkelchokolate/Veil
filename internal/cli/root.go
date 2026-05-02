@@ -90,7 +90,7 @@ func buildDoctorSummary(version string) doctorSummary {
 		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
 		Ready:   true,
 	}
-	for _, name := range []string{"caddy", "hysteria", "systemctl"} {
+	for _, name := range []string{"caddy", "hysteria", "sing-box", "systemctl"} {
 		status := doctorCommandStatus{Name: name}
 		path, err := commandLookPath(name)
 		if err == nil {
