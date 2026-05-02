@@ -2480,3 +2480,22 @@ func TestRouterStatus(t *testing.T) {
 		t.Fatalf("expected 4 services, got %+v", body.Services)
 	}
 }
+
+func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`not json`)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed JSON, got %d: %s", w.Code, w.Body.String())
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on JSON decode error, got %q", nosniff)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on JSON decode error, got %q", cc)
+	}
+}

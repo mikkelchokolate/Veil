@@ -262,23 +262,23 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := decoder.Decode(v); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return false
 		}
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		writeError(w, "invalid JSON", http.StatusBadRequest)
 		return false
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
-			http.Error(w, "request body must contain a single JSON value", http.StatusBadRequest)
+			writeError(w, "request body must contain a single JSON value", http.StatusBadRequest)
 			return false
 		}
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return false
 		}
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		writeError(w, "invalid JSON", http.StatusBadRequest)
 		return false
 	}
 	return true
