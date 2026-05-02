@@ -826,8 +826,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ApplyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
 	s.mu.Lock()

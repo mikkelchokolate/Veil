@@ -1370,6 +1370,22 @@ func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
 	}
 }
 
+func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	body := strings.NewReader(`{"confirm":true,"note":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", body))
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized apply body, got %d with response length %d", w.Code, w.Body.Len())
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("oversized apply should not write files, stat err: %v", err)
+	}
+}
+
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
