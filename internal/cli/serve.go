@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/api"
@@ -26,10 +27,7 @@ func newServeCommand(version string) *cobra.Command {
 			token, tokenSource := resolveServeAuthToken(authToken)
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
-			server := &http.Server{
-				Addr:    listen,
-				Handler: api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: token, StatePath: resolvedStatePath, ApplyRoot: resolvedApplyRoot}),
-			}
+			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot)
 			fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s\n", listen)
 			fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", resolvedStatePath, stateSource)
 			fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", resolvedApplyRoot, applyRootSource)
@@ -46,6 +44,17 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
 	return cmd
+}
+
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string) *http.Server {
+	return &http.Server{
+		Addr:              listen,
+		Handler:           api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot}),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }
 
 func resolveServeAuthToken(flagValue string) (token string, source string) {

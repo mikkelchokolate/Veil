@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestResolveServeAuthTokenUsesFlagBeforeEnvironment(t *testing.T) {
 	t.Setenv("VEIL_API_TOKEN", "env-token")
@@ -29,5 +32,22 @@ func TestResolveServeAuthTokenAllowsDisabledAuthForDevelopment(t *testing.T) {
 
 	if token != "" || source != "disabled" {
 		t.Fatalf("expected disabled auth, got token=%q source=%q", token, source)
+	}
+}
+
+func TestNewServeHTTPServerSetsProductionTimeouts(t *testing.T) {
+	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply")
+
+	if server.ReadHeaderTimeout != 5*time.Second {
+		t.Fatalf("unexpected ReadHeaderTimeout: %s", server.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout != 30*time.Second {
+		t.Fatalf("unexpected ReadTimeout: %s", server.ReadTimeout)
+	}
+	if server.WriteTimeout != 120*time.Second {
+		t.Fatalf("unexpected WriteTimeout: %s", server.WriteTimeout)
+	}
+	if server.IdleTimeout != 120*time.Second {
+		t.Fatalf("unexpected IdleTimeout: %s", server.IdleTimeout)
 	}
 }
