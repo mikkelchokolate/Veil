@@ -258,6 +258,7 @@ const maxJSONBodyBytes int64 = 1024 * 1024
 
 func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {

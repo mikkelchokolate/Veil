@@ -639,6 +639,19 @@ func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
 	}
 }
 
+func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","typo":true}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown JSON field, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
