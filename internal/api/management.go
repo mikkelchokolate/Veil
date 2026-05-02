@@ -370,8 +370,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, inbound)
+		writeJSONStatus(w, http.StatusCreated, inbound)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -447,8 +446,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, rule)
+		writeJSONStatus(w, http.StatusCreated, rule)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -826,10 +824,11 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	plan := s.buildApplyPlanLocked()
+	status := http.StatusOK
 	if !plan.Valid {
-		w.WriteHeader(http.StatusBadRequest)
+		status = http.StatusBadRequest
 	}
-	writeJSON(w, plan)
+	writeJSONStatus(w, status, plan)
 }
 
 func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Request) {
@@ -865,8 +864,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	plan := s.buildApplyPlanLocked()
 	if !plan.Valid {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, ApplyResponse{Applied: false, Plan: plan})
+		writeJSONStatus(w, http.StatusBadRequest, ApplyResponse{Applied: false, Plan: plan})
 		return
 	}
 	if !req.Confirm {
@@ -874,8 +872,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ApplyServices && !req.ApplyLive {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, ApplyResponse{Applied: false, Plan: plan})
+		writeJSONStatus(w, http.StatusBadRequest, ApplyResponse{Applied: false, Plan: plan})
 		return
 	}
 	written, validations, renderedPaths, err := s.writeApplyStageLocked(plan)
@@ -887,8 +884,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if req.ApplyLive {
 		if err := requirePassedValidations(validations); err != nil {
 			_ = s.appendApplyHistoryLocked("validation", false, response)
-			w.WriteHeader(http.StatusBadRequest)
-			writeJSON(w, response)
+			writeJSONStatus(w, http.StatusBadRequest, response)
 			return
 		}
 		liveFiles, backupFiles, promotionRecords, err := s.promoteStagedConfigsLocked(renderedPaths)
@@ -908,8 +904,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
 				_ = s.appendApplyHistoryLocked("rollback", false, response)
-				w.WriteHeader(http.StatusBadRequest)
-				writeJSON(w, response)
+				writeJSONStatus(w, http.StatusBadRequest, response)
 				return
 			}
 			healthChecks := checkServiceHealth(serviceActions)
@@ -920,8 +915,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
 				_ = s.appendApplyHistoryLocked("rollback", false, response)
-				w.WriteHeader(http.StatusBadRequest)
-				writeJSON(w, response)
+				writeJSONStatus(w, http.StatusBadRequest, response)
 				return
 			}
 			response.ServicesApplied = len(serviceActions) > 0

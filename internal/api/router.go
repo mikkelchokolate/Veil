@@ -306,10 +306,20 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
+	setJSONHeaders(w)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func setJSONHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, v any) {
+	setJSONHeaders(w)
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 

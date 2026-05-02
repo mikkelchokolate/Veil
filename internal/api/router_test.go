@@ -858,6 +858,15 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 	if response.Name != "hy2-alt" || response.Port != 8443 {
 		t.Fatalf("unexpected inbound: %+v", response)
 	}
+	if ct := w.Result().Header.Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Fatalf("expected JSON content-type on 201, got %q", ct)
+	}
+	if cc := w.Result().Header.Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on 201, got %q", cc)
+	}
+	if nosniff := w.Result().Header.Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on 201, got %q", nosniff)
+	}
 }
 
 func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
