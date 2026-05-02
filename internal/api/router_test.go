@@ -128,6 +128,9 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 		t.Fatalf("expected nosniff for secret-bearing client links, got %q", nosniff)
 	}
+	if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
+		t.Fatalf("expected no-cache Pragma for secret-bearing client links, got %q", pragma)
+	}
 	if response.Domain != "vpn.example.com" || response.Stack != "both" || response.SubscriptionURL != "/api/client-links/subscription" || response.Base64SubscriptionURL != "/api/client-links/subscription?format=base64" || response.RawSubscriptionURL != "/api/client-links/subscription?format=raw" || response.Count != 2 {
 		t.Fatalf("unexpected client link metadata: %+v", response)
 	}
