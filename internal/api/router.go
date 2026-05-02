@@ -71,7 +71,7 @@ func NewRouter(info ServerInfo) http.Handler {
 	newManagementState(info).register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+			writeNotFound(w)
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -304,6 +304,10 @@ func writeError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.Error(w, msg, code)
+}
+
+func writeNotFound(w http.ResponseWriter) {
+	writeError(w, "404 page not found", http.StatusNotFound)
 }
 
 func methodNotAllowed(w http.ResponseWriter, methods ...string) {

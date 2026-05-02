@@ -380,14 +380,14 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/inbounds/")
 	if name == "" || strings.Contains(name, "/") {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx := s.inboundIndex(name)
 	if idx < 0 {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	switch r.Method {
@@ -457,14 +457,14 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/routing/rules/")
 	if name == "" || strings.Contains(name, "/") {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx := s.routingRuleIndex(name)
 	if idx < 0 {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	switch r.Method {
@@ -572,12 +572,12 @@ func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Re
 func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/routing/presets/")
 	if name == "" || strings.Contains(name, "/") {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	preset, ok := routingPresetByName(name)
 	if !ok {
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 	if r.Method != http.MethodPost {

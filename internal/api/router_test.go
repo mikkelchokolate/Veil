@@ -1218,6 +1218,12 @@ func TestManagementAPIRejectsUnknownRoutingPreset(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown routing preset expected 404, got %d: %s", w.Code, w.Body.String())
 	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on API 404, got %q", cc)
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on API 404, got %q", nosniff)
+	}
 }
 
 func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
