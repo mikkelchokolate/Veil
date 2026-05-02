@@ -1063,7 +1063,12 @@ func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) 
 }
 
 func filterApplyHistory(history []ApplyHistoryEntry, values map[string][]string) ([]ApplyHistoryEntry, error) {
+	filterKeys := make([]string, 0, len(values))
 	for key := range values {
+		filterKeys = append(filterKeys, key)
+	}
+	sort.Strings(filterKeys)
+	for _, key := range filterKeys {
 		if !allowedApplyHistoryFilters[key] {
 			return nil, fmt.Errorf("invalid history filter: %s", key)
 		}

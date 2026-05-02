@@ -2386,6 +2386,22 @@ func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *tes
 	}
 }
 
+func TestManagementApplyHistoryEndpointReportsFirstUnsupportedFilterDeterministically(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+
+	for i := 0; i < 50; i++ {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history?zzz=1&aaa=1", nil))
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for unsupported filters, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "invalid history filter: aaa") {
+			t.Fatalf("expected deterministic first unsupported filter aaa, got %q", w.Body.String())
+		}
+	}
+}
+
 func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
