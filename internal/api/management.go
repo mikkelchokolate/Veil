@@ -39,6 +39,10 @@ var allowedApplyHistoryFilters = map[string]bool{
 	"limit":   true,
 }
 
+var allowedSubscriptionQueries = map[string]bool{
+	"format": true,
+}
+
 type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	Stack             string `json:"stack"`
@@ -700,7 +704,19 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	format := r.URL.Query().Get("format")
+	query := r.URL.Query()
+	queryKeys := make([]string, 0, len(query))
+	for key := range query {
+		queryKeys = append(queryKeys, key)
+	}
+	sort.Strings(queryKeys)
+	for _, key := range queryKeys {
+		if !allowedSubscriptionQueries[key] {
+			writeError(w, fmt.Sprintf("unsupported subscription query %q", key), http.StatusBadRequest)
+			return
+		}
+	}
+	format := query.Get("format")
 	if format != "" && format != "base64" && format != "raw" {
 		writeError(w, "format must be base64 or raw", http.StatusBadRequest)
 		return

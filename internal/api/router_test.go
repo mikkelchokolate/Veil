@@ -242,6 +242,21 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidati
 	assertInvalidSubscriptionFormat(t, w)
 }
 
+func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidation(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?offset=1", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported subscription query, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `unsupported subscription query "offset"`) {
+		t.Fatalf("unexpected unsupported query error: %q", w.Body.String())
+	}
+}
+
 func assertInvalidSubscriptionFormat(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
 	if w.Code != http.StatusBadRequest {
