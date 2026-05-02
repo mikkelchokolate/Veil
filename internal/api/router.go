@@ -225,7 +225,7 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && !validAuthToken(r, token) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="Veil API"`)
-			http.Error(w, "missing or invalid API token", http.StatusUnauthorized)
+			writeError(w, "missing or invalid API token", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -289,4 +289,10 @@ func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.Error(w, msg, code)
 }

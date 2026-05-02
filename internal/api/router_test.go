@@ -44,6 +44,24 @@ func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on auth error, got %q", nosniff)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on auth error, got %q", cc)
+	}
+}
+
 func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
