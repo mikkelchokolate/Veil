@@ -2264,6 +2264,7 @@ func TestManagementApplyHistoryEndpointRejectsInvalidFilterValues(t *testing.T) 
 		"/api/apply/history?success=maybe",
 		"/api/apply/history?limit=-1",
 		"/api/apply/history?limit=abc",
+		"/api/apply/history?stage=unknown",
 	}
 	for _, path := range cases {
 		w := httptest.NewRecorder()

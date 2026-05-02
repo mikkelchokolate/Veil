@@ -25,6 +25,14 @@ import (
 
 const maxApplyHistoryEntries = 100
 
+var allowedApplyHistoryStages = map[string]bool{
+	"staged":     true,
+	"live":       true,
+	"services":   true,
+	"rollback":   true,
+	"validation": true,
+}
+
 type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	Stack             string `json:"stack"`
@@ -1037,6 +1045,9 @@ func filterApplyHistory(history []ApplyHistoryEntry, values map[string][]string)
 	successText := firstQueryValue(values, "success")
 	limitText := firstQueryValue(values, "limit")
 	var successFilter *bool
+	if stage != "" && !allowedApplyHistoryStages[stage] {
+		return nil, fmt.Errorf("invalid stage filter: %s", stage)
+	}
 	if successText != "" {
 		parsed, err := strconv.ParseBool(successText)
 		if err != nil {
