@@ -291,7 +291,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		}
 		writeJSON(w, redactedSettings(s.settings))
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet, http.MethodPut)
 	}
 }
 
@@ -363,7 +363,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusCreated)
 		writeJSON(w, inbound)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -409,7 +409,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 	}
 }
 
@@ -440,7 +440,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusCreated)
 		writeJSON(w, rule)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -482,7 +482,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 	}
 }
 
@@ -551,7 +551,7 @@ func routingPresetByName(name string) (RoutingPreset, bool) {
 
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet)
 		return
 	}
 	s.mu.Lock()
@@ -571,7 +571,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodPost)
 		return
 	}
 	s.mu.Lock()
@@ -668,13 +668,13 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, redactedWarp(s.warp))
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet, http.MethodPut)
 	}
 }
 
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet)
 		return
 	}
 	s.mu.Lock()
@@ -691,7 +691,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 
 func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet)
 		return
 	}
 	format := r.URL.Query().Get("format")
@@ -798,7 +798,7 @@ func hysteria2ClientURI(domain string, port int, password string, name string) s
 
 func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodPost)
 		return
 	}
 	s.mu.Lock()
@@ -812,7 +812,7 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 
 func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodGet)
 		return
 	}
 	s.mu.Lock()
@@ -832,7 +832,7 @@ func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Requ
 
 func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w, http.MethodPost)
 		return
 	}
 	var req ApplyRequest

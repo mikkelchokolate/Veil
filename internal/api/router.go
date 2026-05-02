@@ -74,7 +74,7 @@ func NewRouter(info ServerInfo) http.Handler {
 			return
 		}
 		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			methodNotAllowed(w, http.MethodGet)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -84,14 +84,14 @@ func NewRouter(info ServerInfo) http.Handler {
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			methodNotAllowed(w, http.MethodGet)
 			return
 		}
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			methodNotAllowed(w, http.MethodGet)
 			return
 		}
 		writeJSON(w, StatusResponse{
@@ -103,7 +103,7 @@ func NewRouter(info ServerInfo) http.Handler {
 	})
 	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			methodNotAllowed(w, http.MethodPost)
 			return
 		}
 		result, err := speedtestRunner(r)
@@ -115,7 +115,7 @@ func NewRouter(info ServerInfo) http.Handler {
 	})
 	mux.HandleFunc("/api/profiles/ru-recommended/preview", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			methodNotAllowed(w, http.MethodPost)
 			return
 		}
 		var req RURecommendedPreviewRequest
@@ -295,4 +295,9 @@ func writeError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.Error(w, msg, code)
+}
+
+func methodNotAllowed(w http.ResponseWriter, methods ...string) {
+	w.Header().Set("Allow", strings.Join(methods, ", "))
+	writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 }

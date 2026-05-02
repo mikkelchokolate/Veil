@@ -2500,6 +2500,27 @@ func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestMethodNotAllowedResponsesIncludeAllowAndSecurityHeaders(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/settings", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for unsupported method, got %d: %s", w.Code, w.Body.String())
+	}
+	if allow := w.Header().Get("Allow"); allow != "GET, PUT" {
+		t.Fatalf("expected Allow header to list supported settings methods, got %q", allow)
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff on method-not-allowed error, got %q", nosniff)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control on method-not-allowed error, got %q", cc)
+	}
+}
+
 func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`not json`)
