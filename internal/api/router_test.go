@@ -2353,13 +2353,14 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 	}
 }
 
-func TestManagementApplyHistoryEndpointRejectsInvalidFilterValues(t *testing.T) {
+func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
 	cases := []string{
 		"/api/apply/history?success=maybe",
 		"/api/apply/history?limit=-1",
 		"/api/apply/history?limit=abc",
 		"/api/apply/history?stage=unknown",
+		"/api/apply/history?offset=1",
 	}
 	for _, path := range cases {
 		w := httptest.NewRecorder()

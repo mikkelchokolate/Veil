@@ -33,6 +33,12 @@ var allowedApplyHistoryStages = map[string]bool{
 	"validation": true,
 }
 
+var allowedApplyHistoryFilters = map[string]bool{
+	"stage":   true,
+	"success": true,
+	"limit":   true,
+}
+
 type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	Stack             string `json:"stack"`
@@ -1041,6 +1047,11 @@ func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) 
 }
 
 func filterApplyHistory(history []ApplyHistoryEntry, values map[string][]string) ([]ApplyHistoryEntry, error) {
+	for key := range values {
+		if !allowedApplyHistoryFilters[key] {
+			return nil, fmt.Errorf("invalid history filter: %s", key)
+		}
+	}
 	stage := firstQueryValue(values, "stage")
 	successText := firstQueryValue(values, "success")
 	limitText := firstQueryValue(values, "limit")
