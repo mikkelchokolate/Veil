@@ -76,6 +76,9 @@ func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control on auth error, got %q", cc)
 	}
+	if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
+		t.Fatalf("expected no-cache Pragma on auth error, got %q", pragma)
+	}
 }
 
 func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
