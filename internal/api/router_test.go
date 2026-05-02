@@ -91,6 +91,19 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRouterAcceptsBearerAuthTokenCaseInsensitive(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.Header.Set("Authorization", "bearer secret-token")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for lowercase bearer, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {

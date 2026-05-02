@@ -261,11 +261,14 @@ func bearerToken(header string) string {
 	if header == "" {
 		return ""
 	}
-	prefix := "Bearer "
-	if !strings.HasPrefix(header, prefix) {
+	const scheme = "Bearer "
+	if len(header) <= len(scheme) {
 		return ""
 	}
-	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
+	if !strings.EqualFold(header[:len(scheme)], scheme) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(scheme):])
 }
 
 const maxJSONBodyBytes int64 = 1024 * 1024
