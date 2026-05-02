@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,8 +37,12 @@ func TestResolveServeAuthTokenAllowsDisabledAuthForDevelopment(t *testing.T) {
 }
 
 func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T) {
-	if err := validateServeAuthBinding("0.0.0.0:2096", "disabled"); err == nil {
+	err := validateServeAuthBinding("0.0.0.0:2096", "disabled")
+	if err == nil {
 		t.Fatalf("expected public listen without auth token to be rejected")
+	}
+	if !strings.Contains(err.Error(), "--auth-token") || !strings.Contains(err.Error(), "VEIL_API_TOKEN") {
+		t.Fatalf("expected auth error to explain token sources, got %v", err)
 	}
 }
 

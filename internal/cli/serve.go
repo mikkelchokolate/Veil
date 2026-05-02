@@ -83,7 +83,7 @@ func validateServeAuthBinding(listen string, tokenSource string) error {
 	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
 		return nil
 	}
-	return fmt.Errorf("API auth token is required when listening on non-loopback address %s", listen)
+	return fmt.Errorf("API auth token is required when listening on non-loopback address %s; set --auth-token or VEIL_API_TOKEN", listen)
 }
 
 func resolveServeStatePath(flagValue string) (path string, source string) {
