@@ -25,6 +25,9 @@ func newServeCommand(version string) *cobra.Command {
 				return fmt.Errorf("listen address must be host:port: %w", err)
 			}
 			token, tokenSource := resolveServeAuthToken(authToken)
+			if err := validateServeAuthBinding(listen, tokenSource); err != nil {
+				return err
+			}
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
 			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot)
@@ -66,6 +69,21 @@ func resolveServeAuthToken(flagValue string) (token string, source string) {
 		return token, "VEIL_API_TOKEN"
 	}
 	return "", "disabled"
+}
+
+func validateServeAuthBinding(listen string, tokenSource string) error {
+	if tokenSource != "disabled" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return fmt.Errorf("listen address must be host:port: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if host == "localhost" || (ip != nil && ip.IsLoopback()) {
+		return nil
+	}
+	return fmt.Errorf("API auth token is required when listening on non-loopback address %s", listen)
 }
 
 func resolveServeStatePath(flagValue string) (path string, source string) {

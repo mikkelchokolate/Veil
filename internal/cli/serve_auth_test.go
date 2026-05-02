@@ -35,6 +35,12 @@ func TestResolveServeAuthTokenAllowsDisabledAuthForDevelopment(t *testing.T) {
 	}
 }
 
+func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T) {
+	if err := validateServeAuthBinding("0.0.0.0:2096", "disabled"); err == nil {
+		t.Fatalf("expected public listen without auth token to be rejected")
+	}
+}
+
 func TestNewServeHTTPServerSetsProductionTimeouts(t *testing.T) {
 	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply")
 
