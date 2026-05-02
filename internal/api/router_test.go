@@ -320,6 +320,12 @@ func TestRouterServesPanelShell(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content-type: %q", ct)
 	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for token-bearing panel shell, got %q", cc)
+	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff for panel shell, got %q", nosniff)
+	}
 	if body := w.Body.String(); !strings.Contains(body, "Veil Panel") || !strings.Contains(body, "/api/status") || !strings.Contains(body, "/api/apply/plan") || !strings.Contains(body, "/api/apply") || !strings.Contains(body, "Apply staged files") || !strings.Contains(body, "Apply live configs") || !strings.Contains(body, "Reload and health check services") || !strings.Contains(body, "Load apply history") || !strings.Contains(body, "Service status") || !strings.Contains(body, "loadServiceStatus") || !strings.Contains(body, "Client links") || !strings.Contains(body, "/api/client-links") || !strings.Contains(body, "/api/client-links/subscription") || !strings.Contains(body, "format=base64") || !strings.Contains(body, "format=raw") || !strings.Contains(body, "copy-client-links") || !strings.Contains(body, "copyClientLinksOutput") || !strings.Contains(body, "navigator.clipboard.writeText") || !strings.Contains(body, "download-client-subscription") || !strings.Contains(body, "download-client-subscription-raw") || !strings.Contains(body, "downloadClientSubscriptionPath") || !strings.Contains(body, "URL.createObjectURL") || !strings.Contains(body, "veil-subscription-raw.txt") {
 		t.Fatalf("unexpected panel body: %s", body)
 	}
