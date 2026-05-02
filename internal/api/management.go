@@ -261,8 +261,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, redactedSettings(s.settings))
 	case http.MethodPut:
 		var settings Settings
-		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &settings) {
 			return
 		}
 		if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {

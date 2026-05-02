@@ -653,6 +653,19 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 	}
 }
 
+func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized settings body, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
