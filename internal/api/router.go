@@ -279,6 +279,10 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 			writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return false
 		}
+		if strings.HasPrefix(err.Error(), "json: unknown field ") {
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return false
+		}
 		writeError(w, "invalid JSON", http.StatusBadRequest)
 		return false
 	}

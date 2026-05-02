@@ -726,6 +726,9 @@ func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown JSON field, got %d: %s", w.Code, w.Body.String())
 	}
+	if body := w.Body.String(); !strings.Contains(body, `unknown field "typo"`) {
+		t.Fatalf("expected unknown field diagnostic, got %q", body)
+	}
 }
 
 func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
