@@ -736,6 +736,42 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 	}
 }
 
+func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	oversizedName := strings.Repeat("a", 1024*1024+1)
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{
+			name:   "create",
+			method: http.MethodPost,
+			path:   "/api/inbounds",
+			body:   `{"name":"` + oversizedName + `","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`,
+		},
+		{
+			name:   "update",
+			method: http.MethodPut,
+			path:   "/api/inbounds/naive",
+			body:   `{"protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true,"path":"` + oversizedName + `"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("expected 413 for oversized inbound body, got %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true}`)

@@ -330,8 +330,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, s.inbounds)
 	case http.MethodPost:
 		var inbound Inbound
-		if err := json.NewDecoder(r.Body).Decode(&inbound); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &inbound) {
 			return
 		}
 		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
@@ -374,8 +373,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 	switch r.Method {
 	case http.MethodPut:
 		var update Inbound
-		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &update) {
 			return
 		}
 		if update.Protocol == "" || update.Transport == "" || update.Port <= 0 {
