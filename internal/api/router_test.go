@@ -1401,6 +1401,28 @@ func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T)
 	}
 }
 
+func TestManagementApplyRejectsMalformedJSONWithoutWritingFiles(t *testing.T) {
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{broken`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed JSON, got %d with response length %d", w.Code, w.Body.Len())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "invalid character") || strings.Contains(body, "cannot unmarshal") {
+		t.Fatalf("malformed JSON error should not leak decoder internals: %q", body)
+	}
+	if !strings.Contains(body, "invalid JSON") {
+		t.Fatalf("malformed JSON error should be sanitized, got: %q", body)
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("malformed JSON apply should not write files, stat err: %v", err)
+	}
+}
+
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
