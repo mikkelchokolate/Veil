@@ -56,6 +56,7 @@ type doctorSummary struct {
 type doctorCommandStatus struct {
 	Name    string `json:"name"`
 	Path    string `json:"path,omitempty"`
+	Error   string `json:"error,omitempty"`
 	Present bool   `json:"present"`
 }
 
@@ -97,6 +98,7 @@ func buildDoctorSummary(version string) doctorSummary {
 			status.Path = path
 			status.Present = true
 		} else {
+			status.Error = err.Error()
 			summary.Ready = false
 		}
 		summary.Commands = append(summary.Commands, status)

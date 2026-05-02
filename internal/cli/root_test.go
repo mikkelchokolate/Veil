@@ -65,6 +65,7 @@ func TestDoctorCommandPrintsJSONReadinessSummary(t *testing.T) {
 		`"name":"hysteria"`,
 		`"name":"sing-box"`,
 		`"name":"ufw"`,
+		`"name":"systemctl","error":"command not found","present":false`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("doctor JSON output missing %q:\n%s", want, got)
