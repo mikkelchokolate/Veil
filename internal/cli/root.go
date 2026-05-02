@@ -78,6 +78,10 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	fmt.Fprintln(out, "Required commands:")
 	for _, command := range summary.Commands {
 		if !command.Present {
+			if command.Error != "" {
+				fmt.Fprintf(out, "- %s: missing (%s)\n", command.Name, command.Error)
+				continue
+			}
 			fmt.Fprintf(out, "- %s: missing\n", command.Name)
 			continue
 		}

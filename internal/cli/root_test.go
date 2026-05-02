@@ -99,7 +99,11 @@ func TestDoctorCommandReportsOverallReadiness(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "Ready: no") {
-		t.Fatalf("doctor output missing readiness verdict:\n%s", out.String())
+	got := out.String()
+	if !strings.Contains(got, "Ready: no") {
+		t.Fatalf("doctor output missing readiness verdict:\n%s", got)
+	}
+	if !strings.Contains(got, "hysteria: missing (command not found)") {
+		t.Fatalf("doctor output missing command error detail:\n%s", got)
 	}
 }
