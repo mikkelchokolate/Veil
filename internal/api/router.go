@@ -21,10 +21,11 @@ type ServerInfo struct {
 }
 
 type StatusResponse struct {
-	Name     string          `json:"name"`
-	Version  string          `json:"version"`
-	Mode     string          `json:"mode"`
-	Services []ServiceStatus `json:"services"`
+	SchemaVersion string          `json:"schemaVersion"`
+	Name          string          `json:"name"`
+	Version       string          `json:"version"`
+	Mode          string          `json:"mode"`
+	Services      []ServiceStatus `json:"services"`
 }
 
 type ServiceStatus struct {
@@ -102,10 +103,11 @@ func NewRouter(info ServerInfo) http.Handler {
 			return
 		}
 		writeJSON(w, StatusResponse{
-			Name:     "Veil",
-			Version:  info.Version,
-			Mode:     info.Mode,
-			Services: buildServiceStatuses(),
+			SchemaVersion: "v1",
+			Name:          "Veil",
+			Version:       info.Version,
+			Mode:          info.Mode,
+			Services:      buildServiceStatuses(),
 		})
 	})
 	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {

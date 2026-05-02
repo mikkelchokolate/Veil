@@ -299,6 +299,9 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode status response: %v", err)
 	}
+	if response.SchemaVersion != "v1" {
+		t.Fatalf("unexpected status schema version: %q", response.SchemaVersion)
+	}
 	services := map[string]ServiceStatus{}
 	for _, service := range response.Services {
 		services[service.Name] = service
