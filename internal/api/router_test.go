@@ -29,6 +29,9 @@ func TestRouterHealthz(t *testing.T) {
 			if method == http.MethodGet && w.Body.String() != "ok\n" {
 				t.Fatalf("unexpected body: %q", w.Body.String())
 			}
+			if method == http.MethodHead && w.Body.Len() != 0 {
+				t.Fatalf("expected empty HEAD body, got %q", w.Body.String())
+			}
 			if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 				t.Fatalf("unexpected healthz content-type: %q", ct)
 			}
