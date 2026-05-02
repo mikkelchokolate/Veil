@@ -262,6 +262,9 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff for JSON API response, got %q", nosniff)
+	}
 	var response StatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode status response: %v", err)
