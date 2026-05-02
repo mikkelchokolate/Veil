@@ -86,6 +86,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		_, _ = w.Write([]byte(panelHTML))
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
