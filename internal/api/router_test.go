@@ -1386,6 +1386,21 @@ func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
 	}
 }
 
+func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T) {
+	applyRoot := t.TempDir()
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true} {}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for trailing JSON data, got %d with response length %d", w.Code, w.Body.Len())
+	}
+	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("trailing JSON apply should not write files, stat err: %v", err)
+	}
+}
+
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})

@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -256,17 +257,30 @@ func bearerToken(header string) string {
 const maxJSONBodyBytes int64 = 1024 * 1024
 
 func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
-	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)).Decode(v)
-	if err == nil {
-		return true
-	}
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
-		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+	if err := decoder.Decode(v); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return false
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return false
 	}
-	http.Error(w, err.Error(), http.StatusBadRequest)
-	return false
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			http.Error(w, "request body must contain a single JSON value", http.StatusBadRequest)
+			return false
+		}
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return false
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
