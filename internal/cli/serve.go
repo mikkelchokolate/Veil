@@ -80,7 +80,7 @@ func validateServeAuthBinding(listen string, tokenSource string) error {
 		return fmt.Errorf("listen address must be host:port: %w", err)
 	}
 	ip := net.ParseIP(host)
-	if host == "localhost" || (ip != nil && ip.IsLoopback()) {
+	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
 		return nil
 	}
 	return fmt.Errorf("API auth token is required when listening on non-loopback address %s", listen)

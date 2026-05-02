@@ -41,6 +41,16 @@ func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T)
 	}
 }
 
+func TestValidateServeAuthBindingAllowsDisabledAuthOnLocalhost(t *testing.T) {
+	for _, listen := range []string{"localhost:2096", "LOCALHOST:2096", "127.0.0.1:2096", "[::1]:2096"} {
+		t.Run(listen, func(t *testing.T) {
+			if err := validateServeAuthBinding(listen, "disabled"); err != nil {
+				t.Fatalf("expected local listen without auth token to be allowed: %v", err)
+			}
+		})
+	}
+}
+
 func TestNewServeHTTPServerSetsProductionTimeouts(t *testing.T) {
 	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply")
 
