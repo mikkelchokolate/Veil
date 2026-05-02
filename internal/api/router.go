@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -117,8 +118,7 @@ func NewRouter(info ServerInfo) http.Handler {
 			return
 		}
 		var req RURecommendedPreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &req) {
 			return
 		}
 		profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
@@ -251,6 +251,22 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
+}
+
+const maxJSONBodyBytes int64 = 1024 * 1024
+
+func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)).Decode(v)
+	if err == nil {
+		return true
+	}
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return false
+	}
+	http.Error(w, err.Error(), http.StatusBadRequest)
+	return false
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

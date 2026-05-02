@@ -358,6 +358,19 @@ func TestRouterServesPanelShellWithApplyHistoryFilters(t *testing.T) {
 	}
 }
 
+func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"domain":"` + strings.Repeat("a", 1024*1024+1) + `","email":"admin@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized preview body, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestRURecommendedPreviewEndpoint(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
