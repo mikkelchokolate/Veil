@@ -641,8 +641,7 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, redactedWarp(s.warp))
 	case http.MethodPut:
 		var warp WarpConfig
-		if err := json.NewDecoder(r.Body).Decode(&warp); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSONRequest(w, r, &warp) {
 			return
 		}
 		if warp.LicenseKey == "[REDACTED]" {

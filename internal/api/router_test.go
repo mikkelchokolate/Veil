@@ -626,6 +626,19 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	}
 }
 
+func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized WARP body, got %d with response length %d", w.Code, w.Body.Len())
+	}
+}
+
 func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
