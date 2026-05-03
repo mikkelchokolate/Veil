@@ -90,3 +90,73 @@ func TestPlanStackPortIgnoresUnusedTransport(t *testing.T) {
 		t.Fatalf("expected hysteria-only port plan to ignore TCP/443, got %d", hysteriaOnly.Port)
 	}
 }
+
+func TestPlanExplicitStackPortRejectsInvalidPort(t *testing.T) {
+	avail := PortAvailability{
+		TCPBusy: map[int]bool{},
+		UDPBusy: map[int]bool{},
+	}
+
+	for _, port := range []int{0, -1, 65536} {
+		_, err := PlanExplicitStackPort(avail, port, true, true)
+		if err == nil {
+			t.Fatalf("expected error for port %d, got nil", port)
+		}
+	}
+}
+
+func TestPlanExplicitStackPortRejectsTCPBusyWhenTCPNeeded(t *testing.T) {
+	avail := PortAvailability{
+		TCPBusy: map[int]bool{8443: true},
+		UDPBusy: map[int]bool{},
+	}
+	_, err := PlanExplicitStackPort(avail, 8443, true, true)
+	if err == nil {
+		t.Fatal("expected error when TCP is needed and busy")
+	}
+}
+
+func TestPlanExplicitStackPortRejectsUDPBusyWhenUDPNeeded(t *testing.T) {
+	avail := PortAvailability{
+		TCPBusy: map[int]bool{},
+		UDPBusy: map[int]bool{8443: true},
+	}
+	_, err := PlanExplicitStackPort(avail, 8443, true, true)
+	if err == nil {
+		t.Fatal("expected error when UDP is needed and busy")
+	}
+}
+
+func TestPlanExplicitStackPortIgnoresBusyUnusedTransport(t *testing.T) {
+	// TCP needed only, UDP is busy — should succeed
+	avail := PortAvailability{
+		TCPBusy: map[int]bool{},
+		UDPBusy: map[int]bool{8443: true},
+	}
+	plan, err := PlanExplicitStackPort(avail, 8443, true, false)
+	if err != nil {
+		t.Fatalf("expected success when busy transport is unused, got error: %v", err)
+	}
+	if plan.Port != 8443 {
+		t.Fatalf("expected port 8443, got %d", plan.Port)
+	}
+	if plan.Changed || plan.Random {
+		t.Fatalf("expected unchanged, non-random plan: %+v", plan)
+	}
+
+	// UDP needed only, TCP is busy — should succeed
+	avail2 := PortAvailability{
+		TCPBusy: map[int]bool{8443: true},
+		UDPBusy: map[int]bool{},
+	}
+	plan2, err2 := PlanExplicitStackPort(avail2, 8443, false, true)
+	if err2 != nil {
+		t.Fatalf("expected success when busy transport is unused, got error: %v", err2)
+	}
+	if plan2.Port != 8443 {
+		t.Fatalf("expected port 8443, got %d", plan2.Port)
+	}
+	if plan2.Changed || plan2.Random {
+		t.Fatalf("expected unchanged, non-random plan: %+v", plan2)
+	}
+}
