@@ -18,6 +18,7 @@ func newRepairCommand() *cobra.Command {
 	var etcDir string
 	var varDir string
 	var systemdDir string
+	var backupDir string
 
 	cmd := &cobra.Command{
 		Use:   "repair",
@@ -59,6 +60,21 @@ func newRepairCommand() *cobra.Command {
 			if !yes {
 				return fmt.Errorf("repair apply requires --yes; rerun with --dry-run to preview")
 			}
+
+			// Backup existing files before repairing (only on real apply)
+			var backupID string
+			if backupDir != "" && len(plan.Actions) > 0 {
+				paths := make([]string, 0, len(plan.Actions))
+				for _, action := range plan.Actions {
+					paths = append(paths, action.Path)
+				}
+				id, err := installer.BackupBeforeApply(paths, backupDir)
+				if err != nil {
+					return err
+				}
+				backupID = id
+			}
+
 			result, err := installer.ApplyRepairPlan(plan)
 			if err != nil {
 				return err
@@ -66,6 +82,11 @@ func newRepairCommand() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "Repaired files:")
 			for _, path := range result.WrittenFiles {
 				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
+			}
+			if backupID != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Backup ID: %s\n", backupID)
+			} else if len(plan.Actions) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No backup created")
 			}
 			return nil
 		},
@@ -80,5 +101,6 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before repair (optional)")
 	return cmd
 }
