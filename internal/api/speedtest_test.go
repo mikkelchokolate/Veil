@@ -46,6 +46,35 @@ func TestParseSpeedtestCLIJSONServerLabelNoDanglingDelimiters(t *testing.T) {
 	}
 }
 
+func TestParseSpeedtestCLIJSONTrimsWhitespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		sponsor string
+		srvName string
+		want    string
+	}{
+		{"sponsor leading space", " Test ISP", "Moscow", "Test ISP - Moscow"},
+		{"sponsor trailing space", "Test ISP ", "Moscow", "Test ISP - Moscow"},
+		{"name leading space", "Test ISP", " Moscow", "Test ISP - Moscow"},
+		{"name trailing space", "Test ISP", "Moscow ", "Test ISP - Moscow"},
+		{"both with spaces", "  Test ISP  ", "  Moscow  ", "Test ISP - Moscow"},
+		{"sponsor only with spaces", "  Test ISP  ", "", "Test ISP"},
+		{"name only with spaces", "", "  Moscow  ", "Moscow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := []byte(`{"ping":1,"download":1,"upload":1,"server":{"sponsor":"` + tt.sponsor + `","name":"` + tt.srvName + `"}}`)
+			result, err := parseSpeedtestCLIJSON(raw)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Server != tt.want {
+				t.Fatalf("server = %q, want %q", result.Server, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseOoklaSpeedtestJSONServerLabelFallback(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -57,6 +86,35 @@ func TestParseOoklaSpeedtestJSONServerLabelFallback(t *testing.T) {
 		{"isp missing", "", "Moscow", "Moscow"},
 		{"server name missing", "Test ISP", "", "Test ISP"},
 		{"both missing", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := []byte(`{"ping":{"latency":1},"download":{"bandwidth":1},"upload":{"bandwidth":1},"server":{"name":"` + tt.srvName + `"},"isp":"` + tt.isp + `"}`)
+			result, err := parseOoklaSpeedtestJSON(raw)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Server != tt.want {
+				t.Fatalf("server = %q, want %q", result.Server, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOoklaSpeedtestJSONTrimsWhitespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		isp     string
+		srvName string
+		want    string
+	}{
+		{"isp leading space", " Test ISP", "Moscow", "Test ISP - Moscow"},
+		{"isp trailing space", "Test ISP ", "Moscow", "Test ISP - Moscow"},
+		{"name leading space", "Test ISP", " Moscow", "Test ISP - Moscow"},
+		{"name trailing space", "Test ISP", "Moscow ", "Test ISP - Moscow"},
+		{"both with spaces", "  Test ISP  ", "  Moscow  ", "Test ISP - Moscow"},
+		{"isp only with spaces", "  Test ISP  ", "", "Test ISP"},
+		{"name only with spaces", "", "  Moscow  ", "Moscow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
