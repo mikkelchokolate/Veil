@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -25,5 +26,85 @@ func TestSystemdApplyPlanIgnoresEmptyUnits(t *testing.T) {
 	plan := SystemdApplyPlan([]string{"", "veil.service"})
 	if len(plan) != 3 {
 		t.Fatalf("expected daemon-reload + enable + restart, got %#v", plan)
+	}
+}
+
+type stubRunner struct {
+	errOn map[string]error
+	calls []string
+}
+
+func (r *stubRunner) Run(command string, args ...string) error {
+	r.calls = append(r.calls, command)
+	for i, a := range args {
+		r.calls = append(r.calls, a)
+		if err, ok := r.errOn[a]; ok && i == 0 {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestRunSystemdActionsWithoutActionsReturnsNil(t *testing.T) {
+	runner := &stubRunner{}
+	err := RunSystemdActions(runner, nil)
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("expected no calls, got %#v", runner.calls)
+	}
+}
+
+func TestRunSystemdActionsExecutesAllActions(t *testing.T) {
+	runner := &stubRunner{}
+	actions := []SystemdAction{
+		{Command: "systemctl", Args: []string{"daemon-reload"}},
+		{Command: "systemctl", Args: []string{"enable", "veil.service"}},
+	}
+	err := RunSystemdActions(runner, actions)
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	want := []string{"systemctl", "daemon-reload", "systemctl", "enable", "veil.service"}
+	if !reflect.DeepEqual(runner.calls, want) {
+		t.Fatalf("unexpected calls:\n got: %#v\nwant: %#v", runner.calls, want)
+	}
+}
+
+func TestRunSystemdActionsReturnsErrorOnFirstFailure(t *testing.T) {
+	runner := &stubRunner{
+		errOn: map[string]error{"daemon-reload": errors.New("failed")},
+	}
+	actions := []SystemdAction{
+		{Command: "systemctl", Args: []string{"daemon-reload"}},
+		{Command: "systemctl", Args: []string{"enable", "veil.service"}},
+	}
+	err := RunSystemdActions(runner, actions)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	want := []string{"systemctl", "daemon-reload"}
+	if !reflect.DeepEqual(runner.calls, want) {
+		t.Fatalf("expected only first call before error:\n got: %#v\nwant: %#v", runner.calls, want)
+	}
+}
+
+func TestRunSystemdActionsReturnsErrorOnLaterFailure(t *testing.T) {
+	runner := &stubRunner{
+		errOn: map[string]error{"enable": errors.New("unit not found")},
+	}
+	actions := []SystemdAction{
+		{Command: "systemctl", Args: []string{"daemon-reload"}},
+		{Command: "systemctl", Args: []string{"enable", "veil.service"}},
+		{Command: "systemctl", Args: []string{"restart", "veil.service"}},
+	}
+	err := RunSystemdActions(runner, actions)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	want := []string{"systemctl", "daemon-reload", "systemctl", "enable"}
+	if !reflect.DeepEqual(runner.calls, want) {
+		t.Fatalf("expected calls up to failure:\n got: %#v\nwant: %#v", runner.calls, want)
 	}
 }
