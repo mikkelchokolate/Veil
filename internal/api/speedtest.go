@@ -102,6 +102,8 @@ func parseOoklaSpeedtestJSON(raw []byte) (SpeedtestResult, error) {
 	server := payload.Server.Name
 	if payload.ISP != "" && server != "" {
 		server = payload.ISP + " - " + server
+	} else if payload.ISP != "" {
+		server = payload.ISP
 	}
 	return SpeedtestResult{
 		Server:       server,

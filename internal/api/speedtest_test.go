@@ -46,6 +46,32 @@ func TestParseSpeedtestCLIJSONServerLabelNoDanglingDelimiters(t *testing.T) {
 	}
 }
 
+func TestParseOoklaSpeedtestJSONServerLabelFallback(t *testing.T) {
+	tests := []struct {
+		name    string
+		isp     string
+		srvName string
+		want    string
+	}{
+		{"both present", "Test ISP", "Moscow", "Test ISP - Moscow"},
+		{"isp missing", "", "Moscow", "Moscow"},
+		{"server name missing", "Test ISP", "", "Test ISP"},
+		{"both missing", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := []byte(`{"ping":{"latency":1},"download":{"bandwidth":1},"upload":{"bandwidth":1},"server":{"name":"` + tt.srvName + `"},"isp":"` + tt.isp + `"}`)
+			result, err := parseOoklaSpeedtestJSON(raw)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Server != tt.want {
+				t.Fatalf("server = %q, want %q", result.Server, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseOoklaSpeedtestJSONConvertsBytesPerSecondToMbps(t *testing.T) {
 	result, err := parseOoklaSpeedtestJSON([]byte(`{
 		"ping": {"latency": 9.5},
