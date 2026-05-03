@@ -390,6 +390,8 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, s.inbounds[idx])
 	case http.MethodPut:
 		var update Inbound
 		if !decodeJSONRequest(w, r, &update) {
@@ -418,7 +420,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
+		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
 }
 

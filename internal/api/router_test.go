@@ -2739,3 +2739,39 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestManagementAPIGetsInboundByName(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create inbound expected 201, got %d: %s", create.Code, create.Body.String())
+	}
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/inbounds/hy2-alt", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for GET named inbound, got %d: %s", w.Code, w.Body.String())
+	}
+	var response Inbound
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Name != "hy2-alt" || response.Port != 8443 || response.Protocol != "hysteria2" {
+		t.Fatalf("unexpected inbound: %+v", response)
+	}
+}
+
+func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/inbounds/nonexistent", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing inbound, got %d: %s", w.Code, w.Body.String())
+	}
+}
