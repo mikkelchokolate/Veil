@@ -22,8 +22,8 @@ func newServeCommand(version string) *cobra.Command {
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, _, err := net.SplitHostPort(listen); err != nil {
-				return fmt.Errorf("listen address must be host:port: %w", err)
+			if err := validateServeListen(listen); err != nil {
+				return err
 			}
 			token, tokenSource := resolveServeAuthToken(authToken)
 			if err := validateServeAuthBinding(listen, tokenSource); err != nil {
@@ -72,6 +72,25 @@ func resolveServeAuthToken(flagValue string) (token string, source string) {
 	return "", "disabled"
 }
 
+func validateServeListen(listen string) error {
+	_, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return fmt.Errorf("listen address must be host:port: %w", err)
+	}
+	if err := validateServePort(port); err != nil {
+		return fmt.Errorf("listen address has invalid port %q: %w", port, err)
+	}
+	return nil
+}
+
+func validateServePort(port string) error {
+	portNum, err := strconv.Atoi(port)
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return fmt.Errorf("must be 1-65535")
+	}
+	return nil
+}
+
 func validateServeAuthBinding(listen string, tokenSource string) error {
 	if tokenSource != "disabled" {
 		return nil
@@ -80,9 +99,8 @@ func validateServeAuthBinding(listen string, tokenSource string) error {
 	if err != nil {
 		return fmt.Errorf("listen address must be host:port: %w", err)
 	}
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum < 1 || portNum > 65535 {
-		return fmt.Errorf("listen address has invalid port %q: must be 1-65535", port)
+	if err := validateServePort(port); err != nil {
+		return fmt.Errorf("listen address has invalid port %q: %w", port, err)
 	}
 	ip := net.ParseIP(host)
 	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {

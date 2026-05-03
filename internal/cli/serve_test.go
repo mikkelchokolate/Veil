@@ -21,3 +21,19 @@ func TestServeCommandRejectsInvalidListenAddress(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestServeCommandRejectsInvalidPortWithAuthToken(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"serve", "--listen", "localhost:notaport", "--auth-token", "secret"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected invalid port error when auth token is set")
+	}
+	if !strings.Contains(err.Error(), "invalid port") && !strings.Contains(err.Error(), "listen address") {
+		t.Fatalf("expected error to mention invalid port or listen address, got: %v", err)
+	}
+}
