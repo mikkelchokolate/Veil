@@ -189,6 +189,58 @@ func TestBuildBinaryRepairPlanDetectsChecksumDrift(t *testing.T) {
 	}
 }
 
+func TestBuildBinaryRepairPlanEmptyName(t *testing.T) {
+	_, err := BuildBinaryRepairPlan(BinaryAcquisition{URL: "https://example.com/hysteria", Destination: "/tmp/hysteria", SHA256: "abc123"})
+	if err == nil {
+		t.Fatalf("expected error for empty name")
+	}
+	if !strings.Contains(err.Error(), "binary name is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildBinaryRepairPlanEmptyURL(t *testing.T) {
+	_, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", Destination: "/tmp/hysteria", SHA256: "abc123"})
+	if err == nil {
+		t.Fatalf("expected error for empty url")
+	}
+	if !strings.Contains(err.Error(), "binary url is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildBinaryRepairPlanEmptyDestination(t *testing.T) {
+	_, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", URL: "https://example.com/hysteria", SHA256: "abc123"})
+	if err == nil {
+		t.Fatalf("expected error for empty destination")
+	}
+	if !strings.Contains(err.Error(), "binary destination is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildBinaryRepairPlanCaseInsensitiveSHA256(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "hysteria")
+	body := []byte("test-binary-body")
+	if err := os.WriteFile(dest, body, 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	checksum, err := SHA256Hex(body)
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	upperChecksum := strings.ToUpper(checksum)
+
+	plan, err := BuildBinaryRepairPlan(BinaryAcquisition{Name: "hysteria2", URL: "https://example.com/hysteria", Destination: dest, SHA256: upperChecksum})
+
+	if err != nil {
+		t.Fatalf("build binary repair plan: %v", err)
+	}
+	if len(plan.Actions) != 0 {
+		t.Fatalf("expected empty plan for matching SHA256 (case-insensitive), got actions: %+v", plan)
+	}
+}
+
 func mustRUProfile(t *testing.T, stack Stack) RURecommendedProfile {
 	t.Helper()
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
