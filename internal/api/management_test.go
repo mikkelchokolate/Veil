@@ -228,6 +228,48 @@ func TestVerifyRouteDatChecksumWrongLengthHex(t *testing.T) {
 	}
 }
 
+func TestSetWarpDefaultsFillsAllMissingFields(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  WarpConfig
+		want WarpConfig
+	}{
+		{
+			name: "all empty",
+			cfg:  WarpConfig{},
+			want: WarpConfig{
+				Endpoint:    "engage.cloudflareclient.com:2408",
+				SocksListen: "127.0.0.1",
+				SocksPort:   40000,
+				MTU:         1280,
+			},
+		},
+		{
+			name: "endpoint empty only",
+			cfg:  WarpConfig{SocksListen: "10.0.0.1", SocksPort: 9999, MTU: 1500},
+			want: WarpConfig{
+				Endpoint:    "engage.cloudflareclient.com:2408",
+				SocksListen: "10.0.0.1",
+				SocksPort:   9999,
+				MTU:         1500,
+			},
+		},
+		{
+			name: "preserves existing values",
+			cfg:  WarpConfig{Endpoint: "custom:1234", SocksListen: "0.0.0.0", SocksPort: 8080, MTU: 9000},
+			want: WarpConfig{Endpoint: "custom:1234", SocksListen: "0.0.0.0", SocksPort: 8080, MTU: 9000},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setWarpDefaults(&tt.cfg)
+			if tt.cfg.Endpoint != tt.want.Endpoint || tt.cfg.SocksListen != tt.want.SocksListen || tt.cfg.SocksPort != tt.want.SocksPort || tt.cfg.MTU != tt.want.MTU {
+				t.Fatalf("setWarpDefaults = %+v, want %+v", tt.cfg, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 	tests := []struct {
 		name     string
