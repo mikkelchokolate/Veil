@@ -843,6 +843,24 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 	}
 }
 
+func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	invalidStacks := []string{"invalid", "NATIVE", "BOTH", "hysteria", " ", "naiveproxy"}
+	for _, stack := range invalidStacks {
+		t.Run(stack, func(t *testing.T) {
+			body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"` + stack + `","mode":"dev"}`)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", body))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for invalid stack %q, got %d: %s", stack, w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "stack must be naive, hysteria2, or both") {
+				t.Fatalf("expected stack validation error for %q, got: %s", stack, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestManagementAPICreatesInbound(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)

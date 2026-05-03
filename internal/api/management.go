@@ -288,6 +288,10 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 			writeError(w, "panelListen, stack, and mode are required", http.StatusBadRequest)
 			return
 		}
+		if settings.Stack != "naive" && settings.Stack != "hysteria2" && settings.Stack != "both" {
+			writeError(w, "stack must be naive, hysteria2, or both", http.StatusBadRequest)
+			return
+		}
 		if settings.NaivePassword == "[REDACTED]" {
 			settings.NaivePassword = s.settings.NaivePassword
 		}
