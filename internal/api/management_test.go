@@ -270,6 +270,38 @@ func TestSetWarpDefaultsFillsAllMissingFields(t *testing.T) {
 	}
 }
 
+func TestRunFixedConfigValidationEmptyCommand(t *testing.T) {
+	result := runFixedConfigValidation("test", "/path/to/config", nil)
+	if !result.Skipped {
+		t.Fatal("expected skipped for empty command")
+	}
+	if result.Error != "validator command is empty" {
+		t.Fatalf("expected 'validator command is empty', got %q", result.Error)
+	}
+	if result.Name != "test" || result.Config != "/path/to/config" {
+		t.Fatalf("expected name/config preserved, got %+v", result)
+	}
+	if result.Command != nil {
+		t.Fatalf("expected command preserved as nil, got %v", result.Command)
+	}
+}
+
+func TestRunFixedConfigValidationBinaryNotFound(t *testing.T) {
+	result := runFixedConfigValidation("sing-box", "/etc/veil/generated/sing-box/warp.json", []string{"nonexistent-validator", "check", "-c", "/etc/veil/generated/sing-box/warp.json"})
+	if !result.Skipped {
+		t.Fatal("expected skipped when binary not found")
+	}
+	if result.Error != "nonexistent-validator not found; syntax validation skipped" {
+		t.Fatalf("expected binary not found error, got %q", result.Error)
+	}
+	if result.Name != "sing-box" {
+		t.Fatalf("expected name preserved, got %q", result.Name)
+	}
+	if len(result.Command) != 4 || result.Command[0] != "nonexistent-validator" {
+		t.Fatalf("expected command preserved, got %v", result.Command)
+	}
+}
+
 func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 	tests := []struct {
 		name     string
