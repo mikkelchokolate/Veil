@@ -364,6 +364,54 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	}
 }
 
+func TestStatusEndpointSupportsHEAD(t *testing.T) {
+	old := serviceStatusReader
+	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
+		return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running"}
+	}
+	t.Cleanup(func() { serviceStatusReader = old })
+
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	// HEAD /api/status returns 200, JSON/security headers, empty body
+	t.Run("HEAD", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodHead, "/api/status", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if w.Body.Len() != 0 {
+			t.Fatalf("expected empty HEAD body, got %d bytes: %q", w.Body.Len(), w.Body.String())
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+			t.Fatalf("expected JSON content-type with charset, got %q", ct)
+		}
+		if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Fatalf("expected no-store cache-control, got %q", cc)
+		}
+		if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+			t.Fatalf("expected nosniff, got %q", nosniff)
+		}
+	})
+
+	// unsupported method returns 405 with Allow: GET, HEAD
+	t.Run("unsupported method", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/status", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected 405, got %d", w.Code)
+		}
+		allow := w.Header().Get("Allow")
+		if allow != "GET, HEAD" {
+			t.Fatalf("expected Allow: GET, HEAD, got %q", allow)
+		}
+	})
+}
+
 func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)

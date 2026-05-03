@@ -107,17 +107,20 @@ func NewRouter(info ServerInfo) http.Handler {
 		}
 	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
 			return
 		}
-		writeJSON(w, StatusResponse{
-			SchemaVersion: "v1",
-			Name:          "Veil",
-			Version:       info.Version,
-			Mode:          info.Mode,
-			Services:      buildServiceStatuses(),
-		})
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(StatusResponse{
+				SchemaVersion: "v1",
+				Name:          "Veil",
+				Version:       info.Version,
+				Mode:          info.Mode,
+				Services:      buildServiceStatuses(),
+			})
+		}
 	})
 	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
