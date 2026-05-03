@@ -535,6 +535,8 @@ func (s *managementState) routingRuleIndex(name string) int {
 
 const routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
 
+const maxRouteDatSize = 50 * 1024 * 1024 // 50 MB
+
 var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var routeDatDownloader = downloadRouteDat
 
@@ -634,7 +636,15 @@ func downloadRouteDat(url string) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
+	body, err := io.ReadAll(lr)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxRouteDatSize {
+		return nil, fmt.Errorf("download %s exceeds maximum size of %d bytes", url, maxRouteDatSize)
+	}
+	return body, nil
 }
 
 func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {

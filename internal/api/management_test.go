@@ -503,6 +503,42 @@ func TestDownloadRouteDatUsesHttpClientWithTimeout(t *testing.T) {
 	}
 }
 
+func TestDownloadRouteDatRejectsOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Write content exceeding the 50 MB limit
+		chunk := make([]byte, 1024*1024) // 1 MB chunks
+		for i := 0; i < 51; i++ {        // 51 MB total > 50 MB limit
+			_, _ = w.Write(chunk)
+		}
+	}))
+	defer server.Close()
+
+	_, err := downloadRouteDat(server.URL)
+	if err == nil {
+		t.Fatal("expected error for oversized body (>50MB), got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum size") && !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected error to mention size limit, got: %v", err)
+	}
+}
+
+func TestDownloadRouteDatWithinSizeLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("small-body"))
+	}))
+	defer server.Close()
+
+	body, err := downloadRouteDat(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(body) != "small-body" {
+		t.Fatalf("expected small-body, got %q", string(body))
+	}
+}
+
 func TestManagementStateLoadReturnsErrorOnCorruptedState(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "management-state.json")

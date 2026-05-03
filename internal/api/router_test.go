@@ -26,13 +26,19 @@ func TestRouterHealthz(t *testing.T) {
 			if w.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", w.Code)
 			}
-			if method == http.MethodGet && w.Body.String() != "ok\n" {
-				t.Fatalf("unexpected body: %q", w.Body.String())
+			if method == http.MethodGet {
+				var body map[string]string
+				if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+					t.Fatalf("decode healthz body: %v", err)
+				}
+				if body["status"] != "ok" {
+					t.Fatalf("unexpected body: %+v", body)
+				}
 			}
 			if method == http.MethodHead && w.Body.Len() != 0 {
 				t.Fatalf("expected empty HEAD body, got %q", w.Body.String())
 			}
-			if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+			if ct := w.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
 				t.Fatalf("unexpected healthz content-type: %q", ct)
 			}
 			if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
@@ -45,6 +51,52 @@ func TestRouterHealthz(t *testing.T) {
 				t.Fatalf("expected nosniff for healthz, got %q", nosniff)
 			}
 		})
+	}
+}
+
+func TestHealthzReturnsOKWhenStateAccessible(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "management-state.json")
+	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 when state accessible, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode healthz body: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("expected status ok, got %+v", body)
+	}
+}
+
+func TestHealthzReturns503WhenStateMissing(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "nonexistent", "management-state.json")
+	r := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when state missing, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode healthz body: %v", err)
+	}
+	if body["status"] != "unhealthy" {
+		t.Fatalf("expected status unhealthy, got %+v", body)
+	}
+	if body["error"] == "" {
+		t.Fatalf("expected error message in unhealthy response, got %+v", body)
 	}
 }
 

@@ -183,9 +183,9 @@ func TestRepairDryRunDoesNotCreateBackup(t *testing.T) {
 	}
 }
 
-// TestRepairWithoutBackupDirDoesNotFail verifies backward compatibility:
-// repair without --backup-dir flag does not fail.
-func TestRepairWithoutBackupDirDoesNotFail(t *testing.T) {
+// TestRepairDefaultsBackupDirWhenNotSet verifies that repair without
+// --backup-dir flag defaults to var-dir/backups and creates a backup.
+func TestRepairDefaultsBackupDirWhenNotSet(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")
 	varDir := filepath.Join(dir, "var", "lib", "veil")
@@ -225,13 +225,58 @@ func TestRepairWithoutBackupDirDoesNotFail(t *testing.T) {
 	if !strings.Contains(out.String(), "Repaired files:") {
 		t.Fatalf("expected 'Repaired files:' in output, got:\n%s", out.String())
 	}
-	// Should NOT contain backup ID since no --backup-dir was specified
-	if strings.Contains(out.String(), "Backup ID:") {
-		t.Fatalf("expected no 'Backup ID:' without --backup-dir, got:\n%s", out.String())
+	// Should contain backup ID since default backup-dir is var-dir/backups
+	if !strings.Contains(out.String(), "Backup ID:") {
+		t.Fatalf("expected 'Backup ID:' with default backup-dir, got:\n%s", out.String())
 	}
-	// Should NOT contain "No backup created" since there were actions
-	if strings.Contains(out.String(), "No backup created") {
-		t.Fatalf("expected no 'No backup created' when --backup-dir not set, got:\n%s", out.String())
+}
+
+// TestRepairExplicitEmptyBackupDirSkipsBackup verifies that passing
+// --backup-dir "" explicitly skips backup (opt-out).
+func TestRepairExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "etc", "veil")
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+
+	// Pre-create a drifted file so repair has actions
+	caddyfileDir := filepath.Join(etcDir, "generated", "caddy")
+	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
+		t.Fatalf("mkdir caddy dir: %v", err)
+	}
+	caddyfilePath := filepath.Join(caddyfileDir, "Caddyfile")
+	if err := os.WriteFile(caddyfilePath, []byte("old-drifting-content"), 0o600); err != nil {
+		t.Fatalf("write caddyfile: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--yes",
+		"--backup-dir", "",
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error with --backup-dir '': %v\noutput: %s", err, out.String())
+	}
+	// Verify repair still works
+	if !strings.Contains(out.String(), "Repaired files:") {
+		t.Fatalf("expected 'Repaired files:' in output, got:\n%s", out.String())
+	}
+	// Should NOT contain backup ID since --backup-dir "" explicitly disables backup
+	if strings.Contains(out.String(), "Backup ID:") {
+		t.Fatalf("expected no 'Backup ID:' with --backup-dir '', got:\n%s", out.String())
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -115,6 +116,30 @@ func TestDownloadVerifiedBinaryRejectsChecksumMismatchAndPreservesExistingFile(t
 	}
 	if string(body) != "old-body" {
 		t.Fatalf("checksum mismatch should preserve existing dest, got %q", string(body))
+	}
+}
+
+func TestDownloadVerifiedBinaryRejectsOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Write content exceeding the 100 MB limit
+		chunk := make([]byte, 1024*1024) // 1 MB chunks
+		for i := 0; i < 101; i++ {       // 101 MB total > 100 MB limit
+			_, _ = w.Write(chunk)
+		}
+	}))
+	defer server.Close()
+
+	// Use a known hash that won't be reached because body is rejected first
+	_, err := DownloadVerifiedBinary(context.Background(), server.Client(), DownloadRequest{
+		URL:         server.URL,
+		Destination: filepath.Join(t.TempDir(), "bin"),
+		SHA256:      "0000000000000000000000000000000000000000000000000000000000000000",
+	})
+	if err == nil {
+		t.Fatal("expected error for oversized body (>100MB), got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum size") && !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected error to mention size limit, got: %v", err)
 	}
 }
 

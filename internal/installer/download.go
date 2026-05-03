@@ -18,6 +18,8 @@ type BuildHint struct {
 	Commands   []string
 }
 
+const maxReleaseAssetSize = 100 * 1024 * 1024 // 100 MB
+
 type DownloadRequest struct {
 	URL         string
 	Destination string
@@ -103,9 +105,13 @@ func DownloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return DownloadResult{}, fmt.Errorf("download failed: %s", resp.Status)
 	}
-	body, err := io.ReadAll(resp.Body)
+	lr := io.LimitReader(resp.Body, maxReleaseAssetSize+1)
+	body, err := io.ReadAll(lr)
 	if err != nil {
 		return DownloadResult{}, err
+	}
+	if len(body) > maxReleaseAssetSize {
+		return DownloadResult{}, fmt.Errorf("download %s exceeds maximum size of %d bytes", req.URL, maxReleaseAssetSize)
 	}
 	actual, err := SHA256Hex(body)
 	if err != nil {
