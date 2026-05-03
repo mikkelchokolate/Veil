@@ -53,6 +53,28 @@ func TestPlanSharedPortUsesRandomWhenPreferredPortsBusy(t *testing.T) {
 	}
 }
 
+func TestPlanExplicitStackPortReturnsPlanForFreePort(t *testing.T) {
+	plan, err := PlanExplicitStackPort(PortAvailability{
+		TCPBusy: map[int]bool{},
+		UDPBusy: map[int]bool{},
+	}, 443, true, true)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if plan.Port != 443 {
+		t.Fatalf("expected port 443, got %d", plan.Port)
+	}
+	if plan.Naive.Port != 443 || plan.Naive.Transport != "tcp" {
+		t.Fatalf("bad naive endpoint: %+v", plan.Naive)
+	}
+	if plan.Hysteria2.Port != 443 || plan.Hysteria2.Transport != "udp" {
+		t.Fatalf("bad hysteria2 endpoint: %+v", plan.Hysteria2)
+	}
+	if plan.Changed || plan.Random {
+		t.Fatalf("expected unchanged, non-random plan: %+v", plan)
+	}
+}
+
 func TestPlanStackPortIgnoresUnusedTransport(t *testing.T) {
 	naiveOnly := PlanStackPort(PortAvailability{
 		UDPBusy: map[int]bool{443: true},
