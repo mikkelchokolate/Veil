@@ -68,6 +68,26 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(body)
+	for _, want := range []string{
+		"quality:",
+		"go test ./... -count=1",
+		"go vet ./...",
+		"make build",
+		"git diff --check",
+		"needs: [quality, release]",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("release workflow missing required release gate %q:\n%s", want, workflow)
+		}
+	}
+}
+
 func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/ci.yml")
 	if err != nil {
