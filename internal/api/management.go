@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/veil-panel/veil/internal/secrets"
 )
 
 const maxApplyHistoryEntries = 100
@@ -232,6 +233,8 @@ type managementState struct {
 	mu            sync.Mutex
 	statePath     string
 	applyRoot     string
+	keyPath       string
+	cipher        *secrets.Cipher
 	settings      Settings
 	inbounds      []Inbound
 	rules         []RoutingRule
@@ -241,9 +244,14 @@ type managementState struct {
 }
 
 func newManagementState(info ServerInfo) *managementState {
+	keyPath := info.KeyPath
+	if keyPath == "" {
+		keyPath = "/etc/veil/state.key"
+	}
 	state := &managementState{
 		statePath: info.StatePath,
 		applyRoot: defaultApplyRoot(info.ApplyRoot),
+		keyPath:   keyPath,
 		settings:  Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: info.Mode},
 		inbounds: []Inbound{
 			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
@@ -253,6 +261,17 @@ func newManagementState(info ServerInfo) *managementState {
 			{Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true},
 		},
 		warp: WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
+	}
+	key, err := secrets.LoadOrCreateKey(keyPath)
+	if err != nil {
+		log.Printf("error loading encryption key from %s: %v", keyPath, err)
+	} else {
+		cipher, err := secrets.NewCipher(*key)
+		if err != nil {
+			log.Printf("error creating cipher: %v", err)
+		} else {
+			state.cipher = cipher
+		}
 	}
 	if err := state.load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
@@ -1184,7 +1203,9 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
 		return nil, nil, nil, err
 	}
-	snapshotBody, err := json.MarshalIndent(s.snapshotLocked(), "", "  ")
+	snapshot := s.snapshotLocked()
+	s.encryptSnapshot(&snapshot)
+	snapshotBody, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1598,6 +1619,58 @@ func (s *managementState) snapshotLocked() managementSnapshot {
 	}
 }
 
+func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
+	if s.cipher == nil {
+		return
+	}
+	if v := snapshot.Settings.NaivePassword; v != "" && !secrets.IsEncrypted(v) {
+		if enc, err := s.cipher.Encrypt(v); err == nil {
+			snapshot.Settings.NaivePassword = enc
+		}
+	}
+	if v := snapshot.Settings.Hysteria2Password; v != "" && !secrets.IsEncrypted(v) {
+		if enc, err := s.cipher.Encrypt(v); err == nil {
+			snapshot.Settings.Hysteria2Password = enc
+		}
+	}
+	if v := snapshot.Warp.LicenseKey; v != "" && !secrets.IsEncrypted(v) {
+		if enc, err := s.cipher.Encrypt(v); err == nil {
+			snapshot.Warp.LicenseKey = enc
+		}
+	}
+	if v := snapshot.Warp.PrivateKey; v != "" && !secrets.IsEncrypted(v) {
+		if enc, err := s.cipher.Encrypt(v); err == nil {
+			snapshot.Warp.PrivateKey = enc
+		}
+	}
+}
+
+func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
+	if s.cipher == nil {
+		return
+	}
+	if v := snapshot.Settings.NaivePassword; v != "" {
+		if dec, err := s.cipher.Decrypt(v); err == nil {
+			snapshot.Settings.NaivePassword = dec
+		}
+	}
+	if v := snapshot.Settings.Hysteria2Password; v != "" {
+		if dec, err := s.cipher.Decrypt(v); err == nil {
+			snapshot.Settings.Hysteria2Password = dec
+		}
+	}
+	if v := snapshot.Warp.LicenseKey; v != "" {
+		if dec, err := s.cipher.Decrypt(v); err == nil {
+			snapshot.Warp.LicenseKey = dec
+		}
+	}
+	if v := snapshot.Warp.PrivateKey; v != "" {
+		if dec, err := s.cipher.Decrypt(v); err == nil {
+			snapshot.Warp.PrivateKey = dec
+		}
+	}
+}
+
 func defaultApplyRoot(root string) string {
 	if root != "" {
 		return root
@@ -1656,6 +1729,7 @@ func (s *managementState) load() error {
 	if err := json.Unmarshal(body, &snapshot); err != nil {
 		return err
 	}
+	s.decryptSnapshot(&snapshot)
 	if snapshot.Settings.PanelListen != "" {
 		s.settings = snapshot.Settings
 	}
@@ -1685,6 +1759,7 @@ func (s *managementState) saveLocked() error {
 		return err
 	}
 	snapshot := s.snapshotLocked()
+	s.encryptSnapshot(&snapshot)
 	body, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return err

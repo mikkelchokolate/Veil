@@ -21,6 +21,7 @@ func newServeCommand(version string) *cobra.Command {
 	var authToken string
 	var statePath string
 	var applyRoot string
+	var keyPath string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
@@ -34,10 +35,12 @@ func newServeCommand(version string) *cobra.Command {
 			}
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
-			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot)
+			resolvedKeyPath, keySource := resolveServeKeyPath(keyPath)
+			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath)
 			fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s\n", listen)
 			fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", resolvedStatePath, stateSource)
 			fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", resolvedApplyRoot, applyRootSource)
+			fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", resolvedKeyPath, keySource)
 			if tokenSource == "disabled" {
 				fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 			} else {
@@ -75,13 +78,14 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
+	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 	return cmd
 }
 
-func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string) *http.Server {
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string) *http.Server {
 	return &http.Server{
 		Addr:              listen,
-		Handler:           api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot}),
+		Handler:           api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
@@ -158,4 +162,14 @@ func resolveServeApplyRoot(flagValue string) (path string, source string) {
 		return path, "VEIL_APPLY_ROOT"
 	}
 	return "/etc/veil", "default"
+}
+
+func resolveServeKeyPath(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--key-path"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH")); path != "" {
+		return path, "VEIL_KEY_PATH"
+	}
+	return "/etc/veil/state.key", "default"
 }
