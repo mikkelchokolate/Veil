@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/veil-panel/veil/internal/installer"
 )
@@ -211,7 +213,9 @@ func buildServiceStatuses() []ServiceStatus {
 
 func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
 	status := ServiceRuntimeStatus{Unit: unit, LoadState: "unknown", ActiveState: "unknown", SubState: "unknown"}
-	output, err := exec.Command(
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx,
 		"systemctl",
 		"show",
 		unit,

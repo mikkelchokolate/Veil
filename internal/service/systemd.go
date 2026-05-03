@@ -1,6 +1,10 @@
 package service
 
-import "os/exec"
+import (
+	"context"
+	"os/exec"
+	"time"
+)
 
 type SystemdAction struct {
 	Command string
@@ -14,7 +18,18 @@ type CommandRunner interface {
 type ExecRunner struct{}
 
 func (ExecRunner) Run(command string, args ...string) error {
-	cmd := exec.Command(command, args...)
+	timeout := 10 * time.Second
+	if command == "systemctl" && len(args) > 0 {
+		switch args[0] {
+		case "daemon-reload", "enable", "disable":
+			timeout = 10 * time.Second
+		case "restart":
+			timeout = 30 * time.Second
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command, args...)
 	return cmd.Run()
 }
 

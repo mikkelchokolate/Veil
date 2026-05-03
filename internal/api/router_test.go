@@ -2889,3 +2889,42 @@ func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
 		t.Fatalf("expected 404 for missing inbound, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestReadSystemdServiceStatusTimeout(t *testing.T) {
+	old := serviceStatusReader
+	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
+		return ServiceRuntimeStatus{
+			Unit:        unit,
+			LoadState:   "unknown",
+			ActiveState: "unknown",
+			SubState:    "unknown",
+			Error:       "context deadline exceeded",
+		}
+	}
+	t.Cleanup(func() { serviceStatusReader = old })
+
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response StatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+
+	// Verify timeout errors are surfaced in service status
+	for _, svc := range response.Services {
+		if svc.Error == "" {
+			t.Fatalf("expected timeout error in service %s status, got none", svc.Name)
+		}
+		if !strings.Contains(svc.Error, "deadline") {
+			t.Fatalf("expected deadline error in service %s, got: %s", svc.Name, svc.Error)
+		}
+	}
+}
