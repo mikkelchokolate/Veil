@@ -2928,3 +2928,81 @@ func TestReadSystemdServiceStatusTimeout(t *testing.T) {
 		}
 	}
 }
+
+func TestBearerTokenReturnsEmptyForEmptyHeader(t *testing.T) {
+	if got := bearerToken(""); got != "" {
+		t.Fatalf("expected empty string for empty header, got %q", got)
+	}
+}
+
+func TestBearerTokenReturnsEmptyForHeaderShorterThanScheme(t *testing.T) {
+	tests := []string{"B", "Be", "Bea", "Bear", "Beare", "Bearer"}
+	for _, h := range tests {
+		t.Run("header="+h, func(t *testing.T) {
+			if got := bearerToken(h); got != "" {
+				t.Fatalf("expected empty for header %q (shorter than scheme), got %q", h, got)
+			}
+		})
+	}
+}
+
+func TestBearerTokenReturnsEmptyForHeaderExactlySchemeLengthWithNoToken(t *testing.T) {
+	if got := bearerToken("Bearer "); got != "" {
+		t.Fatalf("expected empty for header exactly 'Bearer ' with no token, got %q", got)
+	}
+}
+
+func TestBearerTokenReturnsEmptyForNonBearerScheme(t *testing.T) {
+	tests := []string{
+		"Basic abcdefghij",
+		"Digest abcdefghij",
+		"bearer", // no space, shorter than scheme
+		"BEARERTOKEN",
+		"NotBearer xyz",
+	}
+	for _, h := range tests {
+		t.Run("header="+h, func(t *testing.T) {
+			if got := bearerToken(h); got != "" {
+				t.Fatalf("expected empty for non-Bearer header %q, got %q", h, got)
+			}
+		})
+	}
+}
+
+func TestBearerTokenExtractsTokenCaseInsensitively(t *testing.T) {
+	tests := []struct {
+		header string
+		want   string
+	}{
+		{"Bearer token", "token"},
+		{"bearer token", "token"},
+		{"BEARER token", "token"},
+		{"BeArEr token", "token"},
+	}
+	for _, tt := range tests {
+		t.Run("header="+tt.header, func(t *testing.T) {
+			if got := bearerToken(tt.header); got != tt.want {
+				t.Fatalf("bearerToken(%q) = %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBearerTokenTrimsWhitespaceFromToken(t *testing.T) {
+	tests := []struct {
+		header string
+		want   string
+	}{
+		{"Bearer   token  ", "token"},
+		{"Bearer \t token \t", "token"},
+		{"Bearer token", "token"},
+		{"Bearer  multi word token ", "multi word token"},
+	}
+	for _, tt := range tests {
+		t.Run("header="+tt.header, func(t *testing.T) {
+			if got := bearerToken(tt.header); got != tt.want {
+				t.Fatalf("bearerToken(%q) = %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
