@@ -41,3 +41,36 @@ func TestCheckDomainDNSRejectsInvalidDomain(t *testing.T) {
 		t.Fatalf("expected invalid domain error")
 	}
 }
+
+func TestCheckDomainDNSSkipsNilIPsAndWarnsOnEmptyResults(t *testing.T) {
+	// Nil IPs mixed with valid IPs: nil entries should be skipped.
+	check, err := CheckDomainDNS(context.Background(), fakeResolver{
+		ips: []net.IP{nil, net.ParseIP("203.0.113.10"), nil},
+	}, "example.com", net.ParseIP("203.0.113.10"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(check.ResolvedIPs) != 1 {
+		t.Fatalf("expected 1 resolved IP after skipping nils, got %d: %+v", len(check.ResolvedIPs), check)
+	}
+	if check.ResolvedIPs[0] != "203.0.113.10" {
+		t.Fatalf("expected resolved IP 203.0.113.10, got %s", check.ResolvedIPs[0])
+	}
+	if !check.MatchesPublicIP {
+		t.Fatalf("expected IP to match public IP: %+v", check)
+	}
+
+	// Empty IP list: warning about no records should be generated.
+	check, err = CheckDomainDNS(context.Background(), fakeResolver{
+		ips: []net.IP{},
+	}, "example.com", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(check.Warnings) == 0 {
+		t.Fatalf("expected warning about no records, got none: %+v", check)
+	}
+	if check.MatchesPublicIP {
+		t.Fatalf("expected no match when no records resolved: %+v", check)
+	}
+}
