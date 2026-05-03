@@ -65,8 +65,14 @@ func parseSpeedtestCLIJSON(raw []byte) (SpeedtestResult, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return SpeedtestResult{}, err
 	}
+	serverLabel := payload.Server.Name
+	if payload.Server.Sponsor != "" && payload.Server.Name != "" {
+		serverLabel = payload.Server.Sponsor + " - " + payload.Server.Name
+	} else if payload.Server.Sponsor != "" {
+		serverLabel = payload.Server.Sponsor
+	}
 	return SpeedtestResult{
-		Server:       strings.TrimSpace(strings.Join([]string{payload.Server.Sponsor, payload.Server.Name}, " - ")),
+		Server:       serverLabel,
 		PingMS:       payload.Ping,
 		DownloadMbps: payload.Download / 1_000_000,
 		UploadMbps:   payload.Upload / 1_000_000,
