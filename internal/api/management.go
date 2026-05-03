@@ -468,6 +468,8 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		return
 	}
 	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, s.rules[idx])
 	case http.MethodPut:
 		var update RoutingRule
 		if !decodeJSONRequest(w, r, &update) {
@@ -492,7 +494,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
+		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
 }
 

@@ -1153,6 +1153,42 @@ func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
 	}
 }
 
+func TestManagementAPIGetsRoutingRuleByName(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create routing rule expected 201, got %d: %s", create.Code, create.Body.String())
+	}
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/rules/ru-sites", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for GET named routing rule, got %d: %s", w.Code, w.Body.String())
+	}
+	var response RoutingRule
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Name != "ru-sites" || response.Match != "geosite:ru" || response.Outbound != "direct" || !response.Enabled {
+		t.Fatalf("unexpected routing rule: %+v", response)
+	}
+}
+
+func TestManagementAPIGetRoutingRuleByNameReturnsNotFoundForMissing(t *testing.T) {
+	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/rules/nonexistent", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing routing rule, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
 	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
