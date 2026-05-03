@@ -281,3 +281,223 @@ func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
 		t.Fatalf("expected no 'No backup created' when actions exist, got:\n%s", out.String())
 	}
 }
+
+func TestRepairDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "etc", "veil")
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	// Pre-create a drifted file for repair plan to detect
+	caddyfileDir := filepath.Join(etcDir, "generated", "caddy")
+	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
+		t.Fatalf("mkdir caddy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+		t.Fatalf("write caddyfile: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--dry-run",
+		"--audit-log", auditPath,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	// Audit log must NOT exist after dry-run
+	if _, err := os.Stat(auditPath); !os.IsNotExist(err) {
+		t.Fatalf("audit log should not exist after dry-run, but found: %s", auditPath)
+	}
+}
+
+func TestRepairApplyWithAuditLogWritesSuccessEventWithBackupID(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "etc", "veil")
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+	backupDir := filepath.Join(dir, "backups")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	// Pre-create a drifted file so repair has actions
+	caddyfileDir := filepath.Join(etcDir, "generated", "caddy")
+	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
+		t.Fatalf("mkdir caddy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+		t.Fatalf("write caddyfile: %v", err)
+	}
+	// Also pre-create veil.env with old content
+	veilEnvPath := filepath.Join(etcDir, "veil.env")
+	if err := os.MkdirAll(filepath.Dir(veilEnvPath), 0o755); err != nil {
+		t.Fatalf("mkdir veil env dir: %v", err)
+	}
+	if err := os.WriteFile(veilEnvPath, []byte("VEIL_API_TOKEN=old-token\n"), 0o600); err != nil {
+		t.Fatalf("write veil.env: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--yes",
+		"--backup-dir", backupDir,
+		"--audit-log", auditPath,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	// Verify audit log exists with success event
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "repair.apply" {
+		t.Fatalf("expected action 'repair.apply', got %v", ev["action"])
+	}
+	if ev["success"] != true {
+		t.Fatalf("expected success=true, got %v", ev["success"])
+	}
+	if ev["timestamp"] == nil || ev["timestamp"] == "" {
+		t.Fatalf("expected non-empty timestamp")
+	}
+	// backupID must be set since --backup-dir was provided
+	if ev["backupID"] == nil || ev["backupID"] == "" {
+		t.Fatalf("expected non-empty backupID, got %v", ev["backupID"])
+	}
+	wf, ok := ev["writtenFiles"].([]interface{})
+	if !ok {
+		t.Fatalf("expected writtenFiles array, got %T", ev["writtenFiles"])
+	}
+	if len(wf) == 0 {
+		t.Fatalf("expected non-empty writtenFiles, got %v", wf)
+	}
+}
+
+func TestRepairApplyFailureWithAuditLog(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	// Create a scenario where the plan builds but apply fails:
+	// Make etcDir read-only so MkdirAll during apply gets permission denied.
+	etcParent := filepath.Join(dir, "etc")
+	if err := os.MkdirAll(etcParent, 0o755); err != nil {
+		t.Fatalf("mkdir etc parent: %v", err)
+	}
+	etcDir := filepath.Join(etcParent, "veil")
+	if err := os.Mkdir(etcDir, 0o555); err != nil {
+		t.Fatalf("mkdir etc/veil: %v", err)
+	}
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatalf("mkdir var: %v", err)
+	}
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+	if err := os.MkdirAll(systemdDir, 0o755); err != nil {
+		t.Fatalf("mkdir systemd: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--yes",
+		"--audit-log", auditPath,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error, got nil\noutput: %s", out.String())
+	}
+
+	// Verify audit log has failure event
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "repair.apply" {
+		t.Fatalf("expected action 'repair.apply', got %v", ev["action"])
+	}
+	if ev["success"] != false {
+		t.Fatalf("expected success=false, got %v", ev["success"])
+	}
+	if ev["error"] == nil || ev["error"] == "" {
+		t.Fatalf("expected non-empty error field, got %v", ev["error"])
+	}
+}
+
+func TestRepairApplyNoAuditFlagBackwardCompatible(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "etc", "veil")
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+
+	// Pre-create a drifted file so repair has actions
+	caddyfileDir := filepath.Join(etcDir, "generated", "caddy")
+	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
+		t.Fatalf("mkdir caddy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+		t.Fatalf("write caddyfile: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--yes",
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error without --audit-log: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Repaired files:") {
+		t.Fatalf("expected 'Repaired files:' in output, got:\n%s", got)
+	}
+}

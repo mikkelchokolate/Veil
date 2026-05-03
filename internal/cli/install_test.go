@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -327,5 +329,109 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestInstallDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--dry-run",
+		"--audit-log", auditPath,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	// Audit log must NOT exist after dry-run
+	if _, err := os.Stat(auditPath); !os.IsNotExist(err) {
+		t.Fatalf("audit log should not exist after dry-run, but found: %s", auditPath)
+	}
+}
+
+func TestInstallApplyWithAuditLogWritesSuccessEvent(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--etc-dir", dir + "/etc/veil",
+		"--var-dir", dir + "/var/lib/veil",
+		"--systemd-dir", dir + "/etc/systemd/system",
+		"--panel-port", "2096",
+		"--yes",
+		"--audit-log", auditPath,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	// Verify audit log exists with success event
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "install.apply" {
+		t.Fatalf("expected action 'install.apply', got %v", ev["action"])
+	}
+	if ev["success"] != true {
+		t.Fatalf("expected success=true, got %v", ev["success"])
+	}
+	if ev["timestamp"] == nil || ev["timestamp"] == "" {
+		t.Fatalf("expected non-empty timestamp")
+	}
+	wf, ok := ev["writtenFiles"].([]interface{})
+	if !ok {
+		t.Fatalf("expected writtenFiles array, got %T", ev["writtenFiles"])
+	}
+	if len(wf) == 0 {
+		t.Fatalf("expected non-empty writtenFiles, got %v", wf)
+	}
+}
+
+func TestInstallApplyNoAuditFlagBackwardCompatible(t *testing.T) {
+	dir := t.TempDir()
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--etc-dir", dir + "/etc/veil",
+		"--var-dir", dir + "/var/lib/veil",
+		"--systemd-dir", dir + "/etc/systemd/system",
+		"--panel-port", "2096",
+		"--yes",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error without --audit-log: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Written files:") {
+		t.Fatalf("expected 'Written files:' in output, got:\n%s", got)
 	}
 }

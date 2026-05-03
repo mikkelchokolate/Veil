@@ -19,6 +19,7 @@ func newRepairCommand() *cobra.Command {
 	var varDir string
 	var systemdDir string
 	var backupDir string
+	var auditLog string
 
 	cmd := &cobra.Command{
 		Use:   "repair",
@@ -77,6 +78,7 @@ func newRepairCommand() *cobra.Command {
 
 			result, err := installer.ApplyRepairPlan(plan)
 			if err != nil {
+				_ = writeAuditRepair(auditLog, backupID, false, err.Error(), nil)
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Repaired files:")
@@ -87,6 +89,9 @@ func newRepairCommand() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Backup ID: %s\n", backupID)
 			} else if len(plan.Actions) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No backup created")
+			}
+			if err := writeAuditRepair(auditLog, backupID, true, "", result.WrittenFiles); err != nil {
+				return fmt.Errorf("audit log write failed after successful repair: %w", err)
 			}
 			return nil
 		},
@@ -102,5 +107,16 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before repair (optional)")
+	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	return cmd
+}
+
+func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
+	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+		Action:       "repair.apply",
+		BackupID:     backupID,
+		Success:      success,
+		Error:        errMsg,
+		WrittenFiles: writtenFiles,
+	})
 }

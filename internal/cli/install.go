@@ -35,6 +35,7 @@ func newInstallCommand() *cobra.Command {
 	var publicIP string
 	var interactive bool
 	var hysteriaSHA256 string
+	var auditLog string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -137,11 +138,15 @@ func newInstallCommand() *cobra.Command {
 			}
 			result, err := installer.ApplyRURecommendedProfile(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 			if err != nil {
+				_ = writeAuditInstall(auditLog, result.BackupID, false, err.Error(), nil)
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
 			for _, path := range result.WrittenFiles {
 				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
+			}
+			if err := writeAuditInstall(auditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
+				return fmt.Errorf("audit log write failed after successful install: %w", err)
 			}
 			return nil
 		},
@@ -160,7 +165,18 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
+	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	return cmd
+}
+
+func writeAuditInstall(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
+	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+		Action:       "install.apply",
+		BackupID:     backupID,
+		Success:      success,
+		Error:        errMsg,
+		WrittenFiles: writtenFiles,
+	})
 }
 
 func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {

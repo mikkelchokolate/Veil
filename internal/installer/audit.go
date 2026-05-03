@@ -15,6 +15,7 @@ type AuditEvent struct {
 	Success       bool     `json:"success"`
 	Error         string   `json:"error,omitempty"`
 	RestoredFiles []string `json:"restoredFiles,omitempty"`
+	WrittenFiles  []string `json:"writtenFiles,omitempty"`
 }
 
 // AppendAuditEvent appends one compact JSON line to the audit log.
