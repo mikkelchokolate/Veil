@@ -73,9 +73,12 @@ func resolveServeAuthToken(flagValue string) (token string, source string) {
 }
 
 func validateServeListen(listen string) error {
-	_, port, err := net.SplitHostPort(listen)
+	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return fmt.Errorf("listen address must be host:port: %w", err)
+	}
+	if host == "" {
+		return fmt.Errorf("listen address must include a host (e.g. 127.0.0.1:%s or localhost:%s)", port, port)
 	}
 	if err := validateServePort(port); err != nil {
 		return fmt.Errorf("listen address has invalid port %q: %w", port, err)

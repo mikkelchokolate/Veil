@@ -37,3 +37,19 @@ func TestServeCommandRejectsInvalidPortWithAuthToken(t *testing.T) {
 		t.Fatalf("expected error to mention invalid port or listen address, got: %v", err)
 	}
 }
+
+func TestServeCommandRejectsEmptyHost(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"serve", "--listen", ":2096", "--auth-token", "secret"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected empty host error")
+	}
+	if !strings.Contains(err.Error(), "host") && !strings.Contains(err.Error(), "listen address") {
+		t.Fatalf("expected error to mention host or listen address, got: %v", err)
+	}
+}
