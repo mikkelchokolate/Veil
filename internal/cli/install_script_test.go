@@ -68,6 +68,24 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	}
 }
 
+func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(body)
+	for _, want := range []string{
+		"go test ./... -count=1",
+		"go vet ./...",
+		"make build",
+		"git diff --check",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml missing required gate %q:\n%s", want, workflow)
+		}
+	}
+}
+
 func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 	body, err := os.ReadFile("../../README.md")
 	if err != nil {

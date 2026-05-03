@@ -13,5 +13,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.22'
-      - run: go test ./...
-      - run: go build ./cmd/veil
+      - run: go vet ./...
+      - run: make build
+      - run: go test ./... -count=1
+      - run: git diff --check
