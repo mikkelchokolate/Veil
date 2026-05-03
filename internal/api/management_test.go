@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDownloadRouteDatReturnsBodyOnSuccess(t *testing.T) {
@@ -336,5 +337,51 @@ func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 				t.Fatalf("applyHistoryStage() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+type timeoutRecordingTransport struct {
+	onRoundTrip func(req *http.Request)
+}
+
+func (t *timeoutRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.onRoundTrip(req)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestDownloadRouteDatUsesHttpClientWithTimeout(t *testing.T) {
+	// Verify the default client has a finite timeout
+	if routeDatHTTPClient.Timeout == 0 {
+		t.Fatal("routeDatHTTPClient should have a non-zero timeout")
+	}
+
+	// Verify timeout is applied to requests by using a custom transport
+	// that records whether the request context has a deadline
+	var hasDeadline bool
+	oldClient := routeDatHTTPClient
+	t.Cleanup(func() { routeDatHTTPClient = oldClient })
+
+	routeDatHTTPClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &timeoutRecordingTransport{
+			onRoundTrip: func(req *http.Request) {
+				_, ok := req.Context().Deadline()
+				hasDeadline = ok
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	_, err := downloadRouteDat(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasDeadline {
+		t.Fatal("expected request context to have a deadline (timeout) but it did not")
 	}
 }

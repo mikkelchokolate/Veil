@@ -513,6 +513,7 @@ func (s *managementState) routingRuleIndex(name string) int {
 
 const routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
 
+var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var routeDatDownloader = downloadRouteDat
 
 func routeDatSource() RoutingSource {
@@ -603,7 +604,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 }
 
 func downloadRouteDat(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	resp, err := routeDatHTTPClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
