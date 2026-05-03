@@ -19,6 +19,9 @@ func DefaultPublicIPEndpoints() []string {
 }
 
 func DetectPublicIP(ctx context.Context, client *http.Client, endpoints []string) (net.IP, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}

@@ -93,6 +93,23 @@ func TestDetectPublicIPRejectsCGNATAddresses(t *testing.T) {
 	}
 }
 
+func TestDetectPublicIPNilContextDoesNotPanic(t *testing.T) {
+	// When called with a nil context, DetectPublicIP should treat it as
+	// context.Background() instead of panicking.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("203.0.113.10\n"))
+	}))
+	defer server.Close()
+
+	ip, err := DetectPublicIP(nil, server.Client(), []string{server.URL})
+	if err != nil {
+		t.Fatalf("unexpected error with nil context: %v", err)
+	}
+	if !ip.Equal(net.ParseIP("203.0.113.10")) {
+		t.Fatalf("unexpected IP with nil context: %v", ip)
+	}
+}
+
 func TestDefaultPublicIPEndpointsAreHTTPS(t *testing.T) {
 	endpoints := DefaultPublicIPEndpoints()
 	if len(endpoints) == 0 {
