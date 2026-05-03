@@ -473,3 +473,115 @@ func TestRestoreRecreatesMissingParentDirectories(t *testing.T) {
 	// Verify file is back with correct content
 	assertFileContains(t, file1, "nested content")
 }
+
+func TestRestoreFromBackupCreatesSafetyBackup(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+
+	file1 := filepath.Join(srcDir, "config.yaml")
+	file2 := filepath.Join(srcDir, "service.conf")
+	original1 := "listen: :443\npassword: secret\n"
+	original2 := "[Unit]\nDescription=Test\n"
+	if err := os.WriteFile(file1, []byte(original1), 0o600); err != nil {
+		t.Fatalf("write file1: %v", err)
+	}
+	if err := os.WriteFile(file2, []byte(original2), 0o644); err != nil {
+		t.Fatalf("write file2: %v", err)
+	}
+
+	// Create initial backup (the one we'll restore from)
+	backupID, err := BackupBeforeApply([]string{file1, file2}, backupDir)
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+
+	// Modify files to simulate current live state
+	modified1 := "listen: :8443\npassword: newpass\n"
+	modified2 := "[Unit]\nDescription=Modified\n"
+	if err := os.WriteFile(file1, []byte(modified1), 0o600); err != nil {
+		t.Fatalf("modify file1: %v", err)
+	}
+	if err := os.WriteFile(file2, []byte(modified2), 0o644); err != nil {
+		t.Fatalf("modify file2: %v", err)
+	}
+
+	// Count backups before restore
+	beforeIDs, err := ListBackups(backupDir)
+	if err != nil {
+		t.Fatalf("list backups before: %v", err)
+	}
+	beforeCount := len(beforeIDs)
+
+	// Restore from the original backup
+	restored, err := RestoreFromBackup(backupDir, backupID)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if len(restored) != 2 {
+		t.Fatalf("expected 2 restored, got %d", len(restored))
+	}
+
+	// Verify files are restored to original content
+	assertFileContains(t, file1, original1)
+	assertFileContains(t, file2, original2)
+
+	// Verify a safety backup was created (one more backup than before)
+	afterIDs, err := ListBackups(backupDir)
+	if err != nil {
+		t.Fatalf("list backups after: %v", err)
+	}
+	if len(afterIDs) != beforeCount+1 {
+		t.Fatalf("expected one new safety backup, before=%d after=%d ids=%v", beforeCount, len(afterIDs), afterIDs)
+	}
+
+	// Find the safety backup (the one that is not backupID)
+	var safetyID string
+	for _, id := range afterIDs {
+		if id != backupID {
+			safetyID = id
+			break
+		}
+	}
+	if safetyID == "" {
+		t.Fatal("could not find safety backup ID")
+	}
+
+	// Verify safety backup contains the modified (pre-restore) files
+	safetyBackupPath := filepath.Join(backupDir, safetyID)
+	manifestData, err := os.ReadFile(filepath.Join(safetyBackupPath, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read safety manifest: %v", err)
+	}
+	if !strings.Contains(string(manifestData), file1) {
+		t.Fatalf("safety backup manifest should contain %s, got: %s", file1, string(manifestData))
+	}
+	if !strings.Contains(string(manifestData), file2) {
+		t.Fatalf("safety backup manifest should contain %s, got: %s", file2, string(manifestData))
+	}
+
+	// Verify safety backup contains the modified content (not the original)
+	// The safety backup should have the files as they were BEFORE restore
+	safetyFiles, err := os.ReadDir(safetyBackupPath)
+	if err != nil {
+		t.Fatalf("read safety backup dir: %v", err)
+	}
+	for _, f := range safetyFiles {
+		if f.Name() == "manifest.json" {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(safetyBackupPath, f.Name()))
+		if err != nil {
+			t.Fatalf("read safety file %s: %v", f.Name(), err)
+		}
+		if strings.Contains(string(content), "newpass") || strings.Contains(string(content), "Modified") {
+			// Found modified content in safety backup - this is correct
+			return
+		}
+	}
+	t.Fatal("safety backup should contain the modified pre-restore content")
+}

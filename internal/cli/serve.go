@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/api"
 )
+
+const serveDrainTimeout = 5 * time.Second
 
 func newServeCommand(version string) *cobra.Command {
 	var listen string
@@ -40,7 +43,32 @@ func newServeCommand(version string) *cobra.Command {
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", tokenSource)
 			}
-			return server.ListenAndServe()
+
+			// Start the server in a goroutine.
+			serveErr := make(chan error, 1)
+			go func() {
+				serveErr <- server.ListenAndServe()
+			}()
+
+			// Wait for either a serve error or context cancellation.
+			select {
+			case err := <-serveErr:
+				if err != nil && err != http.ErrServerClosed {
+					return fmt.Errorf("server error: %w", err)
+				}
+				return nil
+			case <-cmd.Context().Done():
+				fmt.Fprintln(cmd.OutOrStdout(), "Shutting down...")
+			}
+
+			// Graceful shutdown with drain timeout.
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), serveDrainTimeout)
+			defer shutdownCancel()
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				return fmt.Errorf("shutdown error: %w", err)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Server stopped")
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:2096", "HTTP listen address")

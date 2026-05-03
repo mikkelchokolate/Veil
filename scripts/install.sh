@@ -12,6 +12,7 @@ STACK="both"
 PANEL_PORT=""
 YES=""
 DRY_RUN=""
+FORCE=""
 
 usage() {
   cat <<USAGE
@@ -32,6 +33,7 @@ Options:
   --panel-port PORT    Panel TCP port; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
+  --force              Force re-install even if veil is already installed
   -h, --help           Show this help
 
 Environment:
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --panel-port) PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
+    --force) FORCE="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -74,6 +77,20 @@ if [[ "${EUID}" -ne 0 && "${INSTALL_DIR}" == "/usr/local/bin" ]]; then
   echo "Veil installer must run as root when installing into /usr/local/bin." >&2
   echo "Run with sudo, or pass --install-dir to a writable directory." >&2
   exit 1
+fi
+
+# Idempotency: skip download if veil is already installed and --force not set
+if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
+  echo "Veil is already installed at ${INSTALL_DIR}/veil"
+  echo "Use --force to re-install"
+  args=(--profile "${PROFILE}" --stack "${STACK}")
+  if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
+  if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
+  if [[ -n "${PORT}" ]]; then args+=(--port "${PORT}"); fi
+  if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+  if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
+  if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
+  exec "${INSTALL_DIR}/veil" install "${args[@]}"
 fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -113,8 +130,14 @@ echo "Downloading Veil ${VERSION} for ${os}/${arch} from ${REPO}..."
 curl -fsSL "${download_url}" -o "${archive}"
 curl -fsSL "${checksums_url}" -o "${checksums}"
 
+# Verify checksum with match-count guard: exit if grep finds no matching line
 (
   cd "${tmpdir}"
+  count=$(grep -c "  ${asset}$" checksums.txt)
+  if [[ "${count}" -eq 0 ]]; then
+    echo "no matching checksum for ${asset} in checksums.txt" >&2
+    exit 1
+  fi
   grep "  ${asset}$" checksums.txt | sha256sum -c -
 )
 

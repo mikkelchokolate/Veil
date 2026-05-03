@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 var installDNSResolver installer.DNSResolver = installer.NetResolver{}
 var installPublicIPClient *http.Client
 var installPublicIPEndpoints []string
+var installApplyFunc = installer.ApplyRURecommendedProfile
 
 func newInstallCommand() *cobra.Command {
 	var profile string
@@ -36,6 +38,7 @@ func newInstallCommand() *cobra.Command {
 	var interactive bool
 	var hysteriaSHA256 string
 	var auditLog string
+	var backupDir string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -136,7 +139,11 @@ func newInstallCommand() *cobra.Command {
 			if !yes {
 				return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
 			}
-			result, err := installer.ApplyRURecommendedProfile(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+			actualBackupDir := backupDir
+			if !cmd.Flags().Changed("backup-dir") {
+				actualBackupDir = filepath.Join(varDir, "backups")
+			}
+			result, err := installApplyFunc(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, BackupDir: actualBackupDir})
 			if err != nil {
 				_ = writeAuditInstall(auditLog, result.BackupID, false, err.Error(), nil)
 				return err
@@ -166,6 +173,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	return cmd
 }
 

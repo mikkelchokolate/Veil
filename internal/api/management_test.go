@@ -1,8 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -496,5 +500,50 @@ func TestDownloadRouteDatUsesHttpClientWithTimeout(t *testing.T) {
 	}
 	if !hasDeadline {
 		t.Fatal("expected request context to have a deadline (timeout) but it did not")
+	}
+}
+
+func TestManagementStateLoadReturnsErrorOnCorruptedState(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "management-state.json")
+
+	// Write corrupted (invalid JSON) state file
+	if err := os.WriteFile(statePath, []byte("not valid json {{{"), 0o600); err != nil {
+		t.Fatalf("write corrupted state: %v", err)
+	}
+
+	state := &managementState{statePath: statePath}
+	err := state.load()
+	if err == nil {
+		t.Fatal("expected error for corrupted state file, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid character") && !strings.Contains(err.Error(), "unmarshal") {
+		t.Fatalf("expected error to mention invalid character or unmarshal, got: %v", err)
+	}
+}
+
+func TestNewManagementStateLogsCorruptedStateError(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "management-state.json")
+
+	// Write corrupted (invalid JSON) state file
+	if err := os.WriteFile(statePath, []byte("not valid json {{{"), 0o600); err != nil {
+		t.Fatalf("write corrupted state: %v", err)
+	}
+
+	// Capture log output
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	// Create management state via NewRouter (which calls newManagementState internally)
+	_ = NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	output := buf.String()
+	if output == "" {
+		t.Fatal("expected log output when loading corrupted state file, but log was empty")
+	}
+	if !strings.Contains(output, "management-state.json") {
+		t.Fatalf("expected log output to mention state file, got: %s", output)
 	}
 }

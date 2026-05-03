@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/installer"
 )
 
 func TestInstallInteractivePromptsForDomainEmailPortAndRandomPanelPort(t *testing.T) {
@@ -433,5 +435,81 @@ func TestInstallApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, "Written files:") {
 		t.Fatalf("expected 'Written files:' in output, got:\n%s", got)
+	}
+}
+
+func TestInstallDefaultsBackupDirWhenNotSet(t *testing.T) {
+	var capturedPaths installer.ApplyPaths
+	oldApply := installApplyFunc
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		capturedPaths = paths
+		return installer.ApplyResult{}, nil
+	}
+	t.Cleanup(func() { installApplyFunc = oldApply })
+
+	dir := t.TempDir()
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--etc-dir", filepath.Join(dir, "etc", "veil"),
+		"--var-dir", varDir,
+		"--systemd-dir", filepath.Join(dir, "etc", "systemd", "system"),
+		"--yes",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	if capturedPaths.BackupDir == "" {
+		t.Fatalf("expected non-empty BackupDir when --backup-dir is not set, got empty")
+	}
+	expectedPrefix := filepath.Join(varDir, "backups")
+	if !strings.HasPrefix(capturedPaths.BackupDir, expectedPrefix) {
+		t.Fatalf("expected BackupDir to start with %q, got %q", expectedPrefix, capturedPaths.BackupDir)
+	}
+}
+
+func TestInstallExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
+	var capturedPaths installer.ApplyPaths
+	oldApply := installApplyFunc
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		capturedPaths = paths
+		return installer.ApplyResult{}, nil
+	}
+	t.Cleanup(func() { installApplyFunc = oldApply })
+
+	dir := t.TempDir()
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com", "--port", "31874",
+		"--etc-dir", filepath.Join(dir, "etc", "veil"),
+		"--var-dir", filepath.Join(dir, "var", "lib", "veil"),
+		"--systemd-dir", filepath.Join(dir, "etc", "systemd", "system"),
+		"--backup-dir", "",
+		"--yes",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+
+	if capturedPaths.BackupDir != "" {
+		t.Fatalf("expected empty BackupDir when --backup-dir is explicitly empty, got %q", capturedPaths.BackupDir)
 	}
 }

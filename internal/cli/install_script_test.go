@@ -128,3 +128,66 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 		}
 	}
 }
+
+func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	found := false
+	for _, want := range []string{
+		"-f \"${INSTALL_DIR}/veil\"",
+		"already installed",
+		"already up to date",
+		"skip",
+	} {
+		if strings.Contains(script, want) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("install.sh missing idempotency check for existing binary:\n%s", script)
+	}
+}
+
+func TestCurlInstallScriptForceReinstalls(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{
+		"--force",
+		"FORCE",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh missing --force flag for forced re-install; found none of [--force, FORCE]:\n%s", script)
+		}
+	}
+}
+
+func TestCurlInstallScriptChecksumFailsWhenMissing(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	found := false
+	for _, want := range []string{
+		"wc -l",
+		"grep -c",
+		"No checksum",
+		"no matching checksum",
+		"checksum not found",
+	} {
+		if strings.Contains(script, want) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("install.sh missing checksum match-count guard (wc -l / grep -c / error pattern); checksum verification is fragile:\n%s", script)
+	}
+}

@@ -30,7 +30,18 @@ type backupManifest struct {
 // BackupBeforeApply copies existing files to a timestamped backup directory.
 // Files that don't exist are silently skipped. Returns the backup ID.
 func BackupBeforeApply(paths []string, backupDir string) (backupID string, err error) {
-	backupID = time.Now().UTC().Format("20060102_150405")
+	baseID := time.Now().UTC().Format("20060102_150405")
+	backupID = baseID
+
+	// Handle collision: if the backup directory already exists (e.g. two backups in
+	// the same second), append a counter suffix until we find a free directory.
+	for suffix := 1; ; suffix++ {
+		backupPath := filepath.Join(backupDir, backupID)
+		if _, statErr := os.Stat(backupPath); os.IsNotExist(statErr) {
+			break
+		}
+		backupID = fmt.Sprintf("%s_%d", baseID, suffix)
+	}
 
 	backupPath := filepath.Join(backupDir, backupID)
 	if err := os.MkdirAll(backupPath, 0o700); err != nil {
@@ -106,6 +117,19 @@ func RestoreFromBackup(backupDir string, backupID string) ([]string, error) {
 	var manifest backupManifest
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return nil, fmt.Errorf("unmarshal manifest: %w", err)
+	}
+
+	// Collect existing original files to create a safety backup before overwriting
+	var existingPaths []string
+	for _, entry := range manifest.Entries {
+		if _, err := os.Stat(entry.OriginalPath); err == nil {
+			existingPaths = append(existingPaths, entry.OriginalPath)
+		}
+	}
+	if len(existingPaths) > 0 {
+		if _, safetyErr := BackupBeforeApply(existingPaths, backupDir); safetyErr != nil {
+			return nil, fmt.Errorf("create safety backup before restore: %w", safetyErr)
+		}
 	}
 
 	var restored []string

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -253,7 +254,9 @@ func newManagementState(info ServerInfo) *managementState {
 		},
 		warp: WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
 	}
-	_ = state.load()
+	if err := state.load(); err != nil {
+		log.Printf("error loading management state from %s: %v", info.StatePath, err)
+	}
 	return state
 }
 
