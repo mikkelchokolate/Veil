@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -286,5 +287,219 @@ func TestRollbackWithoutBackupDirFails(t *testing.T) {
 				t.Fatalf("expected error to mention --backup-dir for %s, got: %v", tt.name, err)
 			}
 		})
+	}
+}
+
+func readAuditLog(t *testing.T, path string) []map[string]interface{} {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	var events []map[string]interface{}
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		var ev map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("unmarshal audit line: %v", err)
+		}
+		events = append(events, ev)
+	}
+	return events
+}
+
+func TestRollbackRestoreWithAuditLog(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	file1 := filepath.Join(srcDir, "config.yaml")
+	file2 := filepath.Join(srcDir, "service.conf")
+	if err := os.WriteFile(file1, []byte("original 1\n"), 0o600); err != nil {
+		t.Fatalf("write file1: %v", err)
+	}
+	if err := os.WriteFile(file2, []byte("original 2\n"), 0o644); err != nil {
+		t.Fatalf("write file2: %v", err)
+	}
+
+	backupID, err := installer.BackupBeforeApply([]string{file1, file2}, backupDir)
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+
+	// Modify files
+	if err := os.WriteFile(file1, []byte("modified\n"), 0o600); err != nil {
+		t.Fatalf("modify file1: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes", "--audit-log", auditPath})
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out.String())
+	}
+
+	// Verify audit log exists
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "rollback.restore" {
+		t.Fatalf("expected action 'rollback.restore', got %v", ev["action"])
+	}
+	if ev["backupID"] != backupID {
+		t.Fatalf("expected backupID %q, got %v", backupID, ev["backupID"])
+	}
+	if ev["success"] != true {
+		t.Fatalf("expected success=true, got %v", ev["success"])
+	}
+	if ev["timestamp"] == nil || ev["timestamp"] == "" {
+		t.Fatalf("expected non-empty timestamp")
+	}
+	rf, ok := ev["restoredFiles"].([]interface{})
+	if !ok {
+		t.Fatalf("expected restoredFiles array, got %T", ev["restoredFiles"])
+	}
+	if len(rf) != 2 {
+		t.Fatalf("expected 2 restoredFiles, got %d: %v", len(rf), rf)
+	}
+}
+
+func TestRollbackRestoreFailureWithAuditLog(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatalf("mkdir backup dir: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"rollback", "restore", "nonexistent_id", "--backup-dir", backupDir, "--yes", "--audit-log", auditPath})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error, got nil\noutput: %s", out.String())
+	}
+
+	// Verify audit log has failure event
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "rollback.restore" {
+		t.Fatalf("expected action 'rollback.restore', got %v", ev["action"])
+	}
+	if ev["success"] != false {
+		t.Fatalf("expected success=false, got %v", ev["success"])
+	}
+	if ev["error"] == nil || ev["error"] == "" {
+		t.Fatalf("expected non-empty error field, got %v", ev["error"])
+	}
+}
+
+func TestRollbackCleanupWithAuditLog(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	file1 := filepath.Join(srcDir, "file.txt")
+	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"rollback", "cleanup", backupID, "--backup-dir", backupDir, "--yes", "--audit-log", auditPath})
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out.String())
+	}
+
+	// Verify audit log
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "rollback.cleanup" {
+		t.Fatalf("expected action 'rollback.cleanup', got %v", ev["action"])
+	}
+	if ev["backupID"] != backupID {
+		t.Fatalf("expected backupID %q, got %v", backupID, ev["backupID"])
+	}
+	if ev["success"] != true {
+		t.Fatalf("expected success=true, got %v", ev["success"])
+	}
+}
+
+func TestRollbackRestoreNoAuditFlagBackwardCompatible(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	file1 := filepath.Join(srcDir, "file.txt")
+	if err := os.WriteFile(file1, []byte("original"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+
+	// Modify
+	if err := os.WriteFile(file1, []byte("modified"), 0o644); err != nil {
+		t.Fatalf("modify file: %v", err)
+	}
+
+	// Restore without --audit-log
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes"})
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error without --audit-log: %v\noutput: %s", err, out.String())
+	}
+
+	// Verify no audit file was created in default locations
+	body, err := os.ReadFile(file1)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(body) != "original" {
+		t.Fatalf("file not restored: got %q", string(body))
 	}
 }
