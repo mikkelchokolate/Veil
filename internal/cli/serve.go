@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,9 +76,13 @@ func validateServeAuthBinding(listen string, tokenSource string) error {
 	if tokenSource != "disabled" {
 		return nil
 	}
-	host, _, err := net.SplitHostPort(listen)
+	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return fmt.Errorf("listen address must be host:port: %w", err)
+	}
+	portNum, err := strconv.Atoi(port)
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return fmt.Errorf("listen address has invalid port %q: must be 1-65535", port)
 	}
 	ip := net.ParseIP(host)
 	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {

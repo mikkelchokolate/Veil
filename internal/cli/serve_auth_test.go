@@ -46,6 +46,16 @@ func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T)
 	}
 }
 
+func TestValidateServeAuthBindingRejectsInvalidPortOnLocalhost(t *testing.T) {
+	err := validateServeAuthBinding("localhost:notaport", "disabled")
+	if err == nil {
+		t.Fatalf("expected invalid port on localhost to be rejected")
+	}
+	if !strings.Contains(err.Error(), "host:port") && !strings.Contains(err.Error(), "listen address") && !strings.Contains(err.Error(), "invalid port") {
+		t.Fatalf("expected error to mention host:port/listen address or invalid port, got %v", err)
+	}
+}
+
 func TestValidateServeAuthBindingAllowsDisabledAuthOnLocalhost(t *testing.T) {
 	for _, listen := range []string{"localhost:2096", "LOCALHOST:2096", "127.0.0.1:2096", "[::1]:2096"} {
 		t.Run(listen, func(t *testing.T) {
