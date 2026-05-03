@@ -11,7 +11,7 @@ Core idea:
 - Both can share the same numeric port because TCP and UDP port spaces are separate.
 - You can install both together, or only NaiveProxy, or only Hysteria2.
 
-Status: early development. Do not use on production servers yet.
+Status: active development. Suitable for testing and evaluation. Production hardening in progress — see [Roadmap](#roadmap).
 
 ## Quick start
 
@@ -105,8 +105,10 @@ Veil is being shaped with the help of [Hermes Agent](https://github.com/NousRese
 
 ## Roadmap
 
-- Finish the first production-ready installer flow.
-- Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status.
-- Add safer update and repair workflows.
-- Publish the first tagged prerelease with Linux amd64/arm64 binaries.
-- Continue hardening validation, rollback, audit logs, and secret redaction.
+- ✅ First production-ready installer flow (idempotency, checksum verification, backup before install)
+- ✅ Safe update and repair workflows (backup, rollback, audit logs)
+- ✅ Production hardening (signal handling, graceful shutdown, error propagation)
+- ✅ Secrets at rest encryption (AES-256-GCM, field-level)
+- Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status
+- Add safer update workflow (version comparison, staged rollback)
+- Continue hardening: rate limiting, TLS, input validation edge cases
