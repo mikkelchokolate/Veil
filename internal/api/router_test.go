@@ -35,13 +35,13 @@ func TestRouterHealthz(t *testing.T) {
 			if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 				t.Fatalf("unexpected healthz content-type: %q", ct)
 			}
-		if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
-			t.Fatalf("expected no-store cache-control for healthz, got %q", cc)
-		}
-		if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
-			t.Fatalf("expected no-cache pragma for healthz, got %q", pragma)
-		}
-		if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+			if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+				t.Fatalf("expected no-store cache-control for healthz, got %q", cc)
+			}
+			if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
+				t.Fatalf("expected no-cache pragma for healthz, got %q", pragma)
+			}
+			if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 				t.Fatalf("expected nosniff for healthz, got %q", nosniff)
 			}
 		})
@@ -405,6 +405,9 @@ func TestRouterServesPanelShell(t *testing.T) {
 	}
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected no-store cache-control for token-bearing panel shell, got %q", cc)
+	}
+	if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
+		t.Fatalf("expected no-cache Pragma for token-bearing panel shell, got %q", pragma)
 	}
 	if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 		t.Fatalf("expected nosniff for panel shell, got %q", nosniff)
