@@ -128,6 +128,106 @@ func TestRunFixedServiceHealthCheckRejectsDisallowedServices(t *testing.T) {
 	}
 }
 
+func TestVerifyRouteDatChecksumSuccessWithStandardFormat(t *testing.T) {
+	body := []byte("route dat content for geoip")
+	checksumText := "3a4eee3f4b7c80b43a36c56ad857be4213eaad22d2e02b8efff7b1d095f2a6d6  geoip.dat\n"
+
+	err := verifyRouteDatChecksum("geoip.dat", body, checksumText)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumSuccessWithSha256Prefix(t *testing.T) {
+	body := []byte("route dat content for geoip")
+	checksumText := "sha256:3a4eee3f4b7c80b43a36c56ad857be4213eaad22d2e02b8efff7b1d095f2a6d6  geoip.dat\n"
+
+	err := verifyRouteDatChecksum("geoip.dat", body, checksumText)
+	if err != nil {
+		t.Fatalf("unexpected error with sha256 prefix: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumSuccessMultipleEntries(t *testing.T) {
+	geositeBody := []byte("different content for geosite")
+	checksumText := "3a4eee3f4b7c80b43a36c56ad857be4213eaad22d2e02b8efff7b1d095f2a6d6  geoip.dat\n" +
+		"8bfd86422903167e5f93020206abdfdd52a2ae3cdb76e3e4fbafa586a043a50a  geosite.dat\n"
+
+	err := verifyRouteDatChecksum("geosite.dat", geositeBody, checksumText)
+	if err != nil {
+		t.Fatalf("unexpected error for second entry: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumSuccessFallbackToFirstToken(t *testing.T) {
+	body := []byte("route dat content for geoip")
+	checksumText := "3a4eee3f4b7c80b43a36c56ad857be4213eaad22d2e02b8efff7b1d095f2a6d6\n"
+
+	err := verifyRouteDatChecksum("other-file.dat", body, checksumText)
+	if err != nil {
+		t.Fatalf("unexpected error when falling back to first token: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumMismatch(t *testing.T) {
+	body := []byte("route dat content for geoip")
+	checksumText := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  geoip.dat\n"
+
+	err := verifyRouteDatChecksum("geoip.dat", body, checksumText)
+	if err == nil {
+		t.Fatal("expected checksum mismatch error, got nil")
+	}
+	if !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected 'checksum mismatch' error, got: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumEmptyText(t *testing.T) {
+	body := []byte("content")
+	err := verifyRouteDatChecksum("geoip.dat", body, "")
+	if err == nil {
+		t.Fatal("expected error for empty checksum text, got nil")
+	}
+	if !strings.Contains(err.Error(), "checksum for geoip.dat is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumWhitespaceOnly(t *testing.T) {
+	body := []byte("content")
+	err := verifyRouteDatChecksum("geoip.dat", body, "  \n\t  ")
+	if err == nil {
+		t.Fatal("expected error for whitespace-only checksum, got nil")
+	}
+}
+
+func TestVerifyRouteDatChecksumInvalidHex(t *testing.T) {
+	body := []byte("content")
+	checksumText := "not-a-valid-hex-string!!!  geoip.dat\n"
+
+	err := verifyRouteDatChecksum("geoip.dat", body, checksumText)
+	if err == nil {
+		t.Fatal("expected error for invalid hex checksum, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid checksum") {
+		t.Fatalf("expected 'invalid checksum' error, got: %v", err)
+	}
+}
+
+func TestVerifyRouteDatChecksumWrongLengthHex(t *testing.T) {
+	body := []byte("content")
+	// Only 8 hex chars instead of 64 (32 bytes)
+	checksumText := "deadbeef  geoip.dat\n"
+
+	err := verifyRouteDatChecksum("geoip.dat", body, checksumText)
+	if err == nil {
+		t.Fatal("expected error for wrong-length hex, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid checksum") {
+		t.Fatalf("expected 'invalid checksum' error, got: %v", err)
+	}
+}
+
 func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 	tests := []struct {
 		name     string
