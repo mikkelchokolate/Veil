@@ -170,7 +170,16 @@ func NewRouter(info ServerInfo) http.Handler {
 			Hysteria2YAML:      redactProfileSecrets(profile, profile.Hysteria2YAML),
 		})
 	})
-	return authMiddleware(info.AuthToken, mux)
+	rateLimited := rateLimitMiddleware(mux)
+	return authMiddleware(info.AuthToken, rateLimited)
+}
+
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	limiter := NewRateLimiter(100, 20) // 100 req/min per IP, burst 20
+	limiter.SetEndpointLimits(map[string]EndpointLimit{
+		"/api/tools/speedtest": {RatePerMinute: 2, Burst: 1}, // 1 req/30s
+	})
+	return limiter.Middleware(next)
 }
 
 func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
