@@ -2654,3 +2654,88 @@ func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
 		t.Fatalf("expected no-store cache-control on JSON decode error, got %q", cc)
 	}
 }
+
+func TestIsAllowedHealthService(t *testing.T) {
+	tests := []struct {
+		service string
+		want    bool
+	}{
+		{"veil-naive.service", true},
+		{"veil-hysteria2.service", true},
+		{"veil-warp.service", true},
+		{"veil.service", false},
+		{"caddy.service", false},
+		{"hysteria2.service", false},
+		{"", false},
+		{"veil-naive", false},
+		{"veil-naive.service.evil", false},
+	}
+	for _, tt := range tests {
+		got := isAllowedHealthService(tt.service)
+		if got != tt.want {
+			t.Errorf("isAllowedHealthService(%q) = %v, want %v", tt.service, got, tt.want)
+		}
+	}
+}
+
+func TestIsAllowedServiceCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		command []string
+		want    bool
+	}{
+		{
+			name:    "reload naive",
+			command: []string{"systemctl", "reload", "veil-naive.service"},
+			want:    true,
+		},
+		{
+			name:    "reload hysteria2",
+			command: []string{"systemctl", "reload", "veil-hysteria2.service"},
+			want:    true,
+		},
+		{
+			name:    "reload warp",
+			command: []string{"systemctl", "reload", "veil-warp.service"},
+			want:    true,
+		},
+		{
+			name:    "non-systemctl",
+			command: []string{"bash", "reload", "veil-naive.service"},
+			want:    false,
+		},
+		{
+			name:    "non-reload",
+			command: []string{"systemctl", "restart", "veil-naive.service"},
+			want:    false,
+		},
+		{
+			name:    "too few args",
+			command: []string{"systemctl", "reload"},
+			want:    false,
+		},
+		{
+			name:    "too many args",
+			command: []string{"systemctl", "reload", "veil-naive.service", "extra"},
+			want:    false,
+		},
+		{
+			name:    "unlisted service",
+			command: []string{"systemctl", "reload", "caddy.service"},
+			want:    false,
+		},
+		{
+			name:    "empty command",
+			command: []string{},
+			want:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAllowedServiceCommand(tt.command)
+			if got != tt.want {
+				t.Errorf("isAllowedServiceCommand(%v) = %v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+}
