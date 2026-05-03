@@ -90,3 +90,82 @@ func TestRenderWarpSingBoxConfigIncludesRoutingRules(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderWarpSingBoxConfigNoRoutingRules(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "warp-peer-key",
+		SocksPort:     40000,
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box without routing rules: %v", err)
+	}
+	if strings.Contains(body, `"route"`) {
+		t.Fatalf("expected no route section with empty rules:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxConfigSkipsEmptyRuleFields(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "warp-peer-key",
+		SocksPort:     40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "", Outbound: "direct"},
+			{Match: "geoip:ru", Outbound: ""},
+			{Match: "geosite:ru-blocked", Outbound: "warp"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box with partial empty rules: %v", err)
+	}
+	if !strings.Contains(body, `"geosite"`) {
+		t.Fatalf("expected valid geosite rule to be included:\n%s", body)
+	}
+	if strings.Contains(body, `"geoip"`) {
+		t.Fatalf("expected geoip rule with empty outbound to be skipped:\n%s", body)
+	}
+	if strings.Contains(body, `"domain"`) {
+		t.Fatalf("expected empty-match rule to be skipped:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxConfigDomainMatchType(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "warp-peer-key",
+		SocksPort:     40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "example.com", Outbound: "direct"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box with domain match: %v", err)
+	}
+	if !strings.Contains(body, `"domain": "example.com"`) {
+		t.Fatalf("expected domain match rule, got:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxConfigEmptyRulesSliceYieldsNoRoute(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "warp-peer-key",
+		SocksPort:     40000,
+		RoutingRules:  []WarpRoutingRule{},
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box with empty rules slice: %v", err)
+	}
+	if strings.Contains(body, `"route"`) {
+		t.Fatalf("expected no route section with empty rules slice:\n%s", body)
+	}
+}

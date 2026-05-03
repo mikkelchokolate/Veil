@@ -34,3 +34,90 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderNaiveCaddyfileRequiresDomain(t *testing.T) {
+	_, err := RenderNaiveCaddyfile(NaiveConfig{
+		ListenPort: 443,
+		Username:   "alice",
+		Password:   "secret",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing domain, got nil")
+	}
+	if !strings.Contains(err.Error(), "domain is required") {
+		t.Fatalf("expected 'domain is required', got: %v", err)
+	}
+}
+
+func TestRenderNaiveCaddyfileRequiresListenPort(t *testing.T) {
+	_, err := RenderNaiveCaddyfile(NaiveConfig{
+		Domain:   "example.com",
+		Username: "alice",
+		Password: "secret",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing listen port, got nil")
+	}
+	if !strings.Contains(err.Error(), "listen port is required") {
+		t.Fatalf("expected 'listen port is required', got: %v", err)
+	}
+}
+
+func TestRenderNaiveCaddyfileRequiresCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		password string
+	}{
+		{"both empty", "", ""},
+		{"username empty", "", "secret"},
+		{"password empty", "alice", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RenderNaiveCaddyfile(NaiveConfig{
+				Domain:     "example.com",
+				ListenPort: 443,
+				Username:   tt.username,
+				Password:   tt.password,
+			})
+			if err == nil {
+				t.Fatal("expected error for missing credentials, got nil")
+			}
+			if !strings.Contains(err.Error(), "username and password are required") {
+				t.Fatalf("expected 'username and password are required', got: %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderNaiveCaddyfileDefaultsFallbackRoot(t *testing.T) {
+	cfg, err := RenderNaiveCaddyfile(NaiveConfig{
+		Domain:     "example.com",
+		Email:      "admin@example.com",
+		ListenPort: 443,
+		Username:   "alice",
+		Password:   "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(cfg, "root * /var/lib/veil/www") {
+		t.Fatalf("expected default fallback root, got:\n%s", cfg)
+	}
+}
+
+func TestRenderNaiveCaddyfileRejectsZeroListenPort(t *testing.T) {
+	_, err := RenderNaiveCaddyfile(NaiveConfig{
+		Domain:     "example.com",
+		ListenPort: 0,
+		Username:   "alice",
+		Password:   "secret",
+	})
+	if err == nil {
+		t.Fatal("expected error for zero listen port, got nil")
+	}
+	if !strings.Contains(err.Error(), "listen port is required") {
+		t.Fatalf("expected 'listen port is required', got: %v", err)
+	}
+}
