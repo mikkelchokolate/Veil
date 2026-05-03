@@ -134,7 +134,7 @@ func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
 		"--email", "admin@example.com", "--port", "31874",
-		"--public-ip", "198.51.100.25",
+		"--public-ip", "93.184.216.34",
 		"--dry-run",
 	})
 
@@ -144,9 +144,9 @@ func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"DNS check",
-		"Public IP: 198.51.100.25",
+		"Public IP: 93.184.216.34",
 		"Resolved IPs: 203.0.113.10",
-		"Warning: domain example.com does not resolve to public IP 198.51.100.25",
+		"Warning: domain example.com does not resolve to public IP 93.184.216.34",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
@@ -156,14 +156,14 @@ func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 
 func TestInstallDryRunDetectsPublicIPWhenRequested(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("198.51.100.25\n"))
+		_, _ = w.Write([]byte("93.184.216.34\n"))
 	}))
 	defer server.Close()
 
 	oldResolver := installDNSResolver
 	oldClient := installPublicIPClient
 	oldEndpoints := installPublicIPEndpoints
-	installDNSResolver = staticDNSResolver{ips: []net.IP{net.ParseIP("198.51.100.25")}}
+	installDNSResolver = staticDNSResolver{ips: []net.IP{net.ParseIP("93.184.216.34")}}
 	installPublicIPClient = server.Client()
 	installPublicIPEndpoints = []string{server.URL}
 	t.Cleanup(func() {
@@ -190,8 +190,8 @@ func TestInstallDryRunDetectsPublicIPWhenRequested(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"Public IP: 198.51.100.25",
-		"Resolved IPs: 198.51.100.25",
+		"Public IP: 93.184.216.34",
+		"Resolved IPs: 93.184.216.34",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)

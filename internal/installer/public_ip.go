@@ -75,6 +75,26 @@ var cgnatCIDR = func() *net.IPNet {
 	return cidr
 }()
 
+// docCIDRs covers documentation and reserved address ranges that are not
+// globally routable (RFC 5737 TEST-NET-1/2/3, RFC 2544 benchmark).
+var docCIDRs = func() []*net.IPNet {
+	ranges := []string{
+		"192.0.2.0/24",     // TEST-NET-1 (RFC 5737)
+		"198.51.100.0/24",  // TEST-NET-2 (RFC 5737)
+		"203.0.113.0/24",   // TEST-NET-3 (RFC 5737)
+		"198.18.0.0/15",    // Benchmark (RFC 2544)
+	}
+	cidrs := make([]*net.IPNet, 0, len(ranges))
+	for _, r := range ranges {
+		_, cidr, err := net.ParseCIDR(r)
+		if err != nil {
+			panic(err)
+		}
+		cidrs = append(cidrs, cidr)
+	}
+	return cidrs
+}()
+
 func isPublicIP(ip net.IP) bool {
 	if ip == nil {
 		return false
@@ -84,6 +104,12 @@ func isPublicIP(ip net.IP) bool {
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast() || cgnatCIDR.Contains(ip) {
 		return false
+	}
+	// Reject documentation and reserved test ranges.
+	for _, cidr := range docCIDRs {
+		if cidr.Contains(ip) {
+			return false
+		}
 	}
 	return true
 }
