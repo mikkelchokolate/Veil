@@ -63,14 +63,23 @@ func detectPublicIPFromEndpoint(ctx context.Context, client *http.Client, endpoi
 	return ip, nil
 }
 
+// cgnatCIDR covers the carrier-grade NAT address space (RFC 6598).
+var cgnatCIDR = func() *net.IPNet {
+	_, cidr, err := net.ParseCIDR("100.64.0.0/10")
+	if err != nil {
+		panic(err)
+	}
+	return cidr
+}()
+
 func isPublicIP(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	// Reject unspecified, loopback, private, link-local, and multicast.
+	// Reject unspecified, loopback, private, link-local, multicast, and CGNAT.
 	if ip.IsUnspecified() || ip.IsLoopback() || ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() {
+		ip.IsMulticast() || cgnatCIDR.Contains(ip) {
 		return false
 	}
 	return true

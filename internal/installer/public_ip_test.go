@@ -81,6 +81,18 @@ func TestDetectPublicIPFailsWhenAllEndpointsReturnNonPublic(t *testing.T) {
 	}
 }
 
+func TestDetectPublicIPRejectsCGNATAddresses(t *testing.T) {
+	cgnat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("100.64.0.1"))
+	}))
+	defer cgnat.Close()
+
+	_, err := DetectPublicIP(context.Background(), cgnat.Client(), []string{cgnat.URL})
+	if err == nil {
+		t.Fatalf("expected error when endpoint returns CGNAT address 100.64.0.1")
+	}
+}
+
 func TestDefaultPublicIPEndpointsAreHTTPS(t *testing.T) {
 	endpoints := DefaultPublicIPEndpoints()
 	if len(endpoints) == 0 {
