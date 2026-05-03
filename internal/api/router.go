@@ -74,8 +74,8 @@ func NewRouter(info ServerInfo) http.Handler {
 			writeNotFound(w)
 			return
 		}
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -89,7 +89,9 @@ func NewRouter(info ServerInfo) http.Handler {
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("Origin-Agent-Cluster", "?1")
-		_, _ = w.Write([]byte(panelHTML))
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(panelHTML))
+		}
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
