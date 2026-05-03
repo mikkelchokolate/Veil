@@ -57,5 +57,21 @@ func detectPublicIPFromEndpoint(ctx context.Context, client *http.Client, endpoi
 	if ip == nil {
 		return nil, fmt.Errorf("response is not an IP address")
 	}
+	if !isPublicIP(ip) {
+		return nil, fmt.Errorf("%s is not a public IP address", ip)
+	}
 	return ip, nil
+}
+
+func isPublicIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	// Reject unspecified, loopback, private, link-local, and multicast.
+	if ip.IsUnspecified() || ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() {
+		return false
+	}
+	return true
 }
