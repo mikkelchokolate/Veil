@@ -462,6 +462,69 @@ func TestRepairApplyFailureWithAuditLog(t *testing.T) {
 	}
 }
 
+func TestRepairApplyBackupFailureWithAuditLog(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "etc", "veil")
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
+
+	// Pre-create a drifted file so repair has actions (needed for backup path)
+	caddyfileDir := filepath.Join(etcDir, "generated", "caddy")
+	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
+		t.Fatalf("mkdir caddy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+		t.Fatalf("write caddyfile: %v", err)
+	}
+
+	// Make backupDir read-only so MkdirAll inside BackupBeforeApply fails
+	backupDir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(backupDir, 0o555); err != nil {
+		t.Fatalf("mkdir backup dir: %v", err)
+	}
+
+	auditPath := filepath.Join(dir, "audit.jsonl")
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair",
+		"--profile", "ru-recommended",
+		"--domain", "example.com",
+		"--email", "admin@example.com",
+		"--port", "443",
+		"--yes",
+		"--backup-dir", backupDir,
+		"--audit-log", auditPath,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error from backup failure, got nil\noutput: %s", out.String())
+	}
+
+	// Audit log must exist with a failure event
+	events := readAuditLog(t, auditPath)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 audit event for backup failure, got %d", len(events))
+	}
+	ev := events[0]
+	if ev["action"] != "repair.apply" {
+		t.Fatalf("expected action 'repair.apply', got %v", ev["action"])
+	}
+	if ev["success"] != false {
+		t.Fatalf("expected success=false, got %v", ev["success"])
+	}
+	if ev["error"] == nil || ev["error"] == "" {
+		t.Fatalf("expected non-empty error field, got %v", ev["error"])
+	}
+}
+
 func TestRepairApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")

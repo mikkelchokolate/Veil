@@ -67,3 +67,26 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 		}
 	}
 }
+
+func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
+	body, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(body)
+	for _, want := range []string{
+		"repair --backup-dir",
+		"rollback list --backup-dir",
+		"rollback restore",
+		"rollback cleanup",
+		"--audit-log",
+		"audit",
+		"JSONL",
+		"dry-run",
+		"writable",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing %q:\n%s", want, readme)
+		}
+	}
+}

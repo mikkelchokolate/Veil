@@ -71,6 +71,7 @@ func newRepairCommand() *cobra.Command {
 				}
 				id, err := installer.BackupBeforeApply(paths, backupDir)
 				if err != nil {
+					_ = writeAuditRepair(auditLog, "", false, err.Error(), nil)
 					return err
 				}
 				backupID = id
