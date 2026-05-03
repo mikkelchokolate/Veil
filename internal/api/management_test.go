@@ -98,6 +98,36 @@ func TestRunFixedServiceActionRejectsDisallowedCommands(t *testing.T) {
 	}
 }
 
+func TestRunFixedServiceHealthCheckRejectsDisallowedServices(t *testing.T) {
+	tests := []struct {
+		name    string
+		service string
+		wantErr string
+	}{
+		{"unknown service", "unknown.service", "service health check is not allowed"},
+		{"nginx service", "nginx.service", "service health check is not allowed"},
+		{"empty service", "", "service health check is not allowed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runFixedServiceHealthCheck(tt.service)
+			if result.Healthy {
+				t.Fatal("expected not healthy for disallowed service")
+			}
+			if result.Error != tt.wantErr {
+				t.Fatalf("expected error %q, got %q", tt.wantErr, result.Error)
+			}
+			if result.Name != tt.service {
+				t.Fatalf("expected name %q, got %q", tt.service, result.Name)
+			}
+			expectedCommand := []string{"systemctl", "is-active", "--quiet", tt.service}
+			if len(result.Command) != len(expectedCommand) {
+				t.Fatalf("expected command %v, got %v", expectedCommand, result.Command)
+			}
+		})
+	}
+}
+
 func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 	tests := []struct {
 		name     string
