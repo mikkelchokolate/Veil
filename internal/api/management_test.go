@@ -70,6 +70,34 @@ func TestStackAllowsProtocolRejectsCrossStackProtocols(t *testing.T) {
 	}
 }
 
+func TestRunFixedServiceActionRejectsDisallowedCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		command []string
+		wantErr string
+	}{
+		{"wrong binary", []string{"bash", "reload", "veil-naive.service"}, "service command is not allowed"},
+		{"wrong subcommand", []string{"systemctl", "restart", "veil-naive.service"}, "service command is not allowed"},
+		{"wrong service", []string{"systemctl", "reload", "evil.service"}, "service command is not allowed"},
+		{"too few args", []string{"systemctl", "reload"}, "service command is not allowed"},
+		{"too many args", []string{"systemctl", "reload", "veil-naive.service", "extra"}, "service command is not allowed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runFixedServiceAction(tt.command)
+			if result.Success {
+				t.Fatal("expected failure for disallowed command")
+			}
+			if result.Error != tt.wantErr {
+				t.Fatalf("expected error %q, got %q", tt.wantErr, result.Error)
+			}
+			if result.Name != tt.command[len(tt.command)-1] {
+				t.Fatalf("expected name from last arg, got %q", result.Name)
+			}
+		})
+	}
+}
+
 func TestApplyHistoryStageReturnsCorrectStage(t *testing.T) {
 	tests := []struct {
 		name     string
