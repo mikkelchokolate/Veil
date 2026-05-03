@@ -9,6 +9,7 @@ type ApplyPaths struct {
 	EtcDir     string
 	VarDir     string
 	SystemdDir string
+	BackupDir  string
 }
 
 type ApplyResult struct {
@@ -16,6 +17,7 @@ type ApplyResult struct {
 	Hysteria2Path     string
 	FallbackIndexPath string
 	WrittenFiles      []string
+	BackupID          string
 }
 
 func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (ApplyResult, error) {
@@ -28,6 +30,20 @@ func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (
 		Hysteria2Path:     filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(paths.VarDir, "www", "index.html"),
 	}
+
+	// Backup existing files before overwriting
+	if paths.BackupDir != "" {
+		existingPaths := make([]string, 0, len(files))
+		for _, file := range files {
+			existingPaths = append(existingPaths, file.Path)
+		}
+		backupID, err := BackupBeforeApply(existingPaths, paths.BackupDir)
+		if err != nil {
+			return ApplyResult{}, err
+		}
+		result.BackupID = backupID
+	}
+
 	for _, file := range files {
 		if err := writeManagedFile(file.Path, file.Content, file.Mode); err != nil {
 			return ApplyResult{}, err
