@@ -18,6 +18,14 @@ func TestValidateDomainRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestValidateDomainRejectsDomainTooLong(t *testing.T) {
+	label50 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	domain := label50 + "." + label50 + "." + label50 + "." + label50 + "." + label50 + ".com"
+	if err := ValidateDomain(domain); err == nil {
+		t.Fatalf("expected domain too long error")
+	}
+}
+
 func TestValidateEmailAcceptsEmail(t *testing.T) {
 	if err := ValidateEmail("admin@example.com"); err != nil {
 		t.Fatalf("expected valid email: %v", err)
