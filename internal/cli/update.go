@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -31,6 +32,9 @@ func newUpdateCommand(version string) *cobra.Command {
 	var yes bool
 	var dryRun bool
 	var force bool
+	var restart bool
+	var listen string
+	var authToken string
 
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -39,7 +43,8 @@ func newUpdateCommand(version string) *cobra.Command {
 checksum, backs up the current binary, and replaces it.
 
 Use --dry-run to preview without making changes.
-Use --force to reinstall even if the current version is already the latest.`,
+Use --force to reinstall even if the current version is already the latest.
+Use --restart to restart the veil service and perform a health check after update.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
@@ -137,8 +142,28 @@ Use --force to reinstall even if the current version is already the latest.`,
 			}
 
 			fmt.Fprintf(out, "Updated to %s.\n", release.TagName)
-			fmt.Fprintln(out, "Restart the veil service to apply the update:")
-			fmt.Fprintln(out, "  systemctl restart veil.service")
+			if !restart {
+				fmt.Fprintln(out, "Restart the veil service to apply the update:")
+				fmt.Fprintln(out, "  systemctl restart veil.service")
+				return nil
+			}
+
+			// 10. Restart service and health check
+			fmt.Fprintln(out, "Restarting veil.service...")
+			if err := runSystemctlRestart("veil.service"); err != nil {
+				return fmt.Errorf("restart failed (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
+			}
+			fmt.Fprintln(out, "Service restarted. Running health check...")
+
+			addr := resolveStatusListen(listen)
+			if !strings.Contains(addr, "://") {
+				addr = "http://" + addr
+			}
+			token, _ := resolveServeAuthToken(authToken)
+			if err := waitForHealthy(addr, token, 10*time.Second); err != nil {
+				return fmt.Errorf("health check failed after restart (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
+			}
+			fmt.Fprintf(out, "Service healthy. Update complete.\n")
 			return nil
 		},
 	}
@@ -146,7 +171,54 @@ Use --force to reinstall even if the current version is already the latest.`,
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm binary replacement")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview update without making changes")
 	cmd.Flags().BoolVar(&force, "force", false, "reinstall even if already at latest version")
+	cmd.Flags().BoolVar(&restart, "restart", false, "restart veil.service and health check after update")
+	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check (default: 127.0.0.1:2096)")
+	cmd.Flags().StringVar(&authToken, "auth-token", "", "API token for health check")
 	return cmd
+}
+
+// runSystemctlRestart runs systemctl restart for the given unit.
+var runSystemctlRestart = func(unit string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return execCommand(ctx, "systemctl", "restart", unit)
+}
+
+var execCommand = func(ctx context.Context, name string, args ...string) error {
+	cmd := execCmd(ctx, name, args...)
+	return cmd.Run()
+}
+
+var execCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, args...)
+}
+
+// waitForHealthy polls the /healthz endpoint until it returns 200 or times out.
+func waitForHealthy(addr string, token string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr+"/healthz", nil)
+		if err != nil {
+			cancel()
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if token != "" {
+			req.Header.Set("X-Veil-Token", token)
+		}
+		resp, err := updateHTTPClient.Do(req)
+		cancel()
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			return nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("health check timed out after %v", timeout)
 }
 
 // updateAssetName returns the expected release asset name for the current platform.

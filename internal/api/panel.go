@@ -648,6 +648,10 @@ const panelHTML = `<!doctype html>
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
     });
+
+    // Auto-load settings and service status on panel open.
+    loadSettingsIntoForm();
+    loadServiceStatus();
   </script>
 </body>
 </html>
