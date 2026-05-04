@@ -103,12 +103,67 @@ Remove a backup after you confirm it is no longer needed:
 
 Veil is being shaped with the help of [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
+## CLI reference
+
+### serve — Run the API and web panel
+
+```bash
+# Local-only (default, no auth required)
+./bin/veil serve
+
+# HTTPS with TLS
+./bin/veil serve --tls-cert /etc/veil/cert.pem --tls-key /etc/veil/key.pem
+
+# Public bind requires auth
+./bin/veil serve --listen 0.0.0.0:443 --auth-token "$VEIL_API_TOKEN"
+
+# SIGHUP reloads state and encryption key without restart
+kill -HUP $(cat /run/veil.pid)
+```
+
+### status — Query running server for service health
+
+```bash
+./bin/veil status                          # human-readable (default: 127.0.0.1:2096)
+./bin/veil status --json                   # machine-readable JSON
+./bin/veil status --listen :443 --auth-token secret
+```
+
+### update — Self-update from GitHub releases
+
+```bash
+./bin/veil version --check                 # compare current vs latest
+./bin/veil update --dry-run                # preview
+./bin/veil update --yes                    # download, verify, install
+./bin/veil update --yes --restart          # + restart veil.service + health check
+./bin/veil update --yes --force            # reinstall even if already latest
+```
+
+### config validate — Offline state validation
+
+```bash
+./bin/veil config validate --state /var/lib/veil/state.json
+```
+
+### TLS secure defaults
+
+When TLS is enabled, `veil serve` enforces:
+- TLS 1.2 minimum (no TLS 1.0/1.1)
+- AEAD cipher suites only (ECDHE + AES-256-GCM / AES-128-GCM)
+- ECDSA and RSA certificates supported
+- X25519 and P-256 curve preferences
+- Server-preferred cipher order
+
 ## Roadmap
 
 - ✅ First production-ready installer flow (idempotency, checksum verification, backup before install)
 - ✅ Safe update and repair workflows (backup, rollback, audit logs)
 - ✅ Production hardening (signal handling, graceful shutdown, error propagation)
 - ✅ Secrets at rest encryption (AES-256-GCM, field-level)
+- ✅ Server hardening (TLS 1.2+, rate limiting, input validation, security headers)
+- ✅ Self-update with checksum verification, backup, restart, and health check
+- ✅ Service status querying and offline config validation
+- ✅ SIGHUP state reload for zero-downtime config changes
 - Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status
-- Add safer update workflow (version comparison, staged rollback)
-- Continue hardening: rate limiting, TLS, input validation edge cases
+- Add safer update workflow (version comparison, staged rollback) — partial: version check, checksum-verified download
+- Continue hardening: TLS, rate limiting, input validation edge cases — partial: TLS, per-IP rate limiting, domain/email validation
