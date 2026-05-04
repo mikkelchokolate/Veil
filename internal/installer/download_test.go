@@ -274,3 +274,87 @@ func TestDownloadVerifiedBinaryRespectsContextCancellation(t *testing.T) {
 		t.Fatalf("expected 1 attempt (context cancelled during backoff), got %d", attempts)
 	}
 }
+
+// --- isRetryableNetError unit tests -------------------------------------------
+
+// stubError is a plain error that implements neither Temporary() nor Timeout().
+type stubError struct{ msg string }
+
+func (e *stubError) Error() string { return e.msg }
+
+// tempError implements Temporary() bool.
+type tempError struct {
+	msg       string
+	temporary bool
+}
+
+func (e *tempError) Error() string     { return e.msg }
+func (e *tempError) Temporary() bool   { return e.temporary }
+
+// timeoutError implements Timeout() bool.
+type timeoutError struct {
+	msg     string
+	timeout bool
+}
+
+func (e *timeoutError) Error() string  { return e.msg }
+func (e *timeoutError) Timeout() bool  { return e.timeout }
+
+// bothError implements both Temporary() and Timeout().
+type bothError struct {
+	msg       string
+	temporary bool
+	timeout   bool
+}
+
+func (e *bothError) Error() string   { return e.msg }
+func (e *bothError) Temporary() bool { return e.temporary }
+func (e *bothError) Timeout() bool   { return e.timeout }
+
+func TestIsRetryableNetError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "temporary true",
+			err:  &tempError{msg: "temp", temporary: true},
+			want: true,
+		},
+		{
+			name: "timeout true",
+			err:  &timeoutError{msg: "timeout", timeout: true},
+			want: true,
+		},
+		{
+			name: "plain error (neither)",
+			err:  &stubError{msg: "plain"},
+			want: false,
+		},
+		{
+			name: "both false",
+			err:  &bothError{msg: "both false", temporary: false, timeout: false},
+			want: false,
+		},
+		{
+			name: "temporary false, timeout true",
+			err:  &bothError{msg: "temp false, timeout true", temporary: false, timeout: true},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRetryableNetError(tt.err)
+			if got != tt.want {
+				t.Fatalf("isRetryableNetError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
