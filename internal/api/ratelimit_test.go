@@ -466,3 +466,44 @@ func TestRateLimitPUTAndDELETEAreLimited(t *testing.T) {
 		t.Fatalf("second DELETE: expected 429, got %d", w.Code)
 	}
 }
+
+func TestRateLimitCleanupRemovesStaleBuckets(t *testing.T) {
+	rl := NewRateLimiter(60, 5)
+	t.Cleanup(func() { rl.Stop() })
+
+	// Insert a recent bucket
+	rl.buckets.Store("recent", &tokenBucket{
+		tokens:   5,
+		lastTime: time.Now(),
+	})
+
+	// Insert a stale bucket (older than 10 minutes)
+	rl.buckets.Store("stale", &tokenBucket{
+		tokens:   0,
+		lastTime: time.Now().Add(-11 * time.Minute),
+	})
+
+	// Insert a borderline bucket (9 minutes old, within the 10 min cutoff)
+	rl.buckets.Store("borderline", &tokenBucket{
+		tokens:   3,
+		lastTime: time.Now().Add(-9 * time.Minute),
+	})
+
+	// Run cleanup
+	rl.cleanup()
+
+	// "recent" should still exist
+	if _, exists := rl.buckets.Load("recent"); !exists {
+		t.Fatal("expected 'recent' bucket to still exist after cleanup")
+	}
+
+	// "borderline" should still exist (9 min < 10 min cutoff)
+	if _, exists := rl.buckets.Load("borderline"); !exists {
+		t.Fatal("expected 'borderline' bucket (9 min old) to still exist after cleanup")
+	}
+
+	// "stale" should have been deleted (11 min > 10 min cutoff)
+	if _, exists := rl.buckets.Load("stale"); exists {
+		t.Fatal("expected 'stale' bucket (11 min old) to be deleted by cleanup")
+	}
+}
