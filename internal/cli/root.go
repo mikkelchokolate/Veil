@@ -55,10 +55,11 @@ type doctorSummary struct {
 }
 
 type doctorCommandStatus struct {
-	Name    string `json:"name"`
-	Path    string `json:"path,omitempty"`
-	Error   string `json:"error,omitempty"`
-	Present bool   `json:"present"`
+	Name     string `json:"name"`
+	Path     string `json:"path,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Present  bool   `json:"present"`
+	Optional bool   `json:"optional,omitempty"`
 }
 
 func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
@@ -78,6 +79,9 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	}
 	fmt.Fprintln(out, "Required commands:")
 	for _, command := range summary.Commands {
+		if command.Optional {
+			continue
+		}
 		if !command.Present {
 			if command.Error != "" {
 				fmt.Fprintf(out, "- %s: missing (%s)\n", command.Name, command.Error)
@@ -88,6 +92,22 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 		}
 		fmt.Fprintf(out, "- %s: %s\n", command.Name, command.Path)
 	}
+	fmt.Fprintln(out, "Optional commands:")
+	hasOptional := false
+	for _, command := range summary.Commands {
+		if !command.Optional {
+			continue
+		}
+		hasOptional = true
+		if !command.Present {
+			fmt.Fprintf(out, "- %s: missing (warning)\n", command.Name)
+			continue
+		}
+		fmt.Fprintf(out, "- %s: %s\n", command.Name, command.Path)
+	}
+	if !hasOptional {
+		fmt.Fprintln(out, "- none")
+	}
 }
 
 func buildDoctorSummary(version string) doctorSummary {
@@ -96,7 +116,10 @@ func buildDoctorSummary(version string) doctorSummary {
 		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
 		Ready:   true,
 	}
-	for _, name := range []string{"caddy", "hysteria", "sing-box", "systemctl", "ufw"} {
+	required := []string{"caddy", "hysteria", "sing-box", "systemctl"}
+	optional := []string{"ufw"}
+
+	for _, name := range required {
 		status := doctorCommandStatus{Name: name}
 		path, err := commandLookPath(name)
 		if err == nil {
@@ -105,6 +128,17 @@ func buildDoctorSummary(version string) doctorSummary {
 		} else {
 			status.Error = err.Error()
 			summary.Ready = false
+		}
+		summary.Commands = append(summary.Commands, status)
+	}
+	for _, name := range optional {
+		status := doctorCommandStatus{Name: name, Optional: true}
+		path, err := commandLookPath(name)
+		if err == nil {
+			status.Path = path
+			status.Present = true
+		} else {
+			status.Error = err.Error()
 		}
 		summary.Commands = append(summary.Commands, status)
 	}

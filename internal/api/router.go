@@ -305,6 +305,11 @@ func bearerToken(header string) string {
 const maxJSONBodyBytes int64 = 1024 * 1024
 
 func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
+	ct := r.Header.Get("Content-Type")
+	if ct != "" && ct != "application/json" {
+		writeError(w, "Unsupported Media Type: Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return false
+	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {

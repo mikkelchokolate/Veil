@@ -3058,3 +3058,38 @@ func TestBearerTokenTrimsWhitespaceFromToken(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeJSONRequestRejectsNonJSONContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		wantStatus  int
+		wantOK      bool
+	}{
+		{"application/json", "application/json", http.StatusOK, true},
+		{"no content type", "", http.StatusOK, true},
+		{"text/plain", "text/plain", http.StatusUnsupportedMediaType, false},
+		{"application/xml", "application/xml", http.StatusUnsupportedMediaType, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := strings.NewReader(`{"domain":"example.com"}`)
+			req := httptest.NewRequest("POST", "/api/settings", body)
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			rec := httptest.NewRecorder()
+			var v struct {
+				Domain string `json:"domain"`
+			}
+			got := decodeJSONRequest(rec, req, &v)
+			if got != tt.wantOK {
+				t.Fatalf("decodeJSONRequest() = %v, want %v", got, tt.wantOK)
+			}
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}

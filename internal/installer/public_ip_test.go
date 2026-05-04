@@ -148,3 +148,23 @@ func TestDefaultPublicIPEndpointsAreHTTPS(t *testing.T) {
 		}
 	}
 }
+
+func TestCidrInitDoesNotPanic(t *testing.T) {
+	if cgnatCIDR == nil {
+		t.Fatal("cgnatCIDR is nil after init")
+	}
+	if !cgnatCIDR.Contains(net.ParseIP("100.64.0.1")) {
+		t.Fatal("expected 100.64.0.1 to be within CGNAT range")
+	}
+	if len(docCIDRs) != 4 {
+		t.Fatalf("expected 4 doc CIDRs, got %d", len(docCIDRs))
+	}
+	for i, cidr := range docCIDRs {
+		if cidr == nil {
+			t.Fatalf("docCIDRs[%d] is nil after init", i)
+		}
+	}
+	if !docCIDRs[0].Contains(net.ParseIP("192.0.2.1")) {
+		t.Fatal("expected 192.0.2.1 to be within TEST-NET-1")
+	}
+}
