@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,6 +23,8 @@ func newServeCommand(version string) *cobra.Command {
 	var statePath string
 	var applyRoot string
 	var keyPath string
+	var tlsCert string
+	var tlsKey string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
@@ -36,11 +39,21 @@ func newServeCommand(version string) *cobra.Command {
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
 			resolvedKeyPath, keySource := resolveServeKeyPath(keyPath)
-			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath)
-			fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s\n", listen)
+			tlsEnabled, tlsSource := resolveServeTLS(tlsCert, tlsKey)
+			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, tlsCert, tlsKey)
+			tlsLabel := "http"
+			if tlsEnabled {
+				tlsLabel = "https"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s://%s\n", tlsLabel, listen)
 			fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", resolvedStatePath, stateSource)
 			fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", resolvedApplyRoot, applyRootSource)
 			fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", resolvedKeyPath, keySource)
+			if tlsEnabled {
+				fmt.Fprintf(cmd.OutOrStdout(), "TLS: enabled (%s)\n", tlsSource)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "TLS: disabled")
+			}
 			if tokenSource == "disabled" {
 				fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 			} else {
@@ -50,7 +63,11 @@ func newServeCommand(version string) *cobra.Command {
 			// Start the server in a goroutine.
 			serveErr := make(chan error, 1)
 			go func() {
-				serveErr <- server.ListenAndServe()
+				if tlsEnabled {
+					serveErr <- server.ListenAndServeTLS(tlsCert, tlsKey)
+				} else {
+					serveErr <- server.ListenAndServe()
+				}
 			}()
 
 			// Wait for either a serve error or context cancellation.
@@ -74,16 +91,18 @@ func newServeCommand(version string) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:2096", "HTTP listen address")
+	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:2096", "HTTP/HTTPS listen address")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
 	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
+	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file path; enables HTTPS when both --tls-cert and --tls-key are provided")
+	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file path; enables HTTPS when both --tls-cert and --tls-key are provided")
 	return cmd
 }
 
-func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string) *http.Server {
-	return &http.Server{
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string) *http.Server {
+	srv := &http.Server{
 		Addr:              listen,
 		Handler:           api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath}),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -91,6 +110,30 @@ func newServeHTTPServer(listen string, version string, authToken string, statePa
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
+	}
+	if tlsEnabled {
+		srv.TLSConfig = newServeTLSConfig()
+	}
+	return srv
+}
+
+// newServeTLSConfig returns a secure TLS configuration for the serve command.
+// It enforces TLS 1.2 minimum with modern cipher suites and disables insecure
+// features like TLS compression and session tickets.
+func newServeTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		},
+		PreferServerCipherSuites: true,
+		CurvePreferences: []tls.CurveID{
+			tls.X25519,
+			tls.CurveP256,
+		},
 	}
 }
 
@@ -172,4 +215,18 @@ func resolveServeKeyPath(flagValue string) (path string, source string) {
 		return path, "VEIL_KEY_PATH"
 	}
 	return "/etc/veil/state.key", "default"
+}
+
+// resolveServeTLS determines whether TLS should be enabled.
+// Both cert and key must be provided; the caller verifies files exist.
+func resolveServeTLS(cert, key string) (enabled bool, source string) {
+	if cert != "" && key != "" {
+		return true, "--tls-cert / --tls-key"
+	}
+	if c := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")); c != "" {
+		if k := strings.TrimSpace(os.Getenv("VEIL_TLS_KEY")); k != "" {
+			return true, "VEIL_TLS_CERT / VEIL_TLS_KEY"
+		}
+	}
+	return false, ""
 }

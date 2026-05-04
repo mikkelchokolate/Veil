@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
 )
@@ -314,23 +316,43 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 			writeError(w, "stack must be naive, hysteria2, or both", http.StatusBadRequest)
 			return
 		}
+		// Validate optional settings fields when present.
+		if settings.Domain != "" {
+			if err := installer.ValidateDomain(settings.Domain); err != nil {
+				writeError(w, "domain: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		if settings.Email != "" {
+			if err := installer.ValidateEmail(settings.Email); err != nil {
+				writeError(w, "email: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		if settings.PanelListen != "" {
+			host, _, err := net.SplitHostPort(settings.PanelListen)
+			if err != nil || host == "" {
+				writeError(w, "panelListen must be host:port", http.StatusBadRequest)
+				return
+			}
+		}
 		if settings.NaivePassword == "[REDACTED]" {
 			settings.NaivePassword = s.settings.NaivePassword
 		}
 		if settings.Hysteria2Password == "[REDACTED]" {
 			settings.Hysteria2Password = s.settings.Hysteria2Password
 		}
-		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal
+		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
 		if settings.FallbackRoot != "" {
-			cleaned := filepath.Clean(settings.FallbackRoot)
-			if !filepath.IsAbs(cleaned) {
-				cleaned = filepath.Clean("/var/lib/veil/" + cleaned)
+			settings.FallbackRoot = filepath.Clean(settings.FallbackRoot)
+			// Use ToSlash for platform-independent path manipulation.
+			if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
+				settings.FallbackRoot = filepath.Clean("/var/lib/veil/" + settings.FallbackRoot)
 			}
-			if !strings.HasPrefix(cleaned, "/var/lib/veil") {
+			if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
 				writeError(w, "fallbackRoot must be within /var/lib/veil", http.StatusBadRequest)
 				return
 			}
-			settings.FallbackRoot = cleaned
 		}
 		s.settings = settings
 		if err := s.saveLocked(); err != nil {

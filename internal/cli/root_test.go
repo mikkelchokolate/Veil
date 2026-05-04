@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDoctorCommandPrintsReadinessSummary(t *testing.T) {
@@ -161,4 +163,84 @@ func TestDoctorMissingUfwIsWarningNotError(t *testing.T) {
 			t.Fatalf("expected ufw with optional:true, got:\n%s", got)
 		}
 	})
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		{"v0.1.0", "v0.1.0", 0},
+		{"v0.1.0", "v0.2.0", -1},
+		{"v0.2.0", "v0.1.0", 1},
+		{"v0.1.0", "v1.0.0", -1},
+		{"v1.0.0", "v0.1.0", 1},
+		{"v0.1.0", "v0.1.1", -1},
+		{"0.1.0", "0.1.0", 0},
+		{"0.1.0", "v0.2.0", -1},
+		{"1.0.0", "1.0.0", 0},
+		{"2.0.0", "1.9.9", 1},
+		{"v0.1.0-alpha", "v0.1.0", 0}, // non-numeric parts treated as 0
+		{"dev", "v0.1.0", -1},          // non-semver shorter than semver
+	}
+	for _, tt := range tests {
+		got := compareVersions(tt.a, tt.b)
+		switch {
+		case tt.want < 0 && got >= 0:
+			t.Errorf("compareVersions(%q, %q) = %d, want < 0", tt.a, tt.b, got)
+		case tt.want > 0 && got <= 0:
+			t.Errorf("compareVersions(%q, %q) = %d, want > 0", tt.a, tt.b, got)
+		case tt.want == 0 && got != 0:
+			t.Errorf("compareVersions(%q, %q) = %d, want 0", tt.a, tt.b, got)
+		}
+	}
+}
+
+func TestVersionCheckFlagRegistered(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"version", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "--check") {
+		t.Errorf("version --help missing --check flag:\n%s", got)
+	}
+}
+
+func TestVersionCommandPrintsVersion(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"version"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "test") {
+		t.Errorf("version output missing version, got: %s", got)
+	}
+}
+
+func TestVersionCheckPrintsErrorMessageOnNetworkFailure(t *testing.T) {
+	oldClient := versionCheckClient
+	versionCheckClient = &http.Client{Timeout: 1 * time.Nanosecond}
+	t.Cleanup(func() { versionCheckClient = oldClient })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"version", "--check"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error on network timeout")
+	}
+	if !strings.Contains(err.Error(), "update check failed") {
+		t.Errorf("expected 'update check failed' error, got: %v", err)
+	}
 }
