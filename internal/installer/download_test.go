@@ -149,3 +149,128 @@ func TestDownloadVerifiedBinaryRequiresChecksum(t *testing.T) {
 		t.Fatalf("expected checksum requirement error")
 	}
 }
+
+func TestDownloadVerifiedBinaryRetriesOnServerError(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte("binary-body"))
+	}))
+	defer server.Close()
+
+	expected, err := SHA256Hex([]byte("binary-body"))
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	dest := filepath.Join(t.TempDir(), "binary")
+
+	result, err := DownloadVerifiedBinary(context.Background(), server.Client(), DownloadRequest{
+		URL:         server.URL,
+		Destination: dest,
+		SHA256:      expected,
+		Mode:        0o755,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error after retries: %v", err)
+	}
+	if result.Bytes != int64(len("binary-body")) {
+		t.Fatalf("expected %d bytes, got %d", len("binary-body"), result.Bytes)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestDownloadVerifiedBinaryGivesUpAfterMaxRetries(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(t.TempDir(), "binary")
+	_, err := DownloadVerifiedBinary(context.Background(), server.Client(), DownloadRequest{
+		URL:         server.URL,
+		Destination: dest,
+		SHA256:      "0000000000000000000000000000000000000000000000000000000000000000",
+	})
+	if err == nil {
+		t.Fatal("expected error after max retries, got nil")
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts before giving up, got %d", attempts)
+	}
+}
+
+func TestDownloadVerifiedBinaryNoRetryOn4xx(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(t.TempDir(), "binary")
+	_, err := DownloadVerifiedBinary(context.Background(), server.Client(), DownloadRequest{
+		URL:         server.URL,
+		Destination: dest,
+		SHA256:      "0000000000000000000000000000000000000000000000000000000000000000",
+	})
+	if err == nil {
+		t.Fatal("expected error for 404, got nil")
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt (no retry on 4xx), got %d", attempts)
+	}
+}
+
+func TestDownloadVerifiedBinaryRespectsContextCancellation(t *testing.T) {
+	var attempts int
+	// Block server to ensure first attempt completes (with 500) before we cancel
+	serverReady := make(chan struct{})
+	firstAttemptDone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-serverReady
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+		if attempts == 1 {
+			close(firstAttemptDone)
+		}
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	dest := filepath.Join(t.TempDir(), "binary")
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := DownloadVerifiedBinary(ctx, server.Client(), DownloadRequest{
+			URL:         server.URL,
+			Destination: dest,
+			SHA256:      "0000000000000000000000000000000000000000000000000000000000000000",
+		})
+		errCh <- err
+	}()
+
+	// Let first attempt complete
+	close(serverReady)
+	<-firstAttemptDone
+	// Cancel context during backoff sleep (before second attempt)
+	cancel()
+
+	err := <-errCh
+	if err == nil {
+		t.Fatal("expected error due to context cancellation, got nil")
+	}
+	if !strings.Contains(err.Error(), "cancel") && !strings.Contains(err.Error(), "Canceled") {
+		t.Fatalf("expected context cancellation error, got: %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt (context cancelled during backoff), got %d", attempts)
+	}
+}

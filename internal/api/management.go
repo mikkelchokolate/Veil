@@ -628,23 +628,69 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 }
 
 func downloadRouteDat(url string) ([]byte, error) {
-	resp, err := routeDatHTTPClient.Get(url)
-	if err != nil {
-		return nil, err
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			backoff := time.Duration(1<<(attempt-2)) * time.Second // 1s, 2s, 4s
+			log.Printf("downloadRouteDat: retry attempt %d/%d after %v (previous error: %v)", attempt, maxAttempts, backoff, lastErr)
+			time.Sleep(backoff)
+		}
+		resp, err := routeDatHTTPClient.Get(url)
+		if err != nil {
+			lastErr = err
+			if !isRetryableError(err) {
+				return nil, err
+			}
+			continue
+		}
+		if resp.StatusCode >= 500 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("download %s returned %s", url, resp.Status)
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
+		}
+		defer resp.Body.Close()
+		lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
+		body, err := io.ReadAll(lr)
+		if err != nil {
+			lastErr = err
+			if !isRetryableError(err) {
+				return nil, err
+			}
+			continue
+		}
+		if len(body) > maxRouteDatSize {
+			return nil, fmt.Errorf("download %s exceeds maximum size of %d bytes", url, maxRouteDatSize)
+		}
+		return body, nil
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
+	return nil, fmt.Errorf("download %s failed after %d attempts: %w", url, maxAttempts, lastErr)
+}
+
+// isRetryableError returns true for network errors that are worth retrying.
+// Temporary errors and timeouts are retryable; permanent errors are not.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
 	}
-	lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
-	body, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, err
+	// Check for net.Error with Temporary() or Timeout()
+	type temporary interface {
+		Temporary() bool
 	}
-	if len(body) > maxRouteDatSize {
-		return nil, fmt.Errorf("download %s exceeds maximum size of %d bytes", url, maxRouteDatSize)
+	if t, ok := err.(temporary); ok && t.Temporary() {
+		return true
 	}
-	return body, nil
+	type timeout interface {
+		Timeout() bool
+	}
+	if t, ok := err.(timeout); ok && t.Timeout() {
+		return true
+	}
+	return false
 }
 
 func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {

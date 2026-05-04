@@ -53,6 +53,147 @@ func TestDownloadRouteDatReturnsErrorOnInvalidURL(t *testing.T) {
 	}
 }
 
+// retryTestTransport is a http.RoundTripper that fails the first failCount
+// requests with a connection error, then delegates to the base transport.
+type retryTestTransport struct {
+	attempts  *int
+	failCount int
+	base      http.RoundTripper
+}
+
+func (t *retryTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	*t.attempts++
+	if *t.attempts <= t.failCount {
+		return nil, &testNetworkError{msg: "simulated connection refused"}
+	}
+	return t.base.RoundTrip(req)
+}
+
+type testNetworkError struct{ msg string }
+
+func (e *testNetworkError) Error() string   { return e.msg }
+func (e *testNetworkError) Timeout() bool   { return false }
+func (e *testNetworkError) Temporary() bool { return true }
+
+func TestDownloadRouteDatRetriesOnServerError(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success-after-retries"))
+	}))
+	defer server.Close()
+
+	body, err := downloadRouteDat(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error after retries: %v", err)
+	}
+	if string(body) != "success-after-retries" {
+		t.Fatalf("expected success-after-retries, got %q", string(body))
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestDownloadRouteDatRetriesOnConnectionRefused(t *testing.T) {
+	oldClient := routeDatHTTPClient
+	t.Cleanup(func() { routeDatHTTPClient = oldClient })
+
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success-after-conn-retries"))
+	}))
+	defer server.Close()
+
+	routeDatHTTPClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &retryTestTransport{
+			attempts:  &attempts,
+			failCount: 2,
+			base:      server.Client().Transport,
+		},
+	}
+
+	body, err := downloadRouteDat(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(body) != "success-after-conn-retries" {
+		t.Fatalf("unexpected body: %q", string(body))
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestDownloadRouteDatGivesUpAfterMaxRetries(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, err := downloadRouteDat(server.URL)
+	if err == nil {
+		t.Fatal("expected error after max retries, got nil")
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts before giving up, got %d", attempts)
+	}
+}
+
+func TestDownloadRouteDatNoRetryOn4xx(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := downloadRouteDat(server.URL)
+	if err == nil {
+		t.Fatal("expected error for 404, got nil")
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt (no retry on 4xx), got %d", attempts)
+	}
+}
+
+func TestDownloadRouteDatLogsRetries(t *testing.T) {
+	var buf bytes.Buffer
+	oldLogger := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(oldLogger) })
+
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	_, err := downloadRouteDat(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "retry") && !strings.Contains(logOutput, "Retry") && !strings.Contains(logOutput, "attempt") {
+		t.Fatalf("expected retry message in log output, got: %s", logOutput)
+	}
+}
+
 func TestStackAllowsProtocolRejectsCrossStackProtocols(t *testing.T) {
 	tests := []struct {
 		stack    string

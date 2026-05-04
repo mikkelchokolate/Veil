@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -3084,12 +3086,64 @@ func TestDecodeJSONRequestRejectsNonJSONContentType(t *testing.T) {
 				Domain string `json:"domain"`
 			}
 			got := decodeJSONRequest(rec, req, &v)
-			if got != tt.wantOK {
-				t.Fatalf("decodeJSONRequest() = %v, want %v", got, tt.wantOK)
-			}
-			if rec.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-		})
+		if got != tt.wantOK {
+			t.Fatalf("decodeJSONRequest() = %v, want %v", got, tt.wantOK)
+		}
+		if rec.Code != tt.wantStatus {
+			t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+		}
+	})
+	}
+}
+
+func TestWriteJSON_LogsEncodeError(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	w := httptest.NewRecorder()
+	writeJSON(w, make(chan int))
+
+	if !strings.Contains(buf.String(), "writeJSON: encode error") {
+		t.Errorf("expected log message containing 'writeJSON: encode error', got: %s", buf.String())
+	}
+}
+
+func TestWriteJSONStatus_LogsEncodeError(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	w := httptest.NewRecorder()
+	writeJSONStatus(w, http.StatusOK, make(chan int))
+
+	if !strings.Contains(buf.String(), "writeJSONStatus: encode error") {
+		t.Errorf("expected log message containing 'writeJSONStatus: encode error', got: %s", buf.String())
+	}
+}
+
+func TestWriteJSON_NoError_NoLog(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	w := httptest.NewRecorder()
+	writeJSON(w, map[string]string{"hello": "world"})
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output, got: %s", buf.String())
+	}
+}
+
+func TestWriteJSONStatus_NoError_NoLog(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	w := httptest.NewRecorder()
+	writeJSONStatus(w, http.StatusOK, map[string]string{"hello": "world"})
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output, got: %s", buf.String())
 	}
 }

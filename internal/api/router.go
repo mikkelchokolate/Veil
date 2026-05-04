@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -343,7 +344,9 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	setJSONHeaders(w)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writeJSON: encode error: %v", err)
+	}
 }
 
 func setJSONHeaders(w http.ResponseWriter) {
@@ -356,7 +359,9 @@ func setJSONHeaders(w http.ResponseWriter) {
 func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 	setJSONHeaders(w)
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writeJSONStatus: encode error: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, msg string, code int) {
