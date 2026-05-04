@@ -1,6 +1,9 @@
 package installer
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestNormalizeArch(t *testing.T) {
 	cases := map[string]string{
@@ -32,5 +35,29 @@ func TestValidateLinuxPlatform(t *testing.T) {
 	}
 	if err := ValidateLinuxPlatform(Platform{OS: "darwin", Arch: "amd64"}); err == nil {
 		t.Fatalf("expected unsupported os error")
+	}
+}
+
+func TestCurrentPlatform(t *testing.T) {
+	p := CurrentPlatform()
+
+	// OS must match runtime.GOOS
+	if p.OS != runtime.GOOS {
+		t.Fatalf("CurrentPlatform().OS = %q, want %q", p.OS, runtime.GOOS)
+	}
+
+	// Arch must match runtime.GOARCH
+	if p.Arch != runtime.GOARCH {
+		t.Fatalf("CurrentPlatform().Arch = %q, want %q", p.Arch, runtime.GOARCH)
+	}
+
+	// OS must be non-empty
+	if p.OS == "" {
+		t.Fatalf("CurrentPlatform().OS must be non-empty")
+	}
+
+	// Arch must be non-empty
+	if p.Arch == "" {
+		t.Fatalf("CurrentPlatform().Arch must be non-empty")
 	}
 }
