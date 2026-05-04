@@ -122,16 +122,16 @@ func TestRenderNaiveCaddyfileRejectsZeroListenPort(t *testing.T) {
 	}
 }
 
-func TestRenderNaiveCaddyfileRejectsPathTraversal(t *testing.T) {
+func TestRenderNaiveCaddyfileNormalizesPaths(t *testing.T) {
 	tests := []struct {
 		name         string
 		fallbackRoot string
-		wantErr      bool
+		wantOk       bool
 	}{
-		{"FallbackRoot=/etc/passwd should error", "/etc/passwd", true},
-		{"FallbackRoot=/var/lib/veil/../../../etc/passwd should error", "/var/lib/veil/../../../etc/passwd", true},
-		{"FallbackRoot=/var/lib/veil/www should succeed", "/var/lib/veil/www", false},
-		{"FallbackRoot empty should succeed", "", false},
+		{"FallbackRoot=/etc/passwd normalizes into /var/lib/veil", "/etc/passwd", true},
+		{"FallbackRoot=/var/lib/veil/../../../etc/passwd normalizes into /var/lib/veil", "/var/lib/veil/../../../etc/passwd", true},
+		{"FallbackRoot=/var/lib/veil/www unchanged", "/var/lib/veil/www", true},
+		{"FallbackRoot empty uses default", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,11 +143,11 @@ func TestRenderNaiveCaddyfileRejectsPathTraversal(t *testing.T) {
 				Password:     "secret",
 				FallbackRoot: tt.fallbackRoot,
 			})
-			if tt.wantErr && err == nil {
-				t.Fatalf("expected error for FallbackRoot=%q, got nil", tt.fallbackRoot)
-			}
-			if !tt.wantErr && err != nil {
+			if tt.wantOk && err != nil {
 				t.Fatalf("unexpected error for FallbackRoot=%q: %v", tt.fallbackRoot, err)
+			}
+			if !tt.wantOk && err == nil {
+				t.Fatalf("expected error for FallbackRoot=%q, got nil", tt.fallbackRoot)
 			}
 		})
 	}
