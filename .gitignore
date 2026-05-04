@@ -7,3 +7,4 @@
 .env
 node_modules/
 web/dist/
+coverage*.out
