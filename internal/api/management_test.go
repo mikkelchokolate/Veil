@@ -1097,3 +1097,61 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 		t.Fatalf("roundtrip Warp.PrivateKey = %q, want %q", snapshot.Warp.PrivateKey, "warp-priv-key-0123456789")
 	}
 }
+
+func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a key file so newManagementState can load it
+	keyPath := filepath.Join(tmpDir, "state.key")
+	cipher := newTestCipher(t)
+	if err := os.WriteFile(keyPath, cipher.KeyBytes(), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+
+	statePath := filepath.Join(tmpDir, "state.json")
+	state := newManagementState(ServerInfo{
+		StatePath: statePath,
+		KeyPath:   keyPath,
+		Mode:      "dev",
+	})
+
+	mux := http.NewServeMux()
+	state.register(mux)
+
+	validBody := func(fallbackRoot string) []byte {
+		return []byte(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","fallbackRoot":"` + fallbackRoot + `"}`)
+	}
+
+	tests := []struct {
+		name         string
+		fallbackRoot string
+		wantStatus   int
+		checkRoot    bool // whether to expect fallbackRoot in response
+	}{
+		{"PUT /var/lib/veil/www → 200", "/var/lib/veil/www", http.StatusOK, true},
+		{"PUT /var/lib/veil/custom/path → 200", "/var/lib/veil/custom/path", http.StatusOK, true},
+		{"PUT /etc/passwd → 400", "/etc/passwd", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil/../../../etc → 400", "/var/lib/veil/../../../etc", http.StatusBadRequest, false},
+		{"PUT empty → 200", "", http.StatusOK, false},
+		{"PUT relative/path → 200", "relative/path", http.StatusOK, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, "/api/settings", bytes.NewReader(validBody(tt.fallbackRoot)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body = %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+
+			if tt.checkRoot {
+				if !strings.Contains(rec.Body.String(), `"fallbackRoot"`) {
+					t.Fatalf("response should contain fallbackRoot, got: %s", rec.Body.String())
+				}
+			}
+		})
+	}
+}

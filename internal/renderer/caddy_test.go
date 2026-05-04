@@ -121,3 +121,34 @@ func TestRenderNaiveCaddyfileRejectsZeroListenPort(t *testing.T) {
 		t.Fatalf("expected 'listen port is required', got: %v", err)
 	}
 }
+
+func TestRenderNaiveCaddyfileRejectsPathTraversal(t *testing.T) {
+	tests := []struct {
+		name         string
+		fallbackRoot string
+		wantErr      bool
+	}{
+		{"FallbackRoot=/etc/passwd should error", "/etc/passwd", true},
+		{"FallbackRoot=/var/lib/veil/../../../etc/passwd should error", "/var/lib/veil/../../../etc/passwd", true},
+		{"FallbackRoot=/var/lib/veil/www should succeed", "/var/lib/veil/www", false},
+		{"FallbackRoot empty should succeed", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RenderNaiveCaddyfile(NaiveConfig{
+				Domain:       "example.com",
+				Email:        "admin@example.com",
+				ListenPort:   443,
+				Username:     "alice",
+				Password:     "secret",
+				FallbackRoot: tt.fallbackRoot,
+			})
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error for FallbackRoot=%q, got nil", tt.fallbackRoot)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error for FallbackRoot=%q: %v", tt.fallbackRoot, err)
+			}
+		})
+	}
+}

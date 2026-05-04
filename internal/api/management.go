@@ -320,6 +320,18 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		if settings.Hysteria2Password == "[REDACTED]" {
 			settings.Hysteria2Password = s.settings.Hysteria2Password
 		}
+		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal
+		if settings.FallbackRoot != "" {
+			cleaned := filepath.Clean(settings.FallbackRoot)
+			if !filepath.IsAbs(cleaned) {
+				cleaned = filepath.Clean("/var/lib/veil/" + cleaned)
+			}
+			if !strings.HasPrefix(cleaned, "/var/lib/veil") {
+				writeError(w, "fallbackRoot must be within /var/lib/veil", http.StatusBadRequest)
+				return
+			}
+			settings.FallbackRoot = cleaned
+		}
 		s.settings = settings
 		if err := s.saveLocked(); err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
