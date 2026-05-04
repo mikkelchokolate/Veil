@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/rand"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/veil-panel/veil/internal/secrets"
 )
 
 func TestDownloadRouteDatReturnsBodyOnSuccess(t *testing.T) {
@@ -665,5 +668,291 @@ func TestAppendUnique(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// newTestCipher creates a secrets.Cipher with a random 32-byte key for testing.
+func newTestCipher(t *testing.T) *secrets.Cipher {
+	t.Helper()
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("failed to generate random key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+	return cipher
+}
+
+// newTestSnapshot creates a managementSnapshot with all 4 secret fields set to known plaintext values.
+func newTestSnapshot() managementSnapshot {
+	return managementSnapshot{
+		Settings: Settings{
+			NaivePassword:     "naive-password-plain",
+			Hysteria2Password: "hysteria2-password-plain",
+		},
+		Warp: WarpConfig{
+			LicenseKey: "warp-license-plain",
+			PrivateKey: "warp-private-plain",
+		},
+	}
+}
+
+func TestEncryptSnapshotEncryptsAllPlaintextFields(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+	snapshot := newTestSnapshot()
+
+	s.encryptSnapshot(&snapshot)
+
+	// All 4 fields should be encrypted (start with "ve1:")
+	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
+		t.Fatal("NaivePassword was not encrypted")
+	}
+	if !secrets.IsEncrypted(snapshot.Settings.Hysteria2Password) {
+		t.Fatal("Hysteria2Password was not encrypted")
+	}
+	if !secrets.IsEncrypted(snapshot.Warp.LicenseKey) {
+		t.Fatal("Warp.LicenseKey was not encrypted")
+	}
+	if !secrets.IsEncrypted(snapshot.Warp.PrivateKey) {
+		t.Fatal("Warp.PrivateKey was not encrypted")
+	}
+
+	// Verify each field decrypts back to original plaintext
+	if dec, err := cipher.Decrypt(snapshot.Settings.NaivePassword); err != nil {
+		t.Fatalf("failed to decrypt NaivePassword: %v", err)
+	} else if dec != "naive-password-plain" {
+		t.Fatalf("decrypted NaivePassword = %q, want %q", dec, "naive-password-plain")
+	}
+	if dec, err := cipher.Decrypt(snapshot.Settings.Hysteria2Password); err != nil {
+		t.Fatalf("failed to decrypt Hysteria2Password: %v", err)
+	} else if dec != "hysteria2-password-plain" {
+		t.Fatalf("decrypted Hysteria2Password = %q, want %q", dec, "hysteria2-password-plain")
+	}
+	if dec, err := cipher.Decrypt(snapshot.Warp.LicenseKey); err != nil {
+		t.Fatalf("failed to decrypt Warp.LicenseKey: %v", err)
+	} else if dec != "warp-license-plain" {
+		t.Fatalf("decrypted Warp.LicenseKey = %q, want %q", dec, "warp-license-plain")
+	}
+	if dec, err := cipher.Decrypt(snapshot.Warp.PrivateKey); err != nil {
+		t.Fatalf("failed to decrypt Warp.PrivateKey: %v", err)
+	} else if dec != "warp-private-plain" {
+		t.Fatalf("decrypted Warp.PrivateKey = %q, want %q", dec, "warp-private-plain")
+	}
+}
+
+func TestEncryptSnapshotSkipsAlreadyEncryptedFields(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+
+	alreadyEncrypted := "ve1:some-already-encrypted-value"
+	snapshot := managementSnapshot{
+		Settings: Settings{
+			NaivePassword:     alreadyEncrypted,
+			Hysteria2Password: "hysteria2-password-plain",
+		},
+		Warp: WarpConfig{
+			LicenseKey: alreadyEncrypted,
+			PrivateKey: "warp-private-plain",
+		},
+	}
+
+	s.encryptSnapshot(&snapshot)
+
+	// Already-encrypted fields must remain unchanged
+	if snapshot.Settings.NaivePassword != alreadyEncrypted {
+		t.Fatalf("already-encrypted NaivePassword was modified: %q", snapshot.Settings.NaivePassword)
+	}
+	if snapshot.Warp.LicenseKey != alreadyEncrypted {
+		t.Fatalf("already-encrypted Warp.LicenseKey was modified: %q", snapshot.Warp.LicenseKey)
+	}
+
+	// Plaintext fields should be encrypted
+	if !secrets.IsEncrypted(snapshot.Settings.Hysteria2Password) {
+		t.Fatal("Hysteria2Password should have been encrypted")
+	}
+	if !secrets.IsEncrypted(snapshot.Warp.PrivateKey) {
+		t.Fatal("Warp.PrivateKey should have been encrypted")
+	}
+}
+
+func TestEncryptSnapshotSkipsEmptyFields(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+
+	snapshot := managementSnapshot{
+		Settings: Settings{
+			NaivePassword:     "",
+			Hysteria2Password: "",
+		},
+		Warp: WarpConfig{
+			LicenseKey: "",
+			PrivateKey: "",
+		},
+	}
+
+	s.encryptSnapshot(&snapshot)
+
+	// Empty fields must remain empty
+	if snapshot.Settings.NaivePassword != "" {
+		t.Fatalf("empty NaivePassword was modified: %q", snapshot.Settings.NaivePassword)
+	}
+	if snapshot.Settings.Hysteria2Password != "" {
+		t.Fatalf("empty Hysteria2Password was modified: %q", snapshot.Settings.Hysteria2Password)
+	}
+	if snapshot.Warp.LicenseKey != "" {
+		t.Fatalf("empty Warp.LicenseKey was modified: %q", snapshot.Warp.LicenseKey)
+	}
+	if snapshot.Warp.PrivateKey != "" {
+		t.Fatalf("empty Warp.PrivateKey was modified: %q", snapshot.Warp.PrivateKey)
+	}
+}
+
+func TestEncryptSnapshotNoopWhenCipherIsNil(t *testing.T) {
+	s := &managementState{cipher: nil} // cipher is nil
+	snapshot := newTestSnapshot()
+
+	s.encryptSnapshot(&snapshot)
+
+	// All fields should remain as plaintext (no-op)
+	if snapshot.Settings.NaivePassword != "naive-password-plain" {
+		t.Fatalf("NaivePassword was modified with nil cipher: %q", snapshot.Settings.NaivePassword)
+	}
+	if snapshot.Settings.Hysteria2Password != "hysteria2-password-plain" {
+		t.Fatalf("Hysteria2Password was modified with nil cipher: %q", snapshot.Settings.Hysteria2Password)
+	}
+	if snapshot.Warp.LicenseKey != "warp-license-plain" {
+		t.Fatalf("Warp.LicenseKey was modified with nil cipher: %q", snapshot.Warp.LicenseKey)
+	}
+	if snapshot.Warp.PrivateKey != "warp-private-plain" {
+		t.Fatalf("Warp.PrivateKey was modified with nil cipher: %q", snapshot.Warp.PrivateKey)
+	}
+}
+
+func TestDecryptSnapshotRestoresPlaintext(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+	snapshot := newTestSnapshot()
+
+	// First encrypt
+	s.encryptSnapshot(&snapshot)
+
+	// Verify they're encrypted
+	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
+		t.Fatal("expected NaivePassword to be encrypted before decrypt")
+	}
+
+	// Then decrypt
+	s.decryptSnapshot(&snapshot)
+
+	// All fields should be back to plaintext
+	if snapshot.Settings.NaivePassword != "naive-password-plain" {
+		t.Fatalf("decrypted NaivePassword = %q, want %q", snapshot.Settings.NaivePassword, "naive-password-plain")
+	}
+	if snapshot.Settings.Hysteria2Password != "hysteria2-password-plain" {
+		t.Fatalf("decrypted Hysteria2Password = %q, want %q", snapshot.Settings.Hysteria2Password, "hysteria2-password-plain")
+	}
+	if snapshot.Warp.LicenseKey != "warp-license-plain" {
+		t.Fatalf("decrypted Warp.LicenseKey = %q, want %q", snapshot.Warp.LicenseKey, "warp-license-plain")
+	}
+	if snapshot.Warp.PrivateKey != "warp-private-plain" {
+		t.Fatalf("decrypted Warp.PrivateKey = %q, want %q", snapshot.Warp.PrivateKey, "warp-private-plain")
+	}
+}
+
+func TestDecryptSnapshotNoopWhenCipherIsNil(t *testing.T) {
+	s := &managementState{cipher: nil}
+	snapshot := newTestSnapshot()
+
+	s.decryptSnapshot(&snapshot)
+
+	// All fields should remain unchanged
+	if snapshot.Settings.NaivePassword != "naive-password-plain" {
+		t.Fatalf("NaivePassword was modified with nil cipher: %q", snapshot.Settings.NaivePassword)
+	}
+	if snapshot.Settings.Hysteria2Password != "hysteria2-password-plain" {
+		t.Fatalf("Hysteria2Password was modified with nil cipher: %q", snapshot.Settings.Hysteria2Password)
+	}
+	if snapshot.Warp.LicenseKey != "warp-license-plain" {
+		t.Fatalf("Warp.LicenseKey was modified with nil cipher: %q", snapshot.Warp.LicenseKey)
+	}
+	if snapshot.Warp.PrivateKey != "warp-private-plain" {
+		t.Fatalf("Warp.PrivateKey was modified with nil cipher: %q", snapshot.Warp.PrivateKey)
+	}
+}
+
+func TestDecryptSnapshotPassesThroughPlaintext(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+	snapshot := newTestSnapshot()
+
+	// decryptSnapshot without encrypting first — plaintext should pass through unchanged
+	s.decryptSnapshot(&snapshot)
+
+	// All plaintext fields should remain unchanged (pass through)
+	if snapshot.Settings.NaivePassword != "naive-password-plain" {
+		t.Fatalf("NaivePassword = %q, want %q", snapshot.Settings.NaivePassword, "naive-password-plain")
+	}
+	if snapshot.Settings.Hysteria2Password != "hysteria2-password-plain" {
+		t.Fatalf("Hysteria2Password = %q, want %q", snapshot.Settings.Hysteria2Password, "hysteria2-password-plain")
+	}
+	if snapshot.Warp.LicenseKey != "warp-license-plain" {
+		t.Fatalf("Warp.LicenseKey = %q, want %q", snapshot.Warp.LicenseKey, "warp-license-plain")
+	}
+	if snapshot.Warp.PrivateKey != "warp-private-plain" {
+		t.Fatalf("Warp.PrivateKey = %q, want %q", snapshot.Warp.PrivateKey, "warp-private-plain")
+	}
+}
+
+func TestEncryptDecryptRoundtrip(t *testing.T) {
+	cipher := newTestCipher(t)
+	s := &managementState{cipher: cipher}
+
+	// Use a richer snapshot with all 4 fields populated
+	snapshot := managementSnapshot{
+		Settings: Settings{
+			NaivePassword:     "super-secret-naive-pass-123",
+			Hysteria2Password: "hysteria2-!@#$%^&*()-pass",
+		},
+		Warp: WarpConfig{
+			LicenseKey: "warp-license-abcdefghijklmnop",
+			PrivateKey: "warp-priv-key-0123456789",
+		},
+	}
+
+	// Encrypt
+	s.encryptSnapshot(&snapshot)
+
+	// Verify all encrypted
+	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
+		t.Fatal("NaivePassword not encrypted after encrypt")
+	}
+	if !secrets.IsEncrypted(snapshot.Settings.Hysteria2Password) {
+		t.Fatal("Hysteria2Password not encrypted after encrypt")
+	}
+	if !secrets.IsEncrypted(snapshot.Warp.LicenseKey) {
+		t.Fatal("Warp.LicenseKey not encrypted after encrypt")
+	}
+	if !secrets.IsEncrypted(snapshot.Warp.PrivateKey) {
+		t.Fatal("Warp.PrivateKey not encrypted after encrypt")
+	}
+
+	// Decrypt
+	s.decryptSnapshot(&snapshot)
+
+	// Verify full roundtrip restores original values
+	if snapshot.Settings.NaivePassword != "super-secret-naive-pass-123" {
+		t.Fatalf("roundtrip NaivePassword = %q, want %q", snapshot.Settings.NaivePassword, "super-secret-naive-pass-123")
+	}
+	if snapshot.Settings.Hysteria2Password != "hysteria2-!@#$%^&*()-pass" {
+		t.Fatalf("roundtrip Hysteria2Password = %q, want %q", snapshot.Settings.Hysteria2Password, "hysteria2-!@#$%^&*()-pass")
+	}
+	if snapshot.Warp.LicenseKey != "warp-license-abcdefghijklmnop" {
+		t.Fatalf("roundtrip Warp.LicenseKey = %q, want %q", snapshot.Warp.LicenseKey, "warp-license-abcdefghijklmnop")
+	}
+	if snapshot.Warp.PrivateKey != "warp-priv-key-0123456789" {
+		t.Fatalf("roundtrip Warp.PrivateKey = %q, want %q", snapshot.Warp.PrivateKey, "warp-priv-key-0123456789")
 	}
 }
