@@ -88,6 +88,44 @@ func TestBuildRURecommendedProfileSupportsHysteriaOnly(t *testing.T) {
 	}
 }
 
+func TestNormalizeStackTrimsWhitespace(t *testing.T) {
+	tests := []struct {
+		name               string
+		input              Stack
+		wantStack          Stack
+		wantNaive          bool
+		wantHysteria2      bool
+		wantErr            bool
+	}{
+		{"empty", "", StackBoth, true, true, false},
+		{"both exact", StackBoth, StackBoth, true, true, false},
+		{"both with spaces", " both ", StackBoth, true, true, false},
+		{"naive with spaces", " naive ", StackNaive, true, false, false},
+		{"hysteria2 with spaces", " hysteria2 ", StackHysteria2, false, true, false},
+		{"invalid", "bogus", "", false, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotStack, gotNaive, gotHy2, err := normalizeStack(tt.input)
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error for %q", tt.input)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.input, err)
+			}
+			if gotStack != tt.wantStack {
+				t.Errorf("stack = %q, want %q", gotStack, tt.wantStack)
+			}
+			if gotNaive != tt.wantNaive {
+				t.Errorf("installNaive = %v, want %v", gotNaive, tt.wantNaive)
+			}
+			if gotHy2 != tt.wantHysteria2 {
+				t.Errorf("installHysteria2 = %v, want %v", gotHy2, tt.wantHysteria2)
+			}
+		})
+	}
+}
+
 func TestBuildRURecommendedProfileRejectsMissingDomain(t *testing.T) {
 	_, err := BuildRURecommendedProfile(RURecommendedInput{
 		Email:        "admin@example.com",

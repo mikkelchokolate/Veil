@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/veil-panel/veil/internal/renderer"
 )
@@ -18,7 +19,7 @@ const (
 )
 
 func normalizeStack(stack Stack) (normalized Stack, installNaive bool, installHysteria2 bool, err error) {
-	switch stack {
+	switch Stack(strings.TrimSpace(string(stack))) {
 	case "", StackBoth:
 		return StackBoth, true, true, nil
 	case StackNaive:
