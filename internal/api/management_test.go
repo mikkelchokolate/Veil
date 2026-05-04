@@ -718,7 +718,7 @@ func TestNewManagementStateLogsCorruptedStateError(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 
 	// Create management state via NewRouter (which calls newManagementState internally)
-	_ = NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	_, _ = NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	output := buf.String()
 	if output == "" {

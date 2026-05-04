@@ -71,9 +71,10 @@ type RURecommendedPreviewResponse struct {
 	Hysteria2YAML      string `json:"hysteria2YAML"`
 }
 
-func NewRouter(info ServerInfo) http.Handler {
+func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	mux := http.NewServeMux()
-	newManagementState(info).register(mux)
+	state := newManagementState(info)
+	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			writeNotFound(w)
@@ -184,7 +185,7 @@ func NewRouter(info ServerInfo) http.Handler {
 		})
 	})
 	rateLimited := rateLimitMiddleware(mux)
-	return authMiddleware(info.AuthToken, rateLimited)
+	return authMiddleware(info.AuthToken, rateLimited), state
 }
 
 func rateLimitMiddleware(next http.Handler) http.Handler {

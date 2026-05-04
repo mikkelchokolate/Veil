@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,7 +42,7 @@ func newServeCommand(version string) *cobra.Command {
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
 			resolvedKeyPath, keySource := resolveServeKeyPath(keyPath)
 			tlsEnabled, tlsSource := resolveServeTLS(tlsCert, tlsKey)
-			server := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, tlsCert, tlsKey)
+			server, stateReloader := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, tlsCert, tlsKey)
 			tlsLabel := "http"
 			if tlsEnabled {
 				tlsLabel = "https"
@@ -59,6 +61,19 @@ func newServeCommand(version string) *cobra.Command {
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", tokenSource)
 			}
+
+			// SIGHUP reloads management state from disk without restart.
+			sighupCh := make(chan os.Signal, 1)
+			signal.Notify(sighupCh, syscall.SIGHUP)
+			go func() {
+				for range sighupCh {
+					if err := stateReloader.Reload(); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "reload error: %v\n", err)
+					} else {
+						fmt.Fprintln(cmd.OutOrStdout(), "State reloaded (SIGHUP)")
+					}
+				}
+			}()
 
 			// Start the server in a goroutine.
 			serveErr := make(chan error, 1)
@@ -101,10 +116,11 @@ func newServeCommand(version string) *cobra.Command {
 	return cmd
 }
 
-func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string) *http.Server {
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string) (*http.Server, api.Reloader) {
+	handler, reloader := api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath})
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath}),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
@@ -114,7 +130,7 @@ func newServeHTTPServer(listen string, version string, authToken string, statePa
 	if tlsEnabled {
 		srv.TLSConfig = newServeTLSConfig()
 	}
-	return srv
+	return srv, reloader
 }
 
 // newServeTLSConfig returns a secure TLS configuration for the serve command.

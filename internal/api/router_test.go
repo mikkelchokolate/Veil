@@ -17,7 +17,7 @@ import (
 )
 
 func TestRouterHealthz(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/healthz", nil)
@@ -61,7 +61,7 @@ func TestHealthzReturnsOKWhenStateAccessible(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -81,7 +81,7 @@ func TestHealthzReturnsOKWhenStateAccessible(t *testing.T) {
 
 func TestHealthzReturns503WhenStateMissing(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "nonexistent", "management-state.json")
-	r := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -103,7 +103,7 @@ func TestHealthzReturns503WhenStateMissing(t *testing.T) {
 }
 
 func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -118,7 +118,7 @@ func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -139,7 +139,7 @@ func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
 }
 
 func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	w := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterAcceptsBearerAuthTokenCaseInsensitive(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Header.Set("Authorization", "bearer secret-token")
 	w := httptest.NewRecorder()
@@ -169,7 +169,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
 	w := httptest.NewRecorder()
 
@@ -225,7 +225,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 }
 
 func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
 	w := httptest.NewRecorder()
 
@@ -241,7 +241,7 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription", nil)
 	w := httptest.NewRecorder()
 
@@ -274,7 +274,7 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=raw", nil)
 	w := httptest.NewRecorder()
 
@@ -306,7 +306,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
 	w := httptest.NewRecorder()
 
@@ -316,7 +316,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 }
 
 func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidation(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
 	w := httptest.NewRecorder()
 
@@ -326,7 +326,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidati
 }
 
 func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidation(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?offset=1", nil)
 	w := httptest.NewRecorder()
 
@@ -378,7 +378,7 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -425,7 +425,7 @@ func TestStatusEndpointSupportsHEAD(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	// HEAD /api/status returns 200, JSON/security headers, empty body
 	t.Run("HEAD", func(t *testing.T) {
@@ -467,7 +467,7 @@ func TestStatusEndpointSupportsHEAD(t *testing.T) {
 }
 
 func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	req.Header.Set("X-Veil-Token", "secret-token")
@@ -481,7 +481,7 @@ func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -495,7 +495,7 @@ func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
 func TestRouterServesPanelShell(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
-			r := NewRouter(ServerInfo{Version: "test"})
+			r, _ := NewRouter(ServerInfo{Version: "test"})
 			req := httptest.NewRequest(method, "/", nil)
 			w := httptest.NewRecorder()
 
@@ -550,7 +550,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 }
 
 func TestRouterServesPanelShellWithApplyHistoryFilters(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -571,7 +571,7 @@ func TestRouterServesPanelShellWithApplyHistoryFilters(t *testing.T) {
 }
 
 func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"` + strings.Repeat("a", 1024*1024+1) + `","email":"admin@example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -584,7 +584,7 @@ func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpoint(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -614,7 +614,7 @@ func TestRURecommendedPreviewEndpoint(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpointHonorsStack(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"naive"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -640,7 +640,7 @@ func TestRURecommendedPreviewEndpointHonorsStack(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpointRejectsInvalidStack(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"bad"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -664,7 +664,7 @@ func TestSpeedtestEndpointRunsConfiguredRunner(t *testing.T) {
 	}
 	defer func() { speedtestRunner = old }()
 
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", nil)
 	w := httptest.NewRecorder()
 
@@ -692,7 +692,7 @@ func TestSpeedtestEndpointReportsRunnerError(t *testing.T) {
 	}
 	defer func() { speedtestRunner = old }()
 
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", nil)
 	w := httptest.NewRecorder()
 
@@ -704,7 +704,7 @@ func TestSpeedtestEndpointReportsRunnerError(t *testing.T) {
 }
 
 func TestRouterServesPanelShellWithSpeedtestControl(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -717,7 +717,7 @@ func TestRouterServesPanelShellWithSpeedtestControl(t *testing.T) {
 }
 
 func TestRouterServesPanelShellWithManagementSections(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -732,7 +732,7 @@ func TestRouterServesPanelShellWithManagementSections(t *testing.T) {
 }
 
 func TestRouterServesPanelShellWithTokenControls(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -747,7 +747,7 @@ func TestRouterServesPanelShellWithTokenControls(t *testing.T) {
 }
 
 func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test"})
+	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -789,7 +789,7 @@ func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
 }
 
 func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	cases := []struct {
 		path string
@@ -816,7 +816,7 @@ func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 }
 
 func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -839,7 +839,7 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 }
 
 func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -852,7 +852,7 @@ func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","typo":true}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -869,7 +869,7 @@ func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
 
 func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"licenseKey":"warp-license","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
@@ -895,7 +895,7 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 }
 
 func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
@@ -908,7 +908,7 @@ func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
 	put := httptest.NewRecorder()
 
@@ -932,7 +932,7 @@ func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
 
 func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
@@ -958,7 +958,7 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 }
 
 func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	invalidStacks := []string{"invalid", "NATIVE", "BOTH", "hysteria", " ", "naiveproxy"}
 	for _, stack := range invalidStacks {
 		t.Run(stack, func(t *testing.T) {
@@ -976,7 +976,7 @@ func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
 }
 
 func TestManagementAPICreatesInbound(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -1005,7 +1005,7 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 }
 
 func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	oversizedName := strings.Repeat("a", 1024*1024+1)
 
 	for _, tc := range []struct {
@@ -1041,7 +1041,7 @@ func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -1055,7 +1055,7 @@ func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
 
 func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	createInbound := httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`))
 	createInboundRecorder := httptest.NewRecorder()
@@ -1071,7 +1071,7 @@ func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 		t.Fatalf("update warp expected 200, got %d: %s", updateWarpRecorder.Code, updateWarpRecorder.Body.String())
 	}
 
-	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	inboundsReq := httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
 	inboundsRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(inboundsRecorder, inboundsReq)
@@ -1094,7 +1094,7 @@ func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"duplicate-naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -1108,7 +1108,7 @@ func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
 
 func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
@@ -1129,7 +1129,7 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 		t.Fatalf("unexpected updated inbound: %+v", updated)
 	}
 
-	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	readAfterUpdate := httptest.NewRecorder()
 	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/inbounds", nil))
 	if !strings.Contains(readAfterUpdate.Body.String(), `"port":9443`) || strings.Contains(readAfterUpdate.Body.String(), `"port":8443`) {
@@ -1150,7 +1150,7 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 }
 
 func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	update := httptest.NewRecorder()
 	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/hysteria2", strings.NewReader(`{"protocol":"hysteria2","transport":"tcp","port":443,"enabled":true}`)))
@@ -1161,7 +1161,7 @@ func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T)
 
 func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	settingsReq := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3000","stack":"naive","mode":"server"}`))
 	settingsRecorder := httptest.NewRecorder()
@@ -1177,7 +1177,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 		t.Fatalf("create routing rule expected 201, got %d: %s", routingRecorder.Code, routingRecorder.Body.String())
 	}
 
-	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	settingsRead := httptest.NewRecorder()
 	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
 	if !strings.Contains(settingsRead.Body.String(), `"stack":"naive"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
@@ -1192,7 +1192,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 }
 
 func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	oversizedMatch := "geosite:" + strings.Repeat("a", 1024*1024+1)
 
 	for _, tc := range []struct {
@@ -1229,7 +1229,7 @@ func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
 
 func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"non-ru","match":"geosite:geolocation-!ru","outbound":"warp","enabled":false}`)))
@@ -1250,7 +1250,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 		t.Fatalf("unexpected updated rule: %+v", updated)
 	}
 
-	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	readAfterUpdate := httptest.NewRecorder()
 	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
 	if !strings.Contains(readAfterUpdate.Body.String(), "geosite:openai") {
@@ -1271,7 +1271,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	first := httptest.NewRecorder()
 	r.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
 	if first.Code != http.StatusCreated {
@@ -1287,7 +1287,7 @@ func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
 
 func TestManagementAPIGetsRoutingRuleByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
@@ -1311,7 +1311,7 @@ func TestManagementAPIGetsRoutingRuleByName(t *testing.T) {
 }
 
 func TestManagementAPIGetRoutingRuleByNameReturnsNotFoundForMissing(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/rules/nonexistent", nil))
@@ -1322,7 +1322,7 @@ func TestManagementAPIGetRoutingRuleByNameReturnsNotFoundForMissing(t *testing.T
 }
 
 func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/presets", nil))
@@ -1339,7 +1339,7 @@ func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
 
 func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/all-except-Russia", nil))
@@ -1353,7 +1353,7 @@ func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 		}
 	}
 
-	restarted := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	read := httptest.NewRecorder()
 	restarted.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
 	if !strings.Contains(read.Body.String(), "preset-all-except-russia") || !strings.Contains(read.Body.String(), "geosite:category-ru") {
@@ -1381,7 +1381,7 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	t.Cleanup(func() { routeDatDownloader = oldDownloader })
 
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -1428,7 +1428,7 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 }
 
 func TestManagementAPIRejectsUnknownRoutingPreset(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/not-real", nil))
@@ -1464,7 +1464,7 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	t.Cleanup(func() { routeDatDownloader = oldDownloader })
 
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -1492,7 +1492,7 @@ func testSHA256Line(body string, name string) string {
 }
 
 func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil)
 	w := httptest.NewRecorder()
 
@@ -1532,7 +1532,7 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil)
 	w := httptest.NewRecorder()
 
@@ -1566,7 +1566,7 @@ func TestManagementApplyPlanHonorsSelectedStack(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -1596,7 +1596,7 @@ func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -1623,7 +1623,7 @@ func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testi
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -1650,7 +1650,7 @@ func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -1669,7 +1669,7 @@ func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
 
 func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	body := strings.NewReader(`{"confirm":true,"note":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	w := httptest.NewRecorder()
 
@@ -1685,7 +1685,7 @@ func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
 
 func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true} {}`)))
@@ -1700,7 +1700,7 @@ func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T)
 
 func TestManagementApplyRejectsMalformedJSONWithoutWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{broken`)))
@@ -1722,7 +1722,7 @@ func TestManagementApplyRejectsMalformedJSONWithoutWritingFiles(t *testing.T) {
 
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":false}`)))
@@ -1737,7 +1737,7 @@ func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 
 func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -1795,7 +1795,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -1856,7 +1856,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -1896,7 +1896,7 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -1944,7 +1944,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), "--check"}, Valid: true},
 		}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -1987,7 +1987,7 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Command: []string{"caddy", "validate", "--config", paths[0]}, Valid: false, Error: "caddy validation failed"}}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -2022,7 +2022,7 @@ func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *t
 		}
 		return results
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -2064,7 +2064,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 		}
 		return results
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -2118,7 +2118,7 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: false, Error: "invalid caddy"}}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -2166,7 +2166,7 @@ func TestManagementApplyDoesNotRunServiceActionsWithoutExplicitFlag(t *testing.T
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -2201,7 +2201,7 @@ func TestManagementApplyServicesRequiresLiveApply(t *testing.T) {
 		t.Fatalf("service action should not run when applyLive=false: %+v", command)
 		return ServiceActionResult{}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyServices":true}`)))
@@ -2247,7 +2247,7 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2297,7 +2297,7 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
 		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: false, Error: "reload failed"}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2338,7 +2338,7 @@ func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 		healthCalls = append(healthCalls, []string{"systemctl", "is-active", "--quiet", service})
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2387,7 +2387,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2438,7 +2438,7 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2492,7 +2492,7 @@ func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -2530,7 +2530,7 @@ func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouter
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -2538,7 +2538,7 @@ func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouter
 			t.Fatalf("apply %d expected 200, got %d: %s", i, w.Code, w.Body.String())
 		}
 	}
-	freshRouter := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	freshRouter, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 	freshRouter.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history", nil))
 
@@ -2575,7 +2575,7 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 	if err := writeAtomicFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600); err != nil {
 		t.Fatalf("write history: %v", err)
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history?stage=rollback&success=false&limit=1", nil))
@@ -2593,7 +2593,7 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 }
 
 func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
 	cases := []string{
 		"/api/apply/history?success=maybe",
 		"/api/apply/history?limit=-1",
@@ -2611,7 +2611,7 @@ func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *tes
 }
 
 func TestManagementApplyHistoryEndpointReportsFirstUnsupportedFilterDeterministically(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
 
 	for i := 0; i < 50; i++ {
 		w := httptest.NewRecorder()
@@ -2653,7 +2653,7 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
 	}
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -2685,7 +2685,7 @@ func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -2743,7 +2743,7 @@ func writeRenderableManagementState(path string, stack string) error {
 }
 
 func TestRouterStatus(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -2765,7 +2765,7 @@ func TestRouterStatus(t *testing.T) {
 }
 
 func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"","mode":""}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
@@ -2784,7 +2784,7 @@ func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
 }
 
 func TestMethodNotAllowedResponsesIncludeAllowAndSecurityHeaders(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/settings", nil)
 	w := httptest.NewRecorder()
 
@@ -2805,7 +2805,7 @@ func TestMethodNotAllowedResponsesIncludeAllowAndSecurityHeaders(t *testing.T) {
 }
 
 func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`not json`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -2910,7 +2910,7 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 
 func TestManagementAPIGetsInboundByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
@@ -2934,7 +2934,7 @@ func TestManagementAPIGetsInboundByName(t *testing.T) {
 }
 
 func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/inbounds/nonexistent", nil))
@@ -2957,7 +2957,7 @@ func TestReadSystemdServiceStatusTimeout(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 

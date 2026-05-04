@@ -67,7 +67,7 @@ func TestValidateServeAuthBindingAllowsDisabledAuthOnLocalhost(t *testing.T) {
 }
 
 func TestNewServeHTTPServerSetsProductionTimeouts(t *testing.T) {
-	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", false, "", "")
+	server, _ := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", false, "", "")
 
 	if server.ReadHeaderTimeout != 5*time.Second {
 		t.Fatalf("unexpected ReadHeaderTimeout: %s", server.ReadHeaderTimeout)

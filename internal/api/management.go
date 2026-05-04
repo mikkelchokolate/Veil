@@ -245,6 +245,11 @@ type managementState struct {
 	warp          WarpConfig
 }
 
+// Reloader is an optional interface for runtime state reload.
+type Reloader interface {
+	Reload() error
+}
+
 func newManagementState(info ServerInfo) *managementState {
 	keyPath := info.KeyPath
 	if keyPath == "" {
@@ -1838,6 +1843,37 @@ func (s *managementState) load() error {
 	if snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "" {
 		s.warp = snapshot.Warp
 	}
+	return nil
+}
+
+// Reload re-reads the management state and encryption key from disk.
+// It locks the state mutex during the reload. Returns an error if the
+// state file or key file cannot be read, but leaves the previous state
+// intact on failure.
+func (s *managementState) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Reload encryption key
+	if s.keyPath != "" {
+		key, err := secrets.LoadOrCreateKey(s.keyPath)
+		if err != nil {
+			return fmt.Errorf("reload key: %w", err)
+		}
+		cipher, err := secrets.NewCipher(*key)
+		if err != nil {
+			return fmt.Errorf("reload cipher: %w", err)
+		}
+		s.cipher = cipher
+	}
+
+	// Reload state from disk
+	if s.statePath != "" {
+		if err := s.load(); err != nil {
+			return fmt.Errorf("reload state: %w", err)
+		}
+	}
+
 	return nil
 }
 

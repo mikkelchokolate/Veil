@@ -67,7 +67,7 @@ func TestServeCommandRejectsEmptyHost(t *testing.T) {
 }
 
 func TestNewServeHTTPServerSetsTLSConfigWhenEnabled(t *testing.T) {
-	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", true, "/tmp/cert.pem", "/tmp/key.pem")
+	server, _ := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", true, "/tmp/cert.pem", "/tmp/key.pem")
 	if server.TLSConfig == nil {
 		t.Fatal("expected TLSConfig to be set when TLS is enabled")
 	}
@@ -83,7 +83,7 @@ func TestNewServeHTTPServerSetsTLSConfigWhenEnabled(t *testing.T) {
 }
 
 func TestNewServeHTTPServerDoesNotSetTLSConfigWhenDisabled(t *testing.T) {
-	server := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", false, "", "")
+	server, _ := newServeHTTPServer("127.0.0.1:2096", "test", "token", "/tmp/state.json", "/tmp/apply", "/etc/veil/state.key", false, "", "")
 	if server.TLSConfig != nil {
 		t.Fatal("expected TLSConfig to be nil when TLS is disabled")
 	}
