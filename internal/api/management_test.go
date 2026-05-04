@@ -583,3 +583,87 @@ func TestNewManagementStateLogsCorruptedStateError(t *testing.T) {
 		t.Fatalf("expected log output to mention state file, got: %s", output)
 	}
 }
+
+func TestAppendUnique(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []string
+		value  string
+		want   []string
+	}{
+		{
+			name:  "append to nil slice",
+			input: nil,
+			value: "a",
+			want:  []string{"a"},
+		},
+		{
+			name:  "append to empty slice",
+			input: []string{},
+			value: "b",
+			want:  []string{"b"},
+		},
+		{
+			name:  "append unique value to non-empty slice",
+			input: []string{"x", "y"},
+			value: "z",
+			want:  []string{"x", "y", "z"},
+		},
+		{
+			name:  "do not append duplicate value (value already present)",
+			input: []string{"alpha", "beta", "gamma"},
+			value: "beta",
+			want:  []string{"alpha", "beta", "gamma"},
+		},
+		{
+			name:  "multiple duplicates — value appears multiple times, returns original slice",
+			input: []string{"a", "b", "a", "c", "a"},
+			value: "a",
+			want:  []string{"a", "b", "a", "c", "a"},
+		},
+		{
+			name:  "case-sensitive comparison — different case is unique",
+			input: []string{"Hello", "World"},
+			value: "hello",
+			want:  []string{"Hello", "World", "hello"},
+		},
+		{
+			name:  "duplicate in first position",
+			input: []string{"first", "second", "third"},
+			value: "first",
+			want:  []string{"first", "second", "third"},
+		},
+		{
+			name:  "duplicate in last position",
+			input: []string{"one", "two", "three"},
+			value: "three",
+			want:  []string{"one", "two", "three"},
+		},
+		{
+			name:  "empty value as element — append empty string when not present",
+			input: []string{"x", "y"},
+			value: "",
+			want:  []string{"x", "y", ""},
+		},
+		{
+			name:  "empty value already present — do not duplicate empty string",
+			input: []string{"", "x", "y"},
+			value: "",
+			want:  []string{"", "x", "y"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := appendUnique(tt.input, tt.value)
+			if len(got) != len(tt.want) {
+				t.Fatalf("appendUnique(%v, %q) length = %d, want %d (got %v, want %v)", tt.input, tt.value, len(got), len(tt.want), got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("appendUnique(%v, %q)[%d] = %q, want %q (got %v, want %v)", tt.input, tt.value, i, got[i], tt.want[i], got, tt.want)
+				}
+			}
+		})
+	}
+}
