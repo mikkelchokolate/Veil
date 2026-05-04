@@ -28,15 +28,42 @@ const panelHTML = `<!doctype html>
   <main>
     <h1>Veil Panel</h1>
     <div class="card">
-      <p>Early web panel shell for NaiveProxy TCP + Hysteria2 UDP management.</p>
-      <p>Status API: <code>/api/status</code></p>
-      <p>Health: <code>/healthz</code></p>
+      <p>Web panel for NaiveProxy TCP + Hysteria2 UDP management. Use the sections below to configure and apply settings.</p>
+      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
     </div>
     <div class="card">
       <h2>API token</h2>
       <p>If the server was started with <code>--auth-token</code> or <code>VEIL_API_TOKEN</code>, paste the token here. The browser stores it only in <code>localStorage</code> and sends it as <code>X-Veil-Token</code>.</p>
       <label for="api-token">Token</label>
       <input id="api-token" type="password" autocomplete="off" placeholder="Optional API token">
+    </div>
+    <div class="card">
+      <h2>Profile preview</h2>
+      <p>Preview a <code>ru-recommended</code> install profile without writing anything — generated Caddyfile, Hysteria2 YAML, and client URIs.</p>
+      <form id="profile-preview-form">
+        <div class="form-grid">
+          <div>
+            <label for="profile-domain">Domain</label>
+            <input id="profile-domain" autocomplete="off" placeholder="vpn.example.com">
+          </div>
+          <div>
+            <label for="profile-email">Email</label>
+            <input id="profile-email" type="email" autocomplete="off" placeholder="admin@example.com">
+          </div>
+          <div>
+            <label for="profile-stack">Stack</label>
+            <select id="profile-stack">
+              <option value="both">both</option>
+              <option value="naive">naive</option>
+              <option value="hysteria2">hysteria2</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="preview-profile" type="submit">Preview profile</button>
+        </div>
+      </form>
+      <pre id="profile-preview-output">Not generated</pre>
     </div>
     <div class="card">
       <h2>Service status</h2>
@@ -647,6 +674,23 @@ const panelHTML = `<!doctype html>
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
+    });
+
+    // Profile preview
+    document.getElementById('profile-preview-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const domain = document.getElementById('profile-domain').value.trim();
+      const email = document.getElementById('profile-email').value.trim();
+      const stack = document.getElementById('profile-stack').value;
+      if (!domain || !email) {
+        document.getElementById('profile-preview-output').textContent = 'Domain and email are required';
+        return;
+      }
+      await loadJSON('/api/profiles/ru-recommended/preview', 'profile-preview-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, email, stack })
+      });
     });
 
     // Auto-load settings and service status on panel open.

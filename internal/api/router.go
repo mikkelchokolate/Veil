@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -140,6 +141,10 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		if err := validateEmptyJSONBody(r); err != nil {
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		result, err := speedtestRunner(r)
@@ -379,4 +384,24 @@ func writeNotFound(w http.ResponseWriter) {
 func methodNotAllowed(w http.ResponseWriter, methods ...string) {
 	w.Header().Set("Allow", strings.Join(methods, ", "))
 	writeError(w, "method not allowed", http.StatusMethodNotAllowed)
+}
+
+// validateEmptyJSONBody validates Content-Type and body size for POST endpoints
+// that expect no meaningful body (like speedtest). If Content-Type is set, it must
+// be application/json; if a body is present, it must be empty or "{}".
+func validateEmptyJSONBody(r *http.Request) error {
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		if ct != "application/json" {
+			return fmt.Errorf("Content-Type must be application/json")
+		}
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxJSONBodyBytes))
+	if err != nil {
+		return fmt.Errorf("request body too large")
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed != "" && trimmed != "{}" {
+		return fmt.Errorf("unexpected request body")
+	}
+	return nil
 }

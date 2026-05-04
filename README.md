@@ -136,8 +136,13 @@ kill -HUP $(cat /run/veil.pid)
 ./bin/veil update --dry-run                # preview
 ./bin/veil update --yes                    # download, verify, install
 ./bin/veil update --yes --restart          # + restart veil.service + health check
+./bin/veil update --yes --staged           # restart + health check + auto-rollback on failure
 ./bin/veil update --yes --force            # reinstall even if already latest
 ```
+
+With `--staged`, Veil installs the new binary, restarts the service, runs a health
+check, and automatically rolls back to the previous binary if either restart or
+health check fails. Use `--staged` for zero-downtime-risk updates.
 
 ### config validate — Offline state validation
 
@@ -164,6 +169,6 @@ When TLS is enabled, `veil serve` enforces:
 - ✅ Self-update with checksum verification, backup, restart, and health check
 - ✅ Service status querying and offline config validation
 - ✅ SIGHUP state reload for zero-downtime config changes
-- Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status
-- Add safer update workflow (version comparison, staged rollback) — partial: version check, checksum-verified download
+- ✅ Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status
+- ✅ Safer update workflow with `--staged` flag (automatic rollback on health check failure)
 - Continue hardening: TLS, rate limiting, input validation edge cases — partial: TLS, per-IP rate limiting, domain/email validation

@@ -130,10 +130,50 @@ func TestUpdateCommandRegistered(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := out.String()
-	for _, want := range []string{"--yes", "--dry-run", "--force"} {
+	for _, want := range []string{"--yes", "--dry-run", "--force", "--restart", "--staged"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestRollbackBinary(t *testing.T) {
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "veil")
+	backupPath := currentPath + ".backup"
+
+	// Setup: write "old" to current, "backup" to backup
+	os.WriteFile(currentPath, []byte("new-broken"), 0o755)
+	os.WriteFile(backupPath, []byte("old-working"), 0o755)
+
+	if err := rollbackBinary(backupPath, currentPath); err != nil {
+		t.Fatalf("rollbackBinary failed: %v", err)
+	}
+
+	got, err := os.ReadFile(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "old-working" {
+		t.Fatalf("expected old-working, got %q", got)
+	}
+
+	// Backup should be cleaned up
+	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
+		t.Fatalf("backup file should be cleaned up after rollback")
+	}
+}
+
+func TestRollbackBinaryMissingBackup(t *testing.T) {
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "veil")
+	backupPath := currentPath + ".backup"
+
+	os.WriteFile(currentPath, []byte("current"), 0o755)
+	// No backup file exists
+
+	if err := rollbackBinary(backupPath, currentPath); err == nil {
+		t.Fatal("expected error when backup is missing")
 	}
 }
 

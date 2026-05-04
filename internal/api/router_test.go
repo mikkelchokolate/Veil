@@ -3147,3 +3147,50 @@ func TestWriteJSONStatus_NoError_NoLog(t *testing.T) {
 		t.Errorf("expected no log output, got: %s", buf.String())
 	}
 }
+
+func TestValidateEmptyJSONBody(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		wantErr     bool
+	}{
+		{"no content type, no body", "", "", false},
+		{"no content type, empty object", "", "{}", false},
+		{"json content type, no body", "application/json", "", false},
+		{"json content type, empty object", "application/json", "{}", false},
+		{"json content type, whitespace", "application/json", "  {}\n  ", false},
+		{"wrong content type", "text/plain", "", true},
+		{"json content type, unexpected body", "application/json", `"hello"`, true},
+		{"json content type, array body", "application/json", `[1,2,3]`, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			err := validateEmptyJSONBody(req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateEmptyJSONBody() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
+	handler, _ := NewRouter(ServerInfo{Version: "test", StatePath: "/dev/null"})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	res, err := http.Post(srv.URL+"/api/tools/speedtest", "text/plain", strings.NewReader("bad"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", res.StatusCode)
+	}
+}
+

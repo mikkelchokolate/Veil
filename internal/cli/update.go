@@ -33,6 +33,7 @@ func newUpdateCommand(version string) *cobra.Command {
 	var dryRun bool
 	var force bool
 	var restart bool
+	var staged bool
 	var listen string
 	var authToken string
 
@@ -44,7 +45,9 @@ checksum, backs up the current binary, and replaces it.
 
 Use --dry-run to preview without making changes.
 Use --force to reinstall even if the current version is already the latest.
-Use --restart to restart the veil service and perform a health check after update.`,
+Use --restart to restart the veil service and perform a health check after update.
+Use --staged for a safer staged rollout: restart + health check with automatic
+rollback to the previous binary if the health check fails.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
@@ -142,25 +145,46 @@ Use --restart to restart the veil service and perform a health check after updat
 			}
 
 			fmt.Fprintf(out, "Updated to %s.\n", release.TagName)
-			if !restart {
+			if !restart && !staged {
 				fmt.Fprintln(out, "Restart the veil service to apply the update:")
 				fmt.Fprintln(out, "  systemctl restart veil.service")
 				return nil
 			}
 
-			// 10. Restart service and health check
-			fmt.Fprintln(out, "Restarting veil.service...")
-			if err := runSystemctlRestart("veil.service"); err != nil {
-				return fmt.Errorf("restart failed (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
-			}
-			fmt.Fprintln(out, "Service restarted. Running health check...")
-
+			// 10. Restart service and health check (with optional staged rollback)
 			addr := resolveStatusListen(listen)
 			if !strings.Contains(addr, "://") {
 				addr = "http://" + addr
 			}
 			token, _ := resolveServeAuthToken(authToken)
+
+			fmt.Fprintln(out, "Restarting veil.service...")
+			if err := runSystemctlRestart("veil.service"); err != nil {
+				if staged {
+					fmt.Fprintf(out, "Restart failed, rolling back to previous binary...\n")
+					if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
+						return fmt.Errorf("restart failed and rollback also failed: restart: %w; rollback: %v", err, rollbackErr)
+					}
+					fmt.Fprintln(out, "Rolled back to previous binary.")
+					return fmt.Errorf("restart failed, rolled back: %w", err)
+				}
+				return fmt.Errorf("restart failed (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
+			}
+			fmt.Fprintln(out, "Service restarted. Running health check...")
+
 			if err := waitForHealthy(addr, token, 10*time.Second); err != nil {
+				if staged {
+					fmt.Fprintf(out, "Health check failed, rolling back to previous binary...\n")
+					if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
+						return fmt.Errorf("health check failed and rollback also failed: health: %w; rollback: %v", err, rollbackErr)
+					}
+					// Restart again after rollback to get the old binary running
+					if restartErr := runSystemctlRestart("veil.service"); restartErr != nil {
+						fmt.Fprintf(out, "Warning: rollback binary installed but restart failed: %v\n", restartErr)
+					}
+					fmt.Fprintln(out, "Rolled back to previous binary.")
+					return fmt.Errorf("health check failed, rolled back: %w", err)
+				}
 				return fmt.Errorf("health check failed after restart (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
 			}
 			fmt.Fprintf(out, "Service healthy. Update complete.\n")
@@ -172,9 +196,25 @@ Use --restart to restart the veil service and perform a health check after updat
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview update without making changes")
 	cmd.Flags().BoolVar(&force, "force", false, "reinstall even if already at latest version")
 	cmd.Flags().BoolVar(&restart, "restart", false, "restart veil.service and health check after update")
+	cmd.Flags().BoolVar(&staged, "staged", false, "restart with health check and automatic rollback on failure")
 	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check (default: 127.0.0.1:2096)")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API token for health check")
 	return cmd
+}
+
+// rollbackBinary copies the backup file back over the current binary and
+// removes the backup. Returns an error if the rollback cannot be completed.
+func rollbackBinary(backupPath, currentPath string) error {
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		return fmt.Errorf("read backup: %w", err)
+	}
+	if err := replaceBinaryAtomic(currentPath, backupData); err != nil {
+		return fmt.Errorf("restore backup: %w", err)
+	}
+	// Best-effort cleanup of the backup.
+	_ = os.Remove(backupPath)
+	return nil
 }
 
 // runSystemctlRestart runs systemctl restart for the given unit.
@@ -236,8 +276,8 @@ func updateAssetName() string {
 
 // githubRelease represents a subset of the GitHub Release API response.
 type githubRelease struct {
-	TagName string          `json:"tag_name"`
-	Assets  []githubAsset   `json:"assets"`
+	TagName string        `json:"tag_name"`
+	Assets  []githubAsset `json:"assets"`
 }
 
 type githubAsset struct {
