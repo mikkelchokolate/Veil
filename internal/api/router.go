@@ -78,6 +78,21 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	state := newManagementState(info)
 	metrics := NewMetricsCollector()
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
+	mux.HandleFunc("/api/system", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			stats, err := readSystemStats()
+			if err != nil {
+				writeError(w, "failed to read system stats", http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, stats)
+		}
+	})
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

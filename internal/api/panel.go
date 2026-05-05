@@ -75,6 +75,12 @@ const panelHTML = `<!doctype html>
       <pre id="service-status-output">Not loaded</pre>
     </div>
     <div class="card">
+      <h2>System resources</h2>
+      <p>CPU, memory, disk, load average from <code>/api/system</code>.</p>
+      <button id="load-system-stats" type="button">Load system stats</button>
+      <pre id="system-stats-output">Not loaded</pre>
+    </div>
+    <div class="card">
       <h2>Client links</h2>
       <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
       <button id="load-client-links" type="button">Load client links</button>
@@ -676,6 +682,9 @@ const panelHTML = `<!doctype html>
     document.getElementById('settings-form').addEventListener('submit', saveSettings);
     document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
+    document.getElementById('load-system-stats').addEventListener('click', async () => {
+      await loadJSON('/api/system', 'system-stats-output');
+    });
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
     document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
