@@ -104,6 +104,21 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			writeJSON(w, readTLSCert(certPath))
 		}
 	})
+	mux.HandleFunc("/api/network", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			stats, err := readNetworkStats()
+			if err != nil {
+				writeError(w, "failed to read network stats", http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, stats)
+		}
+	})
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

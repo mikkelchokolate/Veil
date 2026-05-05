@@ -29,7 +29,7 @@ const panelHTML = `<!doctype html>
     <h1>Veil Panel</h1>
     <div class="card">
       <p>Web panel for NaiveProxy TCP + Hysteria2 UDP management. Use the sections below to configure and apply settings.</p>
-      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
+      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Network: <code>/api/network</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
     </div>
     <div class="card">
       <h2>API token</h2>
@@ -79,6 +79,12 @@ const panelHTML = `<!doctype html>
       <p>CPU, memory, disk, load average from <code>/api/system</code>.</p>
       <button id="load-system-stats" type="button">Load system stats</button>
       <pre id="system-stats-output">Not loaded</pre>
+    </div>
+    <div class="card">
+      <h2>Network interfaces</h2>
+      <p>RX/TX bytes and packets from <code>/api/network</code>.</p>
+      <button id="load-network-stats" type="button">Load network stats</button>
+      <pre id="network-stats-output">Not loaded</pre>
     </div>
     <div class="card">
       <h2>Client links</h2>
@@ -684,6 +690,9 @@ const panelHTML = `<!doctype html>
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
     document.getElementById('load-system-stats').addEventListener('click', async () => {
       await loadJSON('/api/system', 'system-stats-output');
+    });
+    document.getElementById('load-network-stats').addEventListener('click', async () => {
+      await loadJSON('/api/network', 'network-stats-output');
     });
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
