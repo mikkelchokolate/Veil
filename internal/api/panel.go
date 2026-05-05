@@ -73,6 +73,11 @@ const panelHTML = `<!doctype html>
         <button id="toggle-auto-refresh" class="secondary" type="button">Auto-refresh: OFF</button>
       </div>
       <pre id="service-status-output">Not loaded</pre>
+      <div class="actions">
+        <button id="restart-veil" class="danger" type="button">Restart veil</button>
+        <button id="restart-caddy" class="danger" type="button">Restart caddy</button>
+        <button id="restart-hysteria2" class="danger" type="button">Restart hysteria2</button>
+      </div>
     </div>
     <div class="card">
       <h2>System resources</h2>
@@ -706,6 +711,26 @@ const panelHTML = `<!doctype html>
     document.getElementById('settings-form').addEventListener('submit', saveSettings);
     document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
     document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
+    // Service restart buttons
+    document.getElementById('restart-veil').addEventListener('click', async () => {
+      await loadJSON('/api/services/veil/restart', 'service-status-output', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
+      loadServiceStatus();
+    });
+    document.getElementById('restart-caddy').addEventListener('click', async () => {
+      await loadJSON('/api/services/caddy/restart', 'service-status-output', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
+    });
+    document.getElementById('restart-hysteria2').addEventListener('click', async () => {
+      await loadJSON('/api/services/hysteria2/restart', 'service-status-output', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
+    });
     document.getElementById('load-system-stats').addEventListener('click', async () => {
       await loadJSON('/api/system', 'system-stats-output');
     });
