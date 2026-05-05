@@ -1264,3 +1264,64 @@ func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
 		})
 	}
 }
+
+func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "var", "lib", "veil")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	statePath := filepath.Join(stateDir, "state.json")
+	keyPath := filepath.Join(dir, "etc", "veil", "state.key")
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		t.Fatalf("mkdir key dir: %v", err)
+	}
+
+	// Create key and cipher
+	key, err := secrets.LoadOrCreateKey(keyPath)
+	if err != nil {
+		t.Fatalf("load or create key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+
+	// Write initial state: stack=both, domain=old.example.com
+	state := &managementState{statePath: statePath, keyPath: keyPath, applyRoot: stateDir, cipher: cipher}
+	state.settings = Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Domain: "old.example.com"}
+	if err := state.saveLocked(); err != nil {
+		t.Fatalf("save initial state: %v", err)
+	}
+
+	// Verify initial state
+	if state.settings.Domain != "old.example.com" {
+		t.Fatalf("initial domain = %q, want old.example.com", state.settings.Domain)
+	}
+
+	// Write new state to disk (simulating SIGHUP / external modification)
+	state2 := &managementState{statePath: statePath, keyPath: keyPath, applyRoot: stateDir,
+		settings: Settings{PanelListen: "0.0.0.0:2096", Stack: "hysteria2", Domain: "new.example.com"}, cipher: cipher}
+	if err := state2.saveLocked(); err != nil {
+		t.Fatalf("save new state: %v", err)
+	}
+
+	// Reload — should pick up the new state
+	if err := state.Reload(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if state.settings.Domain != "new.example.com" {
+		t.Errorf("after reload domain = %q, want new.example.com", state.settings.Domain)
+	}
+	if state.settings.Stack != "hysteria2" {
+		t.Errorf("after reload stack = %q, want hysteria2", state.settings.Stack)
+	}
+}
+
+func TestManagementStateReloadRespectsEmptyStatePath(t *testing.T) {
+	state := &managementState{statePath: "", keyPath: ""}
+	// Reload with empty paths should be a no-op, not an error
+	if err := state.Reload(); err != nil {
+		t.Fatalf("reload with empty paths should not error: %v", err)
+	}
+}

@@ -329,3 +329,91 @@ func TestServeGracefulShutdown(t *testing.T) {
 		t.Fatal("server did not shut down within expected time")
 	}
 }
+
+func TestResolveServeTLSFromEnv(t *testing.T) {
+	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
+	t.Setenv("VEIL_TLS_KEY", "/env/key.pem")
+	enabled, source := resolveServeTLS("", "")
+	if !enabled {
+		t.Fatal("expected TLS enabled from env vars")
+	}
+	if source != "VEIL_TLS_CERT / VEIL_TLS_KEY" {
+		t.Fatalf("expected env source, got: %s", source)
+	}
+}
+
+func TestResolveServeTLSEnvFlagPrecedence(t *testing.T) {
+	// Flags should take precedence over env vars
+	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
+	t.Setenv("VEIL_TLS_KEY", "/env/key.pem")
+	enabled, source := resolveServeTLS("/flag/cert.pem", "/flag/key.pem")
+	if !enabled {
+		t.Fatal("expected TLS enabled from flags")
+	}
+	if source != "--tls-cert / --tls-key" {
+		t.Fatalf("expected flag source when both are set, got: %s", source)
+	}
+}
+
+func TestResolveServeTLSEnvOnlyOneVarSet(t *testing.T) {
+	// Only cert in env, no key — should be disabled
+	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
+	enabled, _ := resolveServeTLS("", "")
+	if enabled {
+		t.Fatal("expected TLS disabled when only VEIL_TLS_CERT is set")
+	}
+}
+
+func TestResolveServeKeyPathFromEnv(t *testing.T) {
+	t.Setenv("VEIL_KEY_PATH", "/custom/key.path")
+	path, source := resolveServeKeyPath("")
+	if path != "/custom/key.path" {
+		t.Fatalf("expected /custom/key.path from env, got: %s", path)
+	}
+	if source != "VEIL_KEY_PATH" {
+		t.Fatalf("expected VEIL_KEY_PATH source, got: %s", source)
+	}
+}
+
+func TestResolveServeKeyPathDefault(t *testing.T) {
+	path, source := resolveServeKeyPath("")
+	if path != "/etc/veil/state.key" {
+		t.Fatalf("expected default key path, got: %s", path)
+	}
+	if source != "default" {
+		t.Fatalf("expected default source, got: %s", source)
+	}
+}
+
+func TestResolveServeKeyPathFromFlag(t *testing.T) {
+	path, source := resolveServeKeyPath("/custom/key.path")
+	if path != "/custom/key.path" {
+		t.Fatalf("expected flag key path, got: %s", path)
+	}
+	if source != "--key-path" {
+		t.Fatalf("expected --key-path source, got: %s", source)
+	}
+}
+
+func TestResolveConfigPathFromEnv(t *testing.T) {
+	t.Setenv("VEIL_STATE_PATH", "/custom/state.json")
+	path := resolveConfigPath("")
+	if path != "/custom/state.json" {
+		t.Fatalf("expected env path, got: %s", path)
+	}
+}
+
+func TestResolveConfigPathFlagPrecedence(t *testing.T) {
+	t.Setenv("VEIL_STATE_PATH", "/custom/state.json")
+	path := resolveConfigPath("/flag/path.json")
+	if path != "/flag/path.json" {
+		t.Fatalf("expected flag path, got: %s", path)
+	}
+}
+
+func TestResolveConfigPathDefault(t *testing.T) {
+	path := resolveConfigPath("")
+	if path != "/var/lib/veil/state.json" {
+		t.Fatalf("expected default path, got: %s", path)
+	}
+}
