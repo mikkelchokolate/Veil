@@ -158,6 +158,52 @@ When TLS is enabled, `veil serve` enforces:
 - ECDSA and RSA certificates supported
 - X25519 and P-256 curve preferences
 - Server-preferred cipher order
+- Strict-Transport-Security (HSTS) with 2-year max-age and preload flag
+- Server header stripped to avoid version disclosure
+
+### Security headers
+
+Every response includes:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: no-referrer`
+- `X-Permitted-Cross-Domain-Policies: none`
+- `Cross-Origin-Resource-Policy: same-origin`
+- `X-DNS-Prefetch-Control: off`
+
+Panel responses additionally include `Content-Security-Policy`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`, and `Origin-Agent-Cluster`.
+
+### Service logs
+
+View recent journald logs for managed services from the panel or API:
+
+```bash
+# API: get last 100 lines of caddy logs
+curl http://127.0.0.1:2096/api/logs?unit=caddy&lines=100
+
+# CLI: use journalctl directly
+journalctl -u veil.service -n 50
+```
+
+### Docker
+
+Multi-stage Docker image available (Alpine, non-root user):
+
+```bash
+# Build
+make docker VERSION=latest
+
+# Run with host networking (for systemd access)
+docker run -d --name veil --network host \
+  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+  veil-panel/veil:latest serve
+
+# Run with port mapping
+docker run -d --name veil -p 2096:2096 \
+  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+  -e VEIL_API_TOKEN=your-secret \
+  veil-panel/veil:latest serve --listen 0.0.0.0:2096 --auth-token your-secret
+```
 
 ## Roadmap
 
@@ -171,4 +217,6 @@ When TLS is enabled, `veil serve` enforces:
 - ✅ SIGHUP state reload for zero-downtime config changes
 - ✅ Expand the web panel for settings, inbounds, routing rules, WARP, apply history, and service status
 - ✅ Safer update workflow with `--staged` flag (automatic rollback on health check failure)
-- Continue hardening: TLS, rate limiting, input validation edge cases — partial: TLS, per-IP rate limiting, domain/email validation
+- ✅ Security hardening: HSTS, security headers on all responses, Server header stripping, command injection prevention, DNS prefetch control
+- ✅ Service logs viewer via panel and API
+- ✅ Docker deployment support
