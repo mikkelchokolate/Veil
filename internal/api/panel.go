@@ -68,7 +68,10 @@ const panelHTML = `<!doctype html>
     <div class="card">
       <h2>Service status</h2>
       <p>Read live systemd state for Veil, NaiveProxy/Caddy, Hysteria2, and WARP/sing-box through <code>/api/status</code>.</p>
-      <button id="load-service-status" type="button">Load service status</button>
+      <div class="actions">
+        <button id="load-service-status" type="button">Load service status</button>
+        <button id="toggle-auto-refresh" class="secondary" type="button">Auto-refresh: OFF</button>
+      </div>
       <pre id="service-status-output">Not loaded</pre>
     </div>
     <div class="card">
@@ -471,9 +474,32 @@ const panelHTML = `<!doctype html>
       await loadJSON(applyHistoryPath(), 'apply-plan-output');
     }
 
-    async function loadServiceStatus() {
-      await loadJSON('/api/status', 'service-status-output');
+    function loadServiceStatus() {
+      return loadJSON('/api/status', 'service-status-output');
     }
+
+    // Auto-refresh for service status (10s interval)
+    let autoRefreshInterval = null;
+    document.getElementById('toggle-auto-refresh').addEventListener('click', function() {
+      const btn = this;
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.textContent = 'Auto-refresh: OFF';
+        btn.classList.remove('danger');
+        btn.classList.add('secondary');
+      } else {
+        loadServiceStatus(); // immediate refresh
+        autoRefreshInterval = setInterval(loadServiceStatus, 10000);
+        btn.textContent = 'Auto-refresh: ON (10s)';
+        btn.classList.remove('secondary');
+        btn.classList.add('danger');
+      }
+    });
+    // Clean up interval on page unload
+    window.addEventListener('beforeunload', function() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    });
 
     async function loadClientLinks() {
       await loadJSON('/api/client-links', 'client-links-output');
