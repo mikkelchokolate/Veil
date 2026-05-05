@@ -93,6 +93,17 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			writeJSON(w, stats)
 		}
 	})
+	mux.HandleFunc("/api/tls", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			certPath := os.Getenv("VEIL_TLS_CERT")
+			writeJSON(w, readTLSCert(certPath))
+		}
+	})
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
