@@ -149,6 +149,16 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			writeJSON(w, stats)
 		}
 	})
+	mux.HandleFunc("/api/disk", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			writeJSON(w, readDirDiskStats())
+		}
+	})
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

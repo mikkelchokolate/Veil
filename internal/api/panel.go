@@ -99,6 +99,12 @@ const panelHTML = `<!doctype html>
       <pre id="processes-stats-output">Not loaded</pre>
     </div>
     <div class="card">
+      <h2>Disk usage</h2>
+      <p>Directory sizes for Veil paths from <code>/api/disk</code>.</p>
+      <button id="load-disk-stats" type="button">Load disk usage</button>
+      <pre id="disk-stats-output">Not loaded</pre>
+    </div>
+    <div class="card">
       <h2>Client links</h2>
       <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
       <button id="load-client-links" type="button">Load client links</button>
@@ -711,6 +717,9 @@ const panelHTML = `<!doctype html>
     });
     document.getElementById('load-processes-stats').addEventListener('click', async () => {
       await loadJSON('/api/processes', 'processes-stats-output');
+    });
+    document.getElementById('load-disk-stats').addEventListener('click', async () => {
+      await loadJSON('/api/disk', 'disk-stats-output');
     });
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
