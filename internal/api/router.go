@@ -190,7 +190,20 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 		})
 	})
 	rateLimited := rateLimitMiddleware(mux)
-	return authMiddleware(info.AuthToken, rateLimited), state
+	authenticated := authMiddleware(info.AuthToken, rateLimited)
+	return securityHeadersMiddleware(authenticated), state
+}
+
+// securityHeadersMiddleware adds baseline security headers to every response.
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func rateLimitMiddleware(next http.Handler) http.Handler {

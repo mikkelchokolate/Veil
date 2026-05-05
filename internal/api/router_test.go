@@ -3194,3 +3194,49 @@ func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	paths := []string{"/", "/healthz", "/api/status", "/api/settings", "/api/warp", "/api/nonexistent"}
+
+	for _, path := range paths {
+		t.Run("path="+path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("X-Content-Type-Options: want nosniff, got %q", got)
+			}
+			if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+				t.Errorf("X-Frame-Options: want DENY, got %q", got)
+			}
+			if got := w.Header().Get("Referrer-Policy"); got != "no-referrer" {
+				t.Errorf("Referrer-Policy: want no-referrer, got %q", got)
+			}
+			if got := w.Header().Get("X-Permitted-Cross-Domain-Policies"); got != "none" {
+				t.Errorf("X-Permitted-Cross-Domain-Policies: want none, got %q", got)
+			}
+			if got := w.Header().Get("Cross-Origin-Resource-Policy"); got != "same-origin" {
+				t.Errorf("Cross-Origin-Resource-Policy: want same-origin, got %q", got)
+			}
+		})
+	}
+}
+
+func TestSecurityHeadersMiddlewareOnErrorPaths(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret"})
+
+	// Unauthorized POST without token — should still have security headers
+	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader("bad"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("missing X-Content-Type-Options on unauthorized response")
+	}
+	if w.Header().Get("X-Frame-Options") != "DENY" {
+		t.Error("missing X-Frame-Options on unauthorized response")
+	}
+}
+
