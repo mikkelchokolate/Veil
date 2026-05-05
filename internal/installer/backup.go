@@ -37,8 +37,12 @@ func BackupBeforeApply(paths []string, backupDir string) (backupID string, err e
 	// the same second), append a counter suffix until we find a free directory.
 	for suffix := 1; ; suffix++ {
 		backupPath := filepath.Join(backupDir, backupID)
-		if _, statErr := os.Stat(backupPath); os.IsNotExist(statErr) {
+		_, statErr := os.Stat(backupPath)
+		if os.IsNotExist(statErr) {
 			break
+		}
+		if statErr != nil {
+			return "", fmt.Errorf("stat backup path %s: %w", backupPath, statErr)
 		}
 		backupID = fmt.Sprintf("%s_%d", baseID, suffix)
 	}

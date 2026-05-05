@@ -1,10 +1,12 @@
 package installer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/veil-panel/veil/internal/renderer"
 )
@@ -51,11 +53,11 @@ func BuildRepairPlan(profile RURecommendedProfile, paths ApplyPaths) (RepairPlan
 	plan := RepairPlan{}
 	for _, file := range files {
 		body, err := os.ReadFile(file.Path)
-		if os.IsNotExist(err) {
-			plan.Actions = append(plan.Actions, RepairAction{Path: file.Path, Reason: RepairReasonMissing, Content: file.Content, Mode: file.Mode})
-			continue
-		}
 		if err != nil {
+			if isMissingOrBlocked(err) {
+				plan.Actions = append(plan.Actions, RepairAction{Path: file.Path, Reason: RepairReasonMissing, Content: file.Content, Mode: file.Mode})
+				continue
+			}
 			return RepairPlan{}, err
 		}
 		if string(body) != file.Content {
@@ -170,4 +172,10 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		}
 	}
 	return files, nil
+}
+
+// isMissingOrBlocked reports whether err means the file cannot be read
+// because it doesn't exist or a path component is not a directory (ENOTDIR).
+func isMissingOrBlocked(err error) bool {
+	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
 }

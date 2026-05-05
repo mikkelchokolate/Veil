@@ -450,14 +450,15 @@ func TestRepairApplyFailureWithAuditLog(t *testing.T) {
 	auditPath := filepath.Join(dir, "audit.jsonl")
 
 	// Create a scenario where the plan builds but apply fails:
-	// Make etcDir read-only so MkdirAll during apply gets permission denied.
+	// Write a regular file at etcDir so MkdirAll of subdirectories fails with ENOTDIR.
+	// (chmod 0o555 does not block root due to CAP_DAC_OVERRIDE.)
 	etcParent := filepath.Join(dir, "etc")
 	if err := os.MkdirAll(etcParent, 0o755); err != nil {
 		t.Fatalf("mkdir etc parent: %v", err)
 	}
 	etcDir := filepath.Join(etcParent, "veil")
-	if err := os.Mkdir(etcDir, 0o555); err != nil {
-		t.Fatalf("mkdir etc/veil: %v", err)
+	if err := os.WriteFile(etcDir, []byte("block"), 0o644); err != nil {
+		t.Fatalf("write blocker file at etc/veil: %v", err)
 	}
 	varDir := filepath.Join(dir, "var", "lib", "veil")
 	if err := os.MkdirAll(varDir, 0o755); err != nil {
@@ -522,10 +523,11 @@ func TestRepairApplyBackupFailureWithAuditLog(t *testing.T) {
 		t.Fatalf("write caddyfile: %v", err)
 	}
 
-	// Make backupDir read-only so MkdirAll inside BackupBeforeApply fails
+	// Write a regular file at backupDir so MkdirAll inside BackupBeforeApply fails with ENOTDIR.
+	// (chmod 0o555 does not block root due to CAP_DAC_OVERRIDE.)
 	backupDir := filepath.Join(dir, "backups")
-	if err := os.MkdirAll(backupDir, 0o555); err != nil {
-		t.Fatalf("mkdir backup dir: %v", err)
+	if err := os.WriteFile(backupDir, []byte("block"), 0o644); err != nil {
+		t.Fatalf("write blocker file at backups: %v", err)
 	}
 
 	auditPath := filepath.Join(dir, "audit.jsonl")
