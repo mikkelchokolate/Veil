@@ -1,0 +1,29 @@
+# Veil docker-compose example
+# docker compose up -d
+
+version: "3.8"
+
+services:
+  veil:
+    image: veil-panel/veil:dev
+    build: .
+    container_name: veil
+    restart: unless-stopped
+    ports:
+      - "2096:2096"
+    volumes:
+      - veil-state:/var/lib/veil
+      - veil-etc:/etc/veil
+    environment:
+      - VEIL_API_TOKEN=${VEIL_API_TOKEN:-}
+    command: serve --listen 0.0.0.0:2096${VEIL_API_TOKEN:+ --auth-token $VEIL_API_TOKEN}
+    healthcheck:
+      test: ["CMD", "veil", "status", "--json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  veil-state:
+  veil-etc:

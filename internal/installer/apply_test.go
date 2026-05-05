@@ -515,3 +515,18 @@ func TestApplyBackupSkipsNewFilesThatDidNotExist(t *testing.T) {
 		t.Fatalf("expected no backed up files for fresh apply, got %d: %v", fileCount, entries)
 	}
 }
+
+func TestWriteManagedFileFailsWhenParentIsNotDirectory(t *testing.T) {
+	dir := t.TempDir()
+	// Create a regular file where a directory is needed
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("block"), 0o644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	// Try to write a file under blocker/subdir/ — MkdirAll should fail with ENOTDIR
+	path := filepath.Join(blocker, "subdir", "file.txt")
+	err := writeManagedFile(path, "content", 0o600)
+	if err == nil {
+		t.Fatal("expected error writing file under non-directory path")
+	}
+}
