@@ -612,3 +612,20 @@ func TestStackName(t *testing.T) {
 		})
 	}
 }
+
+func TestRandomSecretGeneratesBase64String(t *testing.T) {
+	// Test that randomSecret produces consistent-length base64 output.
+	s := randomSecret("test-label")
+	if len(s) == 0 {
+		t.Fatal("expected non-empty random secret")
+	}
+	// base64.RawURLEncoding of 18 bytes = 24 chars
+	if len(s) != 24 {
+		t.Errorf("expected 24-char base64 string, got %d chars: %q", len(s), s)
+	}
+	// Calling again should produce a different value
+	s2 := randomSecret("test-label")
+	if s == s2 {
+		t.Error("expected different random values on successive calls")
+	}
+}

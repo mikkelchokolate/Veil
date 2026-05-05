@@ -1,7 +1,8 @@
 BINARY=veil
 VERSION?=dev
+DOCKER_IMAGE?=veil-panel/veil
 
-.PHONY: test build tidy
+.PHONY: test build tidy docker
 
 test:
 	go test ./...
@@ -12,3 +13,7 @@ build:
 
 tidy:
 	go mod tidy
+
+docker:
+	docker build -t $(DOCKER_IMAGE):$(VERSION) .
+	@echo "Built $(DOCKER_IMAGE):$(VERSION)"
