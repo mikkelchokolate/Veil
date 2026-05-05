@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,6 +189,43 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			Caddyfile:          redactProfileSecrets(profile, profile.Caddyfile),
 			Hysteria2YAML:      redactProfileSecrets(profile, profile.Hysteria2YAML),
 		})
+	})
+	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		unit := r.URL.Query().Get("unit")
+		if unit == "" {
+			unit = "veil"
+		}
+		if !validLogUnit(unit) {
+			writeError(w, "invalid unit name", http.StatusBadRequest)
+			return
+		}
+		lines := 50
+		if ls := r.URL.Query().Get("lines"); ls != "" {
+			n, err := strconv.Atoi(ls)
+			if err != nil || n < 1 || n > 500 {
+				writeError(w, "lines must be 1-500", http.StatusBadRequest)
+				return
+			}
+			lines = n
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx,
+			"journalctl", "-u", unit+".service", "--no-pager", "-n", strconv.Itoa(lines), "-o", "short-iso",
+		).CombinedOutput()
+		if err != nil {
+			writeError(w, "failed to read logs: "+strings.TrimSpace(string(out)), http.StatusServiceUnavailable)
+			return
+		}
+		result := map[string]string{
+			"unit":   unit,
+			"output": string(out),
+		}
+		writeJSON(w, result)
 	})
 	rateLimited := rateLimitMiddleware(mux)
 	authenticated := authMiddleware(info.AuthToken, rateLimited)
@@ -422,4 +460,17 @@ func validateEmptyJSONBody(r *http.Request) error {
 		return fmt.Errorf("unexpected request body")
 	}
 	return nil
+}
+
+// validLogUnit checks that a systemd unit name contains only safe characters.
+func validLogUnit(unit string) bool {
+	if unit == "" {
+		return false
+	}
+	for _, r := range unit {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '@' || r == '.') {
+			return false
+		}
+	}
+	return true
 }

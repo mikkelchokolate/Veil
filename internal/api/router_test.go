@@ -3272,3 +3272,63 @@ func TestSecurityHeadersMiddlewareHSTSOnHTTPS(t *testing.T) {
 	}
 }
 
+func TestLogsEndpointRequiresGET(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodPost, "/api/logs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestLogsEndpointRejectsInvalidUnit(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/api/logs?unit=rm%20-rf", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid unit, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLogsEndpointRejectsInvalidLines(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	for _, qs := range []string{"lines=0", "lines=501", "lines=abc"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/logs?"+qs, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for %s, got %d: %s", qs, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestValidLogUnit(t *testing.T) {
+	tests := []struct {
+		unit string
+		want bool
+	}{
+		{"veil", true},
+		{"caddy", true},
+		{"hysteria2", true},
+		{"sing-box", true},
+		{"veil-naive", true},
+		{"my_service@1", true},
+		{"foo.bar", true},
+		{"", false},
+		{"rm -rf", false},
+		{"foo;bar", false},
+		{"cat /etc/passwd", false},
+		{"$(whoami)", false},
+		{"foo`id`", false},
+	}
+	for _, tt := range tests {
+		t.Run("unit="+tt.unit, func(t *testing.T) {
+			if got := validLogUnit(tt.unit); got != tt.want {
+				t.Errorf("validLogUnit(%q) = %v, want %v", tt.unit, got, tt.want)
+			}
+		})
+	}
+}
+

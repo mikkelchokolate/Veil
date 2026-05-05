@@ -335,6 +335,29 @@ const panelHTML = `<!doctype html>
       <button id="run-speedtest" type="button">Run speedtest</button>
       <pre id="speedtest-output">Not started</pre>
     </div>
+    <div class="card">
+      <h2>Service logs</h2>
+      <p>View recent journald logs for managed services.</p>
+      <div class="form-grid">
+        <div>
+          <label for="log-unit">Service unit</label>
+          <select id="log-unit">
+            <option value="veil">veil</option>
+            <option value="caddy">caddy (NaiveProxy)</option>
+            <option value="hysteria2">hysteria2</option>
+            <option value="sing-box">sing-box (WARP)</option>
+          </select>
+        </div>
+        <div>
+          <label for="log-lines">Lines</label>
+          <input id="log-lines" type="number" min="1" max="500" value="50">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="load-logs" type="button">Load logs</button>
+      </div>
+      <pre id="logs-output" style="max-height: 400px; overflow-y: auto;">Not loaded</pre>
+    </div>
   </main>
   <script>
     const tokenInput = document.getElementById('api-token');
@@ -674,6 +697,23 @@ const panelHTML = `<!doctype html>
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
+    });
+
+    // Service logs
+    document.getElementById('load-logs').addEventListener('click', async () => {
+      const unit = document.getElementById('log-unit').value;
+      const lines = document.getElementById('log-lines').value || '50';
+      await loadJSON('/api/logs?unit=' + encodeURIComponent(unit) + '&lines=' + encodeURIComponent(lines), 'logs-output');
+      // Extract the output field for nicer display
+      try {
+        const el = document.getElementById('logs-output');
+        const data = JSON.parse(el.textContent);
+        if (data && data.output) {
+          el.textContent = data.output;
+        }
+      } catch (_) {
+        // keep raw JSON if parsing fails
+      }
     });
 
     // Profile preview
