@@ -29,7 +29,7 @@ const panelHTML = `<!doctype html>
     <h1>Veil Panel</h1>
     <div class="card">
       <p>Web panel for NaiveProxy TCP + Hysteria2 UDP management. Use the sections below to configure and apply settings.</p>
-      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
+      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
     </div>
     <div class="card">
       <h2>API token</h2>

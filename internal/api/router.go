@@ -76,6 +76,8 @@ type RURecommendedPreviewResponse struct {
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	mux := http.NewServeMux()
 	state := newManagementState(info)
+	metrics := NewMetricsCollector()
+	mux.HandleFunc("/metrics", metrics.ServeHTTP)
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -227,9 +229,10 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 		}
 		writeJSON(w, result)
 	})
-	rateLimited := rateLimitMiddleware(mux)
+	rateLimited := rateLimitMiddleware(metrics, mux)
 	authenticated := authMiddleware(info.AuthToken, rateLimited)
-	return securityHeadersMiddleware(authenticated), state
+	secured := securityHeadersMiddleware(authenticated)
+	return metrics.MetricsMiddleware(secured), state
 }
 
 // securityHeadersMiddleware adds baseline security headers to every response.
@@ -249,11 +252,12 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(next http.Handler) http.Handler {
+func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
 	limiter := NewRateLimiter(100, 20) // 100 req/min per IP, burst 20
 	limiter.SetEndpointLimits(map[string]EndpointLimit{
 		"/api/tools/speedtest": {RatePerMinute: 2, Burst: 1}, // 1 req/30s
 	})
+	limiter.onRateLimited = func() { metrics.TrackRateLimitHit() }
 	return limiter.Middleware(next)
 }
 

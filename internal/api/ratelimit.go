@@ -23,6 +23,7 @@ type RateLimiter struct {
 	endpointLimits map[string]EndpointLimit
 	mu             sync.RWMutex
 	stopCh         chan struct{}
+	onRateLimited  func() // called when a request is rate-limited
 }
 
 type tokenBucket struct {
@@ -117,6 +118,9 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 				key := bestMatch + ":" + ip
 				allowed, retryAfter := rl.allow(key, rate, bestLimit.Burst)
 				if !allowed {
+					if rl.onRateLimited != nil {
+						rl.onRateLimited()
+					}
 					w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 					writeError(w, "too many requests", http.StatusTooManyRequests)
 					return
@@ -129,6 +133,9 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		// Default rate limit
 		allowed, retryAfter := rl.allow(ip, rl.rate, rl.burst)
 		if !allowed {
+			if rl.onRateLimited != nil {
+				rl.onRateLimited()
+			}
 			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 			writeError(w, "too many requests", http.StatusTooManyRequests)
 			return

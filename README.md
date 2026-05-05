@@ -173,6 +173,24 @@ Every response includes:
 
 Panel responses additionally include `Content-Security-Policy`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`, and `Origin-Agent-Cluster`.
 
+### Prometheus metrics
+
+`GET /metrics` exposes Prometheus-compatible metrics:
+
+```bash
+curl http://127.0.0.1:2096/metrics
+```
+
+Metrics include:
+- `veil_uptime_seconds` — server uptime
+- `veil_http_requests_total` — total HTTP requests
+- `veil_http_requests_active` — currently active requests
+- `veil_http_requests_duration_seconds_avg` — average request duration
+- `veil_rate_limit_hits_total` — rate-limited requests
+- `veil_http_requests_by_code_total{code="200"}` — requests by status code
+- `veil_http_requests_by_path_total{path="GET:/api/status"}` — requests by method:path
+- `veil_service_status{service="veil"}` — service active gauges (1=active, 0=inactive)
+
 ### Service logs
 
 View recent journald logs for managed services from the panel or API:
