@@ -119,6 +119,21 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			writeJSON(w, stats)
 		}
 	})
+	mux.HandleFunc("/api/connections", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			stats, err := readConnectionsStats()
+			if err != nil {
+				writeError(w, "failed to read connections", http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, stats)
+		}
+	})
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

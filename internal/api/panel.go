@@ -87,6 +87,12 @@ const panelHTML = `<!doctype html>
       <pre id="network-stats-output">Not loaded</pre>
     </div>
     <div class="card">
+      <h2>Listening ports</h2>
+      <p>TCP/UDP listening sockets from <code>/api/connections</code>.</p>
+      <button id="load-connections-stats" type="button">Load connections</button>
+      <pre id="connections-stats-output">Not loaded</pre>
+    </div>
+    <div class="card">
       <h2>Client links</h2>
       <p>Generate current NaiveProxy and Hysteria2 client connection URIs from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
       <button id="load-client-links" type="button">Load client links</button>
@@ -693,6 +699,9 @@ const panelHTML = `<!doctype html>
     });
     document.getElementById('load-network-stats').addEventListener('click', async () => {
       await loadJSON('/api/network', 'network-stats-output');
+    });
+    document.getElementById('load-connections-stats').addEventListener('click', async () => {
+      await loadJSON('/api/connections', 'connections-stats-output');
     });
     document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
     document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
