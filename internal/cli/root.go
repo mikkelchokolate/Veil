@@ -54,6 +54,7 @@ func NewRootCommand(version string) *cobra.Command {
 	cmd.AddCommand(doctorCmd)
 	cmd.AddCommand(newInstallCommand())
 	cmd.AddCommand(newRepairCommand())
+	cmd.AddCommand(newUninstallCommand())
 	cmd.AddCommand(newRollbackCommand())
 	cmd.AddCommand(newServeCommand(version))
 	cmd.AddCommand(newUpdateCommand(version))

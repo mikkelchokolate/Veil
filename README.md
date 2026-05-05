@@ -103,6 +103,21 @@ Remove a backup after you confirm it is no longer needed:
 
 Veil is being shaped with the help of [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
+## Uninstall
+
+Remove Veil panel, services, and configuration with one command:
+
+```bash
+# Preview what will be removed
+./bin/veil uninstall --dry-run
+
+# Full uninstall (stops services, removes files)
+./bin/veil uninstall --yes
+
+# Or via curl
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/uninstall.sh | bash -s -- --yes
+```
+
 ## CLI reference
 
 ### serve — Run the API and web panel

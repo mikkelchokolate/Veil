@@ -2,6 +2,17 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.2.1] — 2026-05-05
+
+### Added
+
+- `veil uninstall` CLI command — safely removes Veil panel, services, and configuration
+  - `--dry-run` previews the removal plan
+  - `--yes` confirms the operation
+  - Stops and disables veil, veil-naive, veil-hysteria2, veil-warp services
+  - Removes /etc/veil, /var/lib/veil, and /usr/local/bin/veil
+- `scripts/uninstall.sh` — curl-installable uninstaller script
+
 ## [v0.2.0] — 2026-05-05
 
 ### Added
