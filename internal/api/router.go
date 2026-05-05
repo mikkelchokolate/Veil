@@ -255,7 +255,8 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
 	limiter := NewRateLimiter(100, 20) // 100 req/min per IP, burst 20
 	limiter.SetEndpointLimits(map[string]EndpointLimit{
-		"/api/tools/speedtest": {RatePerMinute: 2, Burst: 1}, // 1 req/30s
+		"/api/tools/speedtest": {RatePerMinute: 2, Burst: 1},    // 1 req/30s
+		"/api/logs":            {RatePerMinute: 10, Burst: 3},   // 10 req/min for log reads
 	})
 	limiter.onRateLimited = func() { metrics.TrackRateLimitHit() }
 	return limiter.Middleware(next)

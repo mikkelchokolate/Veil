@@ -89,10 +89,11 @@ func (rl *RateLimiter) allow(key string, rate float64, burst int) (bool, time.Du
 }
 
 // Middleware returns an HTTP middleware that rate-limits mutating requests (POST/PUT/DELETE)
-// based on client IP. Non-mutating requests (GET/HEAD/OPTIONS) pass through unmodified.
+// based on client IP. Non-mutating requests (GET/HEAD/OPTIONS) pass through unmodified,
+// except for explicitly rate-limited expensive read endpoints.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isMutatingMethod(r.Method) {
+		if !isMutatingMethod(r.Method) && !isRateLimitedReadPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -146,6 +147,12 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 func isMutatingMethod(method string) bool {
 	return method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete
+}
+
+// isRateLimitedReadPath returns true for GET paths that should be rate-limited
+// (expensive queries like log reading).
+func isRateLimitedReadPath(path string) bool {
+	return strings.HasPrefix(path, "/api/logs")
 }
 
 func extractClientIP(r *http.Request) string {

@@ -507,3 +507,52 @@ func TestRateLimitCleanupRemovesStaleBuckets(t *testing.T) {
 		t.Fatal("expected 'stale' bucket (11 min old) to be deleted by cleanup")
 	}
 }
+
+func TestIsRateLimitedReadPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/api/logs", true},
+		{"/api/logs?unit=caddy&lines=50", true},
+		{"/api/status", false},
+		{"/metrics", false},
+		{"/healthz", false},
+		{"/", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := isRateLimitedReadPath(tt.path); got != tt.want {
+				t.Errorf("isRateLimitedReadPath(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRateLimitAppliesToLogsReadPath(t *testing.T) {
+	rl := NewRateLimiter(1, 1) // 1 req/min, burst 1
+
+	var handlerCalled int
+	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// First GET /api/logs should pass
+	req := httptest.NewRequest(http.MethodGet, "/api/logs?unit=veil&lines=10", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", w.Code)
+	}
+
+	// Second GET /api/logs should be rate-limited
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req)
+	if w2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second request: expected 429, got %d", w2.Code)
+	}
+	if handlerCalled != 1 {
+		t.Errorf("handler should have been called only once, got %d", handlerCalled)
+	}
+}
