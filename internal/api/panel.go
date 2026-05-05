@@ -29,7 +29,13 @@ const panelHTML = `<!doctype html>
     <h1>Veil Panel</h1>
     <div class="card">
       <p>Web panel for NaiveProxy TCP + Hysteria2 UDP management. Use the sections below to configure and apply settings.</p>
-      <p>Status API: <code>/api/status</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Network: <code>/api/network</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
+      <p>Status API: <code>/api/status</code> &middot; Version: <code>/api/version</code> &middot; Firewall: <code>/api/firewall</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Network: <code>/api/network</code> &middot; DNS: <code>/api/tools/dns-lookup</code> &middot; Ping: <code>/api/tools/ping</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
+    </div>
+    <div class="card">
+      <h2>Version</h2>
+      <p>Veil server version and runtime info from <code>/api/version</code>.</p>
+      <button id="load-version" type="button">Load version</button>
+      <pre id="version-output">Not loaded</pre>
     </div>
     <div class="card">
       <h2>API token</h2>
@@ -372,6 +378,44 @@ const panelHTML = `<!doctype html>
       <p>Run server-side speedtest-cli/Ookla speedtest from the panel.</p>
       <button id="run-speedtest" type="button">Run speedtest</button>
       <pre id="speedtest-output">Not started</pre>
+    </div>
+    <div class="card">
+      <h2>DNS lookup</h2>
+      <p>Resolve a hostname from the server using <code>/api/tools/dns-lookup</code>.</p>
+      <div class="form-grid">
+        <div>
+          <label for="dns-hostname">Hostname</label>
+          <input id="dns-hostname" autocomplete="off" placeholder="example.com">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="run-dns-lookup" type="button">Lookup</button>
+      </div>
+      <pre id="dns-lookup-output">Not started</pre>
+    </div>
+    <div class="card">
+      <h2>Ping</h2>
+      <p>Ping a host from the server using <code>/api/tools/ping</code>.</p>
+      <div class="form-grid">
+        <div>
+          <label for="ping-host">Host</label>
+          <input id="ping-host" autocomplete="off" placeholder="8.8.8.8">
+        </div>
+        <div>
+          <label for="ping-count">Count (1-10)</label>
+          <input id="ping-count" type="number" min="1" max="10" value="3">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="run-ping" type="button">Ping</button>
+      </div>
+      <pre id="ping-output">Not started</pre>
+    </div>
+    <div class="card">
+      <h2>Firewall</h2>
+      <p>Check UFW firewall status and planned rules from <code>/api/firewall</code>.</p>
+      <button id="load-firewall" type="button">Load firewall</button>
+      <pre id="firewall-output">Not loaded</pre>
     </div>
     <div class="card">
       <h2>Service logs</h2>
@@ -826,6 +870,45 @@ const panelHTML = `<!doctype html>
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain, email, stack })
+      });
+    });
+
+    // Version
+    document.getElementById('load-version').addEventListener('click', async () => {
+      await loadJSON('/api/version', 'version-output');
+    });
+
+    // Firewall
+    document.getElementById('load-firewall').addEventListener('click', async () => {
+      await loadJSON('/api/firewall', 'firewall-output');
+    });
+
+    // DNS lookup
+    document.getElementById('run-dns-lookup').addEventListener('click', async () => {
+      const hostname = document.getElementById('dns-hostname').value.trim();
+      if (!hostname) {
+        document.getElementById('dns-lookup-output').textContent = 'Hostname is required';
+        return;
+      }
+      await loadJSON('/api/tools/dns-lookup', 'dns-lookup-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostname })
+      });
+    });
+
+    // Ping
+    document.getElementById('run-ping').addEventListener('click', async () => {
+      const host = document.getElementById('ping-host').value.trim();
+      const count = document.getElementById('ping-count').value || '3';
+      if (!host) {
+        document.getElementById('ping-output').textContent = 'Host is required';
+        return;
+      }
+      await loadJSON('/api/tools/ping', 'ping-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, count: Number(count) })
       });
     });
 

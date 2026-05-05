@@ -203,6 +203,46 @@ curl http://127.0.0.1:2096/api/logs?unit=caddy&lines=100
 journalctl -u veil.service -n 50
 ```
 
+### Server version
+
+Query Veil version and runtime info:
+
+```bash
+curl http://127.0.0.1:2096/api/version
+# {"version":"0.2.0","runtime":"linux/amd64","name":"Veil"}
+```
+
+### DNS lookup
+
+Resolve hostnames from the server:
+
+```bash
+curl -X POST http://127.0.0.1:2096/api/tools/dns-lookup \
+  -H "Content-Type: application/json" \
+  -d '{"hostname":"example.com"}'
+# {"hostname":"example.com","addresses":["93.184.216.34"],"cname":""}
+```
+
+### Ping
+
+Ping a host from the server:
+
+```bash
+curl -X POST http://127.0.0.1:2096/api/tools/ping \
+  -H "Content-Type: application/json" \
+  -d '{"host":"8.8.8.8","count":3}'
+# {"host":"8.8.8.8","transmitted":3,"received":3,"lossPct":0,"minMs":1.2,...}
+```
+
+### Firewall status
+
+Check UFW status and planned rules:
+
+```bash
+curl http://127.0.0.1:2096/api/firewall
+# {"active":true,"rules":[{"port":443,"protocol":"tcp","service":"Veil NaiveProxy"},...]}
+```
+
 ### Docker
 
 Multi-stage Docker image available (Alpine, non-root user):
@@ -238,3 +278,5 @@ docker run -d --name veil -p 2096:2096 \
 - ✅ Security hardening: HSTS, security headers on all responses, Server header stripping, command injection prevention, DNS prefetch control
 - ✅ Service logs viewer via panel and API
 - ✅ Docker deployment support
+- ✅ API: server version, DNS lookup, firewall status, ICMP ping diagnostics
+- ✅ Rate limiting for DNS lookup and ping endpoints

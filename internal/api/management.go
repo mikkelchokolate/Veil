@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/veil-panel/veil/internal/firewall"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
@@ -297,6 +298,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/warp", s.handleWarp)
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
+	mux.HandleFunc("/api/firewall", s.handleFirewall)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
@@ -940,6 +942,25 @@ func hysteria2ClientURI(domain string, port int, password string, name string) s
 	query.Set("sni", domain)
 	fragment := url.QueryEscape(name)
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", url.QueryEscape(password), domain, port, query.Encode(), fragment)
+}
+
+func (s *managementState) handleFirewall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet, http.MethodHead)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	active, _ := firewallStatusReader()
+	rules := buildFirewallRules(s.settings, s.inbounds)
+	if r.Method == http.MethodGet {
+		writeJSON(w, map[string]any{
+			"active": active,
+			"rules":  rules,
+		})
+	} else {
+		setJSONHeaders(w)
+	}
 }
 
 func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request) {
@@ -1895,4 +1916,70 @@ func (s *managementState) saveLocked() error {
 		return err
 	}
 	return os.Rename(tmp, s.statePath)
+}
+
+type firewallRuleResponse struct {
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"`
+	Service  string `json:"service"`
+}
+
+func buildFirewallRules(settings Settings, inbounds []Inbound) []firewallRuleResponse {
+	// Determine shared proxy port from first enabled inbound
+	sharedPort := 0
+	enableTCP := false
+	enableUDP := false
+	for _, inbound := range inbounds {
+		if !inbound.Enabled {
+			continue
+		}
+		if inbound.Port > 0 && sharedPort == 0 {
+			sharedPort = inbound.Port
+		}
+		switch inbound.Protocol {
+		case "naiveproxy":
+			enableTCP = true
+		case "hysteria2":
+			enableUDP = true
+		}
+	}
+	// Parse panel port from PanelListen (host:port)
+	panelPort := 0
+	if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			panelPort = p
+		}
+	}
+	plan := firewall.UFWPlan(firewall.Config{
+		SharedPort: sharedPort,
+		PanelPort:  panelPort,
+		EnableTCP:  enableTCP,
+		EnableUDP:  enableUDP,
+	})
+	rules := make([]firewallRuleResponse, 0, len(plan))
+	for _, r := range plan {
+		if len(r.Args) < 2 {
+			continue
+		}
+		portProto := r.Args[1]
+		parts := strings.SplitN(portProto, "/", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		port, _ := strconv.Atoi(parts[0])
+		proto := parts[1]
+		service := ""
+		for i, arg := range r.Args {
+			if arg == "comment" && i+1 < len(r.Args) {
+				service = r.Args[i+1]
+				break
+			}
+		}
+		rules = append(rules, firewallRuleResponse{
+			Port:     port,
+			Protocol: proto,
+			Service:  service,
+		})
+	}
+	return rules
 }

@@ -556,3 +556,88 @@ func TestRateLimitAppliesToLogsReadPath(t *testing.T) {
 		t.Errorf("handler should have been called only once, got %d", handlerCalled)
 	}
 }
+
+func TestRateLimitAppliesToDNSTools(t *testing.T) {
+	rl := NewRateLimiter(100, 20)
+	rl.SetEndpointLimits(map[string]EndpointLimit{
+		"/api/tools/dns-lookup": {RatePerMinute: 10, Burst: 3},
+		"/api/tools/ping":       {RatePerMinute: 5, Burst: 2},
+	})
+
+	var handlerCalled int
+	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	t.Run("dns-lookup allows burst of 3", func(t *testing.T) {
+		handlerCalled = 0
+		for i := 0; i < 3; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("dns-lookup %d: expected 200, got %d", i+1, w.Code)
+			}
+		}
+		// 4th should be limited
+		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusTooManyRequests {
+			t.Fatalf("dns-lookup 4th: expected 429, got %d", w.Code)
+		}
+		if handlerCalled != 3 {
+			t.Errorf("expected 3 calls, got %d", handlerCalled)
+		}
+	})
+
+	t.Run("ping allows burst of 2", func(t *testing.T) {
+		handlerCalled = 0
+		for i := 0; i < 2; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("ping %d: expected 200, got %d", i+1, w.Code)
+			}
+		}
+		// 3rd should be limited
+		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusTooManyRequests {
+			t.Fatalf("ping 3rd: expected 429, got %d", w.Code)
+		}
+		if handlerCalled != 2 {
+			t.Errorf("expected 2 calls, got %d", handlerCalled)
+		}
+	})
+
+	t.Run("dns-lookup and ping have separate buckets", func(t *testing.T) {
+		// Fresh limiter for isolation
+		rl2 := NewRateLimiter(100, 20)
+		rl2.SetEndpointLimits(map[string]EndpointLimit{
+			"/api/tools/dns-lookup": {RatePerMinute: 10, Burst: 3},
+			"/api/tools/ping":       {RatePerMinute: 5, Burst: 2},
+		})
+		called := 0
+		h2 := rl2.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called++
+			w.WriteHeader(http.StatusOK)
+		}))
+		// Exhaust ping burst
+		for i := 0; i < 2; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", nil)
+			w := httptest.NewRecorder()
+			h2.ServeHTTP(w, req)
+		}
+		// DNS lookup should still work (separate bucket)
+		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", nil)
+		w := httptest.NewRecorder()
+		h2.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("dns-lookup after ping exhaustion: expected 200, got %d", w.Code)
+		}
+	})
+}

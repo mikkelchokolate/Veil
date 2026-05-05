@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +57,24 @@ type ServiceRuntimeStatus struct {
 }
 
 var serviceStatusReader = readSystemdServiceStatus
+
+var dnsLookuper = runDNSLookup
+
+var firewallStatusReader = readFirewallStatus
+
+var pingRunner = runPing
+
+type PingResult struct {
+	Host        string  `json:"host"`
+	Transmitted int     `json:"transmitted"`
+	Received    int     `json:"received"`
+	LossPct     float64 `json:"lossPct"`
+	MinMs       float64 `json:"minMs,omitempty"`
+	AvgMs       float64 `json:"avgMs,omitempty"`
+	MaxMs       float64 `json:"maxMs,omitempty"`
+	StddevMs    float64 `json:"stddevMs,omitempty"`
+	Error       string  `json:"error,omitempty"`
+}
 
 type RURecommendedPreviewRequest struct {
 	Domain string `json:"domain"`
@@ -225,6 +245,51 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 			writeJSON(w, map[string]string{"status": "ok"})
 		}
 	})
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		setJSONHeaders(w)
+		if r.Method == http.MethodGet {
+			writeJSON(w, map[string]string{
+				"version": info.Version,
+				"runtime": runtimeInfo(),
+				"name":    "Veil",
+			})
+		}
+	})
+	mux.HandleFunc("/api/tools/dns-lookup", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		var req struct {
+			Hostname string `json:"hostname"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		if strings.TrimSpace(req.Hostname) == "" {
+			writeError(w, "hostname is required", http.StatusBadRequest)
+			return
+		}
+		addrs, cname, err := dnsLookuper(req.Hostname)
+		result := map[string]any{
+			"hostname":  req.Hostname,
+			"addresses": addrs,
+		}
+		if cname != "" {
+			result["cname"] = cname
+		}
+		if err != nil {
+			result["error"] = err.Error()
+		}
+		if addrs == nil {
+			result["addresses"] = []string{}
+		}
+		writeJSON(w, result)
+	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			methodNotAllowed(w, http.MethodGet, http.MethodHead)
@@ -240,6 +305,32 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 				Services:      buildServiceStatuses(),
 			})
 		}
+	})
+	mux.HandleFunc("/api/tools/ping", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		var req struct {
+			Host  string `json:"host"`
+			Count int    `json:"count"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		if strings.TrimSpace(req.Host) == "" {
+			writeError(w, "host is required", http.StatusBadRequest)
+			return
+		}
+		if req.Count <= 0 {
+			req.Count = 3
+		}
+		if req.Count > 10 {
+			writeError(w, "count must be 1-10", http.StatusBadRequest)
+			return
+		}
+		result := pingRunner(req.Host, req.Count)
+		writeJSON(w, result)
 	})
 	mux.HandleFunc("/api/tools/speedtest", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -355,8 +446,10 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
 	limiter := NewRateLimiter(100, 20) // 100 req/min per IP, burst 20
 	limiter.SetEndpointLimits(map[string]EndpointLimit{
-		"/api/tools/speedtest": {RatePerMinute: 2, Burst: 1},    // 1 req/30s
-		"/api/logs":            {RatePerMinute: 10, Burst: 3},   // 10 req/min for log reads
+		"/api/tools/speedtest":   {RatePerMinute: 2, Burst: 1},    // 1 req/30s
+		"/api/tools/dns-lookup":  {RatePerMinute: 10, Burst: 3},   // 10 req/min for DNS lookups
+		"/api/tools/ping":        {RatePerMinute: 5, Burst: 2},    // 5 req/min for ping
+		"/api/logs":              {RatePerMinute: 10, Burst: 3},   // 10 req/min for log reads
 	})
 	limiter.onRateLimited = func() { metrics.TrackRateLimitHit() }
 	return limiter.Middleware(next)
@@ -568,6 +661,79 @@ func validateEmptyJSONBody(r *http.Request) error {
 }
 
 // validLogUnit checks that a systemd unit name contains only safe characters.
+func readFirewallStatus() (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "ufw", "status").CombinedOutput()
+	if err != nil {
+		return false, nil
+	}
+	return strings.Contains(string(output), "Status: active"), nil
+}
+
+func runPing(host string, count int) PingResult {
+	result := PingResult{Host: host, Transmitted: count}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(count+2)*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "ping", "-c", strconv.Itoa(count), "-W", "2", host).CombinedOutput()
+	if err != nil {
+		result.Error = "ping failed: " + strings.TrimSpace(string(output))
+		if result.Error == "ping failed:" {
+			result.Error = "ping failed: " + err.Error()
+		}
+		result.LossPct = 100
+		return result
+	}
+	parsePingOutput(string(output), &result)
+	if result.Transmitted > 0 {
+		result.LossPct = float64(result.Transmitted-result.Received) / float64(result.Transmitted) * 100
+	}
+	return result
+}
+
+func parsePingOutput(output string, result *PingResult) {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "packets transmitted") {
+			// e.g. "3 packets transmitted, 3 received, 0% packet loss"
+			fmt.Sscanf(line, "%d packets transmitted, %d received", &result.Transmitted, &result.Received)
+		}
+		if strings.Contains(line, "min/avg/max") || strings.Contains(line, "rtt min/avg/max") {
+			// e.g. "rtt min/avg/max/mdev = 1.234/2.345/4.567/0.890 ms"
+			parts := strings.Split(line, "=")
+			if len(parts) == 2 {
+				stats := strings.Fields(strings.TrimSpace(parts[1]))
+				if len(stats) >= 1 {
+					times := strings.Split(stats[0], "/")
+					if len(times) >= 4 {
+						fmt.Sscanf(times[0], "%f", &result.MinMs)
+						fmt.Sscanf(times[1], "%f", &result.AvgMs)
+						fmt.Sscanf(times[2], "%f", &result.MaxMs)
+						fmt.Sscanf(times[3], "%f", &result.StddevMs)
+					}
+				}
+			}
+		}
+	}
+}
+
+func runtimeInfo() string {
+	return runtime.GOOS + "/" + runtime.GOARCH
+}
+
+func runDNSLookup(host string) ([]string, string, error) {
+	addrs, err := net.LookupHost(host)
+	if err != nil {
+		return nil, "", err
+	}
+	cname, _ := net.LookupCNAME(host)
+	// Only return cname if it differs from the host (i.e. there is a CNAME record)
+	if strings.TrimSuffix(cname, ".") == strings.TrimSuffix(host, ".") {
+		cname = ""
+	}
+	return addrs, strings.TrimSuffix(cname, "."), nil
+}
+
 func validLogUnit(unit string) bool {
 	if unit == "" {
 		return false
