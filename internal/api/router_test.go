@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -3219,6 +3220,16 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 			if got := w.Header().Get("Cross-Origin-Resource-Policy"); got != "same-origin" {
 				t.Errorf("Cross-Origin-Resource-Policy: want same-origin, got %q", got)
 			}
+			if got := w.Header().Get("X-DNS-Prefetch-Control"); got != "off" {
+				t.Errorf("X-DNS-Prefetch-Control: want off, got %q", got)
+			}
+			if got := w.Header().Get("Server"); got != "" {
+				t.Errorf("Server: want empty (hidden), got %q", got)
+			}
+			// HSTS only on HTTPS
+			if got := w.Header().Get("Strict-Transport-Security"); got != "" {
+				t.Errorf("Strict-Transport-Security: want empty on HTTP, got %q", got)
+			}
 		})
 	}
 }
@@ -3237,6 +3248,27 @@ func TestSecurityHeadersMiddlewareOnErrorPaths(t *testing.T) {
 	}
 	if w.Header().Get("X-Frame-Options") != "DENY" {
 		t.Error("missing X-Frame-Options on unauthorized response")
+	}
+}
+
+func TestSecurityHeadersMiddlewareHSTSOnHTTPS(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	// Simulate a TLS connection by setting req.TLS
+	req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	hsts := w.Header().Get("Strict-Transport-Security")
+	if hsts == "" {
+		t.Error("expected Strict-Transport-Security header on HTTPS request")
+	}
+	if !strings.Contains(hsts, "max-age=63072000") {
+		t.Errorf("expected HSTS max-age in %q", hsts)
+	}
+	if !strings.Contains(hsts, "includeSubDomains") {
+		t.Errorf("expected includeSubDomains in %q", hsts)
 	}
 }
 
