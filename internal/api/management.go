@@ -882,22 +882,22 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {
-	return managementSnapshot{
+	return BuildManagementSnapshot(ManagementSnapshotInput{
 		Settings:      s.settings,
-		Inbounds:      append([]Inbound(nil), s.inbounds...),
-		Rules:         append([]RoutingRule(nil), s.rules...),
+		Inbounds:      s.inbounds,
+		Rules:         s.rules,
 		RoutingPreset: s.routingPreset,
 		RoutingSource: s.routingSource,
 		Warp:          s.warp,
-	}
+	})
 }
 
 func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
-	NewStateStore("", s.cipher).encryptSnapshot(snapshot)
+	EncryptManagementSnapshot(snapshot, s.cipher)
 }
 
 func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
-	NewStateStore("", s.cipher).decryptSnapshot(snapshot)
+	DecryptManagementSnapshot(snapshot, s.cipher)
 }
 
 func defaultApplyRoot(root string) string {
