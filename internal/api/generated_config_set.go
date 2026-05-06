@@ -97,6 +97,7 @@ func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, err
 		ListenPort:   inbound.Port,
 		Username:     settings.NaiveUsername,
 		Password:     password,
+		Users:        naiveUsersFromProfiles(inbound.Profiles),
 		FallbackRoot: settings.FallbackRoot,
 	})
 }
@@ -110,6 +111,37 @@ func renderHysteria2GeneratedConfig(settings Settings, inbound Inbound) (string,
 		ListenPort:    inbound.Port,
 		Domain:        settings.Domain,
 		Password:      password,
+		Users:         hysteria2UsersFromProfiles(inbound.Profiles),
 		MasqueradeURL: settings.MasqueradeURL,
 	})
+}
+
+func naiveUsersFromProfiles(profiles []ClientProfile) []renderer.NaiveUser {
+	users := []renderer.NaiveUser{}
+	for _, profile := range profiles {
+		if !profile.Enabled {
+			continue
+		}
+		username := profile.Username
+		if username == "" {
+			username = profile.Name
+		}
+		users = append(users, renderer.NaiveUser{Username: username, Password: profile.Password})
+	}
+	return users
+}
+
+func hysteria2UsersFromProfiles(profiles []ClientProfile) []renderer.Hysteria2User {
+	users := []renderer.Hysteria2User{}
+	for _, profile := range profiles {
+		if !profile.Enabled {
+			continue
+		}
+		username := profile.Username
+		if username == "" {
+			username = profile.Name
+		}
+		users = append(users, renderer.Hysteria2User{Username: username, Password: profile.Password})
+	}
+	return users
 }

@@ -81,6 +81,9 @@ func (s StateStore) encryptSnapshot(snapshot *managementSnapshot) {
 	snapshot.Settings.Hysteria2Password = encrypt(snapshot.Settings.Hysteria2Password)
 	for i := range snapshot.Inbounds {
 		snapshot.Inbounds[i].Password = encrypt(snapshot.Inbounds[i].Password)
+		for j := range snapshot.Inbounds[i].Profiles {
+			snapshot.Inbounds[i].Profiles[j].Password = encrypt(snapshot.Inbounds[i].Profiles[j].Password)
+		}
 	}
 	snapshot.Warp.LicenseKey = encrypt(snapshot.Warp.LicenseKey)
 	snapshot.Warp.PrivateKey = encrypt(snapshot.Warp.PrivateKey)
@@ -103,6 +106,9 @@ func (s StateStore) decryptSnapshot(snapshot *managementSnapshot) {
 	snapshot.Settings.Hysteria2Password = decrypt(snapshot.Settings.Hysteria2Password)
 	for i := range snapshot.Inbounds {
 		snapshot.Inbounds[i].Password = decrypt(snapshot.Inbounds[i].Password)
+		for j := range snapshot.Inbounds[i].Profiles {
+			snapshot.Inbounds[i].Profiles[j].Password = decrypt(snapshot.Inbounds[i].Profiles[j].Password)
+		}
 	}
 	snapshot.Warp.LicenseKey = decrypt(snapshot.Warp.LicenseKey)
 	snapshot.Warp.PrivateKey = decrypt(snapshot.Warp.PrivateKey)

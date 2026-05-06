@@ -29,6 +29,48 @@ func TestGeneratedConfigSetRejectsMultipleEnabledInboundsPerProtocol(t *testing.
 	}
 }
 
+func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
+	applyRoot := t.TempDir()
+	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
+		ApplyRoot: applyRoot,
+		Settings: Settings{
+			Domain:            "vpn.example.com",
+			Email:             "admin@example.com",
+			Stack:             "both",
+			NaiveUsername:     "veil",
+			NaivePassword:     "global-naive",
+			Hysteria2Password: "global-hy2",
+			MasqueradeURL:     "https://www.bing.com/",
+			FallbackRoot:      "/var/lib/veil/www",
+		},
+		Inbounds: []Inbound{
+			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{
+				{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true},
+				{Name: "bob", Username: "bob", Password: "bob-pass", Enabled: true},
+			}},
+			{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Profiles: []ClientProfile{
+				{Name: "carol", Username: "carol", Password: "carol-pass", Enabled: true},
+				{Name: "dave", Username: "dave", Password: "dave-pass", Enabled: true},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildGeneratedConfigSet: %v", err)
+	}
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")]
+	for _, want := range []string{"basic_auth alice alice-pass", "basic_auth bob bob-pass"} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("Caddyfile missing %q:\n%s", want, caddy)
+		}
+	}
+	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml")]
+	for _, want := range []string{"type: userpass", "carol: carol-pass", "dave: dave-pass"} {
+		if !strings.Contains(hy2, want) {
+			t.Fatalf("Hysteria2 config missing %q:\n%s", want, hy2)
+		}
+	}
+}
+
 func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	applyRoot := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
