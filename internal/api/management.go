@@ -489,28 +489,21 @@ func writeInboundManagementError(w http.ResponseWriter, err error) {
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	management := NewRoutingRuleManagement(&s.rules, s.saveLocked)
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.rules)
+		writeJSON(w, management.List())
 	case http.MethodPost:
 		var rule RoutingRule
 		if !decodeJSONRequest(w, r, &rule) {
 			return
 		}
-		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
-			writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
+		created, err := management.Create(rule)
+		if err != nil {
+			writeRoutingRuleManagementError(w, err)
 			return
 		}
-		if s.routingRuleIndex(rule.Name) >= 0 {
-			writeError(w, "routing rule name already exists", http.StatusConflict)
-			return
-		}
-		s.rules = append(s.rules, rule)
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSONStatus(w, http.StatusCreated, rule)
+		writeJSONStatus(w, http.StatusCreated, created)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -524,34 +517,29 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	idx := s.routingRuleIndex(name)
-	if idx < 0 {
+	management := NewRoutingRuleManagement(&s.rules, s.saveLocked)
+	rule, ok := management.Get(name)
+	if !ok {
 		writeNotFound(w)
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.rules[idx])
+		writeJSON(w, rule)
 	case http.MethodPut:
 		var update RoutingRule
 		if !decodeJSONRequest(w, r, &update) {
 			return
 		}
-		if update.Match == "" || update.Outbound == "" {
-			writeError(w, "match and outbound are required", http.StatusBadRequest)
+		updated, err := management.Update(name, update)
+		if err != nil {
+			writeRoutingRuleManagementError(w, err)
 			return
 		}
-		update.Name = name
-		s.rules[idx] = update
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, update)
+		writeJSON(w, updated)
 	case http.MethodDelete:
-		s.rules = append(s.rules[:idx], s.rules[idx+1:]...)
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
+		if err := management.Delete(name); err != nil {
+			writeRoutingRuleManagementError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -560,13 +548,17 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 	}
 }
 
-func (s *managementState) routingRuleIndex(name string) int {
-	for idx, rule := range s.rules {
-		if rule.Name == name {
-			return idx
-		}
+func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
+	switch err {
+	case ErrRoutingRuleInvalid:
+		writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
+	case ErrRoutingRuleDuplicateName:
+		writeError(w, "routing rule name already exists", http.StatusConflict)
+	case ErrRoutingRuleNotFound:
+		writeNotFound(w)
+	default:
+		writeError(w, err.Error(), http.StatusInternalServerError)
 	}
-	return -1
 }
 
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
