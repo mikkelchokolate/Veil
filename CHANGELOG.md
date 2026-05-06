@@ -2,6 +2,19 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.2] — 2026-05-06
+
+### Added
+
+- `CONTEXT.md` with Veil domain language for architecture reviews and future changes
+- `BuildRURecommendedInstall` workflow Module to preserve panel-port-before-profile ordering
+- Docker examples for Web base path and auto-TLS options
+
+### Changed
+
+- CLI install now delegates ru-recommended profile ordering to the installer Module
+- Local `make release-check` now passes on a clean tree
+
 ## [v0.3.1] — 2026-05-06
 
 ### Added
