@@ -1,0 +1,99 @@
+package api
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+type LiveConfigPromotion struct {
+	applyRoot string
+	reload    func([]string) []ServiceActionResult
+}
+
+func NewLiveConfigPromotion(applyRoot string, reload func([]string) []ServiceActionResult) LiveConfigPromotion {
+	return LiveConfigPromotion{applyRoot: applyRoot, reload: reload}
+}
+
+func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
+	liveFiles := []string{}
+	backupFiles := []string{}
+	records := []livePromotionRecord{}
+	backupRoot := filepath.Join(p.applyRoot, "backups", time.Now().UTC().Format("20060102T150405.000000000Z"))
+	for _, stagedPath := range stagedPaths {
+		livePath, ok := p.LivePathForStagedConfig(stagedPath)
+		if !ok {
+			continue
+		}
+		body, err := os.ReadFile(stagedPath)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		record := livePromotionRecord{LivePath: livePath}
+		if existing, err := os.ReadFile(livePath); err == nil {
+			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(livePath), "/"))
+			if err := writeAtomicFile(backupPath, existing, 0o600); err != nil {
+				return nil, nil, nil, err
+			}
+			record.HadPrevious = true
+			record.BackupPath = backupPath
+			backupFiles = append(backupFiles, backupPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil, err
+		}
+		if err := writeAtomicFile(livePath, body, 0o600); err != nil {
+			return nil, nil, nil, err
+		}
+		liveFiles = append(liveFiles, livePath)
+		records = append(records, record)
+	}
+	sort.Strings(liveFiles)
+	sort.Strings(backupFiles)
+	sort.Slice(records, func(i, j int) bool { return records[i].LivePath < records[j].LivePath })
+	return liveFiles, backupFiles, records, nil
+}
+
+func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {
+	slashPath := filepath.ToSlash(stagedPath)
+	slashRoot := filepath.ToSlash(p.applyRoot)
+	prefix := strings.TrimRight(slashRoot, "/") + "/generated/"
+	if !strings.HasPrefix(slashPath, prefix) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(slashPath, prefix)
+	switch rel {
+	case "caddy/Caddyfile", "hysteria2/server.yaml", "sing-box/warp.json":
+		return filepath.Join(p.applyRoot, "live", filepath.FromSlash(rel)), true
+	default:
+		return "", false
+	}
+}
+
+func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+	rollbackFiles := []string{}
+	for _, record := range records {
+		if record.HadPrevious {
+			body, err := os.ReadFile(record.BackupPath)
+			if err != nil {
+				continue
+			}
+			if err := writeAtomicFile(record.LivePath, body, 0o600); err != nil {
+				continue
+			}
+			rollbackFiles = append(rollbackFiles, record.LivePath)
+			continue
+		}
+		if err := os.Remove(record.LivePath); err == nil || errors.Is(err, os.ErrNotExist) {
+			rollbackFiles = append(rollbackFiles, record.LivePath)
+		}
+	}
+	sort.Strings(rollbackFiles)
+	rollbackActions := []ServiceActionResult{}
+	if len(rollbackFiles) > 0 && p.reload != nil {
+		rollbackActions = p.reload(liveFiles)
+	}
+	return rollbackFiles, rollbackActions
+}
