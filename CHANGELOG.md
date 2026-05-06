@@ -2,6 +2,12 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.13] — 2026-05-06
+
+### Changed
+
+- Extracted Live config promotion, backup, live-path mapping, and rollback into its own Module
+
 ## [v0.3.12] — 2026-05-06
 
 ### Changed
