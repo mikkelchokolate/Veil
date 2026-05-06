@@ -45,42 +45,27 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 }
 
 func buildInboundClientLinks(settings Settings, inbound Inbound) ([]ClientLink, error) {
-	profiles := enabledClientProfiles(inbound)
-	if len(profiles) == 0 {
+	credentials, err := BuildClientCredentials(inbound)
+	if err != nil {
+		return nil, err
+	}
+	if len(credentials) == 0 {
 		return []ClientLink{fallbackInboundClientLink(settings, inbound)}, nil
 	}
-	links := make([]ClientLink, 0, len(profiles))
-	for _, profile := range profiles {
-		link := ClientLink{Name: inbound.Name + "/" + profile.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
+	links := make([]ClientLink, 0, len(credentials))
+	for _, credential := range credentials {
+		link := ClientLink{Name: inbound.Name + "/" + credential.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
 		switch inbound.Protocol {
 		case "naiveproxy":
-			username := profile.Username
-			if username == "" {
-				username = profile.Name
-			}
-			if username == "" || profile.Password == "" {
-				return nil, errors.New("naive client profile username and password are required to build client links")
-			}
-			link.URI = naiveClientURI(settings.Domain, inbound.Port, username, profile.Password)
+			link.URI = naiveClientURI(settings.Domain, inbound.Port, credential.Username, credential.Password)
 		case "hysteria2":
-			username := profile.Username
-			if username == "" {
-				username = profile.Name
-			}
-			if username == "" || profile.Password == "" {
-				return nil, errors.New("hysteria2 client profile username and password are required to build client links")
-			}
-			link.URI = hysteria2UserPassClientURI(settings.Domain, inbound.Port, username, profile.Password, link.Name)
+			link.URI = hysteria2UserPassClientURI(settings.Domain, inbound.Port, credential.Username, credential.Password, link.Name)
 		default:
 			continue
 		}
 		links = append(links, link)
 	}
 	return links, nil
-}
-
-func enabledClientProfiles(inbound Inbound) []ClientProfile {
-	return NewClientProfileCatalog(inbound.Profiles).Enabled()
 }
 
 func fallbackInboundClientLink(settings Settings, inbound Inbound) ClientLink {

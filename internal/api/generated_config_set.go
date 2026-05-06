@@ -91,13 +91,17 @@ func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, err
 	if password == "" {
 		password = settings.NaivePassword
 	}
+	credentials, err := BuildClientCredentials(inbound)
+	if err != nil {
+		return "", err
+	}
 	return renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
 		Domain:       settings.Domain,
 		Email:        settings.Email,
 		ListenPort:   inbound.Port,
 		Username:     settings.NaiveUsername,
 		Password:     password,
-		Users:        naiveUsersFromProfiles(inbound.Profiles),
+		Users:        naiveUsersFromCredentials(credentials),
 		FallbackRoot: settings.FallbackRoot,
 	})
 }
@@ -107,41 +111,31 @@ func renderHysteria2GeneratedConfig(settings Settings, inbound Inbound) (string,
 	if password == "" {
 		password = settings.Hysteria2Password
 	}
+	credentials, err := BuildClientCredentials(inbound)
+	if err != nil {
+		return "", err
+	}
 	return renderer.RenderHysteria2(renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
 		Domain:        settings.Domain,
 		Password:      password,
-		Users:         hysteria2UsersFromProfiles(inbound.Profiles),
+		Users:         hysteria2UsersFromCredentials(credentials),
 		MasqueradeURL: settings.MasqueradeURL,
 	})
 }
 
-func naiveUsersFromProfiles(profiles []ClientProfile) []renderer.NaiveUser {
-	users := []renderer.NaiveUser{}
-	for _, profile := range profiles {
-		if !profile.Enabled {
-			continue
-		}
-		username := profile.Username
-		if username == "" {
-			username = profile.Name
-		}
-		users = append(users, renderer.NaiveUser{Username: username, Password: profile.Password})
+func naiveUsersFromCredentials(credentials []ClientCredential) []renderer.NaiveUser {
+	users := make([]renderer.NaiveUser, 0, len(credentials))
+	for _, credential := range credentials {
+		users = append(users, renderer.NaiveUser{Username: credential.Username, Password: credential.Password})
 	}
 	return users
 }
 
-func hysteria2UsersFromProfiles(profiles []ClientProfile) []renderer.Hysteria2User {
-	users := []renderer.Hysteria2User{}
-	for _, profile := range profiles {
-		if !profile.Enabled {
-			continue
-		}
-		username := profile.Username
-		if username == "" {
-			username = profile.Name
-		}
-		users = append(users, renderer.Hysteria2User{Username: username, Password: profile.Password})
+func hysteria2UsersFromCredentials(credentials []ClientCredential) []renderer.Hysteria2User {
+	users := make([]renderer.Hysteria2User, 0, len(credentials))
+	for _, credential := range credentials {
+		users = append(users, renderer.Hysteria2User{Username: credential.Username, Password: credential.Password})
 	}
 	return users
 }
