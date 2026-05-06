@@ -2,6 +2,12 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.10] — 2026-05-06
+
+### Changed
+
+- Extracted Routing rule management mutation and persistence ordering from HTTP handlers
+
 ## [v0.3.9] — 2026-05-06
 
 ### Changed
