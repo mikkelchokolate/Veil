@@ -9,12 +9,18 @@ import (
 	"text/template"
 )
 
+type NaiveUser struct {
+	Username string
+	Password string
+}
+
 type NaiveConfig struct {
 	Domain       string
 	Email        string
 	ListenPort   int
 	Username     string
 	Password     string
+	Users        []NaiveUser
 	FallbackRoot string
 	PanelPort    int
 	WebBasePath  string
@@ -27,8 +33,16 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	if cfg.ListenPort <= 0 {
 		return "", errors.New("listen port is required")
 	}
-	if cfg.Username == "" || cfg.Password == "" {
-		return "", errors.New("naive username and password are required")
+	if len(cfg.Users) == 0 {
+		if cfg.Username == "" || cfg.Password == "" {
+			return "", errors.New("naive username and password are required")
+		}
+		cfg.Users = []NaiveUser{{Username: cfg.Username, Password: cfg.Password}}
+	}
+	for _, user := range cfg.Users {
+		if user.Username == "" || user.Password == "" {
+			return "", errors.New("naive username and password are required")
+		}
 	}
 	if cfg.FallbackRoot == "" {
 		cfg.FallbackRoot = "/var/lib/veil/www"
@@ -53,7 +67,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
   tls {{ .Email }}
 
   forward_proxy {
+{{- range .Users }}
     basic_auth {{ .Username }} {{ .Password }}
+{{- end }}
     hide_ip
     hide_via
     probe_resistance

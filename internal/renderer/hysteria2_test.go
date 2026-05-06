@@ -7,9 +7,9 @@ import (
 
 func TestRenderHysteria2RecommendedConfig(t *testing.T) {
 	cfg, err := RenderHysteria2(Hysteria2Config{
-		ListenPort: 443,
-		Domain: "example.com",
-		Password: "secret-pass",
+		ListenPort:    443,
+		Domain:        "example.com",
+		Password:      "secret-pass",
 		MasqueradeURL: "https://www.bing.com/",
 	})
 	if err != nil {
@@ -25,6 +25,26 @@ func TestRenderHysteria2RecommendedConfig(t *testing.T) {
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("rendered config missing %q:\n%s", want, cfg)
+		}
+	}
+}
+
+func TestRenderHysteria2SupportsMultipleUsers(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort: 443,
+		Domain:     "example.com",
+		Password:   "fallback-pass",
+		Users: []Hysteria2User{
+			{Username: "alice", Password: "alice-pass"},
+			{Username: "bob", Password: "bob-pass"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{"type: userpass", "alice: alice-pass", "bob: bob-pass"} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("rendered Hysteria2 config missing %q:\n%s", want, cfg)
 		}
 	}
 }

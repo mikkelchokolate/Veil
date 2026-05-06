@@ -35,6 +35,28 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 	}
 }
 
+func TestRenderNaiveCaddyfileSupportsMultipleUsers(t *testing.T) {
+	cfg, err := RenderNaiveCaddyfile(NaiveConfig{
+		Domain:     "example.com",
+		Email:      "admin@example.com",
+		ListenPort: 443,
+		Username:   "fallback",
+		Password:   "fallback-pass",
+		Users: []NaiveUser{
+			{Username: "alice", Password: "alice-pass"},
+			{Username: "bob", Password: "bob-pass"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{"basic_auth alice alice-pass", "basic_auth bob bob-pass"} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("rendered Caddyfile missing %q:\n%s", want, cfg)
+		}
+	}
+}
+
 func TestRenderNaiveCaddyfileRequiresDomain(t *testing.T) {
 	_, err := RenderNaiveCaddyfile(NaiveConfig{
 		ListenPort: 443,
