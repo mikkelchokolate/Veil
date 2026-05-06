@@ -2,6 +2,14 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.11] — 2026-05-06
+
+### Changed
+
+- Extracted Settings management validation/redaction/save ordering from HTTP handlers
+- Extracted WARP management redaction/defaults/save ordering from HTTP handlers
+- Extracted Apply history storage, filtering, capping, and stage selection into its own Module
+
 ## [v0.3.10] — 2026-05-06
 
 ### Changed
