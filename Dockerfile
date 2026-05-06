@@ -9,12 +9,21 @@
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
 #     veil serve
 #
-# Run (public panel with auth):
+# Run (public panel with auth and hidden base path):
 #   docker run -d --name veil -p 2096:2096 \
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
 #     -v /etc/systemd/system:/host-systemd:ro \
 #     -e VEIL_API_TOKEN=your-secret-token \
-#     veil serve --listen 0.0.0.0:2096 --auth-token your-secret-token
+#     -e VEIL_WEB_BASE_PATH=/secret-panel/ \
+#     veil serve --listen 0.0.0.0:2096 --auth-token your-secret-token --web-base-path /secret-panel/
+#
+# Run (auto Let's Encrypt TLS):
+#   docker run -d --name veil -p 443:443 \
+#     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+#     -v /etc/systemd/system:/host-systemd:ro \
+#     -e VEIL_API_TOKEN=your-secret-token \
+#     -e VEIL_AUTO_TLS=1 \
+#     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
 FROM golang:1.22-alpine AS builder
 

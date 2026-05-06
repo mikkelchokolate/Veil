@@ -16,7 +16,10 @@ services:
       - veil-etc:/etc/veil
     environment:
       - VEIL_API_TOKEN=${VEIL_API_TOKEN:-}
-    command: serve --listen 0.0.0.0:2096${VEIL_API_TOKEN:+ --auth-token $VEIL_API_TOKEN}
+      - VEIL_WEB_BASE_PATH=${VEIL_WEB_BASE_PATH:-}
+      - VEIL_AUTO_TLS=${VEIL_AUTO_TLS:-}
+      - VEIL_AUTO_TLS_DIR=${VEIL_AUTO_TLS_DIR:-}
+    command: serve --listen 0.0.0.0:2096${VEIL_API_TOKEN:+ --auth-token $VEIL_API_TOKEN}${VEIL_WEB_BASE_PATH:+ --web-base-path $VEIL_WEB_BASE_PATH}${VEIL_AUTO_TLS:+ --auto-tls}
     healthcheck:
       test: ["CMD", "veil", "status", "--json"]
       interval: 30s
