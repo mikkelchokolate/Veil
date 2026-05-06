@@ -218,8 +218,11 @@ const panelHTMLBase = `<!doctype html>
               <input id="inbound-port" type="number" min="1" max="65535" placeholder="443">
             </div>
             <div>
-              <label for="inbound-password">Password (optional)</label>
-              <input id="inbound-password" type="text" autocomplete="off" placeholder="leave empty to use global password">
+              <label for="inbound-password">Password</label>
+              <div style="display:flex;gap:8px">
+                <input id="inbound-password" type="text" autocomplete="off" placeholder="auto-generated if empty" style="flex:1">
+                <button type="button" class="secondary" onclick="genInboundPassword()" style="white-space:nowrap">Generate</button>
+              </div>
             </div>
             <div>
               <label for="inbound-enabled">Enabled</label>
@@ -652,6 +655,13 @@ const panelHTMLBase = `<!doctype html>
       }
     }
 
+    function genInboundPassword() {
+      const bytes = new Uint8Array(9);
+      crypto.getRandomValues(bytes);
+      const pw = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      document.getElementById('inbound-password').value = pw;
+    }
+
     async function saveInbound(event) {
       event.preventDefault();
       const name = document.getElementById('inbound-name').value.trim();
@@ -667,9 +677,15 @@ const panelHTMLBase = `<!doctype html>
         enabled: document.getElementById('inbound-enabled').checked
       };
       const pw = document.getElementById('inbound-password').value.trim();
-      if (pw) payload.password = pw;
       const inbounds = await loadJSON('/api/inbounds', 'inbounds-output');
       const exists = Array.isArray(inbounds) && inbounds.some((inbound) => inbound.name === name);
+      if (pw) {
+        payload.password = pw;
+      } else if (!exists) {
+        // Auto-generate password for new inbounds
+        genInboundPassword();
+        payload.password = document.getElementById('inbound-password').value;
+      }
       await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
         method: exists ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
