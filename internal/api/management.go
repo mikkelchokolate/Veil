@@ -1747,31 +1747,6 @@ func writeAtomicFile(path string, body []byte, mode os.FileMode) error {
 	return os.Rename(tmp, path)
 }
 
-func (s *managementState) inboundIndex(name string) int {
-	for idx, inbound := range s.inbounds {
-		if inbound.Name == name {
-			return idx
-		}
-	}
-	return -1
-}
-
-func (s *managementState) hasInboundTransportPort(transport string, port int) bool {
-	return s.hasInboundTransportPortExcept(transport, port, -1)
-}
-
-func (s *managementState) hasInboundTransportPortExcept(transport string, port int, exceptIndex int) bool {
-	for idx, existing := range s.inbounds {
-		if idx == exceptIndex {
-			continue
-		}
-		if existing.Transport == transport && existing.Port == port {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *managementState) load() error {
 	if s.statePath == "" {
 		return nil
