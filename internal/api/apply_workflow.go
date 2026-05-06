@@ -5,11 +5,20 @@ import (
 	"net/http"
 )
 
-type ApplyWorkflow struct {
-	state *managementState
+type applyWorkflowState interface {
+	buildApplyPlanLocked() ApplyPlanResponse
+	writeApplyStageLocked(ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error)
+	promoteStagedConfigsLocked([]string) ([]string, []string, []livePromotionRecord, error)
+	reloadPromotedServicesLocked([]string) []ServiceActionResult
+	rollbackPromotedConfigsLocked([]livePromotionRecord, []string) ([]string, []ServiceActionResult)
+	appendApplyHistoryLocked(string, bool, ApplyResponse) error
 }
 
-func NewApplyWorkflow(state *managementState) ApplyWorkflow {
+type ApplyWorkflow struct {
+	state applyWorkflowState
+}
+
+func NewApplyWorkflow(state applyWorkflowState) ApplyWorkflow {
 	return ApplyWorkflow{state: state}
 }
 
