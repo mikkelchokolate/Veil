@@ -91,23 +91,23 @@ func newInstallCommand() *cobra.Command {
 				}
 				return port
 			}
-			panelListenPort, panelRandom, err := installer.SelectPanelPort(panelPort, installer.RandomHighPort)
-			if err != nil {
-				return err
-			}
-			built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-				Domain:       domain,
-				Email:        email,
-				Stack:        installer.Stack(stack),
-				Port:         sharedPort,
-				Availability: availability,
-				Secret:       randomSecret,
-				RandomPort:   randomPort,
-				PanelPort:    panelListenPort,
+			install, err := installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
+				Domain:          domain,
+				Email:           email,
+				Stack:           installer.Stack(stack),
+				Port:            sharedPort,
+				PanelPort:       panelPort,
+				Availability:    availability,
+				Secret:          randomSecret,
+				RandomPort:      randomPort,
+				RandomPanelPort: installer.RandomHighPort,
 			})
 			if err != nil {
 				return err
 			}
+			built := install.Profile
+			panelListenPort := install.PanelPort
+			panelRandom := install.PanelRandom
 			printRURecommended(cmd, built, dryRun)
 			if parsedPublicIP != nil {
 				ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
