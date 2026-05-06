@@ -2,6 +2,13 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.9] — 2026-05-06
+
+### Changed
+
+- Extracted route-dat download/checksum logic into its own Module
+- Extracted Routing preset definitions from the management HTTP implementation
+
 ## [v0.3.8] — 2026-05-06
 
 ### Changed
