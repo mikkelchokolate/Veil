@@ -332,6 +332,15 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
+	// Caddyfile must include reverse_proxy to panel port
+	caddyPath := filepath.Join(dir, "etc/veil/generated/caddy/Caddyfile")
+	body, err := os.ReadFile(caddyPath)
+	if err != nil {
+		t.Fatalf("read Caddyfile: %v", err)
+	}
+	if !strings.Contains(string(body), "reverse_proxy 127.0.0.1:2096") {
+		t.Fatalf("Caddyfile missing reverse_proxy:\n%s", string(body))
+	}
 }
 
 func TestInstallDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
