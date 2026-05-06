@@ -420,22 +420,18 @@ func setWarpDefaults(warp *WarpConfig) {
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	management := NewInboundManagement(&s.inbounds, s.saveLocked)
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.inbounds)
+		writeJSON(w, management.List())
 	case http.MethodPost:
 		var inbound Inbound
 		if !decodeJSONRequest(w, r, &inbound) {
 			return
 		}
-		created, catalog, err := NewInboundCatalog(s.inbounds).Create(inbound)
+		created, err := management.Create(inbound)
 		if err != nil {
-			writeInboundCatalogError(w, err)
-			return
-		}
-		s.inbounds = catalog.List()
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
+			writeInboundManagementError(w, err)
 			return
 		}
 		writeJSONStatus(w, http.StatusCreated, created)
@@ -452,8 +448,8 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	catalog := NewInboundCatalog(s.inbounds)
-	inbound, ok := catalog.Get(name)
+	management := NewInboundManagement(&s.inbounds, s.saveLocked)
+	inbound, ok := management.Get(name)
 	if !ok {
 		writeNotFound(w)
 		return
@@ -466,26 +462,15 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		if !decodeJSONRequest(w, r, &update) {
 			return
 		}
-		updated, next, err := catalog.Update(name, update)
+		updated, err := management.Update(name, update)
 		if err != nil {
-			writeInboundCatalogError(w, err)
-			return
-		}
-		s.inbounds = next.List()
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
+			writeInboundManagementError(w, err)
 			return
 		}
 		writeJSON(w, updated)
 	case http.MethodDelete:
-		next, err := catalog.Delete(name)
-		if err != nil {
-			writeInboundCatalogError(w, err)
-			return
-		}
-		s.inbounds = next.List()
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
+		if err := management.Delete(name); err != nil {
+			writeInboundManagementError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -494,7 +479,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func writeInboundCatalogError(w http.ResponseWriter, err error) {
+func writeInboundManagementError(w http.ResponseWriter, err error) {
 	switch err {
 	case ErrInboundInvalid:
 		writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
