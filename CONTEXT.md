@@ -67,3 +67,4 @@ _Avoid_: logging, masking
 - "profile" was used for both install profiles and proxy entries — resolved: use **Veil install** for setup presets and **Inbound** for proxy entries.
 - "webBasePath" appears as Go field naming; in prose use **Web base path**.
 - "service" may mean systemd unit or domain module — in architecture reviews use **Module** for code structure and name systemd units explicitly.
+- Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but are not yet renderable into one **Generated config set**; apply plan must reject this instead of silently overwriting generated files.
