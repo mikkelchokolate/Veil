@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/veil-panel/veil/internal/firewall"
-	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
@@ -856,52 +855,33 @@ func isAllowedHealthService(service string) bool {
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
-	return BuildGeneratedConfigSet(GeneratedConfigInput{
+	return s.managementConfigRendererLocked().Render()
+}
+
+func (s *managementState) hasRenderSettingsLocked() bool {
+	return s.managementConfigRendererLocked().HasRenderSettings()
+}
+
+func (s *managementState) renderNaiveConfigLocked(inbound Inbound) (string, error) {
+	return s.managementConfigRendererLocked().RenderInbound(inbound)
+}
+
+func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, error) {
+	return s.managementConfigRendererLocked().RenderInbound(inbound)
+}
+
+func (s *managementState) renderWarpConfigLocked() (string, error) {
+	return s.managementConfigRendererLocked().RenderWarp()
+}
+
+func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
+	return NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: s.applyRoot,
 		Settings:  s.settings,
 		Inbounds:  s.inbounds,
 		Rules:     s.rules,
 		Warp:      s.warp,
 	})
-}
-
-func (s *managementState) hasRenderSettingsLocked() bool {
-	return hasRenderSettings(s.settings)
-}
-
-func (s *managementState) renderNaiveConfigLocked(inbound Inbound) (string, error) {
-	return renderNaiveGeneratedConfig(s.settings, inbound)
-}
-
-func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, error) {
-	return renderHysteria2GeneratedConfig(s.settings, inbound)
-}
-
-func (s *managementState) renderWarpConfigLocked() (string, error) {
-	warp := s.warp
-	setWarpDefaults(&warp)
-	return renderer.RenderWarpSingBox(renderer.WarpSingBoxConfig{
-		Endpoint:      warp.Endpoint,
-		PrivateKey:    warp.PrivateKey,
-		LocalAddress:  warp.LocalAddress,
-		PeerPublicKey: warp.PeerPublicKey,
-		Reserved:      append([]int(nil), warp.Reserved...),
-		SocksListen:   warp.SocksListen,
-		SocksPort:     warp.SocksPort,
-		MTU:           warp.MTU,
-		RoutingRules:  renderWarpRoutingRules(s.rules),
-	})
-}
-
-func renderWarpRoutingRules(rules []RoutingRule) []renderer.WarpRoutingRule {
-	rendered := []renderer.WarpRoutingRule{}
-	for _, rule := range rules {
-		if !rule.Enabled {
-			continue
-		}
-		rendered = append(rendered, renderer.WarpRoutingRule{Match: rule.Match, Outbound: rule.Outbound})
-	}
-	return rendered
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {

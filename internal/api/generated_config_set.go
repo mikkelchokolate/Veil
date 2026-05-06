@@ -53,7 +53,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 			SocksListen:   warp.SocksListen,
 			SocksPort:     warp.SocksPort,
 			MTU:           warp.MTU,
-			RoutingRules:  renderWarpRoutingRules(input.Rules),
+			RoutingRules:  RenderWarpRoutingRules(input.Rules),
 		})
 		if err != nil {
 			return nil, err
