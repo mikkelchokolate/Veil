@@ -229,19 +229,7 @@ const panelHTMLBase = `<!doctype html>
               <input id="inbound-enabled" type="checkbox" checked> enabled
             </div>
             <div style="grid-column: 1 / -1">
-              <label>Client profile</label>
-              <div class="form-grid">
-                <input id="client-profile-name" autocomplete="off" placeholder="profile name, e.g. alice">
-                <input id="client-profile-username" autocomplete="off" placeholder="username (optional)">
-                <div style="display:flex;gap:8px">
-                  <input id="client-profile-password" type="text" autocomplete="off" placeholder="auto-generated if empty" style="flex:1">
-                  <button type="button" class="secondary" onclick="genClientProfilePassword()" style="white-space:nowrap">Generate</button>
-                </div>
-                <button type="button" class="secondary" onclick="addClientProfile()">Add profile</button>
-              </div>
-              <label for="inbound-profiles">Client profiles (JSON)</label>
-              <textarea id="inbound-profiles" rows="4" spellcheck="false" placeholder='[{"name":"alice","username":"alice","password":"optional","enabled":true}]'></textarea>
-              <p class="hint">Use Add profile for 3x-ui-style users on one Inbound, or edit JSON directly.</p>
+__VEIL_PANEL_CLIENT_PROFILE_CONTROLS__
             </div>
           </div>
           <div class="actions">
@@ -680,37 +668,7 @@ const panelHTMLBase = `<!doctype html>
       document.getElementById('inbound-password').value = randomPassword();
     }
 
-    function genClientProfilePassword() {
-      document.getElementById('client-profile-password').value = randomPassword();
-    }
-
-    function addClientProfile() {
-      const out = document.getElementById('inbounds-output');
-      const name = document.getElementById('client-profile-name').value.trim();
-      if (!name) {
-        out.textContent = 'Client profile name is required';
-        return;
-      }
-      let profiles = [];
-      const raw = document.getElementById('inbound-profiles').value.trim();
-      if (raw) {
-        try {
-          profiles = JSON.parse(raw);
-        } catch (err) {
-          out.textContent = 'Client profiles must be valid JSON: ' + String(err);
-          return;
-        }
-      }
-      const username = document.getElementById('client-profile-username').value.trim();
-      let password = document.getElementById('client-profile-password').value.trim();
-      if (!password) {
-        password = randomPassword();
-        document.getElementById('client-profile-password').value = password;
-      }
-      profiles.push({ name, username: username || name, password, enabled: true });
-      document.getElementById('inbound-profiles').value = JSON.stringify(profiles, null, 2);
-      out.textContent = 'Client profile added';
-    }
+__VEIL_PANEL_CLIENT_PROFILE_ACTIONS__
 
     async function saveInbound(event) {
       event.preventDefault();
@@ -1009,8 +967,9 @@ const panelHTMLBase = `<!doctype html>
 // panelHTML returns the panel HTML with all API paths adjusted for the given base path.
 // When basePath is "/", the HTML is returned unchanged.
 func panelHTML(basePath string) string {
+	html := renderPanelHTMLBase()
 	if basePath == "" || basePath == "/" {
-		return panelHTMLBase
+		return html
 	}
 	// basePath is like "/secret/" — strip trailing slash for replacement.
 	bp := strings.TrimRight(basePath, "/")
@@ -1022,5 +981,5 @@ func panelHTML(basePath string) string {
 		`"/metrics`, `"`+bp+`/metrics`,
 		`'/metrics`, `'`+bp+`/metrics`,
 	)
-	return replacer.Replace(panelHTMLBase)
+	return replacer.Replace(html)
 }
