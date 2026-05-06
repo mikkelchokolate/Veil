@@ -1,6 +1,10 @@
 package api
 
-const panelHTML = `<!doctype html>
+import "strings"
+
+// panelHTMLBase is the raw panel HTML. Paths in JS strings are all /-prefixed
+// (e.g., "/api/status"). At serve time, a replacer injects the web base path.
+const panelHTMLBase = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -212,6 +216,10 @@ const panelHTML = `<!doctype html>
             <div>
               <label for="inbound-port">Port</label>
               <input id="inbound-port" type="number" min="1" max="65535" placeholder="443">
+            </div>
+            <div>
+              <label for="inbound-password">Password (optional)</label>
+              <input id="inbound-password" type="text" autocomplete="off" placeholder="leave empty to use global password">
             </div>
             <div>
               <label for="inbound-enabled">Enabled</label>
@@ -658,6 +666,8 @@ const panelHTML = `<!doctype html>
         port: numberOrZero('inbound-port'),
         enabled: document.getElementById('inbound-enabled').checked
       };
+      const pw = document.getElementById('inbound-password').value.trim();
+      if (pw) payload.password = pw;
       const inbounds = await loadJSON('/api/inbounds', 'inbounds-output');
       const exists = Array.isArray(inbounds) && inbounds.some((inbound) => inbound.name === name);
       await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
@@ -919,3 +929,22 @@ const panelHTML = `<!doctype html>
 </body>
 </html>
 `
+
+// panelHTML returns the panel HTML with all API paths adjusted for the given base path.
+// When basePath is "/", the HTML is returned unchanged.
+func panelHTML(basePath string) string {
+	if basePath == "" || basePath == "/" {
+		return panelHTMLBase
+	}
+	// basePath is like "/secret/" — strip trailing slash for replacement.
+	bp := strings.TrimRight(basePath, "/")
+	replacer := strings.NewReplacer(
+		`"/api/`, `"`+bp+`/api/`,
+		`'/api/`, `'`+bp+`/api/`,
+		`"/healthz`, `"`+bp+`/healthz`,
+		`'/healthz`, `'`+bp+`/healthz`,
+		`"/metrics`, `"`+bp+`/metrics`,
+		`'/metrics`, `'`+bp+`/metrics`,
+	)
+	return replacer.Replace(panelHTMLBase)
+}
