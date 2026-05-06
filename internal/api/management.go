@@ -326,32 +326,6 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func redactedWarp(warp WarpConfig) WarpConfig {
-	redacted := warp
-	if redacted.PrivateKey != "" {
-		redacted.PrivateKey = "[REDACTED]"
-	}
-	if redacted.LicenseKey != "" {
-		redacted.LicenseKey = "[REDACTED]"
-	}
-	return redacted
-}
-
-func setWarpDefaults(warp *WarpConfig) {
-	if warp.Endpoint == "" {
-		warp.Endpoint = "engage.cloudflareclient.com:2408"
-	}
-	if warp.SocksListen == "" {
-		warp.SocksListen = "127.0.0.1"
-	}
-	if warp.SocksPort == 0 {
-		warp.SocksPort = 40000
-	}
-	if warp.MTU == 0 {
-		warp.MTU = 1280
-	}
-}
-
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -544,27 +518,21 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	management := NewWarpManagement(&s.warp, s.saveLocked)
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, redactedWarp(s.warp))
+		writeJSON(w, management.Get())
 	case http.MethodPut:
 		var warp WarpConfig
 		if !decodeJSONRequest(w, r, &warp) {
 			return
 		}
-		if warp.LicenseKey == "[REDACTED]" {
-			warp.LicenseKey = s.warp.LicenseKey
-		}
-		if warp.PrivateKey == "[REDACTED]" {
-			warp.PrivateKey = s.warp.PrivateKey
-		}
-		setWarpDefaults(&warp)
-		s.warp = warp
-		if err := s.saveLocked(); err != nil {
+		updated, err := management.Update(warp)
+		if err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, redactedWarp(s.warp))
+		writeJSON(w, updated)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut)
 	}
