@@ -2,7 +2,7 @@ BINARY=veil
 VERSION?=dev
 DOCKER_IMAGE?=veil-panel/veil
 
-.PHONY: test build tidy docker
+.PHONY: test build tidy docker release-check
 
 test:
 	go test ./...
@@ -13,6 +13,12 @@ build:
 
 tidy:
 	go mod tidy
+
+release-check:
+	go vet ./...
+	go test ./... -count=1
+	git diff --check
+	@test -z "$$(git status --short)" || (git status --short && exit 1)
 
 docker:
 	docker build -t $(DOCKER_IMAGE):$(VERSION) .
