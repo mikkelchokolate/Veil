@@ -5,6 +5,22 @@ import (
 	"testing"
 )
 
+func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing.T) {
+	form := panelInboundFormHTML()
+	for _, want := range []string{
+		`<h2>Inbounds</h2>`,
+		`id="inbound-form"`,
+		`id="inbound-password"`,
+		panelClientProfileControlsPlaceholder,
+		`id="save-inbound"`,
+		`id="delete-inbound"`,
+	} {
+		if !strings.Contains(form, want) {
+			t.Fatalf("Inbound form missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 	controls := panelClientProfileControlsHTML()
 	for _, want := range []string{
