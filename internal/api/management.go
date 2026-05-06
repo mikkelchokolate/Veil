@@ -931,95 +931,30 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
-	plan := ApplyPlanResponse{
-		Valid:   true,
-		Configs: []string{},
-		Actions: []string{"validate management state"},
-	}
-	if s.settings.Stack != "both" && s.settings.Stack != "naive" && s.settings.Stack != "hysteria2" {
-		plan.Errors = append(plan.Errors, "unsupported stack: "+s.settings.Stack)
-	}
-	seen := map[string]bool{}
-	for _, inbound := range s.inbounds {
-		if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
-			continue
-		}
-		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" {
-			plan.Errors = append(plan.Errors, "enabled inbounds require name, protocol, and transport")
-		}
-		if inbound.Port <= 0 {
-			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
-		}
-		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
-		if seen[key] {
-			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
-		}
-		seen[key] = true
-		switch inbound.Protocol {
-		case "naiveproxy":
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
-			if s.hasRenderSettingsLocked() {
-				if _, err := s.renderNaiveConfigLocked(inbound); err != nil {
-					plan.Errors = append(plan.Errors, err.Error())
-				}
+	return BuildApplyPlan(ApplyPlanInput{
+		Settings:                s.settings,
+		Inbounds:                s.inbounds,
+		Rules:                   s.rules,
+		RoutingSource:           s.routingSource,
+		Warp:                    s.warp,
+		RenderSettingsAvailable: s.hasRenderSettingsLocked(),
+		ValidateInboundRender: func(inbound Inbound) error {
+			switch inbound.Protocol {
+			case "naiveproxy":
+				_, err := s.renderNaiveConfigLocked(inbound)
+				return err
+			case "hysteria2":
+				_, err := s.renderHysteria2ConfigLocked(inbound)
+				return err
+			default:
+				return nil
 			}
-		case "hysteria2":
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-hysteria2.service")
-			if s.hasRenderSettingsLocked() {
-				if _, err := s.renderHysteria2ConfigLocked(inbound); err != nil {
-					plan.Errors = append(plan.Errors, err.Error())
-				}
-			}
-		default:
-			if inbound.Protocol != "" {
-				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
-			}
-		}
-	}
-	if err := validateGeneratedConfigInboundCardinality(s.settings, s.inbounds); err != nil {
-		plan.Errors = append(plan.Errors, err.Error())
-	}
-	if s.warp.Enabled {
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
-		plan.Actions = appendUnique(plan.Actions, "reload veil-warp.service")
-		if _, err := s.renderWarpConfigLocked(); err != nil {
-			plan.Errors = append(plan.Errors, err.Error())
-		}
-	}
-	for _, rule := range s.rules {
-		if !rule.Enabled {
-			continue
-		}
-		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
-			plan.Errors = append(plan.Errors, "enabled routing rules require name, match, and outbound")
-			continue
-		}
-		switch rule.Outbound {
-		case "direct":
-		case "warp":
-			if !s.warp.Enabled {
-				plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" requires WARP to be enabled")
-			}
-		default:
-			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)
-		}
-	}
-	for _, file := range s.routingSource.Files {
-		if file.Name == "" || file.URL == "" {
-			plan.Errors = append(plan.Errors, "routing source files require name and URL")
-			continue
-		}
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/rules/"+file.Name)
-	}
-	if len(plan.Configs) > 0 {
-		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
-	}
-	if len(plan.Errors) > 0 {
-		plan.Valid = false
-	}
-	return plan
+		},
+		ValidateWarpRender: func() error {
+			_, err := s.renderWarpConfigLocked()
+			return err
+		},
+	})
 }
 
 func stackIncludesProtocol(stack string, protocol string) bool {
