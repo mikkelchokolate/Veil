@@ -2,6 +2,22 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.1] — 2026-05-06
+
+### Added
+
+- Per-inbound passwords for NaiveProxy and Hysteria2 client links
+- Backend password generation for new inbounds without a provided password
+- Password preservation on inbound update when no replacement password is provided
+- Inbound passwords encrypted at rest in `state.json`
+- `make release-check` for vet, tests, diff check, and dirty-tree guard
+
+### Changed
+
+- Extracted `ClientLinksBuilder`, `InboundCatalog`, `StateStore`, `ApplyWorkflow`, and `GeneratedConfigSet` Modules for better locality and testability
+- Generated configs now use per-inbound passwords when present, falling back to global protocol passwords
+- Install credential disclosure is centralized in a small summary Module
+
 ## [v0.3.0] — 2026-05-06
 
 ### Added
