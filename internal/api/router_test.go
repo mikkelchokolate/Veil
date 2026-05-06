@@ -238,6 +238,51 @@ func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
 	}
 }
 
+func TestClientLinksUsesPerInboundPassword(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	// Add a second hysteria2 inbound with its own password via API
+	body := strings.NewReader(`{"name":"hysteria2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true,"password":"alt-hy2-secret"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Get client links
+	req2 := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+	var response ClientLinksResponse
+	if err := json.NewDecoder(w2.Body).Decode(&response); err != nil {
+		t.Fatalf("decode client links: %v", err)
+	}
+	if response.Count != 3 {
+		t.Fatalf("expected 3 client links, got %d", response.Count)
+	}
+	links := map[string]ClientLink{}
+	for _, link := range response.Links {
+		links[link.Name] = link
+	}
+	// Original hysteria2 uses global password
+	if links["hysteria2"].URI != "hysteria2://hy2-secret@vpn.example.com:443/?sni=vpn.example.com#hysteria2" {
+		t.Fatalf("original hysteria2 should use global password, got: %s", links["hysteria2"].URI)
+	}
+	// New inbound uses its own password
+	if links["hysteria2-alt"].URI != "hysteria2://alt-hy2-secret@vpn.example.com:8443/?sni=vpn.example.com#hysteria2-alt" {
+		t.Fatalf("new hysteria2 should use per-inbound password, got: %s", links["hysteria2-alt"].URI)
+	}
+}
+
 func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {

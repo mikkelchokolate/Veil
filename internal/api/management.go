@@ -67,6 +67,7 @@ type Inbound struct {
 	Transport string `json:"transport"`
 	Port      int    `json:"port"`
 	Enabled   bool   `json:"enabled"`
+	Password  string `json:"password,omitempty"`
 }
 
 type RoutingRule struct {
@@ -900,15 +901,23 @@ func buildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		link := ClientLink{Name: inbound.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
 		switch inbound.Protocol {
 		case "naiveproxy":
-			if settings.NaiveUsername == "" || settings.NaivePassword == "" {
+			password := inbound.Password
+			if password == "" {
+				password = settings.NaivePassword
+			}
+			if settings.NaiveUsername == "" || password == "" {
 				return ClientLinksResponse{}, errors.New("naive username and password are required to build client links")
 			}
-			link.URI = naiveClientURI(settings.Domain, inbound.Port, settings.NaiveUsername, settings.NaivePassword)
+			link.URI = naiveClientURI(settings.Domain, inbound.Port, settings.NaiveUsername, password)
 		case "hysteria2":
-			if settings.Hysteria2Password == "" {
+			password := inbound.Password
+			if password == "" {
+				password = settings.Hysteria2Password
+			}
+			if password == "" {
 				return ClientLinksResponse{}, errors.New("hysteria2 password is required to build client links")
 			}
-			link.URI = hysteria2ClientURI(settings.Domain, inbound.Port, settings.Hysteria2Password, inbound.Name)
+			link.URI = hysteria2ClientURI(settings.Domain, inbound.Port, password, inbound.Name)
 		default:
 			continue
 		}
