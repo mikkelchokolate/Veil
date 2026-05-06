@@ -2,6 +2,14 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.15] — 2026-05-06
+
+### Changed
+
+- Extracted Config validation command mapping and execution into its own Module
+- Extracted Management config rendering and WARP routing projection into its own Module
+- Extracted Firewall rule projection from Settings and Inbounds into its own Module
+
 ## [v0.3.14] — 2026-05-06
 
 ### Changed
