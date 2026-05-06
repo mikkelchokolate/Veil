@@ -2,6 +2,12 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.12] — 2026-05-06
+
+### Changed
+
+- Extracted Apply stage writer for staged plan, snapshot, generated configs, route-dat files, and validation
+
 ## [v0.3.11] — 2026-05-06
 
 ### Changed
