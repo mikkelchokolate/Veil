@@ -420,24 +420,17 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 		if !decodeJSONRequest(w, r, &inbound) {
 			return
 		}
-		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
-			writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
+		created, catalog, err := NewInboundCatalog(s.inbounds).Create(inbound)
+		if err != nil {
+			writeInboundCatalogError(w, err)
 			return
 		}
-		if s.inboundIndex(inbound.Name) >= 0 {
-			writeError(w, "inbound name already exists", http.StatusConflict)
-			return
-		}
-		if s.hasInboundTransportPort(inbound.Transport, inbound.Port) {
-			writeError(w, "inbound transport/port already exists", http.StatusConflict)
-			return
-		}
-		s.inbounds = append(s.inbounds, inbound)
+		s.inbounds = catalog.List()
 		if err := s.saveLocked(); err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSONStatus(w, http.StatusCreated, inbound)
+		writeJSONStatus(w, http.StatusCreated, created)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -451,36 +444,38 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	idx := s.inboundIndex(name)
-	if idx < 0 {
+	catalog := NewInboundCatalog(s.inbounds)
+	inbound, ok := catalog.Get(name)
+	if !ok {
 		writeNotFound(w)
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.inbounds[idx])
+		writeJSON(w, inbound)
 	case http.MethodPut:
 		var update Inbound
 		if !decodeJSONRequest(w, r, &update) {
 			return
 		}
-		if update.Protocol == "" || update.Transport == "" || update.Port <= 0 {
-			writeError(w, "protocol, transport, and positive port are required", http.StatusBadRequest)
+		updated, next, err := catalog.Update(name, update)
+		if err != nil {
+			writeInboundCatalogError(w, err)
 			return
 		}
-		if s.hasInboundTransportPortExcept(update.Transport, update.Port, idx) {
-			writeError(w, "inbound transport/port already exists", http.StatusConflict)
-			return
-		}
-		update.Name = name
-		s.inbounds[idx] = update
+		s.inbounds = next.List()
 		if err := s.saveLocked(); err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, update)
+		writeJSON(w, updated)
 	case http.MethodDelete:
-		s.inbounds = append(s.inbounds[:idx], s.inbounds[idx+1:]...)
+		next, err := catalog.Delete(name)
+		if err != nil {
+			writeInboundCatalogError(w, err)
+			return
+		}
+		s.inbounds = next.List()
 		if err := s.saveLocked(); err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -488,6 +483,21 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
+	}
+}
+
+func writeInboundCatalogError(w http.ResponseWriter, err error) {
+	switch err {
+	case ErrInboundInvalid:
+		writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
+	case ErrInboundDuplicateName:
+		writeError(w, "inbound name already exists", http.StatusConflict)
+	case ErrInboundDuplicateTransportPort:
+		writeError(w, "inbound transport/port already exists", http.StatusConflict)
+	case ErrInboundNotFound:
+		writeNotFound(w)
+	default:
+		writeError(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
