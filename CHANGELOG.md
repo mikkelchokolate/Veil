@@ -7,9 +7,11 @@ All notable changes to Veil will be documented in this file.
 ### Added
 
 - Auto-generated random web base path for the panel (`/a1b2c3d4e5f6/`) — hides the panel from casual scanners
+- Panel served via Caddy reverse proxy with automatic Let's Encrypt HTTPS — no separate port or manual TLS config
 - `VEIL_WEB_BASE_PATH` written to `/etc/veil/veil.env` during install, picked up automatically by `veil serve`
-- Interactive install now shows the full panel URL (`https://domain.com/a1b2c3d4e5f6/`)
+- Interactive install now shows the full panel URL (`https://domain.com/a1b2c3d4e5f6/`) and credentials (username, passwords)
 - Interactive install confirmation prompt (`Apply install plan? [y/N]`) instead of requiring `--yes`
+- Simplified user-facing documentation
 
 ## [v0.2.1] — 2026-05-05
 
