@@ -1011,6 +1011,9 @@ func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
 			}
 		}
 	}
+	if err := validateGeneratedConfigInboundCardinality(s.settings, s.inbounds); err != nil {
+		plan.Errors = append(plan.Errors, err.Error())
+	}
 	if s.warp.Enabled {
 		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
 		plan.Actions = appendUnique(plan.Actions, "reload veil-warp.service")
