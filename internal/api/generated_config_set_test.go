@@ -6,6 +6,29 @@ import (
 	"testing"
 )
 
+func TestGeneratedConfigSetRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+	_, err := BuildGeneratedConfigSet(GeneratedConfigInput{
+		ApplyRoot: t.TempDir(),
+		Settings: Settings{
+			Domain:            "vpn.example.com",
+			Email:             "admin@example.com",
+			Stack:             "both",
+			NaiveUsername:     "veil",
+			NaivePassword:     "global-naive",
+			Hysteria2Password: "global-hy2",
+			MasqueradeURL:     "https://www.bing.com/",
+			FallbackRoot:      "/var/lib/veil/www",
+		},
+		Inbounds: []Inbound{
+			{Name: "naive-a", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "a"},
+			{Name: "naive-b", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, Password: "b"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "multiple enabled naiveproxy inbounds") {
+		t.Fatalf("expected multiple naiveproxy inbound error, got %v", err)
+	}
+}
+
 func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	applyRoot := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
