@@ -10,6 +10,11 @@ func TestPanelHTMLIncludesInboundPasswordGenerationUI(t *testing.T) {
 	for _, want := range []string{
 		`id="inbound-password"`,
 		`id="inbound-profiles"`,
+		`id="client-profile-name"`,
+		`id="client-profile-username"`,
+		`id="client-profile-password"`,
+		`addClientProfile()`,
+		`genClientProfilePassword()`,
 		`Client profiles`,
 		`genInboundPassword()`,
 		`Generate`,
