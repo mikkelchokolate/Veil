@@ -60,13 +60,21 @@ type Settings struct {
 	FallbackRoot      string `json:"fallbackRoot,omitempty"`
 }
 
+type ClientProfile struct {
+	Name     string `json:"name"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Enabled  bool   `json:"enabled"`
+}
+
 type Inbound struct {
-	Name      string `json:"name"`
-	Protocol  string `json:"protocol"`
-	Transport string `json:"transport"`
-	Port      int    `json:"port"`
-	Enabled   bool   `json:"enabled"`
-	Password  string `json:"password,omitempty"`
+	Name      string          `json:"name"`
+	Protocol  string          `json:"protocol"`
+	Transport string          `json:"transport"`
+	Port      int             `json:"port"`
+	Enabled   bool            `json:"enabled"`
+	Password  string          `json:"password,omitempty"`
+	Profiles  []ClientProfile `json:"profiles,omitempty"`
 }
 
 type RoutingRule struct {

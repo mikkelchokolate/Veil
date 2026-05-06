@@ -24,8 +24,12 @@ _Avoid_: dashboard link, admin URL
 A named proxy entry that defines protocol, transport, port, enabled state, and optional password.
 _Avoid_: profile, listener, account
 
+**Client profile**:
+A named user credential attached to an Inbound.
+_Avoid_: profile, account, inbound
+
 **Client link**:
-A user-facing connection URI generated from Settings and enabled Inbounds.
+A user-facing connection URI generated from Settings, enabled Inbounds, and enabled Client profiles.
 _Avoid_: share link, subscription item
 
 **Generated config set**:
@@ -49,7 +53,8 @@ _Avoid_: logging, masking
 - A **Veil install** produces a **Panel URL**, credentials, and a **Generated config set**.
 - A **Panel URL** contains exactly one **Web base path**.
 - The **Panel** manages zero or more **Inbounds**.
-- Each **Inbound** can produce one **Client link** when enabled and allowed by Settings.
+- Each **Inbound** can contain zero or more **Client profiles**.
+- Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
 - The **Generated config set** is promoted by the **Apply workflow**.
 - The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
@@ -64,7 +69,7 @@ _Avoid_: logging, masking
 
 ## Flagged ambiguities
 
-- "profile" was used for both install profiles and proxy entries — resolved: use **Veil install** for setup presets and **Inbound** for proxy entries.
+- "profile" was used for install presets, proxy entries, and user credentials — resolved: use **Veil install** for setup presets, **Inbound** for proxy entries, and **Client profile** for user credentials.
 - "webBasePath" appears as Go field naming; in prose use **Web base path**.
 - "service" may mean systemd unit or domain module — in architecture reviews use **Module** for code structure and name systemd units explicitly.
 - Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but are not yet renderable into one **Generated config set**; apply plan must reject this instead of silently overwriting generated files.
