@@ -2,6 +2,13 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.8] — 2026-05-06
+
+### Changed
+
+- Extracted Client subscription formatting and query validation from HTTP handlers
+- Extracted Apply plan building into a pure Module with render-validation callbacks
+
 ## [v0.3.7] — 2026-05-06
 
 ### Changed
