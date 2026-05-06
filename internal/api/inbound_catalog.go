@@ -93,20 +93,7 @@ func (c InboundCatalog) Delete(name string) (InboundCatalog, error) {
 }
 
 func (c InboundCatalog) fillMissingProfilePasswords(inbound *Inbound, previous []ClientProfile) {
-	previousByName := map[string]ClientProfile{}
-	for _, profile := range previous {
-		previousByName[profile.Name] = profile
-	}
-	for i := range inbound.Profiles {
-		if inbound.Profiles[i].Password != "" {
-			continue
-		}
-		if previous, ok := previousByName[inbound.Profiles[i].Name]; ok && previous.Password != "" {
-			inbound.Profiles[i].Password = previous.Password
-			continue
-		}
-		inbound.Profiles[i].Password = c.passwordGenerate()
-	}
+	inbound.Profiles = NewClientProfileCatalogWithPasswordGenerator(inbound.Profiles, c.passwordGenerate).WithCompletedPasswords(previous)
 }
 
 func (c InboundCatalog) index(name string) int {

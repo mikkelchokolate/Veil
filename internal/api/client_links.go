@@ -80,13 +80,7 @@ func buildInboundClientLinks(settings Settings, inbound Inbound) ([]ClientLink, 
 }
 
 func enabledClientProfiles(inbound Inbound) []ClientProfile {
-	profiles := []ClientProfile{}
-	for _, profile := range inbound.Profiles {
-		if profile.Enabled {
-			profiles = append(profiles, profile)
-		}
-	}
-	return profiles
+	return NewClientProfileCatalog(inbound.Profiles).Enabled()
 }
 
 func fallbackInboundClientLink(settings Settings, inbound Inbound) ClientLink {
