@@ -1,0 +1,128 @@
+package api
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+)
+
+const maxRouteDatSize = 50 * 1024 * 1024 // 50 MB
+
+var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var routeDatDownloader = downloadRouteDat
+
+func downloadRouteDat(url string) ([]byte, error) {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			backoff := time.Duration(1<<(attempt-2)) * time.Second // 1s, 2s, 4s
+			log.Printf("downloadRouteDat: retry attempt %d/%d after %v (previous error: %v)", attempt, maxAttempts, backoff, lastErr)
+			time.Sleep(backoff)
+		}
+		resp, err := routeDatHTTPClient.Get(url)
+		if err != nil {
+			lastErr = err
+			if !isRetryableError(err) {
+				return nil, err
+			}
+			continue
+		}
+		if resp.StatusCode >= 500 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("download %s returned %s", url, resp.Status)
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
+		}
+		defer resp.Body.Close()
+		lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
+		body, err := io.ReadAll(lr)
+		if err != nil {
+			lastErr = err
+			if !isRetryableError(err) {
+				return nil, err
+			}
+			continue
+		}
+		if len(body) > maxRouteDatSize {
+			return nil, fmt.Errorf("download %s exceeds maximum size of %d bytes", url, maxRouteDatSize)
+		}
+		return body, nil
+	}
+	return nil, fmt.Errorf("download %s failed after %d attempts: %w", url, maxAttempts, lastErr)
+}
+
+// isRetryableError returns true for network errors that are worth retrying.
+// Temporary errors and timeouts are retryable; permanent errors are not.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for net.Error with Temporary() or Timeout()
+	type temporary interface {
+		Temporary() bool
+	}
+	if t, ok := err.(temporary); ok && t.Temporary() {
+		return true
+	}
+	type timeout interface {
+		Timeout() bool
+	}
+	if t, ok := err.(timeout); ok && t.Timeout() {
+		return true
+	}
+	return false
+}
+
+func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
+	body, err := routeDatDownloader(file.URL)
+	if err != nil {
+		return nil, err
+	}
+	if file.SHA256URL == "" {
+		return body, nil
+	}
+	checksumBody, err := routeDatDownloader(file.SHA256URL)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyRouteDatChecksum(file.Name, body, string(checksumBody)); err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func verifyRouteDatChecksum(name string, body []byte, checksumText string) error {
+	fields := strings.Fields(checksumText)
+	if len(fields) == 0 {
+		return fmt.Errorf("checksum for %s is empty", name)
+	}
+	expected := ""
+	for i := 0; i < len(fields); i++ {
+		if fields[i] == name && i > 0 {
+			expected = fields[i-1]
+			break
+		}
+	}
+	if expected == "" {
+		expected = fields[0]
+	}
+	expected = strings.TrimPrefix(strings.ToLower(expected), "sha256:")
+	decoded, err := hex.DecodeString(expected)
+	if err != nil || len(decoded) != sha256.Size {
+		return fmt.Errorf("invalid checksum for %s", name)
+	}
+	actual := sha256.Sum256(body)
+	if !strings.EqualFold(hex.EncodeToString(actual[:]), expected) {
+		return fmt.Errorf("checksum mismatch for %s", name)
+	}
+	return nil
+}
