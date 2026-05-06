@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -41,10 +40,6 @@ var allowedApplyHistoryFilters = map[string]bool{
 	"stage":   true,
 	"success": true,
 	"limit":   true,
-}
-
-var allowedSubscriptionQueries = map[string]bool{
-	"format": true,
 }
 
 type Settings struct {
@@ -834,22 +829,11 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		return
 	}
 	query := r.URL.Query()
-	queryKeys := make([]string, 0, len(query))
-	for key := range query {
-		queryKeys = append(queryKeys, key)
-	}
-	sort.Strings(queryKeys)
-	for _, key := range queryKeys {
-		if !allowedSubscriptionQueries[key] {
-			writeError(w, fmt.Sprintf("unsupported subscription query %q", key), http.StatusBadRequest)
-			return
-		}
-	}
-	format := query.Get("format")
-	if format != "" && format != "base64" && format != "raw" {
-		writeError(w, "format must be base64 or raw", http.StatusBadRequest)
+	if err := ValidateClientSubscriptionQuery(query); err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	format := query.Get("format")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, err := BuildClientLinks(s.settings, s.inbounds)
@@ -857,26 +841,16 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	uris := make([]string, 0, len(response.Links))
-	for _, link := range response.Links {
-		uris = append(uris, link.URI)
+	subscription, err := BuildClientSubscription(response, format)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	payload := strings.Join(uris, "\n") + "\n"
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	switch format {
-	case "", "base64":
-		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="veil-subscription.txt"`)
-		_, _ = w.Write([]byte(encoded + "\n"))
-	case "raw":
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="veil-subscription-raw.txt"`)
-		_, _ = w.Write([]byte(payload))
-	default:
-		writeError(w, "format must be base64 or raw", http.StatusBadRequest)
-	}
+	w.Header().Set("Content-Type", subscription.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, subscription.Filename))
+	_, _ = w.Write([]byte(subscription.Body))
 }
 
 func (s *managementState) handleFirewall(w http.ResponseWriter, r *http.Request) {
