@@ -2,6 +2,13 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.16] — 2026-05-06
+
+### Changed
+
+- Extracted Management snapshot construction and secret transforms into its own Module
+- Extracted Atomic file writing into its own Module
+
 ## [v0.3.15] — 2026-05-06
 
 ### Changed
