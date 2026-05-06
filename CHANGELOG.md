@@ -2,6 +2,13 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.3] — 2026-05-06
+
+### Fixed
+
+- Apply plan now rejects multiple enabled Inbounds of the same protocol instead of allowing Generated config set overwrite
+- Documented the current Generated config set limitation for multiple same-protocol Inbounds in `CONTEXT.md`
+
 ## [v0.3.2] — 2026-05-06
 
 ### Added
