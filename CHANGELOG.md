@@ -2,6 +2,12 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.6] — 2026-05-06
+
+### Fixed
+
+- Release CI flake in corrupted ciphertext regression test by tampering decoded ciphertext bytes instead of randomly replacing a base64 character
+
 ## [v0.3.5] — 2026-05-06
 
 ### Added

@@ -122,16 +122,14 @@ func TestDecryptCorruptedCiphertext(t *testing.T) {
 		t.Fatalf("Encrypt: %v", err)
 	}
 
-	// Tamper with the base64 payload (modify middle characters)
-	prefixEnd := len("ve1:")
-	payload := encrypted[prefixEnd:]
-	if len(payload) < 4 {
-		t.Fatal("payload too short to tamper")
+	// Tamper with the decoded ciphertext bytes. Replacing a base64 character can be
+	// a no-op when the replacement equals the original character, making this test flaky.
+	payload, err := base64.RawURLEncoding.DecodeString(encrypted[len("ve1:"):])
+	if err != nil {
+		t.Fatalf("decode encrypted payload: %v", err)
 	}
-	// Flip a character in the middle of the payload
-	mid := len(payload) / 2
-	tamperedPayload := payload[:mid] + "X" + payload[mid+1:]
-	tampered := "ve1:" + tamperedPayload
+	payload[len(payload)-1] ^= 0xff
+	tampered := "ve1:" + base64.RawURLEncoding.EncodeToString(payload)
 
 	_, err = cipher.Decrypt(tampered)
 	if err == nil {
@@ -374,11 +372,11 @@ func TestIsEncrypted(t *testing.T) {
 	}{
 		{"", false},
 		{"plaintext", false},
-		{"ve1:", false},          // empty payload
+		{"ve1:", false}, // empty payload
 		{"ve1:abc123", true},
-		{"VE1:abc123", false},    // case sensitive
-		{"ve1", false},           // no colon
-		{" ve1:abc123", false},   // leading space
+		{"VE1:abc123", false},  // case sensitive
+		{"ve1", false},         // no colon
+		{" ve1:abc123", false}, // leading space
 	}
 	for _, tt := range tests {
 		got := IsEncrypted(tt.value)
