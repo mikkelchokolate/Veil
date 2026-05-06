@@ -124,7 +124,7 @@ func newInstallCommand() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
 			}
 			if built.WebBasePath != "" && built.WebBasePath != "/" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
+				fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
 			}
 			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
 				Platform:        installer.CurrentPlatform(),
@@ -168,15 +168,8 @@ func newInstallCommand() *cobra.Command {
 			for _, path := range result.WrittenFiles {
 				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
 			}
-		fmt.Fprintln(cmd.OutOrStdout())
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel: https://%s%s\n", built.Domain, built.WebBasePath)
-		fmt.Fprintf(cmd.OutOrStdout(), "Username: %s\n", built.Username)
-		if built.InstallNaive && built.NaivePassword != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "NaiveProxy password: %s\n", built.NaivePassword)
-		}
-		if built.InstallHysteria2 && built.Hysteria2Password != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Hysteria2 password: %s\n", built.Hysteria2Password)
-		}
+			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprint(cmd.OutOrStdout(), installCredentialSummary(built))
 			if err := writeAuditInstall(auditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
 				return fmt.Errorf("audit log write failed after successful install: %w", err)
 			}
