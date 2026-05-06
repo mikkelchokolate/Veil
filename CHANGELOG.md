@@ -2,6 +2,19 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.5] — 2026-05-06
+
+### Added
+
+- `ClientProfileCatalog` Module for Client profile password generation, preservation, and enabled filtering
+- Simple Panel controls for adding Client profiles without hand-writing JSON
+- Renderer support for multiple NaiveProxy and Hysteria2 users from Client profiles
+
+### Changed
+
+- Client links and Generated config set now use Client profiles end-to-end
+- Client profile passwords are encrypted at rest by the State store
+
 ## [v0.3.4] — 2026-05-06
 
 ### Added
