@@ -951,66 +951,15 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	plan := s.buildApplyPlanLocked()
-	if !plan.Valid {
-		writeJSONStatus(w, http.StatusBadRequest, ApplyResponse{Applied: false, Plan: plan})
-		return
-	}
-	if !req.Confirm {
-		writeError(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
-		return
-	}
-	if req.ApplyServices && !req.ApplyLive {
-		writeJSONStatus(w, http.StatusBadRequest, ApplyResponse{Applied: false, Plan: plan})
-		return
-	}
-	written, validations, renderedPaths, err := s.writeApplyStageLocked(plan)
+	response, status, err := NewApplyWorkflow(s).RunLocked(req)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, err.Error(), status)
 		return
 	}
-	response := ApplyResponse{Applied: true, Plan: plan, WrittenFiles: written, Validations: validations}
-	if req.ApplyLive {
-		if err := requirePassedValidations(validations); err != nil {
-			_ = s.appendApplyHistoryLocked("validation", false, response)
-			writeJSONStatus(w, http.StatusBadRequest, response)
-			return
-		}
-		liveFiles, backupFiles, promotionRecords, err := s.promoteStagedConfigsLocked(renderedPaths)
-		if err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		response.LiveApplied = true
-		response.LiveFiles = liveFiles
-		response.BackupFiles = backupFiles
-		if req.ApplyServices {
-			serviceActions := s.reloadPromotedServicesLocked(liveFiles)
-			response.ServiceActions = serviceActions
-			if err := requireSuccessfulServiceActions(serviceActions); err != nil {
-				rollbackFiles, rollbackActions := s.rollbackPromotedConfigsLocked(promotionRecords, liveFiles)
-				response.RolledBack = len(rollbackFiles) > 0
-				response.RollbackFiles = rollbackFiles
-				response.RollbackActions = rollbackActions
-				_ = s.appendApplyHistoryLocked("rollback", false, response)
-				writeJSONStatus(w, http.StatusBadRequest, response)
-				return
-			}
-			healthChecks := checkServiceHealth(serviceActions)
-			response.HealthChecks = healthChecks
-			if err := requireHealthyServices(healthChecks); err != nil {
-				rollbackFiles, rollbackActions := s.rollbackPromotedConfigsLocked(promotionRecords, liveFiles)
-				response.RolledBack = len(rollbackFiles) > 0
-				response.RollbackFiles = rollbackFiles
-				response.RollbackActions = rollbackActions
-				_ = s.appendApplyHistoryLocked("rollback", false, response)
-				writeJSONStatus(w, http.StatusBadRequest, response)
-				return
-			}
-			response.ServicesApplied = len(serviceActions) > 0
-		}
+	if status != http.StatusOK {
+		writeJSONStatus(w, status, response)
+		return
 	}
-	_ = s.appendApplyHistoryLocked(applyHistoryStage(response), true, response)
 	writeJSON(w, response)
 }
 
