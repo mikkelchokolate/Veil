@@ -2,6 +2,16 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.7] — 2026-05-06
+
+### Changed
+
+- Deepened the Panel Module by extracting Inbound and Client profile form slices from the giant HTML string
+- Centralized State store secret policy so encrypted fields are transformed through one Module
+- Centralized Client profile credential projection for Client links and Generated config set rendering
+- Added an Apply workflow state seam with a fake Adapter test
+- Extracted Inbound management mutation/persistence ordering from HTTP handlers
+
 ## [v0.3.6] — 2026-05-06
 
 ### Fixed
