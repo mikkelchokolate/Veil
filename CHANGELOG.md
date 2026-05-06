@@ -2,6 +2,12 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.14] — 2026-05-06
+
+### Changed
+
+- Extracted Promoted service reload mapping and execution into its own Module
+
 ## [v0.3.13] — 2026-05-06
 
 ### Changed
