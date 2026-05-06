@@ -27,6 +27,52 @@ func TestInboundCatalogCreatesInboundWithGeneratedPassword(t *testing.T) {
 	}
 }
 
+func TestInboundCatalogCreatesClientProfilesWithGeneratedPasswords(t *testing.T) {
+	catalog := NewInboundCatalogWithPasswordGenerator(nil, func() string { return "generated-pass" })
+
+	created, _, err := catalog.Create(Inbound{
+		Name:      "naive",
+		Protocol:  "naiveproxy",
+		Transport: "tcp",
+		Port:      443,
+		Enabled:   true,
+		Profiles: []ClientProfile{
+			{Name: "alice", Username: "alice", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got := created.Profiles[0].Password; got != "generated-pass" {
+		t.Fatalf("generated profile password = %q", got)
+	}
+}
+
+func TestInboundCatalogUpdatePreservesClientProfilePasswordWhenEmpty(t *testing.T) {
+	catalog := NewInboundCatalogWithPasswordGenerator([]Inbound{{
+		Name:      "naive",
+		Protocol:  "naiveproxy",
+		Transport: "tcp",
+		Port:      443,
+		Enabled:   true,
+		Profiles:  []ClientProfile{{Name: "alice", Username: "alice", Password: "existing-pass", Enabled: true}},
+	}}, func() string { return "generated-pass" })
+
+	updated, _, err := catalog.Update("naive", Inbound{
+		Protocol:  "naiveproxy",
+		Transport: "tcp",
+		Port:      443,
+		Enabled:   true,
+		Profiles:  []ClientProfile{{Name: "alice", Username: "alice", Enabled: true}},
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got := updated.Profiles[0].Password; got != "existing-pass" {
+		t.Fatalf("preserved profile password = %q", got)
+	}
+}
+
 func TestInboundCatalogUpdatePreservesPasswordWhenEmpty(t *testing.T) {
 	catalog := NewInboundCatalogWithPasswordGenerator([]Inbound{{
 		Name:      "hy2-vip",
