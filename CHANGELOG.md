@@ -2,6 +2,15 @@
 
 All notable changes to Veil will be documented in this file.
 
+## [v0.3.0] — 2026-05-06
+
+### Added
+
+- Auto-generated random web base path for the panel (`/a1b2c3d4e5f6/`) — hides the panel from casual scanners
+- `VEIL_WEB_BASE_PATH` written to `/etc/veil/veil.env` during install, picked up automatically by `veil serve`
+- Interactive install now shows the full panel URL (`https://domain.com/a1b2c3d4e5f6/`)
+- Interactive install confirmation prompt (`Apply install plan? [y/N]`) instead of requiring `--yes`
+
 ## [v0.2.1] — 2026-05-05
 
 ### Added

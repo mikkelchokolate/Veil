@@ -137,3 +137,29 @@ func TestBuildRURecommendedProfileRejectsMissingDomain(t *testing.T) {
 		t.Fatalf("expected missing domain error")
 	}
 }
+
+func TestBuildRURecommendedProfileGeneratesWebBasePath(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
+		Secret:       func(label string) string { return "secret-" + label },
+		RandomPort:   func() int { return 31874 },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if profile.WebBasePath == "" {
+		t.Fatalf("expected WebBasePath to be generated")
+	}
+	if profile.WebBasePath == "/" {
+		t.Fatalf("expected WebBasePath to be a random path, not /")
+	}
+	if profile.WebBasePath[0] != '/' || profile.WebBasePath[len(profile.WebBasePath)-1] != '/' {
+		t.Fatalf("WebBasePath must start and end with /, got: %s", profile.WebBasePath)
+	}
+	// 9 random bytes → 12 base64url chars + 2 slashes = 14 chars
+	if len(profile.WebBasePath) != 14 {
+		t.Fatalf("expected WebBasePath length 14 (/ + 12 base64url + /), got %d: %s", len(profile.WebBasePath), profile.WebBasePath)
+	}
+}

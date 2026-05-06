@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strings"
@@ -48,6 +50,7 @@ type RURecommendedProfile struct {
 	NaivePassword      string
 	Hysteria2Password  string
 	PanelAuthToken     string
+	WebBasePath        string
 	Stack              Stack
 	InstallNaive       bool
 	InstallHysteria2   bool
@@ -125,6 +128,8 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		hysteriaClientURI = hysteria2URI(hysteriaPassword, input.Domain, plan.Port)
 	}
 
+	webBasePath := generateWebBasePath()
+
 	return RURecommendedProfile{
 		Domain:             input.Domain,
 		Email:              input.Email,
@@ -132,6 +137,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		NaivePassword:      naivePassword,
 		Hysteria2Password:  hysteriaPassword,
 		PanelAuthToken:     panelAuthToken,
+		WebBasePath:        webBasePath,
 		Stack:              stack,
 		InstallNaive:       installNaive,
 		InstallHysteria2:   installHysteria2,
@@ -164,4 +170,15 @@ func hysteria2URI(password, domain string, port int) string {
 	q.Set("insecure", "0")
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// generateWebBasePath creates a random 12-character base64url string
+// formatted as a web base path (e.g. "/a1b2c3d4e5f6/").
+func generateWebBasePath() string {
+	buf := make([]byte, 9)
+	if _, err := rand.Read(buf); err != nil {
+		// Fallback: use a fixed path if crypto/rand fails
+		return "/veil-panel/"
+	}
+	return "/" + base64.RawURLEncoding.EncodeToString(buf) + "/"
 }

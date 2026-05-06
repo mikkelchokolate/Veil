@@ -122,6 +122,9 @@ func newInstallCommand() *cobra.Command {
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
 			}
+			if built.WebBasePath != "" && built.WebBasePath != "/" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
+			}
 			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
 				Platform:        installer.CurrentPlatform(),
 				HysteriaVersion: "v2.6.0",
@@ -138,7 +141,18 @@ func newInstallCommand() *cobra.Command {
 				return nil
 			}
 			if !yes {
-				return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
+				if interactive {
+					fmt.Fprint(cmd.OutOrStdout(), "Apply install plan? [y/N]: ")
+					answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+					if err != nil {
+						return fmt.Errorf("read confirmation: %w", err)
+					}
+					if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+						return fmt.Errorf("install cancelled")
+					}
+				} else {
+					return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
+				}
 			}
 			actualBackupDir := backupDir
 			if !cmd.Flags().Changed("backup-dir") {

@@ -156,7 +156,11 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"), Content: profile.Hysteria2YAML, Mode: 0o600})
 	}
 	if profile.PanelAuthToken != "" {
-		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: "VEIL_API_TOKEN=" + profile.PanelAuthToken + "\n", Mode: 0o600})
+		envContent := "VEIL_API_TOKEN=" + profile.PanelAuthToken + "\n"
+		if profile.WebBasePath != "" && profile.WebBasePath != "/" {
+			envContent += "VEIL_WEB_BASE_PATH=" + profile.WebBasePath + "\n"
+		}
+		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o600})
 	}
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
