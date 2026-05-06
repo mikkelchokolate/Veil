@@ -152,3 +152,25 @@ func TestRenderNaiveCaddyfileNormalizesPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderNaiveCaddyfileWithPanelReverseProxy(t *testing.T) {
+	cfg, err := RenderNaiveCaddyfile(NaiveConfig{
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		ListenPort:   443,
+		Username:     "alice",
+		Password:     "secret",
+		FallbackRoot: "/var/lib/veil/www",
+		PanelPort:    2096,
+		WebBasePath:  "/a1b2c3d4e5f6/",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(cfg, "reverse_proxy 127.0.0.1:2096") {
+		t.Fatalf("Caddyfile missing reverse_proxy:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "handle_path /a1b2c3d4e5f6/*") {
+		t.Fatalf("Caddyfile missing handle_path for web base path:\n%s", cfg)
+	}
+}

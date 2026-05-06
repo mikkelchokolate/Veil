@@ -16,6 +16,8 @@ type NaiveConfig struct {
 	Username     string
 	Password     string
 	FallbackRoot string
+	PanelPort    int
+	WebBasePath  string
 }
 
 func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
@@ -59,6 +61,13 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 
   root * {{ .FallbackRoot }}
   file_server
+{{- if .PanelPort }}
+{{ if .WebBasePath }}
+  handle_path {{ .WebBasePath }}* {
+    reverse_proxy 127.0.0.1:{{ .PanelPort }}
+  }
+{{- end }}
+{{- end }}
 }
 `
 	var out bytes.Buffer
