@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/veil-panel/veil/internal/firewall"
-	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
 )
@@ -307,80 +306,24 @@ func (s *managementState) register(mux *http.ServeMux) {
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	management := NewSettingsManagement(&s.settings, s.saveLocked)
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, redactedSettings(s.settings))
+		writeJSON(w, management.Get())
 	case http.MethodPut:
 		var settings Settings
 		if !decodeJSONRequest(w, r, &settings) {
 			return
 		}
-		if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {
-			writeError(w, "panelListen, stack, and mode are required", http.StatusBadRequest)
+		updated, err := management.Update(settings)
+		if err != nil {
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if settings.Stack != "naive" && settings.Stack != "hysteria2" && settings.Stack != "both" {
-			writeError(w, "stack must be naive, hysteria2, or both", http.StatusBadRequest)
-			return
-		}
-		// Validate optional settings fields when present.
-		if settings.Domain != "" {
-			if err := installer.ValidateDomain(settings.Domain); err != nil {
-				writeError(w, "domain: "+err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-		if settings.Email != "" {
-			if err := installer.ValidateEmail(settings.Email); err != nil {
-				writeError(w, "email: "+err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-		if settings.PanelListen != "" {
-			host, _, err := net.SplitHostPort(settings.PanelListen)
-			if err != nil || host == "" {
-				writeError(w, "panelListen must be host:port", http.StatusBadRequest)
-				return
-			}
-		}
-		if settings.NaivePassword == "[REDACTED]" {
-			settings.NaivePassword = s.settings.NaivePassword
-		}
-		if settings.Hysteria2Password == "[REDACTED]" {
-			settings.Hysteria2Password = s.settings.Hysteria2Password
-		}
-		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
-		if settings.FallbackRoot != "" {
-			settings.FallbackRoot = filepath.Clean(settings.FallbackRoot)
-			// Use ToSlash for platform-independent path manipulation.
-			if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
-				settings.FallbackRoot = filepath.Clean("/var/lib/veil/" + settings.FallbackRoot)
-			}
-			if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
-				writeError(w, "fallbackRoot must be within /var/lib/veil", http.StatusBadRequest)
-				return
-			}
-		}
-		s.settings = settings
-		if err := s.saveLocked(); err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, redactedSettings(s.settings))
+		writeJSON(w, updated)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut)
 	}
-}
-
-func redactedSettings(settings Settings) Settings {
-	redacted := settings
-	if redacted.NaivePassword != "" {
-		redacted.NaivePassword = "[REDACTED]"
-	}
-	if redacted.Hysteria2Password != "" {
-		redacted.Hysteria2Password = "[REDACTED]"
-	}
-	return redacted
 }
 
 func redactedWarp(warp WarpConfig) WarpConfig {
