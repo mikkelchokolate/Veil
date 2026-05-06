@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/api"
+	"github.com/veil-panel/veil/internal/secrets"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 const serveDrainTimeout = 5 * time.Second
@@ -27,6 +30,9 @@ func newServeCommand(version string) *cobra.Command {
 	var keyPath string
 	var tlsCert string
 	var tlsKey string
+	var webBasePath string
+	var autoTLS bool
+	var autoTLSDir string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
@@ -41,8 +47,17 @@ func newServeCommand(version string) *cobra.Command {
 			resolvedStatePath, stateSource := resolveServeStatePath(statePath)
 			resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(applyRoot)
 			resolvedKeyPath, keySource := resolveServeKeyPath(keyPath)
+			resolvedWebBasePath, _ := resolveServeWebBasePath(webBasePath)
 			tlsEnabled, tlsSource := resolveServeTLS(tlsCert, tlsKey)
-			server, stateReloader := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, tlsCert, tlsKey)
+			if autoTLS && !tlsEnabled {
+				autoTLSEnabled, autoTLSErr := resolveServeAutoTLS(autoTLS, autoTLSDir, resolvedStatePath, resolvedKeyPath)
+				if autoTLSErr != nil {
+					return fmt.Errorf("auto-tls: %w", autoTLSErr)
+				}
+				tlsEnabled = autoTLSEnabled
+				tlsSource = "auto-tls (Let's Encrypt)"
+			}
+			server, stateReloader := newServeHTTPServer(listen, version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, tlsCert, tlsKey, resolvedWebBasePath)
 			tlsLabel := "http"
 			if tlsEnabled {
 				tlsLabel = "https"
@@ -55,6 +70,9 @@ func newServeCommand(version string) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "TLS: enabled (%s)\n", tlsSource)
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "TLS: disabled")
+			}
+			if resolvedWebBasePath != "/" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Web base path: %s\n", resolvedWebBasePath)
 			}
 			if tokenSource == "disabled" {
 				fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
@@ -113,11 +131,14 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file path; enables HTTPS when both --tls-cert and --tls-key are provided")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file path; enables HTTPS when both --tls-cert and --tls-key are provided")
+	cmd.Flags().StringVar(&webBasePath, "web-base-path", "", "base path prefix for the web panel (e.g. /secret/); defaults to VEIL_WEB_BASE_PATH or /")
+	cmd.Flags().BoolVar(&autoTLS, "auto-tls", false, "auto-obtain Let's Encrypt TLS certificate using domain/email from state; requires state with domain and email set")
+	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or /var/lib/veil/autocert")
 	return cmd
 }
 
-func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string) (*http.Server, api.Reloader) {
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath})
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string, webBasePath string) (*http.Server, api.Reloader) {
+	handler, reloader := api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath, WebBasePath: webBasePath})
 	srv := &http.Server{
 		Addr:              listen,
 		Handler:           handler,
@@ -128,7 +149,20 @@ func newServeHTTPServer(listen string, version string, authToken string, statePa
 		MaxHeaderBytes:    1 << 20,
 	}
 	if tlsEnabled {
-		srv.TLSConfig = newServeTLSConfig()
+		if tlsCert == "" && tlsKey == "" && autoTLSDomain != "" {
+			// Auto-TLS via Let's Encrypt (autocert).
+			mgr := &autocert.Manager{
+				Cache:      autocert.DirCache(autoTLSCacheDir),
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(autoTLSDomain),
+				Email:      autoTLSEmail,
+			}
+			tlsCfg := newServeTLSConfig()
+			tlsCfg.GetCertificate = mgr.GetCertificate
+			srv.TLSConfig = tlsCfg
+		} else {
+			srv.TLSConfig = newServeTLSConfig()
+		}
 	}
 	return srv, reloader
 }
@@ -231,6 +265,92 @@ func resolveServeKeyPath(flagValue string) (path string, source string) {
 		return path, "VEIL_KEY_PATH"
 	}
 	return "/etc/veil/state.key", "default"
+}
+
+// resolveServeWebBasePath resolves the web base path from flag or env var.
+func resolveServeWebBasePath(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return cleanWebBasePath(path), "--web-base-path"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_WEB_BASE_PATH")); path != "" {
+		return cleanWebBasePath(path), "VEIL_WEB_BASE_PATH"
+	}
+	return "/", "default"
+}
+
+// cleanWebBasePath ensures the path starts and ends with /.
+func cleanWebBasePath(path string) string {
+	path = "/" + strings.Trim(path, "/")
+	if path == "" {
+		path = "/"
+	}
+	path += "/"
+	return path
+}
+
+// resolveServeAutoTLS determines whether auto-TLS (Let's Encrypt) should be used.
+// Reads domain and email from the state file settings.
+func resolveServeAutoTLS(autoTLS bool, autoTLSDir string, statePath string, keyPath string) (enabled bool, err error) {
+	if !autoTLS && strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS")) == "" {
+		return false, nil
+	}
+	// Read state file to extract domain and email from settings.
+	domain, email, err := readSettingsFromState(statePath, keyPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read state for auto-tls: %w", err)
+	}
+	if domain == "" {
+		return false, fmt.Errorf("auto-tls requires domain in state settings; set domain via API or veil install")
+	}
+	if email == "" {
+		return false, fmt.Errorf("auto-tls requires email in state settings; set email via API or veil install")
+	}
+	if autoTLSDir == "" {
+		autoTLSDir = strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS_DIR"))
+	}
+	if autoTLSDir == "" {
+		autoTLSDir = "/var/lib/veil/autocert"
+	}
+	// Store resolved values so newServeHTTPServer can use them.
+	autoTLSDomain = domain
+	autoTLSEmail = email
+	autoTLSCacheDir = autoTLSDir
+	return true, nil
+}
+
+// Package-level variables set by resolveServeAutoTLS and used by newServeHTTPServer.
+var autoTLSDomain, autoTLSEmail, autoTLSCacheDir string
+
+// stateSnapshot is a minimal struct to extract domain and email from state JSON.
+type stateSnapshot struct {
+	Settings struct {
+		Domain string `json:"domain"`
+		Email  string `json:"email"`
+	} `json:"settings"`
+}
+
+// readSettingsFromState reads domain and email from the management state file.
+func readSettingsFromState(statePath, keyPath string) (domain, email string, err error) {
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		return "", "", fmt.Errorf("read state file %s: %w", statePath, err)
+	}
+	// Try to decrypt if encryption key is available.
+	if keyPath != "" {
+		key, keyErr := secrets.LoadOrCreateKey(keyPath)
+		if keyErr == nil {
+			if ciph, ciphErr := secrets.NewCipher(*key); ciphErr == nil {
+				if decrypted, decErr := ciph.Decrypt(string(data)); decErr == nil {
+					data = []byte(decrypted)
+				}
+			}
+		}
+	}
+	var snapshot stateSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return "", "", fmt.Errorf("parse state JSON: %w", err)
+	}
+	return snapshot.Settings.Domain, snapshot.Settings.Email, nil
 }
 
 // resolveServeTLS determines whether TLS should be enabled.

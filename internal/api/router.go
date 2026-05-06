@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -21,12 +22,13 @@ import (
 )
 
 type ServerInfo struct {
-	Version   string
-	Mode      string
-	AuthToken string
-	StatePath string
-	ApplyRoot string
-	KeyPath   string
+	Version     string
+	Mode        string
+	AuthToken   string
+	StatePath   string
+	ApplyRoot   string
+	KeyPath     string
+	WebBasePath string
 }
 
 type StatusResponse struct {
@@ -97,6 +99,10 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	mux := http.NewServeMux()
 	state := newManagementState(info)
 	metrics := NewMetricsCollector()
+	basePath := info.WebBasePath
+	if basePath == "" {
+		basePath = "/"
+	}
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
 	mux.HandleFunc("/api/system", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -220,7 +226,7 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("Origin-Agent-Cluster", "?1")
 		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(panelHTML))
+			_, _ = w.Write([]byte(panelHTML(basePath)))
 		}
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -420,10 +426,37 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 		}
 		writeJSON(w, result)
 	})
-	rateLimited := rateLimitMiddleware(metrics, mux)
+	// Wrap the mux to strip the web base path prefix from incoming requests.
+	var handler http.Handler = mux
+	if basePath != "/" {
+		handler = stripBasePathMiddleware(basePath, mux)
+	}
+	rateLimited := rateLimitMiddleware(metrics, handler)
 	authenticated := authMiddleware(info.AuthToken, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	return metrics.MetricsMiddleware(secured), state
+}
+
+// stripBasePathMiddleware removes the base path prefix from request URL before routing.
+func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, prefix[:len(prefix)-1]) {
+			// Strip prefix: /secret/foo → /foo
+			stripped := strings.TrimPrefix(r.URL.Path, prefix[:len(prefix)-1])
+			if stripped == "" {
+				stripped = "/"
+			}
+			r2 := new(http.Request)
+			*r2 = *r
+			r2.URL = new(url.URL)
+			*r2.URL = *r.URL
+			r2.URL.Path = stripped
+			next.ServeHTTP(w, r2)
+			return
+		}
+		// Path doesn't match base path — reject with 404.
+		writeNotFound(w)
+	})
 }
 
 // securityHeadersMiddleware adds baseline security headers to every response.
