@@ -1261,13 +1261,11 @@ func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]strin
 	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
 		return nil, nil, nil, err
 	}
-	snapshot := s.snapshotLocked()
-	s.encryptSnapshot(&snapshot)
-	snapshotBody, err := json.MarshalIndent(snapshot, "", "  ")
+	snapshotBody, err := NewStateStore("", s.cipher).Marshal(s.snapshotLocked())
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := writeAtomicFile(statePath, append(snapshotBody, '\n'), 0o600); err != nil {
+	if err := writeAtomicFile(statePath, snapshotBody, 0o600); err != nil {
 		return nil, nil, nil, err
 	}
 	written := []string{planPath, statePath}
@@ -1678,55 +1676,11 @@ func (s *managementState) snapshotLocked() managementSnapshot {
 }
 
 func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
-	if s.cipher == nil {
-		return
-	}
-	if v := snapshot.Settings.NaivePassword; v != "" && !secrets.IsEncrypted(v) {
-		if enc, err := s.cipher.Encrypt(v); err == nil {
-			snapshot.Settings.NaivePassword = enc
-		}
-	}
-	if v := snapshot.Settings.Hysteria2Password; v != "" && !secrets.IsEncrypted(v) {
-		if enc, err := s.cipher.Encrypt(v); err == nil {
-			snapshot.Settings.Hysteria2Password = enc
-		}
-	}
-	if v := snapshot.Warp.LicenseKey; v != "" && !secrets.IsEncrypted(v) {
-		if enc, err := s.cipher.Encrypt(v); err == nil {
-			snapshot.Warp.LicenseKey = enc
-		}
-	}
-	if v := snapshot.Warp.PrivateKey; v != "" && !secrets.IsEncrypted(v) {
-		if enc, err := s.cipher.Encrypt(v); err == nil {
-			snapshot.Warp.PrivateKey = enc
-		}
-	}
+	NewStateStore("", s.cipher).encryptSnapshot(snapshot)
 }
 
 func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
-	if s.cipher == nil {
-		return
-	}
-	if v := snapshot.Settings.NaivePassword; v != "" {
-		if dec, err := s.cipher.Decrypt(v); err == nil {
-			snapshot.Settings.NaivePassword = dec
-		}
-	}
-	if v := snapshot.Settings.Hysteria2Password; v != "" {
-		if dec, err := s.cipher.Decrypt(v); err == nil {
-			snapshot.Settings.Hysteria2Password = dec
-		}
-	}
-	if v := snapshot.Warp.LicenseKey; v != "" {
-		if dec, err := s.cipher.Decrypt(v); err == nil {
-			snapshot.Warp.LicenseKey = dec
-		}
-	}
-	if v := snapshot.Warp.PrivateKey; v != "" {
-		if dec, err := s.cipher.Decrypt(v); err == nil {
-			snapshot.Warp.PrivateKey = dec
-		}
-	}
+	NewStateStore("", s.cipher).decryptSnapshot(snapshot)
 }
 
 func defaultApplyRoot(root string) string {
@@ -1748,21 +1702,13 @@ func writeAtomicFile(path string, body []byte, mode os.FileMode) error {
 }
 
 func (s *managementState) load() error {
-	if s.statePath == "" {
+	snapshot, ok, err := NewStateStore(s.statePath, s.cipher).Load()
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
-	body, err := os.ReadFile(s.statePath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	var snapshot managementSnapshot
-	if err := json.Unmarshal(body, &snapshot); err != nil {
-		return err
-	}
-	s.decryptSnapshot(&snapshot)
 	if snapshot.Settings.PanelListen != "" {
 		s.settings = snapshot.Settings
 	}
@@ -1816,23 +1762,7 @@ func (s *managementState) Reload() error {
 }
 
 func (s *managementState) saveLocked() error {
-	if s.statePath == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(s.statePath), 0o700); err != nil {
-		return err
-	}
-	snapshot := s.snapshotLocked()
-	s.encryptSnapshot(&snapshot)
-	body, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.statePath + ".tmp"
-	if err := os.WriteFile(tmp, append(body, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.statePath)
+	return NewStateStore(s.statePath, s.cipher).Save(s.snapshotLocked())
 }
 
 type firewallRuleResponse struct {
