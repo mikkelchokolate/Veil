@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -708,52 +707,19 @@ func (s *managementState) appendApplyHistoryLocked(stage string, success bool, r
 }
 
 func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
-	stageDir := filepath.Join(s.applyRoot, "generated", "veil")
-	planPath := filepath.Join(stageDir, "apply-plan.json")
-	statePath := filepath.Join(stageDir, "management-state.json")
-	planBody, err := json.MarshalIndent(plan, "", "  ")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
-		return nil, nil, nil, err
-	}
-	snapshotBody, err := NewStateStore("", s.cipher).Marshal(s.snapshotLocked())
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if err := writeAtomicFile(statePath, snapshotBody, 0o600); err != nil {
-		return nil, nil, nil, err
-	}
-	written := []string{planPath, statePath}
 	rendered, err := s.renderManagementConfigsLocked()
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	renderedPaths := make([]string, 0, len(rendered))
-	for path := range rendered {
-		renderedPaths = append(renderedPaths, path)
-	}
-	sort.Strings(renderedPaths)
-	for _, path := range renderedPaths {
-		if err := writeAtomicFile(path, []byte(rendered[path]), 0o600); err != nil {
-			return nil, nil, nil, err
-		}
-		written = append(written, path)
-	}
-	for _, file := range s.routingSource.Files {
-		body, err := fetchVerifiedRouteDatFile(file)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		path := filepath.Join(s.applyRoot, "generated", "rules", file.Name)
-		if err := writeAtomicFile(path, body, 0o600); err != nil {
-			return nil, nil, nil, err
-		}
-		written = append(written, path)
-	}
-	validations := stagedConfigValidator(renderedPaths)
-	return written, validations, renderedPaths, nil
+	return WriteApplyStage(ApplyStageInput{
+		ApplyRoot:     s.applyRoot,
+		Cipher:        s.cipher,
+		Plan:          plan,
+		Snapshot:      s.snapshotLocked(),
+		Rendered:      rendered,
+		RoutingSource: s.routingSource,
+		Validate:      stagedConfigValidator,
+	})
 }
 
 func requirePassedValidations(validations []ConfigValidationResult) error {
