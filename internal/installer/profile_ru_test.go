@@ -163,3 +163,40 @@ func TestBuildRURecommendedProfileGeneratesWebBasePath(t *testing.T) {
 		t.Fatalf("expected WebBasePath length 14 (/ + 12 base64url + /), got %d: %s", len(profile.WebBasePath), profile.WebBasePath)
 	}
 }
+
+func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyfile(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
+		Secret:       func(label string) string { return "secret-" + label },
+		RandomPort:   func() int { return 31874 },
+		PanelPort:    2096,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(profile.Caddyfile, "reverse_proxy 127.0.0.1:2096") {
+		t.Fatalf("Caddyfile missing reverse_proxy for panel port:\n%s", profile.Caddyfile)
+	}
+	if !strings.Contains(profile.Caddyfile, "handle_path /"+strings.Trim(profile.WebBasePath, "/")+"/*") {
+		t.Fatalf("Caddyfile missing handle_path for web base path %s:\n%s", profile.WebBasePath, profile.Caddyfile)
+	}
+}
+
+func TestBuildRURecommendedProfileNoPanelReverseProxyWhenPanelPortZero(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		Domain:       "example.com",
+		Email:        "admin@example.com",
+		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
+		Secret:       func(label string) string { return "secret-" + label },
+		RandomPort:   func() int { return 31874 },
+		PanelPort:    0,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(profile.Caddyfile, "reverse_proxy") {
+		t.Fatalf("Caddyfile should not contain reverse_proxy when PanelPort is 0:\n%s", profile.Caddyfile)
+	}
+}

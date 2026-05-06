@@ -41,6 +41,7 @@ type RURecommendedInput struct {
 	Availability PortAvailability
 	Secret       SecretFunc
 	RandomPort   func() int
+	PanelPort    int
 }
 
 type RURecommendedProfile struct {
@@ -91,6 +92,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 	username := "veil"
 	masqueradeURL := "https://www.bing.com/"
 	fallbackRoot := "/var/lib/veil/www"
+	webBasePath := generateWebBasePath()
 	var naivePassword string
 	var hysteriaPassword string
 	panelAuthToken := input.Secret("panel")
@@ -108,6 +110,8 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 			Username:     username,
 			Password:     naivePassword,
 			FallbackRoot: fallbackRoot,
+			PanelPort:    input.PanelPort,
+			WebBasePath:  webBasePath,
 		})
 		if err != nil {
 			return RURecommendedProfile{}, err
@@ -127,8 +131,6 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 		}
 		hysteriaClientURI = hysteria2URI(hysteriaPassword, input.Domain, plan.Port)
 	}
-
-	webBasePath := generateWebBasePath()
 
 	return RURecommendedProfile{
 		Domain:             input.Domain,
