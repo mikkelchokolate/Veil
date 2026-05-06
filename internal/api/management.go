@@ -1484,60 +1484,25 @@ func isAllowedHealthService(service string) bool {
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
-	configs := map[string]string{}
-	if s.hasRenderSettingsLocked() {
-		for _, inbound := range s.inbounds {
-			if !inbound.Enabled || !stackIncludesProtocol(s.settings.Stack, inbound.Protocol) {
-				continue
-			}
-			switch inbound.Protocol {
-			case "naiveproxy":
-				body, err := s.renderNaiveConfigLocked(inbound)
-				if err != nil {
-					return nil, err
-				}
-				configs[filepath.Join(s.applyRoot, "generated", "caddy", "Caddyfile")] = body
-			case "hysteria2":
-				body, err := s.renderHysteria2ConfigLocked(inbound)
-				if err != nil {
-					return nil, err
-				}
-				configs[filepath.Join(s.applyRoot, "generated", "hysteria2", "server.yaml")] = body
-			}
-		}
-	}
-	if s.warp.Enabled {
-		body, err := s.renderWarpConfigLocked()
-		if err != nil {
-			return nil, err
-		}
-		configs[filepath.Join(s.applyRoot, "generated", "sing-box", "warp.json")] = body
-	}
-	return configs, nil
+	return BuildGeneratedConfigSet(GeneratedConfigInput{
+		ApplyRoot: s.applyRoot,
+		Settings:  s.settings,
+		Inbounds:  s.inbounds,
+		Rules:     s.rules,
+		Warp:      s.warp,
+	})
 }
 
 func (s *managementState) hasRenderSettingsLocked() bool {
-	return s.settings.Domain != "" || s.settings.Email != "" || s.settings.NaiveUsername != "" || s.settings.NaivePassword != "" || s.settings.Hysteria2Password != "" || s.settings.MasqueradeURL != "" || s.settings.FallbackRoot != ""
+	return hasRenderSettings(s.settings)
 }
 
 func (s *managementState) renderNaiveConfigLocked(inbound Inbound) (string, error) {
-	return renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
-		Domain:       s.settings.Domain,
-		Email:        s.settings.Email,
-		ListenPort:   inbound.Port,
-		Username:     s.settings.NaiveUsername,
-		Password:     s.settings.NaivePassword,
-		FallbackRoot: s.settings.FallbackRoot,
-	})
+	return renderNaiveGeneratedConfig(s.settings, inbound)
 }
 
 func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, error) {
-	return renderer.RenderHysteria2(renderer.Hysteria2Config{
-		ListenPort:    inbound.Port,
-		Domain:        s.settings.Domain,
-		Password:      s.settings.Hysteria2Password,
-		MasqueradeURL: s.settings.MasqueradeURL,
-	})
+	return renderHysteria2GeneratedConfig(s.settings, inbound)
 }
 
 func (s *managementState) renderWarpConfigLocked() (string, error) {
