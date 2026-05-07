@@ -9,14 +9,10 @@ func NewClientLinkStackPolicy(stack string) ClientLinkStackPolicy {
 }
 
 func (p ClientLinkStackPolicy) Allows(protocol string) bool {
-	switch p.stack {
-	case "naive":
-		return protocol == "naiveproxy"
-	case "hysteria2":
-		return protocol == "hysteria2"
-	default:
+	if p.stack == "" || p.stack == "unknown" {
 		return true
 	}
+	return NewStackProtocolPolicy(p.stack).Includes(protocol)
 }
 
 func stackAllowsProtocol(stack string, protocol string) bool {

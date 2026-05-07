@@ -13,6 +13,10 @@ func TestClientLinkStackPolicyAllowsExpectedProtocols(t *testing.T) {
 		{"hysteria2", "hysteria2", true},
 		{"hysteria2", "naiveproxy", false},
 		{"both", "naiveproxy", true},
+		{"both", "mieru", true},
+		{"mieru", "mieru", true},
+		{"mieru", "naiveproxy", false},
+		{"panel", "mieru", false},
 		{"", "hysteria2", true},
 		{"unknown", "naiveproxy", true},
 	}
