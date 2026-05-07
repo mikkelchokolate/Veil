@@ -52,17 +52,7 @@ __VEIL_PANEL_DIAGNOSTICS_CARDS__
   <script>
 __VEIL_PANEL_INTRO_ACTIONS__
 
-    function parseReserved(value) {
-      if (!value.trim()) {
-        return [];
-      }
-      return value.split(',').map((part) => Number(part.trim())).filter((value) => Number.isInteger(value));
-    }
-
-    function numberOrZero(id) {
-      const value = document.getElementById(id).value;
-      return value === '' ? 0 : Number(value);
-    }
+__VEIL_PANEL_UTILITY_ACTIONS__
 
 __VEIL_PANEL_SETTINGS_ACTIONS__
 
@@ -78,36 +68,11 @@ __VEIL_PANEL_WARP_ACTIONS__
 
 __VEIL_PANEL_ROUTING_ACTIONS__
 
-    document.querySelectorAll('[data-load]').forEach((button) => {
-      button.addEventListener('click', () => loadJSON(button.dataset.load, button.dataset.output));
-    });
-    document.getElementById('settings-form').addEventListener('submit', saveSettings);
-    document.getElementById('load-settings').addEventListener('click', loadSettingsIntoForm);
-    document.getElementById('load-service-status').addEventListener('click', loadServiceStatus);
 __VEIL_PANEL_SERVICE_RESTART_ACTIONS__
 __VEIL_PANEL_RUNTIME_STATS_ACTIONS__
-    document.getElementById('load-client-links').addEventListener('click', loadClientLinks);
-    document.getElementById('load-client-subscription').addEventListener('click', loadClientSubscription);
-    document.getElementById('load-client-subscription-raw').addEventListener('click', loadRawClientSubscription);
-    document.getElementById('download-client-subscription').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=base64', 'veil-subscription.txt'));
-    document.getElementById('download-client-subscription-raw').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=raw', 'veil-subscription-raw.txt'));
-    document.getElementById('copy-client-links').addEventListener('click', copyClientLinksOutput);
-    document.getElementById('inbound-form').addEventListener('submit', saveInbound);
-    document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
-    document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
-    document.getElementById('routing-rule-form').addEventListener('submit', saveRoutingRule);
-    document.getElementById('delete-routing-rule').addEventListener('click', deleteRoutingRule);
-    document.getElementById('apply-routing-preset').addEventListener('click', applyRoutingPreset);
-    document.getElementById('warp-form').addEventListener('submit', saveWarpConfig);
-    document.getElementById('load-warp-config').addEventListener('click', loadWarpIntoForm);
-
 __VEIL_PANEL_APPLY_ACTIONS__
-
 __VEIL_PANEL_DIAGNOSTICS_ACTIONS__
-
-    // Auto-load settings and service status on panel open.
-    loadSettingsIntoForm();
-    loadServiceStatus();
+__VEIL_PANEL_EVENT_BINDINGS__
   </script>
 </body>
 </html>
