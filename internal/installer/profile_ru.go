@@ -1,11 +1,6 @@
 package installer
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/veil-panel/veil/internal/renderer"
-)
+import "github.com/veil-panel/veil/internal/renderer"
 
 type SecretFunc func(label string) string
 
@@ -16,19 +11,6 @@ const (
 	StackNaive     Stack = "naive"
 	StackHysteria2 Stack = "hysteria2"
 )
-
-func normalizeStack(stack Stack) (normalized Stack, installNaive bool, installHysteria2 bool, err error) {
-	switch Stack(strings.TrimSpace(string(stack))) {
-	case "", StackBoth:
-		return StackBoth, true, true, nil
-	case StackNaive:
-		return StackNaive, true, false, nil
-	case StackHysteria2:
-		return StackHysteria2, false, true, nil
-	default:
-		return "", false, false, fmt.Errorf("unsupported stack %q", stack)
-	}
-}
 
 type RURecommendedInput struct {
 	Domain       string
@@ -65,12 +47,7 @@ type RURecommendedProfileModule struct {
 	input RURecommendedInput
 }
 
-type ruRecommendedStackPolicy struct {
-	Stack            Stack
-	InstallNaive     bool
-	InstallHysteria2 bool
-}
-
+type ruRecommendedStackPolicy = RURecommendedStackPolicy
 type ruRecommendedNaiveArtifacts struct {
 	Password  string
 	Caddyfile string
@@ -167,7 +144,7 @@ func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPo
 	if err != nil {
 		return ruRecommendedStackPolicy{}, err
 	}
-	return ruRecommendedStackPolicy{Stack: normalized, InstallNaive: installNaive, InstallHysteria2: installHysteria2}, nil
+	return RURecommendedStackPolicy{Stack: normalized, InstallNaive: installNaive, InstallHysteria2: installHysteria2}, nil
 }
 
 func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRecommendedStackPolicy) (SharedPortPlan, error) {
