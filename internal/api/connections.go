@@ -30,24 +30,6 @@ func readListeningSockets(path, proto string) ([]ConnectionListener, error) {
 	return newConnectionDiscoveryWithSource(fileConnectionSource{path: path}).listeningSockets(proto)
 }
 
-func parseHexAddress(hex string) (addr string, port int) {
-	parts := strings.Split(hex, ":")
-	if len(parts) != 2 {
-		return "", 0
-	}
-	// Parse hex IP (little-endian)
-	ipHex, err := strconv.ParseUint(parts[0], 16, 32)
-	if err != nil {
-		return "", 0
-	}
-	addr = fmt.Sprintf("%d.%d.%d.%d", byte(ipHex), byte(ipHex>>8), byte(ipHex>>16), byte(ipHex>>24))
-	port64, err := strconv.ParseUint(parts[1], 16, 16)
-	if err != nil {
-		return addr, 0
-	}
-	return addr, int(port64)
-}
-
 func findProcessByPort(proto string, port int) string {
 	inode := findInodeByPort(proto, fmt.Sprintf("%04X", port))
 	if inode == "" {
