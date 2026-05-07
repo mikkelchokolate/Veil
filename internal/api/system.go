@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"os"
 	"strconv"
 	"strings"
@@ -100,30 +99,9 @@ func readCPUTicks() (idle, total uint64) {
 }
 
 func (procSystemStatsSource) CPUTicks() (idle, total uint64) {
-	f, err := os.Open("/proc/stat")
+	data, err := os.ReadFile("/proc/stat")
 	if err != nil {
 		return 0, 0
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "cpu ") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			return 0, 0
-		}
-		for i := 1; i < len(fields); i++ {
-			v, _ := strconv.ParseUint(fields[i], 10, 64)
-			total += v
-			if i == 4 { // idle is the 4th field (0-indexed: 4)
-				idle = v
-			}
-		}
-		return idle, total
-	}
-	return 0, 0
+	return NewCPUTicksParser().Parse(string(data))
 }
