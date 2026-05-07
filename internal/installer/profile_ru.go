@@ -1,7 +1,5 @@
 package installer
 
-import "github.com/veil-panel/veil/internal/renderer"
-
 type SecretFunc func(label string) string
 
 type Stack string
@@ -149,15 +147,5 @@ func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan 
 }
 
 func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, plan SharedPortPlan, masqueradeURL string) (ruRecommendedHysteriaArtifacts, error) {
-	password := input.Secret("hysteria2")
-	yaml, err := renderer.RenderHysteria2(renderer.Hysteria2Config{
-		ListenPort:    plan.Port,
-		Domain:        input.Domain,
-		Password:      password,
-		MasqueradeURL: masqueradeURL,
-	})
-	if err != nil {
-		return ruRecommendedHysteriaArtifacts{}, err
-	}
-	return ruRecommendedHysteriaArtifacts{Password: password, ServerYAML: yaml, ClientURI: hysteria2URI(password, input.Domain, plan.Port)}, nil
+	return NewRURecommendedHysteriaArtifacts().Build(input, plan, RURecommendedDefaults{MasqueradeURL: masqueradeURL})
 }
