@@ -53,9 +53,7 @@ func (c InboundCatalog) Create(inbound Inbound) (Inbound, InboundCatalog, error)
 	if c.hasTransportPort(inbound.Transport, inbound.Port, -1) {
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
-	if inbound.Password == "" && len(inbound.Profiles) == 0 {
-		inbound.Password = c.passwordGenerate()
-	}
+	NewInboundPasswordPolicy(c.passwordGenerate).ApplyCreate(&inbound)
 	c.fillMissingProfilePasswords(&inbound, nil)
 	next := NewInboundCatalogWithPasswordGenerator(append(c.List(), inbound), c.passwordGenerate)
 	return inbound, next, nil
@@ -73,9 +71,7 @@ func (c InboundCatalog) Update(name string, update Inbound) (Inbound, InboundCat
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
 	update.Name = name
-	if update.Password == "" {
-		update.Password = c.inbounds[idx].Password
-	}
+	NewInboundPasswordPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx])
 	c.fillMissingProfilePasswords(&update, c.inbounds[idx].Profiles)
 	nextInbounds := c.List()
 	nextInbounds[idx] = update
