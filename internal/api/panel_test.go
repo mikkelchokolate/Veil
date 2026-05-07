@@ -114,6 +114,22 @@ func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
 	}
 }
 
+func TestPanelSettingsActionsModuleRendersLoadAndSaveActions(t *testing.T) {
+	actions := panelSettingsActionsJS()
+	for _, want := range []string{
+		`async function loadSettingsIntoForm()`,
+		`async function saveSettings(event)`,
+		`/api/settings`,
+		`settings-naive-password`,
+		`hysteria2Password`,
+		`fallbackRoot`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Settings actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
 	card := panelSettingsCardHTML()
 	for _, want := range []string{
