@@ -81,16 +81,7 @@ func readProcessCPU(pid int, uptimeSec int64) float64 {
 	if !ok {
 		return 0
 	}
-	totalTicks := stat.UserTicks + stat.SystemTicks
-	clkTck := int64(100) // sysconf(_SC_CLK_TCK) = 100
-	if uptimeSec <= 0 {
-		return 0
-	}
-	seconds := uptimeSec - stat.StartTimeTicks/clkTck
-	if seconds <= 0 {
-		return 0
-	}
-	return float64(totalTicks) / float64(clkTck) / float64(seconds) * 100
+	return NewProcessCPUUsage(100).Percent(stat, uptimeSec)
 }
 
 func readProcessUptime(pid int, systemUptime int64) int64 {
