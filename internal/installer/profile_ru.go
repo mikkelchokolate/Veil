@@ -1,8 +1,6 @@
 package installer
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strings"
@@ -231,15 +229,4 @@ func hysteria2URI(password, domain string, port int) string {
 	q.Set("insecure", "0")
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-// generateWebBasePath creates a random 12-character base64url string
-// formatted as a web base path (e.g. "/a1b2c3d4e5f6/").
-func generateWebBasePath() string {
-	buf := make([]byte, 9)
-	if _, err := rand.Read(buf); err != nil {
-		// Fallback: use a fixed path if crypto/rand fails
-		return "/veil-panel/"
-	}
-	return "/" + base64.RawURLEncoding.EncodeToString(buf) + "/"
 }
