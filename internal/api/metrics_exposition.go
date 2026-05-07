@@ -41,14 +41,14 @@ func (e MetricsExposition) Render() string {
 	b = append(b, "# HELP veil_http_requests_by_code_total HTTP requests by status code.\n"...)
 	b = append(b, "# TYPE veil_http_requests_by_code_total counter\n"...)
 	m.requestsByCode.Range(func(key, value any) bool {
-		b = append(b, fmt.Sprintf("veil_http_requests_by_code_total{code=\"%s\"} %d\n", key.(string), value.(*atomic.Int64).Load())...)
+		b = append(b, fmt.Sprintf("veil_http_requests_by_code_total{code=\"%s\"} %d\n", PrometheusLabelValue(key.(string)), value.(*atomic.Int64).Load())...)
 		return true
 	})
 
 	b = append(b, "# HELP veil_http_requests_by_path_total HTTP requests by method and path.\n"...)
 	b = append(b, "# TYPE veil_http_requests_by_path_total counter\n"...)
 	m.requestsByPath.Range(func(key, value any) bool {
-		b = append(b, fmt.Sprintf("veil_http_requests_by_path_total{path=\"%s\"} %d\n", key.(string), value.(*atomic.Int64).Load())...)
+		b = append(b, fmt.Sprintf("veil_http_requests_by_path_total{path=\"%s\"} %d\n", PrometheusLabelValue(key.(string)), value.(*atomic.Int64).Load())...)
 		return true
 	})
 
@@ -57,7 +57,7 @@ func (e MetricsExposition) Render() string {
 		b = append(b, "# HELP veil_service_status Service active status (1=active, 0=inactive).\n"...)
 		b = append(b, "# TYPE veil_service_status gauge\n"...)
 		for name, val := range m.serviceStatus {
-			b = append(b, fmt.Sprintf("veil_service_status{service=\"%s\"} %g\n", name, val)...)
+			b = append(b, fmt.Sprintf("veil_service_status{service=\"%s\"} %g\n", PrometheusLabelValue(name), val)...)
 		}
 	}
 	m.statusMu.RUnlock()
