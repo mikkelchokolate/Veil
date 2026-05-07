@@ -55,6 +55,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 					plan.Errors = append(plan.Errors, err.Error())
 				}
 			}
+		case "mieru":
+			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/mieru/server_config.json")
+			plan.Actions = appendUnique(plan.Actions, "reload veil-mieru.service")
 		default:
 			if inbound.Protocol != "" {
 				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
