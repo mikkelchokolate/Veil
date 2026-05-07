@@ -1,9 +1,6 @@
 package api
 
-import (
-	"net/http"
-	"strings"
-)
+import "net/http"
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
@@ -30,8 +27,8 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/api/routing/rules/")
-	if name == "" || strings.Contains(name, "/") {
+	name, ok := NewManagementResourceName("/api/routing/rules/").Parse(r.URL.Path)
+	if !ok {
 		writeNotFound(w)
 		return
 	}
@@ -80,8 +77,8 @@ func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Re
 }
 
 func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/api/routing/presets/")
-	if name == "" || strings.Contains(name, "/") {
+	name, ok := NewManagementResourceName("/api/routing/presets/").Parse(r.URL.Path)
+	if !ok {
 		writeNotFound(w)
 		return
 	}
