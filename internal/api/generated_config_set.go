@@ -26,7 +26,14 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 			}
 		}
 	}
-	artifact, ok, err := NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
+	artifact, ok, err := NewGeneratedMieruConfigRenderer(input.Settings, paths).Render(input.Inbounds)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		configs[artifact.Path] = artifact.Body
+	}
+	artifact, ok, err = NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
 	if err != nil {
 		return nil, err
 	}
