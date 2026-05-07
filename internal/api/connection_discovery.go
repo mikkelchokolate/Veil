@@ -68,11 +68,7 @@ func (ConnectionDiscovery) FindProcessByPort(proto string, port int) string {
 type procConnectionSource struct{}
 
 func (procConnectionSource) SocketLines(proto string) ([]string, error) {
-	path := "/proc/net/" + proto
-	if proto == "tcp" {
-		path = "/proc/net/tcp"
-	}
-	return readLines(path)
+	return readLines(NewConnectionProcSocketPath().ForProtocol(proto))
 }
 
 func (procConnectionSource) ProcessByPort(proto string, port int) string {

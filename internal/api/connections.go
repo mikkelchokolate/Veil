@@ -57,11 +57,7 @@ func findProcessByPort(proto string, port int) string {
 }
 
 func findInodeByPort(proto, hexPort string) string {
-	path := "/proc/net/" + proto
-	if proto == "tcp" {
-		path = "/proc/net/tcp"
-	}
-	f, err := os.Open(path)
+	f, err := os.Open(NewConnectionProcSocketPath().ForProtocol(proto))
 	if err != nil {
 		return ""
 	}
