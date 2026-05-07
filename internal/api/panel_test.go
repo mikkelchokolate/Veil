@@ -180,6 +180,24 @@ func TestPanelClientLinksCardModuleRendersCredentialDisclosureControls(t *testin
 	}
 }
 
+func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`function applyHistoryPath()`,
+		`async function loadApplyHistory()`,
+		`build-apply-plan`,
+		`apply-staged-files`,
+		`apply-live-configs`,
+		`reload-services`,
+		`load-apply-history`,
+		`applyServices: true`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Apply actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	card := panelApplyCardHTML()
 	for _, want := range []string{

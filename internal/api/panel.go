@@ -139,28 +139,6 @@ __VEIL_PANEL_DIAGNOSTICS_CARDS__
       await loadJSON('/api/inbounds', 'inbounds-output');
     }
 
-    function applyHistoryPath() {
-      const params = new URLSearchParams();
-      const stage = document.getElementById('apply-history-stage').value;
-      const success = document.getElementById('apply-history-success').value;
-      const limit = document.getElementById('apply-history-limit').value;
-      if (stage) {
-        params.set('stage', stage);
-      }
-      if (success) {
-        params.set('success', success);
-      }
-      if (limit) {
-        params.set('limit', limit);
-      }
-      const query = params.toString();
-      return '/api/apply/history?' + query;
-    }
-
-    async function loadApplyHistory() {
-      await loadJSON(applyHistoryPath(), 'apply-plan-output');
-    }
-
 __VEIL_PANEL_SERVICE_STATUS_ACTIONS__
 
 __VEIL_PANEL_CLIENT_LINKS_ACTIONS__
@@ -356,35 +334,7 @@ __VEIL_PANEL_CLIENT_PROFILE_ACTIONS__
     document.getElementById('warp-form').addEventListener('submit', saveWarpConfig);
     document.getElementById('load-warp-config').addEventListener('click', loadWarpIntoForm);
 
-    document.getElementById('build-apply-plan').addEventListener('click', async () => {
-      await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
-    });
-
-    document.getElementById('apply-staged-files').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true })
-      });
-    });
-
-    document.getElementById('apply-live-configs').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, applyLive: true })
-      });
-    });
-
-    document.getElementById('reload-services').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, applyLive: true, applyServices: true })
-      });
-    });
-
-    document.getElementById('load-apply-history').addEventListener('click', loadApplyHistory);
+__VEIL_PANEL_APPLY_ACTIONS__
 
     document.getElementById('run-speedtest').addEventListener('click', async () => {
       await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
