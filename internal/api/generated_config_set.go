@@ -2,8 +2,6 @@ package api
 
 import (
 	"fmt"
-	"path/filepath"
-
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
@@ -20,6 +18,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		return nil, err
 	}
 	configs := map[string]string{}
+	paths := NewGeneratedConfigPaths(input.ApplyRoot)
 	if hasRenderSettings(input.Settings) {
 		for _, inbound := range input.Inbounds {
 			if !inbound.Enabled || !stackIncludesProtocol(input.Settings.Stack, inbound.Protocol) {
@@ -31,13 +30,13 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 				if err != nil {
 					return nil, err
 				}
-				configs[filepath.Join(input.ApplyRoot, "generated", "caddy", "Caddyfile")] = body
+				configs[paths.Caddyfile()] = body
 			case "hysteria2":
 				body, err := renderHysteria2GeneratedConfig(input.Settings, inbound)
 				if err != nil {
 					return nil, err
 				}
-				configs[filepath.Join(input.ApplyRoot, "generated", "hysteria2", "server.yaml")] = body
+				configs[paths.Hysteria2()] = body
 			}
 		}
 	}
@@ -58,7 +57,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		if err != nil {
 			return nil, err
 		}
-		configs[filepath.Join(input.ApplyRoot, "generated", "sing-box", "warp.json")] = body
+		configs[paths.Warp()] = body
 	}
 	return configs, nil
 }
