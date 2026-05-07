@@ -21,5 +21,11 @@ func panelServiceRestartActionsJS() string {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ confirm: true })
       });
+    });
+    document.getElementById('restart-mieru').addEventListener('click', async () => {
+      await loadJSON('/api/services/mieru/restart', 'service-status-output', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true })
+      });
     });`
 }

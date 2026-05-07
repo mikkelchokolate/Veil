@@ -15,6 +15,7 @@ func TestPanelServiceStatusCardModuleRendersOperationalControls(t *testing.T) {
 		`id="restart-veil"`,
 		`id="restart-caddy"`,
 		`id="restart-hysteria2"`,
+		`id="restart-mieru"`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("Service status card missing %q", want)
@@ -31,6 +32,8 @@ func TestPanelServiceRestartActionsModuleRendersRestartActions(t *testing.T) {
 		`/api/services/caddy/restart`,
 		`restart-hysteria2`,
 		`/api/services/hysteria2/restart`,
+		`restart-mieru`,
+		`/api/services/mieru/restart`,
 		`confirm: true`,
 	} {
 		if !strings.Contains(actions, want) {
