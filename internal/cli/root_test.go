@@ -181,7 +181,7 @@ func TestCompareVersions(t *testing.T) {
 		{"1.0.0", "1.0.0", 0},
 		{"2.0.0", "1.9.9", 1},
 		{"v0.1.0-alpha", "v0.1.0", 0}, // non-numeric parts treated as 0
-		{"dev", "v0.1.0", -1},          // non-semver shorter than semver
+		{"dev", "v0.1.0", -1},         // non-semver shorter than semver
 	}
 	for _, tt := range tests {
 		got := compareVersions(tt.a, tt.b)
