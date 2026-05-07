@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -68,14 +67,9 @@ func (l BackupLifecycle) BackupExisting(paths []string) (string, error) {
 		})
 	}
 
-	// Write manifest
-	manifestData, err := json.Marshal(manifest)
-	if err != nil {
-		return "", fmt.Errorf("marshal manifest: %w", err)
-	}
 	manifestPath := filepath.Join(backupPath, "manifest.json")
-	if err := os.WriteFile(manifestPath, manifestData, 0o600); err != nil {
-		return "", fmt.Errorf("write manifest: %w", err)
+	if err := NewBackupManifestStore(manifestPath).Save(manifest); err != nil {
+		return "", err
 	}
 
 	return backupID, nil
@@ -94,19 +88,13 @@ func (l BackupLifecycle) Restore(backupID string) ([]string, error) {
 		return nil, fmt.Errorf("backup %s is not a directory", backupID)
 	}
 
-	// Read manifest
 	manifestPath := filepath.Join(backupPath, "manifest.json")
-	manifestData, err := os.ReadFile(manifestPath)
+	manifest, err := NewBackupManifestStore(manifestPath).Load()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("manifest not found in backup %s", backupID)
 		}
-		return nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	var manifest backupManifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, fmt.Errorf("unmarshal manifest: %w", err)
+		return nil, err
 	}
 
 	// Collect existing original files to create a safety backup before overwriting
