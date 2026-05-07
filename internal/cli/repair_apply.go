@@ -22,7 +22,7 @@ func applyRepairPlan(cmd *cobra.Command, plan installer.RepairPlan, opts repairW
 		for _, action := range plan.Actions {
 			paths = append(paths, action.Path)
 		}
-		id, err := installer.BackupBeforeApply(paths, actualBackupDir)
+		id, err := installer.NewBackupLifecycle(actualBackupDir).BackupExisting(paths)
 		if err != nil {
 			_ = writeAuditRepair(opts.AuditLog, "", false, err.Error(), nil)
 			return err

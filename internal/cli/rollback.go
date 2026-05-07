@@ -24,7 +24,7 @@ func newRollbackCommand() *cobra.Command {
 			if backupDir == "" {
 				return fmt.Errorf("--backup-dir is required")
 			}
-			ids, err := installer.ListBackups(backupDir)
+			ids, err := installer.NewBackupLifecycle(backupDir).List()
 			if err != nil {
 				return err
 			}
@@ -51,7 +51,7 @@ func newRollbackCommand() *cobra.Command {
 				return fmt.Errorf("restore requires --yes to confirm")
 			}
 			backupID := args[0]
-			restored, err := installer.RestoreFromBackup(backupDir, backupID)
+			restored, err := installer.NewBackupLifecycle(backupDir).Restore(backupID)
 			if err != nil {
 				writeAuditRestore(auditLog, backupID, false, err.Error(), nil)
 				return err
@@ -79,7 +79,7 @@ func newRollbackCommand() *cobra.Command {
 				return fmt.Errorf("cleanup requires --yes to confirm")
 			}
 			backupID := args[0]
-			if err := installer.CleanupBackup(backupDir, backupID); err != nil {
+			if err := installer.NewBackupLifecycle(backupDir).Cleanup(backupID); err != nil {
 				_ = writeAuditCleanup(auditLog, backupID, false, err.Error())
 				return err
 			}
