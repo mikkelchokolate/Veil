@@ -56,18 +56,6 @@ func requireHealthyServices(checks []ServiceHealthResult) error {
 	return nil
 }
 
-func requireSuccessfulServiceActions(actions []ServiceActionResult) error {
-	for _, action := range actions {
-		if !action.Success {
-			if action.Error != "" {
-				return errors.New(action.Error)
-			}
-			return fmt.Errorf("%s service action failed", action.Name)
-		}
-	}
-	return nil
-}
-
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
 	return s.managementConfigRendererLocked().Render()
 }
