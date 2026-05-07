@@ -145,21 +145,7 @@ func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRec
 }
 
 func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan SharedPortPlan, username, fallbackRoot, webBasePath string) (ruRecommendedNaiveArtifacts, error) {
-	password := input.Secret("naive")
-	caddyfile, err := renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
-		Domain:       input.Domain,
-		Email:        input.Email,
-		ListenPort:   plan.Port,
-		Username:     username,
-		Password:     password,
-		FallbackRoot: fallbackRoot,
-		PanelPort:    input.PanelPort,
-		WebBasePath:  webBasePath,
-	})
-	if err != nil {
-		return ruRecommendedNaiveArtifacts{}, err
-	}
-	return ruRecommendedNaiveArtifacts{Password: password, Caddyfile: caddyfile, ClientURL: naiveURL(username, password, input.Domain, plan.Port)}, nil
+	return NewRURecommendedNaiveArtifacts().Build(input, plan, RURecommendedDefaults{Username: username, FallbackRoot: fallbackRoot}, webBasePath)
 }
 
 func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, plan SharedPortPlan, masqueradeURL string) (ruRecommendedHysteriaArtifacts, error) {
