@@ -13,6 +13,8 @@ type RURecommendedStackPolicy struct {
 
 func NewRURecommendedStackPolicy(stack Stack) (RURecommendedStackPolicy, error) {
 	switch Stack(strings.TrimSpace(string(stack))) {
+	case StackPanel:
+		return RURecommendedStackPolicy{Stack: StackPanel}, nil
 	case "", StackBoth:
 		return RURecommendedStackPolicy{Stack: StackBoth, InstallNaive: true, InstallHysteria2: true}, nil
 	case StackNaive:

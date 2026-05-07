@@ -5,6 +5,7 @@ type SecretFunc func(label string) string
 type Stack string
 
 const (
+	StackPanel     Stack = "panel"
 	StackBoth      Stack = "both"
 	StackNaive     Stack = "naive"
 	StackHysteria2 Stack = "hysteria2"
@@ -68,15 +69,17 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
-	if err := ValidateDomain(input.Domain); err != nil {
-		return RURecommendedProfile{}, err
-	}
-	if err := ValidateEmail(input.Email); err != nil {
-		return RURecommendedProfile{}, err
-	}
 	stack, err := m.stackPolicy(input.Stack)
 	if err != nil {
 		return RURecommendedProfile{}, err
+	}
+	if stack.InstallNaive || stack.InstallHysteria2 {
+		if err := ValidateDomain(input.Domain); err != nil {
+			return RURecommendedProfile{}, err
+		}
+		if err := ValidateEmail(input.Email); err != nil {
+			return RURecommendedProfile{}, err
+		}
 	}
 	plan, err := m.portPlan(input, stack)
 	if err != nil {
@@ -87,7 +90,10 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	username := defaults.Username
 	masqueradeURL := defaults.MasqueradeURL
 	fallbackRoot := defaults.FallbackRoot
-	webBasePath := generateWebBasePath()
+	webBasePath := ""
+	if stack.InstallNaive {
+		webBasePath = generateWebBasePath()
+	}
 	panelAuthToken := input.Secret("panel")
 	naive := ruRecommendedNaiveArtifacts{}
 	hysteria := ruRecommendedHysteriaArtifacts{}
