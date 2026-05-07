@@ -81,10 +81,6 @@ func validateGeneratedConfigInboundCardinality(settings Settings, inbounds []Inb
 	return nil
 }
 
-func hasRenderSettings(settings Settings) bool {
-	return settings.Domain != "" || settings.Email != "" || settings.NaiveUsername != "" || settings.NaivePassword != "" || settings.Hysteria2Password != "" || settings.MasqueradeURL != "" || settings.FallbackRoot != ""
-}
-
 func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, error) {
 	password := inbound.Password
 	if password == "" {
