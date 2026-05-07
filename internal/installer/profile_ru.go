@@ -148,11 +148,7 @@ func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPo
 }
 
 func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRecommendedStackPolicy) (SharedPortPlan, error) {
-	plan := PlanStackPort(input.Availability, []int{443, 8443}, input.RandomPort, stack.InstallNaive, stack.InstallHysteria2)
-	if input.Port <= 0 {
-		return plan, nil
-	}
-	return PlanExplicitStackPort(input.Availability, input.Port, stack.InstallNaive, stack.InstallHysteria2)
+	return NewRURecommendedPortPolicy(input.Availability, input.RandomPort).Plan(input.Port, stack)
 }
 
 func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan SharedPortPlan, username, fallbackRoot, webBasePath string) (ruRecommendedNaiveArtifacts, error) {
