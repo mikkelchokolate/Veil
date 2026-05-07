@@ -18,10 +18,7 @@ func panelInboundFormHTML() string {
             <div>
               <label for="inbound-protocol">Protocol</label>
               <select id="inbound-protocol">
-                <option value="naiveproxy">naiveproxy</option>
-                <option value="hysteria2">hysteria2</option>
-                <option value="mieru">mieru</option>
-              </select>
+` + panelInboundProtocolOptionsHTML() + `              </select>
             </div>
             <div>
               <label for="inbound-transport">Transport</label>
