@@ -40,6 +40,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		seen[key] = true
 		switch inbound.Protocol {
 		case "naiveproxy":
+			if err := NewNaiveCaddySettingsRequirement().Validate(input.Settings); err != nil {
+				plan.Errors = append(plan.Errors, err.Error())
+			}
 			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
 			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
 			if input.RenderSettingsAvailable && input.ValidateInboundRender != nil {

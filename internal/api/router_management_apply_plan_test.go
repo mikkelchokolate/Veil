@@ -84,7 +84,7 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 func TestManagementApplyPlanHonorsSelectedStack(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev"},
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
