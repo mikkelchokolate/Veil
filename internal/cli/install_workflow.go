@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -111,17 +110,8 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		return nil
 	}
 	if !opts.Yes {
-		if opts.Interactive {
-			fmt.Fprint(cmd.OutOrStdout(), "Apply install plan? [y/N]: ")
-			answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("read confirmation: %w", err)
-			}
-			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-				return fmt.Errorf("install cancelled")
-			}
-		} else {
-			return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
+		if err := confirmInstallPlan(cmd, opts.Interactive); err != nil {
+			return err
 		}
 	}
 	actualBackupDir := opts.BackupDir
