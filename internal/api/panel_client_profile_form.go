@@ -74,6 +74,7 @@ func renderPanelHTMLBase() string {
 	replacer := strings.NewReplacer(
 		panelClientProfileControlsPlaceholder, panelClientProfileControlsHTML(),
 		panelClientProfileActionsPlaceholder, panelClientProfileActionsJS(),
+		panelClientLinksActionsPlaceholder, panelClientLinksActionsJS(),
 	)
 	return replacer.Replace(html)
 }

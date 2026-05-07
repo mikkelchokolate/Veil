@@ -131,6 +131,23 @@ func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
 	}
 }
 
+func TestPanelClientLinksActionsModuleRendersCredentialDisclosureActions(t *testing.T) {
+	actions := panelClientLinksActionsJS()
+	for _, want := range []string{
+		`async function loadClientLinks()`,
+		`async function loadClientSubscription()`,
+		`async function loadRawClientSubscription()`,
+		`async function copyClientLinksOutput()`,
+		`async function downloadClientSubscriptionPath(path, filename)`,
+		`navigator.clipboard.writeText`,
+		`URL.createObjectURL`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Client links actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientLinksCardModuleRendersCredentialDisclosureControls(t *testing.T) {
 	card := panelClientLinksCardHTML()
 	for _, want := range []string{
