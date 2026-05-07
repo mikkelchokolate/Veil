@@ -78,6 +78,7 @@ func renderPanelHTMLBase() string {
 		panelServiceStatusActionsPlaceholder, panelServiceStatusActionsJS(),
 		panelApplyActionsPlaceholder, panelApplyActionsJS(),
 		panelSettingsActionsPlaceholder, panelSettingsActionsJS(),
+		panelInboundActionsPlaceholder, panelInboundActionsJS(),
 	)
 	return replacer.Replace(html)
 }

@@ -231,6 +231,23 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	}
 }
 
+func TestPanelInboundActionsModuleRendersInboundManagementActions(t *testing.T) {
+	actions := panelInboundActionsJS()
+	for _, want := range []string{
+		`async function loadInboundsIntoOutput()`,
+		`function randomPassword()`,
+		`function genInboundPassword()`,
+		`async function saveInbound(event)`,
+		`async function deleteInbound()`,
+		`payload.profiles`,
+		`/api/inbounds`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Inbound actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing.T) {
 	form := panelInboundFormHTML()
 	for _, want := range []string{
