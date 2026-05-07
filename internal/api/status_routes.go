@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 type StatusResponse struct {
@@ -68,17 +67,10 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	command := NewSystemdServiceStatusCommand(unit)
+	ctx, cancel := context.WithTimeout(context.Background(), command.Timeout())
 	defer cancel()
-	output, err := exec.CommandContext(ctx,
-		"systemctl",
-		"show",
-		unit,
-		"--property=LoadState",
-		"--property=ActiveState",
-		"--property=SubState",
-		"--no-page",
-	).CombinedOutput()
+	output, err := exec.CommandContext(ctx, command.Name(), command.Args()...).CombinedOutput()
 	status := NewSystemdServiceStatusParser().Parse(unit, string(output))
 	if err != nil {
 		status.Error = strings.TrimSpace(string(output))
