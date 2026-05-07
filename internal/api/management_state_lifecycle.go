@@ -1,5 +1,11 @@
 package api
 
+import (
+	"fmt"
+
+	"github.com/veil-panel/veil/internal/secrets"
+)
+
 type ManagementStateLifecycle struct {
 	state *managementState
 }
@@ -32,6 +38,26 @@ func (l ManagementStateLifecycle) Load() error {
 		return nil
 	}
 	ApplyManagementSnapshot(l.state, snapshot)
+	return nil
+}
+
+func (l ManagementStateLifecycle) ReloadLocked() error {
+	if l.state.keyPath != "" {
+		key, err := secrets.LoadOrCreateKey(l.state.keyPath)
+		if err != nil {
+			return fmt.Errorf("reload key: %w", err)
+		}
+		cipher, err := secrets.NewCipher(*key)
+		if err != nil {
+			return fmt.Errorf("reload cipher: %w", err)
+		}
+		l.state.cipher = cipher
+	}
+	if l.state.statePath != "" {
+		if err := l.Load(); err != nil {
+			return fmt.Errorf("reload state: %w", err)
+		}
+	}
 	return nil
 }
 

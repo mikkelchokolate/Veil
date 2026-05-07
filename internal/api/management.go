@@ -191,27 +191,7 @@ func (s *managementState) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Reload encryption key
-	if s.keyPath != "" {
-		key, err := secrets.LoadOrCreateKey(s.keyPath)
-		if err != nil {
-			return fmt.Errorf("reload key: %w", err)
-		}
-		cipher, err := secrets.NewCipher(*key)
-		if err != nil {
-			return fmt.Errorf("reload cipher: %w", err)
-		}
-		s.cipher = cipher
-	}
-
-	// Reload state from disk
-	if s.statePath != "" {
-		if err := s.load(); err != nil {
-			return fmt.Errorf("reload state: %w", err)
-		}
-	}
-
-	return nil
+	return NewManagementStateLifecycle(s).ReloadLocked()
 }
 
 func (s *managementState) saveLocked() error {
