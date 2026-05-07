@@ -1,15 +1,10 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os/exec"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -125,93 +120,9 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	}
 }
 
-const veilGitHubReleasesAPI = "https://api.github.com/repos/mikkelchokolate/Veil/releases/latest"
-
-var versionCheckClient = &http.Client{Timeout: 10 * time.Second}
-
 // checkLatestVersion fetches the latest Veil release tag from GitHub and
 // compares it against the current version. It prints a human-readable
 // comparison and returns an error only on network/parse failures.
 func checkLatestVersion(cmd *cobra.Command, current string) error {
-	out := cmd.OutOrStdout()
-	latest, err := fetchLatestReleaseTag()
-	if err != nil {
-		return fmt.Errorf("update check failed: %w", err)
-	}
-	if latest == "" {
-		fmt.Fprintln(out, "No releases found on GitHub.")
-		return nil
-	}
-	cmp := compareVersions(current, latest)
-	switch {
-	case cmp < 0:
-		fmt.Fprintf(out, "Newer release available: %s → %s\n", current, latest)
-		fmt.Fprintf(out, "Download: https://github.com/mikkelchokolate/Veil/releases/tag/%s\n", latest)
-	case cmp > 0:
-		fmt.Fprintf(out, "Running a version newer than the latest release (%s > %s).\n", current, latest)
-	default:
-		fmt.Fprintf(out, "Veil is up to date (%s).\n", current)
-	}
-	return nil
-}
-
-// fetchLatestReleaseTag queries the GitHub API for the latest release tag.
-func fetchLatestReleaseTag() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, veilGitHubReleasesAPI, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "veil")
-	resp, err := versionCheckClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch releases: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
-	if err != nil {
-		return "", err
-	}
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.Unmarshal(body, &release); err != nil {
-		return "", fmt.Errorf("parse release JSON: %w", err)
-	}
-	return release.TagName, nil
-}
-
-// compareVersions compares two semantic version strings (possibly prefixed with 'v').
-// Returns -1 if a < b, 1 if a > b, 0 if equal.
-// Non-semver strings are compared lexicographically.
-func compareVersions(a, b string) int {
-	a = strings.TrimPrefix(a, "v")
-	b = strings.TrimPrefix(b, "v")
-	partsA := strings.Split(a, ".")
-	partsB := strings.Split(b, ".")
-	maxLen := len(partsA)
-	if len(partsB) > maxLen {
-		maxLen = len(partsB)
-	}
-	for i := 0; i < maxLen; i++ {
-		var va, vb int
-		if i < len(partsA) {
-			fmt.Sscanf(partsA[i], "%d", &va)
-		}
-		if i < len(partsB) {
-			fmt.Sscanf(partsB[i], "%d", &vb)
-		}
-		if va < vb {
-			return -1
-		}
-		if va > vb {
-			return 1
-		}
-	}
-	return 0
+	return NewVersionCheck(current, cmd.OutOrStdout()).Run()
 }
