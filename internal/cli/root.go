@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -124,41 +123,6 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	if !hasOptional {
 		fmt.Fprintln(out, "- none")
 	}
-}
-
-func buildDoctorSummary(version string) doctorSummary {
-	summary := doctorSummary{
-		Version: version,
-		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
-		Ready:   true,
-	}
-	required := []string{"caddy", "hysteria", "sing-box", "systemctl"}
-	optional := []string{"ufw"}
-
-	for _, name := range required {
-		status := doctorCommandStatus{Name: name}
-		path, err := commandLookPath(name)
-		if err == nil {
-			status.Path = path
-			status.Present = true
-		} else {
-			status.Error = err.Error()
-			summary.Ready = false
-		}
-		summary.Commands = append(summary.Commands, status)
-	}
-	for _, name := range optional {
-		status := doctorCommandStatus{Name: name, Optional: true}
-		path, err := commandLookPath(name)
-		if err == nil {
-			status.Path = path
-			status.Present = true
-		} else {
-			status.Error = err.Error()
-		}
-		summary.Commands = append(summary.Commands, status)
-	}
-	return summary
 }
 
 const veilGitHubReleasesAPI = "https://api.github.com/repos/mikkelchokolate/Veil/releases/latest"
