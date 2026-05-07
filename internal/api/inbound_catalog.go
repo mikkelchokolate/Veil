@@ -113,20 +113,6 @@ func (c InboundCatalog) hasTransportPort(transport string, port int, exceptIndex
 	return false
 }
 
-func validateInboundForCreate(inbound Inbound) error {
-	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
-		return ErrInboundInvalid
-	}
-	return nil
-}
-
-func validateInboundForUpdate(inbound Inbound) error {
-	if inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
-		return ErrInboundInvalid
-	}
-	return nil
-}
-
 func cloneInbounds(inbounds []Inbound) []Inbound {
 	out := make([]Inbound, len(inbounds))
 	copy(out, inbounds)
