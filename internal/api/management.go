@@ -168,14 +168,7 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {
-	return BuildManagementSnapshot(ManagementSnapshotInput{
-		Settings:      s.settings,
-		Inbounds:      s.inbounds,
-		Rules:         s.rules,
-		RoutingPreset: s.routingPreset,
-		RoutingSource: s.routingSource,
-		Warp:          s.warp,
-	})
+	return NewManagementStateLifecycle(s).SnapshotLocked()
 }
 
 func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
@@ -187,15 +180,7 @@ func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
 }
 
 func (s *managementState) load() error {
-	snapshot, ok, err := NewStateStore(s.statePath, s.cipher).Load()
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	ApplyManagementSnapshot(s, snapshot)
-	return nil
+	return NewManagementStateLifecycle(s).Load()
 }
 
 // Reload re-reads the management state and encryption key from disk.
@@ -230,7 +215,7 @@ func (s *managementState) Reload() error {
 }
 
 func (s *managementState) saveLocked() error {
-	return NewStateStore(s.statePath, s.cipher).Save(s.snapshotLocked())
+	return NewManagementStateLifecycle(s).SaveLocked()
 }
 
 func buildFirewallRules(settings Settings, inbounds []Inbound) []firewallRuleResponse {
