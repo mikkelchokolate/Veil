@@ -14,10 +14,7 @@ type ApplyHistoryStore struct {
 }
 
 func NewApplyHistoryStore(path string, max int) ApplyHistoryStore {
-	if max <= 0 {
-		max = maxApplyHistoryEntries
-	}
-	return ApplyHistoryStore{path: path, max: max}
+	return ApplyHistoryStore{path: path, max: NewApplyHistoryRetention(max).Max()}
 }
 
 func (s ApplyHistoryStore) Load() ([]ApplyHistoryEntry, error) {
@@ -41,10 +38,7 @@ func (s ApplyHistoryStore) Append(stage string, success bool, response ApplyResp
 		return err
 	}
 	entry := NewApplyHistoryEntryBuilder(nil).Build(stage, success, response)
-	history = append([]ApplyHistoryEntry{entry}, history...)
-	if len(history) > s.max {
-		history = history[:s.max]
-	}
+	history = NewApplyHistoryRetention(s.max).Prepend(entry, history)
 	body, err := json.MarshalIndent(history, "", "  ")
 	if err != nil {
 		return err
