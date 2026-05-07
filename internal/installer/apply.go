@@ -20,39 +20,6 @@ type ApplyResult struct {
 	BackupID          string
 }
 
-func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (ApplyResult, error) {
-	files, err := desiredManagedFiles(profile, paths)
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	result := ApplyResult{
-		CaddyfilePath:     filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"),
-		Hysteria2Path:     filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"),
-		FallbackIndexPath: filepath.Join(paths.VarDir, "www", "index.html"),
-	}
-
-	// Backup existing files before overwriting
-	if paths.BackupDir != "" {
-		existingPaths := make([]string, 0, len(files))
-		for _, file := range files {
-			existingPaths = append(existingPaths, file.Path)
-		}
-		backupID, err := BackupBeforeApply(existingPaths, paths.BackupDir)
-		if err != nil {
-			return ApplyResult{}, err
-		}
-		result.BackupID = backupID
-	}
-
-	for _, file := range files {
-		if err := writeManagedFile(file.Path, file.Content, file.Mode); err != nil {
-			return ApplyResult{}, err
-		}
-		result.WrittenFiles = append(result.WrittenFiles, file.Path)
-	}
-	return result, nil
-}
-
 func writeManagedFile(path string, content string, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
