@@ -238,6 +238,23 @@ func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
 	}
 }
 
+func TestPanelServiceRestartActionsModuleRendersRestartActions(t *testing.T) {
+	actions := panelServiceRestartActionsJS()
+	for _, want := range []string{
+		`restart-veil`,
+		`/api/services/veil/restart`,
+		`restart-caddy`,
+		`/api/services/caddy/restart`,
+		`restart-hysteria2`,
+		`/api/services/hysteria2/restart`,
+		`confirm: true`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Service restart actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelServiceStatusActionsModuleRendersAutoRefreshActions(t *testing.T) {
 	actions := panelServiceStatusActionsJS()
 	for _, want := range []string{
