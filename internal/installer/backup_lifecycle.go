@@ -85,13 +85,7 @@ func (l BackupLifecycle) Restore(backupID string) ([]string, error) {
 		return nil, err
 	}
 
-	// Collect existing original files to create a safety backup before overwriting
-	var existingPaths []string
-	for _, entry := range manifest.Entries {
-		if _, err := os.Stat(entry.OriginalPath); err == nil {
-			existingPaths = append(existingPaths, entry.OriginalPath)
-		}
-	}
+	existingPaths := NewBackupSafetyPolicy().ExistingOriginalPaths(manifest)
 	if len(existingPaths) > 0 {
 		if _, safetyErr := l.BackupExisting(existingPaths); safetyErr != nil {
 			return nil, fmt.Errorf("create safety backup before restore: %w", safetyErr)
