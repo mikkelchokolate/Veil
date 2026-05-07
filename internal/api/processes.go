@@ -89,8 +89,7 @@ func readProcessUptime(pid int, systemUptime int64) int64 {
 	if !ok {
 		return 0
 	}
-	clkTck := int64(100)
-	return systemUptime - stat.StartTimeTicks/clkTck
+	return NewProcessUptime(100).Seconds(stat, systemUptime)
 }
 
 func readProcessStat(pid int) (ProcessStatFields, bool) {
