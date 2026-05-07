@@ -66,35 +66,18 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		return nil
 	}
 
-	// 6. Extract the binary from the tar.gz
-	fmt.Fprintln(out, "Extracting binary...")
-	binary, err := extractVeilBinary(archive)
-	if err != nil {
-		return fmt.Errorf("extract binary: %w", err)
-	}
-
-	// 7. Find current binary path
 	currentPath, err := os.Executable()
 	if err != nil {
 		currentPath = "/usr/local/bin/veil"
 	}
-	fmt.Fprintf(out, "Current binary: %s\n", currentPath)
-
-	// 8. Backup current binary
 	backupPath := currentPath + ".backup"
+	fmt.Fprintln(out, "Extracting binary...")
+	fmt.Fprintf(out, "Current binary: %s\n", currentPath)
 	fmt.Fprintf(out, "Backing up to %s...\n", backupPath)
-	if err := copyFileData(currentPath, backupPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("backup: %w", err)
-	}
-
-	if !opts.Yes {
-		return fmt.Errorf("update requires --yes to confirm replacing %s", currentPath)
-	}
-
-	// 9. Replace binary atomically
 	fmt.Fprintf(out, "Installing to %s...\n", currentPath)
-	if err := replaceBinaryAtomic(currentPath, binary); err != nil {
-		return fmt.Errorf("replace binary: %w", err)
+	backupPath, err = replaceVeilBinaryFromArchive(currentPath, archive, opts.Yes)
+	if err != nil {
+		return err
 	}
 
 	fmt.Fprintf(out, "Updated to %s.\n", release.TagName)
