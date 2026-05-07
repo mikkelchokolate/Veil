@@ -75,6 +75,7 @@ func renderPanelHTMLBase() string {
 		panelClientProfileControlsPlaceholder, panelClientProfileControlsHTML(),
 		panelClientProfileActionsPlaceholder, panelClientProfileActionsJS(),
 		panelClientLinksActionsPlaceholder, panelClientLinksActionsJS(),
+		panelServiceStatusActionsPlaceholder, panelServiceStatusActionsJS(),
 	)
 	return replacer.Replace(html)
 }

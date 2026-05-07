@@ -131,6 +131,21 @@ func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
 	}
 }
 
+func TestPanelServiceStatusActionsModuleRendersAutoRefreshActions(t *testing.T) {
+	actions := panelServiceStatusActionsJS()
+	for _, want := range []string{
+		`function loadServiceStatus()`,
+		`let autoRefreshInterval = null`,
+		`toggle-auto-refresh`,
+		`setInterval(loadServiceStatus, 10000)`,
+		`beforeunload`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Service status actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientLinksActionsModuleRendersCredentialDisclosureActions(t *testing.T) {
 	actions := panelClientLinksActionsJS()
 	for _, want := range []string{
