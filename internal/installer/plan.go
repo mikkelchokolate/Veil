@@ -35,12 +35,7 @@ type BinaryAcquisition struct {
 }
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {
-	if input.Platform.OS == "" {
-		input.Platform = CurrentPlatform()
-	}
-	if input.HysteriaVersion == "" {
-		input.HysteriaVersion = "v2.6.0"
-	}
+	input = NewInstallPlanDefaults(nil).Apply(input)
 	if err := ValidateLinuxPlatform(input.Platform); err != nil {
 		return InstallPlan{}, err
 	}
