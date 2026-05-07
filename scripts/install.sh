@@ -8,7 +8,8 @@ PROFILE="${VEIL_PROFILE:-ru-recommended}"
 DOMAIN=""
 EMAIL=""
 PORT=""
-STACK="both"
+STACK="panel"
+PANEL_ACCESS="local"
 PANEL_PORT=""
 YES=""
 DRY_RUN=""
@@ -29,7 +30,8 @@ Options:
   --domain DOMAIN      Domain used for ACME and client configs
   --email EMAIL        ACME email
   --port PORT          Shared proxy port passed to veil install; omit it to use the interactive prompt
-  --stack STACK        naive, hysteria2, or both, default both
+  --stack STACK        panel, naive, hysteria2, or both, default panel
+  --panel-access MODE  local, direct, or caddy, default local
   --panel-port PORT    Panel TCP port; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
@@ -59,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --email) EMAIL="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --stack) STACK="$2"; shift 2 ;;
+    --panel-access) PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
@@ -83,7 +86,7 @@ fi
 if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
   echo "Veil is already installed at ${INSTALL_DIR}/veil"
   echo "Use --force to re-install"
-  args=(--profile "${PROFILE}" --stack "${STACK}")
+  args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PORT}" ]]; then args+=(--port "${PORT}"); fi
@@ -151,7 +154,7 @@ install -m 0755 "${tmpdir}/veil" "${INSTALL_DIR}/veil"
 
 echo "Installed ${INSTALL_DIR}/veil"
 
-args=(--profile "${PROFILE}" --stack "${STACK}")
+args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PORT}" ]]; then args+=(--port "${PORT}"); fi
