@@ -46,11 +46,12 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	var hysteriaURL string
 	var hysteriaBinary BinaryAcquisition
 	if profile.InstallHysteria2 {
-		hysteriaURL, err = Hysteria2ReleaseAssetURL(input.HysteriaVersion, input.Platform.OS, arch)
+		artifact, err := NewHysteriaBinaryAcquisition().Build(input.HysteriaVersion, input.Platform.OS, arch, input.HysteriaSHA256)
 		if err != nil {
 			return InstallPlan{}, err
 		}
-		hysteriaBinary = BinaryAcquisition{Name: "hysteria2", URL: hysteriaURL, Destination: "/usr/local/bin/hysteria", SHA256: strings.TrimSpace(input.HysteriaSHA256)}
+		hysteriaURL = artifact.URL
+		hysteriaBinary = artifact.Binary
 	}
 	var caddyBuild BuildHint
 	if profile.InstallNaive {
