@@ -368,26 +368,27 @@ func writeInboundManagementError(w http.ResponseWriter, err error) {
 }
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewRoutingRuleManagement(&s.rules, s.saveLocked)
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, management.List())
-	case http.MethodPost:
-		var rule RoutingRule
-		if !decodeJSONRequest(w, r, &rule) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.RoutingRules()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, management.List())
+		case http.MethodPost:
+			var rule RoutingRule
+			if !decodeJSONRequest(w, r, &rule) {
+				return nil
+			}
+			created, err := management.Create(rule)
+			if err != nil {
+				writeRoutingRuleManagementError(w, err)
+				return nil
+			}
+			writeJSONStatus(w, http.StatusCreated, created)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
-		created, err := management.Create(rule)
-		if err != nil {
-			writeRoutingRuleManagementError(w, err)
-			return
-		}
-		writeJSONStatus(w, http.StatusCreated, created)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPost)
-	}
+		return nil
+	})
 }
 
 func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http.Request) {
@@ -396,37 +397,38 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		writeNotFound(w)
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewRoutingRuleManagement(&s.rules, s.saveLocked)
-	rule, ok := management.Get(name)
-	if !ok {
-		writeNotFound(w)
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, rule)
-	case http.MethodPut:
-		var update RoutingRule
-		if !decodeJSONRequest(w, r, &update) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.RoutingRules()
+		rule, ok := management.Get(name)
+		if !ok {
+			writeNotFound(w)
+			return nil
 		}
-		updated, err := management.Update(name, update)
-		if err != nil {
-			writeRoutingRuleManagementError(w, err)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, rule)
+		case http.MethodPut:
+			var update RoutingRule
+			if !decodeJSONRequest(w, r, &update) {
+				return nil
+			}
+			updated, err := management.Update(name, update)
+			if err != nil {
+				writeRoutingRuleManagementError(w, err)
+				return nil
+			}
+			writeJSON(w, updated)
+		case http.MethodDelete:
+			if err := management.Delete(name); err != nil {
+				writeRoutingRuleManagementError(w, err)
+				return nil
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 		}
-		writeJSON(w, updated)
-	case http.MethodDelete:
-		if err := management.Delete(name); err != nil {
-			writeRoutingRuleManagementError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
-	}
+		return nil
+	})
 }
 
 func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
@@ -480,26 +482,27 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewWarpManagement(&s.warp, s.saveLocked)
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, management.Get())
-	case http.MethodPut:
-		var warp WarpConfig
-		if !decodeJSONRequest(w, r, &warp) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.Warp()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, management.Get())
+		case http.MethodPut:
+			var warp WarpConfig
+			if !decodeJSONRequest(w, r, &warp) {
+				return nil
+			}
+			updated, err := management.Update(warp)
+			if err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return nil
+			}
+			writeJSON(w, updated)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPut)
 		}
-		updated, err := management.Update(warp)
-		if err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, updated)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut)
-	}
+		return nil
+	})
 }
 
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
