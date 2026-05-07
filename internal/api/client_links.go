@@ -14,19 +14,7 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 	if strings.TrimSpace(settings.Domain) == "" {
 		return ClientLinksResponse{}, errors.New("domain is required to build client links")
 	}
-	response := ClientLinksResponse{
-		SchemaVersion:              "v1",
-		Domain:                     settings.Domain,
-		Stack:                      settings.Stack,
-		SubscriptionURL:            "/api/client-links/subscription",
-		Base64SubscriptionURL:      "/api/client-links/subscription?format=base64",
-		RawSubscriptionURL:         "/api/client-links/subscription?format=raw",
-		DefaultSubscriptionFormat:  "base64",
-		Base64SubscriptionFilename: "veil-subscription.txt",
-		RawSubscriptionFilename:    "veil-subscription-raw.txt",
-		SubscriptionContentType:    "text/plain; charset=utf-8",
-		SubscriptionFormats:        []string{"base64", "raw"},
-	}
+	response := NewClientLinksResponseMetadata(settings).Build()
 	for _, inbound := range inbounds {
 		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {
 			continue
