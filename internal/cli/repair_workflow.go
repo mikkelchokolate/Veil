@@ -37,19 +37,7 @@ func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 	if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
 		return fmt.Errorf("--port is required and must be between 1 and 65535")
 	}
-	built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-		Domain:       opts.Domain,
-		Email:        opts.Email,
-		Stack:        installer.Stack(opts.Stack),
-		Port:         opts.SharedPort,
-		Availability: installer.PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       randomSecret,
-		RandomPort:   func() int { return 31874 },
-	})
-	if err != nil {
-		return err
-	}
-	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir})
+	plan, err := buildRepairPlanFromOptions(opts)
 	if err != nil {
 		return err
 	}
