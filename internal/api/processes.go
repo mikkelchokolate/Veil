@@ -20,8 +20,6 @@ type ProcessesStats struct {
 	Processes []ProcessInfo `json:"processes"`
 }
 
-var managedProcessNames = []string{"caddy", "hysteria2", "sing-box", "veil"}
-
 // readProcessesStats finds managed service processes via /proc.
 func readProcessesStats() (ProcessesStats, error) {
 	return NewProcessDiscovery(procProcessSource{}).Read()
@@ -60,15 +58,6 @@ func (procProcessSource) CPUPercent(pid int, uptimeSec int64) float64 {
 
 func (procProcessSource) UptimeSeconds(pid int, systemUptime int64) int64 {
 	return readProcessUptime(pid, systemUptime)
-}
-
-func isManagedProcess(name string) bool {
-	for _, n := range managedProcessNames {
-		if name == n {
-			return true
-		}
-	}
-	return false
 }
 
 func readProcessName(pid int) string {
