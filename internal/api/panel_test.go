@@ -97,6 +97,23 @@ func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
 	}
 }
 
+func TestPanelWarpActionsModuleRendersLoadAndSaveActions(t *testing.T) {
+	actions := panelWarpActionsJS()
+	for _, want := range []string{
+		`async function loadWarpIntoForm()`,
+		`async function saveWarpConfig(event)`,
+		`/api/warp`,
+		`warp-private-key`,
+		`parseReserved`,
+		`socksPort`,
+		`mtu`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("WARP actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
 	card := panelWarpCardHTML()
 	for _, want := range []string{
