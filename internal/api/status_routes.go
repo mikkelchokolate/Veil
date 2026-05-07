@@ -68,7 +68,6 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
-	status := ServiceRuntimeStatus{Unit: unit, LoadState: "unknown", ActiveState: "unknown", SubState: "unknown"}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	output, err := exec.CommandContext(ctx,
@@ -80,26 +79,7 @@ func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
 		"--property=SubState",
 		"--no-page",
 	).CombinedOutput()
-	for _, line := range strings.Split(string(output), "\n") {
-		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if !ok {
-			continue
-		}
-		switch key {
-		case "LoadState":
-			if value != "" {
-				status.LoadState = value
-			}
-		case "ActiveState":
-			if value != "" {
-				status.ActiveState = value
-			}
-		case "SubState":
-			if value != "" {
-				status.SubState = value
-			}
-		}
-	}
+	status := NewSystemdServiceStatusParser().Parse(unit, string(output))
 	if err != nil {
 		status.Error = strings.TrimSpace(string(output))
 		if status.Error == "" {
