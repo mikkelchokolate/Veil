@@ -94,30 +94,16 @@ func readProcessMemory(pid int) int64 {
 }
 
 func readProcessCPU(pid int, uptimeSec int64) float64 {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
+	stat, ok := readProcessStat(pid)
+	if !ok {
 		return 0
 	}
-	// Format: pid (comm) state ... utime stime cutime cstime starttime ...
-	// Find closing paren, then parse fields after
-	closeParen := strings.LastIndexByte(string(data), ')')
-	if closeParen < 0 {
-		return 0
-	}
-	fields := strings.Fields(string(data[closeParen+2:]))
-	if len(fields) < 14 {
-		return 0
-	}
-	utime, _ := strconv.ParseInt(fields[11], 10, 64) // 14th field after ')'
-	stime, _ := strconv.ParseInt(fields[12], 10, 64)
-	starttime, _ := strconv.ParseInt(fields[19], 10, 64) // 22nd field
-
-	totalTicks := utime + stime
+	totalTicks := stat.UserTicks + stat.SystemTicks
 	clkTck := int64(100) // sysconf(_SC_CLK_TCK) = 100
 	if uptimeSec <= 0 {
 		return 0
 	}
-	seconds := uptimeSec - starttime/clkTck
+	seconds := uptimeSec - stat.StartTimeTicks/clkTck
 	if seconds <= 0 {
 		return 0
 	}
@@ -125,21 +111,20 @@ func readProcessCPU(pid int, uptimeSec int64) float64 {
 }
 
 func readProcessUptime(pid int, systemUptime int64) int64 {
+	stat, ok := readProcessStat(pid)
+	if !ok {
+		return 0
+	}
+	clkTck := int64(100)
+	return systemUptime - stat.StartTimeTicks/clkTck
+}
+
+func readProcessStat(pid int) (ProcessStatFields, bool) {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
-		return 0
+		return ProcessStatFields{}, false
 	}
-	closeParen := strings.LastIndexByte(string(data), ')')
-	if closeParen < 0 {
-		return 0
-	}
-	fields := strings.Fields(string(data[closeParen+2:]))
-	if len(fields) < 20 {
-		return 0
-	}
-	starttime, _ := strconv.ParseInt(fields[19], 10, 64)
-	clkTck := int64(100)
-	return systemUptime - starttime/clkTck
+	return NewProcessStatParser().Parse(string(data))
 }
 
 func readSystemUptime() (int64, error) {
