@@ -28,6 +28,12 @@ func (a ClientAccess) ClientLinks() []ClientLink {
 			link.URI = naiveClientURI(a.settings.Domain, a.inbound.Port, credential.Username, credential.Password)
 		case "hysteria2":
 			link.URI = hysteria2UserPassClientURI(a.settings.Domain, a.inbound.Port, credential.Username, credential.Password, link.Name)
+		case "mieru":
+			config, err := NewMieruClientConfig().Build(a.settings, a.inbound, link.Name, credential)
+			if err != nil {
+				continue
+			}
+			link.Config = config
 		default:
 			continue
 		}

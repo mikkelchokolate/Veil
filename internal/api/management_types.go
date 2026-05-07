@@ -104,6 +104,7 @@ type ClientLink struct {
 	Transport string `json:"transport"`
 	Port      int    `json:"port"`
 	URI       string `json:"uri"`
+	Config    string `json:"config,omitempty"`
 }
 
 type ApplyPlanResponse struct {
