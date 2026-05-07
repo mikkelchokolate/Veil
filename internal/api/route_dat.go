@@ -45,7 +45,8 @@ func downloadRouteDat(url string) ([]byte, error) {
 			return nil, decision.Err
 		}
 		defer resp.Body.Close()
-		lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
+		limit := NewRouteDatBodyLimit(maxRouteDatSize)
+		lr := io.LimitReader(resp.Body, int64(limit.Limit())+1)
 		body, err := io.ReadAll(lr)
 		if err != nil {
 			lastErr = err
@@ -54,8 +55,8 @@ func downloadRouteDat(url string) ([]byte, error) {
 			}
 			continue
 		}
-		if len(body) > maxRouteDatSize {
-			return nil, fmt.Errorf("download %s exceeds maximum size of %d bytes", url, maxRouteDatSize)
+		if err := limit.Validate(url, body); err != nil {
+			return nil, err
 		}
 		return body, nil
 	}
