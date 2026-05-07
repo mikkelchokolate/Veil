@@ -26,47 +26,31 @@ type serveWorkflowOptions struct {
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	if err := validateServeListen(opts.Listen); err != nil {
+	cfg, err := resolveServeConfig(opts)
+	if err != nil {
 		return err
 	}
-	token, tokenSource := resolveServeAuthToken(opts.AuthToken)
-	if err := validateServeAuthBinding(opts.Listen, tokenSource); err != nil {
-		return err
-	}
-	resolvedStatePath, stateSource := resolveServeStatePath(opts.StatePath)
-	resolvedApplyRoot, applyRootSource := resolveServeApplyRoot(opts.ApplyRoot)
-	resolvedKeyPath, keySource := resolveServeKeyPath(opts.KeyPath)
-	resolvedWebBasePath, _ := resolveServeWebBasePath(opts.WebBasePath)
-	tlsEnabled, tlsSource := resolveServeTLS(opts.TLSCert, opts.TLSKey)
-	if opts.AutoTLS && !tlsEnabled {
-		autoTLSEnabled, autoTLSErr := resolveServeAutoTLS(opts.AutoTLS, opts.AutoTLSDir, resolvedStatePath, resolvedKeyPath)
-		if autoTLSErr != nil {
-			return fmt.Errorf("auto-tls: %w", autoTLSErr)
-		}
-		tlsEnabled = autoTLSEnabled
-		tlsSource = "auto-tls (Let's Encrypt)"
-	}
-	server, stateReloader := newServeHTTPServer(opts.Listen, opts.Version, token, resolvedStatePath, resolvedApplyRoot, resolvedKeyPath, tlsEnabled, opts.TLSCert, opts.TLSKey, resolvedWebBasePath)
+	server, stateReloader := newServeHTTPServer(opts.Listen, opts.Version, cfg.Token, cfg.StatePath, cfg.ApplyRoot, cfg.KeyPath, cfg.TLSEnabled, opts.TLSCert, opts.TLSKey, cfg.WebBasePath)
 	tlsLabel := "http"
-	if tlsEnabled {
+	if cfg.TLSEnabled {
 		tlsLabel = "https"
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s://%s\n", tlsLabel, opts.Listen)
-	fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", resolvedStatePath, stateSource)
-	fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", resolvedApplyRoot, applyRootSource)
-	fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", resolvedKeyPath, keySource)
-	if tlsEnabled {
-		fmt.Fprintf(cmd.OutOrStdout(), "TLS: enabled (%s)\n", tlsSource)
+	fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", cfg.StatePath, cfg.StateSource)
+	fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", cfg.ApplyRoot, cfg.ApplyRootSource)
+	fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", cfg.KeyPath, cfg.KeySource)
+	if cfg.TLSEnabled {
+		fmt.Fprintf(cmd.OutOrStdout(), "TLS: enabled (%s)\n", cfg.TLSSource)
 	} else {
 		fmt.Fprintln(cmd.OutOrStdout(), "TLS: disabled")
 	}
-	if resolvedWebBasePath != "/" {
-		fmt.Fprintf(cmd.OutOrStdout(), "Web base path: %s\n", resolvedWebBasePath)
+	if cfg.WebBasePath != "/" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Web base path: %s\n", cfg.WebBasePath)
 	}
-	if tokenSource == "disabled" {
+	if cfg.TokenSource == "disabled" {
 		fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", tokenSource)
+		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", cfg.TokenSource)
 	}
 
 	// SIGHUP reloads management state from disk without restart.
@@ -85,7 +69,7 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	// Start the server in a goroutine.
 	serveErr := make(chan error, 1)
 	go func() {
-		if tlsEnabled {
+		if cfg.TLSEnabled {
 			serveErr <- server.ListenAndServeTLS(opts.TLSCert, opts.TLSKey)
 		} else {
 			serveErr <- server.ListenAndServe()
