@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 )
 
@@ -103,12 +101,4 @@ func (c InboundCatalog) index(name string) int {
 
 func (c InboundCatalog) hasTransportPort(transport string, port int, exceptIndex int) bool {
 	return NewInboundTransportPortIndex(c.inbounds).Has(transport, port, exceptIndex)
-}
-
-func generateInboundPassword() string {
-	buf := make([]byte, 9)
-	if _, err := rand.Read(buf); err != nil {
-		return "change-me"
-	}
-	return base64.RawURLEncoding.EncodeToString(buf)
 }
