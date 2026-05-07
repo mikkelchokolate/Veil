@@ -20,9 +20,21 @@ _Avoid_: secret route, slug
 The final HTTPS URL a user opens to reach the Panel, composed from domain and Web base path.
 _Avoid_: dashboard link, admin URL
 
+**Panel access**:
+The way a user reaches the Panel: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy.
+_Avoid_: dashboard exposure, admin binding
+
 **Inbound**:
 A named proxy entry that defines protocol, transport, port, enabled state, and optional password.
 _Avoid_: profile, listener, account
+
+**Transport binding**:
+The network binding selected by an Inbound, composed from transport and port. TCP and UDP bindings may share the same numeric port because they are different transports.
+_Avoid_: listener key, socket id
+
+**Mieru**:
+A proxy protocol/runtime that Veil can manage as Inbounds with TCP or UDP transport bindings.
+_Avoid_: mieru stack, mizaru
 
 **Client profile**:
 A named user credential attached to an Inbound.
@@ -52,7 +64,9 @@ _Avoid_: logging, masking
 
 - A **Veil install** produces a **Panel URL**, credentials, and a **Generated config set**.
 - A **Panel URL** contains exactly one **Web base path**.
+- **Panel access** may be direct/local without a **Panel URL**, or HTTPS through Caddy with a **Panel URL**.
 - The **Panel** manages zero or more **Inbounds**.
+- Each **Inbound** has exactly one **Transport binding**.
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
 - The **Generated config set** is promoted by the **Apply workflow**.
@@ -72,4 +86,5 @@ _Avoid_: logging, masking
 - "profile" was used for install presets, proxy entries, and user credentials — resolved: use **Veil install** for setup presets, **Inbound** for proxy entries, and **Client profile** for user credentials.
 - "webBasePath" appears as Go field naming; in prose use **Web base path**.
 - "service" may mean systemd unit or domain module — in architecture reviews use **Module** for code structure and name systemd units explicitly.
-- Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but are not yet renderable into one **Generated config set**; apply plan must reject this instead of silently overwriting generated files.
+- Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but NaiveProxy and Hysteria2 are not yet renderable into one **Generated config set**; apply plan must reject those instead of silently overwriting generated files.
+- Mieru **Inbounds** are expected to aggregate into one **Generated config set** so TCP and UDP **Transport bindings** can share a numeric port.
