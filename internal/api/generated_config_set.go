@@ -1,7 +1,5 @@
 package api
 
-import "github.com/veil-panel/veil/internal/renderer"
-
 type GeneratedConfigInput struct {
 	ApplyRoot string
 	Settings  Settings
@@ -28,24 +26,12 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 			}
 		}
 	}
-	if input.Warp.Enabled {
-		warp := input.Warp
-		setWarpDefaults(&warp)
-		body, err := renderer.RenderWarpSingBox(renderer.WarpSingBoxConfig{
-			Endpoint:      warp.Endpoint,
-			PrivateKey:    warp.PrivateKey,
-			LocalAddress:  warp.LocalAddress,
-			PeerPublicKey: warp.PeerPublicKey,
-			Reserved:      append([]int(nil), warp.Reserved...),
-			SocksListen:   warp.SocksListen,
-			SocksPort:     warp.SocksPort,
-			MTU:           warp.MTU,
-			RoutingRules:  RenderWarpRoutingRules(input.Rules),
-		})
-		if err != nil {
-			return nil, err
-		}
-		configs[paths.Warp()] = body
+	artifact, ok, err := NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		configs[artifact.Path] = artifact.Body
 	}
 	return configs, nil
 }
