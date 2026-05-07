@@ -99,14 +99,15 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 			}
 			continue
 		}
-		if resp.StatusCode >= 500 {
+		decision := NewBinaryDownloadResponsePolicy().Decide(resp.StatusCode, resp.Status)
+		if decision.Retry {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("download failed: %s", resp.Status)
+			lastErr = decision.Err
 			continue
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if !decision.Accept {
 			resp.Body.Close()
-			return DownloadResult{}, fmt.Errorf("download failed: %s", resp.Status)
+			return DownloadResult{}, decision.Err
 		}
 		defer resp.Body.Close()
 		lr := io.LimitReader(resp.Body, maxReleaseAssetSize+1)
