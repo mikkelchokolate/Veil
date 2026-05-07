@@ -112,13 +112,5 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
-	if err != nil {
-		writeError(w, err.Error(), status)
-		return
-	}
-	if status != http.StatusOK {
-		writeJSONStatus(w, status, response)
-		return
-	}
-	writeJSON(w, response)
+	NewApplyResponseWriter().Write(w, response, status, err)
 }
