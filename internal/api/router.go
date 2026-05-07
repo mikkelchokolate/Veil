@@ -89,23 +89,7 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	state.register(mux)
 	PanelRoutes{Info: info, BasePath: basePath}.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			_ = json.NewEncoder(w).Encode(StatusResponse{
-				SchemaVersion: "v1",
-				Name:          "Veil",
-				Version:       info.Version,
-				Mode:          info.Mode,
-				Services:      buildServiceStatuses(),
-			})
-		}
-	})
-
+	StatusRoutes{Info: info}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
