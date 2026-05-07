@@ -3,7 +3,6 @@ package renderer
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 )
 
 type MieruPortBinding struct {
@@ -49,7 +48,7 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 		if binding.Port <= 0 {
 			return "", errors.New("mieru port is required")
 		}
-		protocol := strings.ToUpper(binding.Protocol)
+		protocol := normalizeMieruProtocol(binding.Protocol)
 		if protocol != "TCP" && protocol != "UDP" {
 			return "", errors.New("mieru protocol must be TCP or UDP")
 		}
