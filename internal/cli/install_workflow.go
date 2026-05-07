@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -114,23 +113,5 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			return err
 		}
 	}
-	actualBackupDir := opts.BackupDir
-	if !opts.BackupDirSet {
-		actualBackupDir = filepath.Join(opts.VarDir, "backups")
-	}
-	result, err := installApplyFunc(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: actualBackupDir})
-	if err != nil {
-		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
-		return err
-	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
-	for _, path := range result.WrittenFiles {
-		fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
-	}
-	fmt.Fprintln(cmd.OutOrStdout())
-	fmt.Fprint(cmd.OutOrStdout(), installCredentialSummary(built))
-	if err := writeAuditInstall(opts.AuditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
-		return fmt.Errorf("audit log write failed after successful install: %w", err)
-	}
-	return nil
+	return applyRURecommendedInstall(cmd, built, opts)
 }
