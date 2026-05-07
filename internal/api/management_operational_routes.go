@@ -1,9 +1,6 @@
 package api
 
-import (
-	"fmt"
-	"net/http"
-)
+import "net/http"
 
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -44,9 +41,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	NewClientLinkDeliveryHeaders().Apply(w.Header())
-	w.Header().Set("Content-Type", subscription.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, subscription.Filename))
+	NewClientSubscriptionDeliveryHeaders(subscription).Apply(w.Header())
 	_, _ = w.Write([]byte(subscription.Body))
 }
 
