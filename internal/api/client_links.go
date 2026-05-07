@@ -71,17 +71,6 @@ func fallbackInboundClientLink(settings Settings, inbound Inbound) ClientLink {
 	return link
 }
 
-func stackAllowsProtocol(stack string, protocol string) bool {
-	switch stack {
-	case "naive":
-		return protocol == "naiveproxy"
-	case "hysteria2":
-		return protocol == "hysteria2"
-	default:
-		return true
-	}
-}
-
 func naiveClientURI(domain string, port int, username string, password string) string {
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("https://%s@%s:%d", userinfo, domain, port)
