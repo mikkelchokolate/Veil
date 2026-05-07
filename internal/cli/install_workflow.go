@@ -53,28 +53,7 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		return err
 	}
 
-	availability, err := installer.DetectPortAvailability([]int{443, 8443})
-	if err != nil {
-		return err
-	}
-	randomPort := func() int {
-		port, err := installer.RandomHighPort()
-		if err != nil {
-			return 31874
-		}
-		return port
-	}
-	install, err := installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
-		Domain:          opts.Domain,
-		Email:           opts.Email,
-		Stack:           installer.Stack(opts.Stack),
-		Port:            opts.SharedPort,
-		PanelPort:       opts.PanelPort,
-		Availability:    availability,
-		Secret:          randomSecret,
-		RandomPort:      randomPort,
-		RandomPanelPort: installer.RandomHighPort,
-	})
+	install, err := buildRURecommendedInstallFromOptions(opts)
 	if err != nil {
 		return err
 	}
