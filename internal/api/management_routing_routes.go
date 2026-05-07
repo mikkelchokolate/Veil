@@ -109,9 +109,11 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.routingPreset = preset.Name
-	s.routingSource = preset.Source
-	s.rules = append([]RoutingRule(nil), preset.Rules...)
+	state := RoutingPresetState{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: s.rules}
+	NewRoutingPresetApplication(&state).Apply(preset)
+	s.routingPreset = state.ActivePreset
+	s.routingSource = state.Source
+	s.rules = state.Rules
 	if err := s.saveLocked(); err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
