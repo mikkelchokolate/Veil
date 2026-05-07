@@ -1,7 +1,5 @@
 package api
 
-import "path/filepath"
-
 type PromotedServiceReloader struct {
 	applyRoot string
 	run       func([]string) ServiceActionResult
@@ -15,19 +13,7 @@ func NewPromotedServiceReloader(applyRoot string, run func([]string) ServiceActi
 }
 
 func (r PromotedServiceReloader) Reload(liveFiles []string) []ServiceActionResult {
-	commands := [][]string{}
-	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "caddy", "Caddyfile")) {
-		commands = append(commands, []string{"systemctl", "reload", "veil-naive.service"})
-	}
-	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "hysteria2", "server.yaml")) {
-		commands = append(commands, []string{"systemctl", "reload", "veil-hysteria2.service"})
-	}
-	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "sing-box", "warp.json")) {
-		commands = append(commands, []string{"systemctl", "reload", "veil-warp.service"})
-	}
-	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "mieru", "server_config.json")) {
-		commands = append(commands, []string{"systemctl", "restart", "veil-mieru.service"})
-	}
+	commands := NewPromotedServiceActionCatalog(r.applyRoot).Commands(liveFiles)
 	results := make([]ServiceActionResult, 0, len(commands))
 	for _, command := range commands {
 		result := r.run(command)
