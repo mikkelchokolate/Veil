@@ -25,6 +25,9 @@ func (r PromotedServiceReloader) Reload(liveFiles []string) []ServiceActionResul
 	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "sing-box", "warp.json")) {
 		commands = append(commands, []string{"systemctl", "reload", "veil-warp.service"})
 	}
+	if containsPath(liveFiles, filepath.Join(r.applyRoot, "live", "mieru", "server_config.json")) {
+		commands = append(commands, []string{"systemctl", "restart", "veil-mieru.service"})
+	}
 	results := make([]ServiceActionResult, 0, len(commands))
 	for _, command := range commands {
 		result := r.run(command)

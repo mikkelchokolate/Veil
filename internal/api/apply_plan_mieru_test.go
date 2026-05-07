@@ -13,8 +13,8 @@ func TestBuildApplyPlanIncludesMieruConfigAndReloadAction(t *testing.T) {
 	if !containsString(plan.Configs, "/etc/veil/generated/mieru/server_config.json") {
 		t.Fatalf("plan missing Mieru config: %+v", plan.Configs)
 	}
-	if !containsString(plan.Actions, "reload veil-mieru.service") {
-		t.Fatalf("plan missing Mieru reload action: %+v", plan.Actions)
+	if !containsString(plan.Actions, "restart veil-mieru.service") {
+		t.Fatalf("plan missing Mieru restart action: %+v", plan.Actions)
 	}
 	if containsString(plan.Configs, "/etc/veil/generated/caddy/Caddyfile") || containsString(plan.Actions, "reload veil-naive.service") {
 		t.Fatalf("Mieru-only plan should not require Caddy/Naive actions: %+v", plan)
