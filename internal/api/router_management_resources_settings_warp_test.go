@@ -30,7 +30,7 @@ func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 		want string
 	}{
 		{path: "/api/settings", want: "panelListen"},
-		{path: "/api/inbounds", want: "naive"},
+		{path: "/api/inbounds", want: "[]"},
 		{path: "/api/routing/rules", want: "direct"},
 		{path: "/api/warp", want: "enabled"},
 	}

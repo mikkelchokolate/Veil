@@ -53,6 +53,11 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 
 func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	seed := httptest.NewRecorder()
+	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("seed inbound expected 201, got %d: %s", seed.Code, seed.Body.String())
+	}
 	oversizedName := strings.Repeat("a", 1024*1024+1)
 
 	for _, tc := range []struct {
@@ -89,6 +94,11 @@ func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
 
 func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	seed := httptest.NewRecorder()
+	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("seed inbound expected 201, got %d: %s", seed.Code, seed.Body.String())
+	}
 	body := strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -102,6 +112,11 @@ func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
 
 func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	seed := httptest.NewRecorder()
+	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("seed inbound expected 201, got %d: %s", seed.Code, seed.Body.String())
+	}
 	body := strings.NewReader(`{"name":"duplicate-naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -158,6 +173,16 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 
 func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	seedNaive := httptest.NewRecorder()
+	r.ServeHTTP(seedNaive, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
+	if seedNaive.Code != http.StatusCreated {
+		t.Fatalf("seed naive expected 201, got %d: %s", seedNaive.Code, seedNaive.Body.String())
+	}
+	seedHy2 := httptest.NewRecorder()
+	r.ServeHTTP(seedHy2, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}`)))
+	if seedHy2.Code != http.StatusCreated {
+		t.Fatalf("seed hysteria2 expected 201, got %d: %s", seedHy2.Code, seedHy2.Body.String())
+	}
 
 	update := httptest.NewRecorder()
 	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/hysteria2", strings.NewReader(`{"protocol":"hysteria2","transport":"tcp","port":443,"enabled":true}`)))

@@ -42,14 +42,11 @@ func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 	if len(response.Errors) != 0 {
 		t.Fatalf("expected no validation errors: %+v", response.Errors)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") {
-		t.Fatalf("expected caddy config in plan: %+v", response.Configs)
+	if len(response.Configs) != 0 {
+		t.Fatalf("fresh Panel without Inbounds should not plan generated proxy configs: %+v", response.Configs)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
-		t.Fatalf("expected hysteria2 config in plan: %+v", response.Configs)
-	}
-	if !containsString(response.Actions, "validate management state") || !containsString(response.Actions, "stage generated configs") || !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2.service") {
-		t.Fatalf("expected staged validation/write/reload actions: %+v", response.Actions)
+	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-naive.service") || containsString(response.Actions, "reload veil-hysteria2.service") {
+		t.Fatalf("expected only management validation action for fresh Panel: %+v", response.Actions)
 	}
 }
 

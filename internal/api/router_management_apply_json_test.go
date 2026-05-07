@@ -113,8 +113,8 @@ func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read plan file: %v", err)
 	}
-	if !strings.Contains(string(planBody), "reload veil-naive.service") || !strings.Contains(string(planBody), "reload veil-hysteria2.service") {
-		t.Fatalf("plan file missing staged actions: %s", string(planBody))
+	if strings.Contains(string(planBody), "reload veil-naive.service") || strings.Contains(string(planBody), "reload veil-hysteria2.service") {
+		t.Fatalf("fresh Panel without Inbounds should not stage proxy reloads: %s", string(planBody))
 	}
 	stateBody, err := os.ReadFile(statePath)
 	if err != nil {

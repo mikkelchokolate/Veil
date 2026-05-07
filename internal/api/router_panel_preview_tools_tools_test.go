@@ -233,28 +233,15 @@ func TestFirewallEndpoint(t *testing.T) {
 		if !result.Active {
 			t.Error("expected UFW active")
 		}
-		if len(result.Rules) != 3 {
-			t.Fatalf("expected 3 rules, got %d: %+v", len(result.Rules), result.Rules)
+		if len(result.Rules) != 1 {
+			t.Fatalf("expected 1 Panel rule, got %d: %+v", len(result.Rules), result.Rules)
 		}
-		// Default inbounds: naive:443/tcp, hysteria2:443/udp, panel:2096/tcp
-		hasTCP := false
-		hasUDP := false
 		hasPanel := false
 		for _, rule := range result.Rules {
 			switch {
-			case rule.Port == 443 && rule.Protocol == "tcp":
-				hasTCP = true
-			case rule.Port == 443 && rule.Protocol == "udp":
-				hasUDP = true
 			case rule.Port == 2096 && rule.Protocol == "tcp":
 				hasPanel = true
 			}
-		}
-		if !hasTCP {
-			t.Error("missing NaiveProxy TCP/443 rule")
-		}
-		if !hasUDP {
-			t.Error("missing Hysteria2 UDP/443 rule")
 		}
 		if !hasPanel {
 			t.Error("missing panel TCP/2096 rule")
