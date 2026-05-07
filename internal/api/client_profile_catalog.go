@@ -31,22 +31,7 @@ func (c ClientProfileCatalog) Enabled() []ClientProfile {
 }
 
 func (c ClientProfileCatalog) WithCompletedPasswords(previous []ClientProfile) []ClientProfile {
-	profiles := c.List()
-	previousByName := map[string]ClientProfile{}
-	for _, profile := range previous {
-		previousByName[profile.Name] = profile
-	}
-	for i := range profiles {
-		if profiles[i].Password != "" {
-			continue
-		}
-		if previous, ok := previousByName[profiles[i].Name]; ok && previous.Password != "" {
-			profiles[i].Password = previous.Password
-			continue
-		}
-		profiles[i].Password = c.passwordGenerate()
-	}
-	return profiles
+	return NewClientProfilePasswordPolicy(c.passwordGenerate).Complete(c.profiles, previous)
 }
 
 func cloneClientProfiles(profiles []ClientProfile) []ClientProfile {
