@@ -75,24 +75,3 @@ func (m *MetricsCollector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (m *MetricsCollector) MetricsMiddleware(next http.Handler) http.Handler {
 	return NewMetricsMiddlewareModule(m).Wrap(next)
 }
-
-type codeResponseWriter struct {
-	http.ResponseWriter
-	statusCode  int
-	wroteHeader bool
-}
-
-func (w *codeResponseWriter) WriteHeader(code int) {
-	if !w.wroteHeader {
-		w.statusCode = code
-		w.wroteHeader = true
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *codeResponseWriter) Write(b []byte) (int, error) {
-	if !w.wroteHeader {
-		w.WriteHeader(http.StatusOK)
-	}
-	return w.ResponseWriter.Write(b)
-}

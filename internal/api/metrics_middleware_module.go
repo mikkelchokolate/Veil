@@ -23,9 +23,9 @@ func (m MetricsMiddlewareModule) Wrap(next http.Handler) http.Handler {
 		m.collector.activeRequests.Add(1)
 		defer m.collector.activeRequests.Add(-1)
 
-		crw := &codeResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		next.ServeHTTP(crw, r)
+		statusRecorder := NewHTTPStatusRecorder(w)
+		next.ServeHTTP(statusRecorder, r)
 
-		m.collector.TrackRequest(r.Method, r.URL.Path, crw.statusCode, time.Since(start))
+		m.collector.TrackRequest(r.Method, r.URL.Path, statusRecorder.StatusCode(), time.Since(start))
 	})
 }
