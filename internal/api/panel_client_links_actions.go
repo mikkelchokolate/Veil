@@ -27,6 +27,36 @@ func panelClientLinksActionsJS() string {
       }
     }
 
+    async function downloadMieruConfigs() {
+      const output = document.getElementById('client-links-output');
+      output.textContent = 'Loading Mieru client configs...';
+      try {
+        const response = await fetch('/api/client-links', { headers: requestHeaders() });
+        const body = await response.json();
+        if (!response.ok) {
+          output.textContent = JSON.stringify(body, null, 2);
+          return;
+        }
+        const configs = (body.links || []).filter(link => link.protocol === 'mieru' && link.config).map(link => ({ name: link.name, config: JSON.parse(link.config) }));
+        if (!configs.length) {
+          output.textContent = 'No Mieru client configs available';
+          return;
+        }
+        const blob = new Blob([JSON.stringify(configs, null, 2) + '\n'], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'mieru-client-configs.json';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        output.textContent = 'Downloaded mieru-client-configs.json';
+      } catch (err) {
+        output.textContent = 'Mieru config download failed: ' + String(err);
+      }
+    }
+
     async function copyClientLinksOutput() {
       const output = document.getElementById('client-links-output');
       const text = output.textContent || '';
