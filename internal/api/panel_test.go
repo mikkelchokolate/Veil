@@ -23,6 +23,26 @@ func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T
 	}
 }
 
+func TestPanelDiagnosticsActionsModuleRendersToolActions(t *testing.T) {
+	actions := panelDiagnosticsActionsJS()
+	for _, want := range []string{
+		`run-speedtest`,
+		`/api/tools/speedtest`,
+		`load-logs`,
+		`/api/logs?unit=`,
+		`load-firewall`,
+		`/api/firewall`,
+		`run-dns-lookup`,
+		`/api/tools/dns-lookup`,
+		`run-ping`,
+		`/api/tools/ping`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Diagnostics actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelDiagnosticsCardsModuleRendersToolControls(t *testing.T) {
 	cards := panelDiagnosticsCardsHTML()
 	for _, want := range []string{
