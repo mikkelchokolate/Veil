@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelServiceStatusCardModuleRendersOperationalControls(t *testing.T) {
+	card := panelServiceStatusCardHTML()
+	for _, want := range []string{
+		`<h2>Service status</h2>`,
+		`id="load-service-status"`,
+		`id="toggle-auto-refresh"`,
+		`id="service-status-output"`,
+		`id="restart-veil"`,
+		`id="restart-caddy"`,
+		`id="restart-hysteria2"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Service status card missing %q", want)
+		}
+	}
+}
+
 func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
 	card := panelRoutingCardHTML()
 	for _, want := range []string{
