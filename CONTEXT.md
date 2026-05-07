@@ -1,11 +1,11 @@
 # Veil Context
 
-Veil is a control plane for installing, configuring, and operating NaiveProxy and Hysteria2 through a panel and CLI. This context records the domain language used by the codebase and architecture reviews.
+Veil is a control plane for installing, configuring, and operating NaiveProxy, Hysteria2, and Mieru through a panel and CLI. This context records the domain language used by the codebase and architecture reviews.
 
 ## Language
 
 **Veil install**:
-An interactive or scripted setup flow that chooses ports, generates credentials, renders managed files, and prints the panel access summary.
+An interactive or scripted setup flow that chooses Panel access, optionally chooses proxy runtimes, generates credentials, renders managed files, and prints the panel access summary.
 _Avoid_: bootstrap, setup wizard
 
 **Panel**:
@@ -62,7 +62,7 @@ _Avoid_: logging, masking
 
 ## Relationships
 
-- A **Veil install** produces a **Panel URL**, credentials, and a **Generated config set**.
+- A **Veil install** always produces **Panel access** and credentials, and may produce a **Generated config set** when proxy runtimes are selected.
 - A **Panel URL** contains exactly one **Web base path**.
 - **Panel access** may be direct/local without a **Panel URL**, or HTTPS through Caddy with a **Panel URL**.
 - The **Panel** manages zero or more **Inbounds**.
