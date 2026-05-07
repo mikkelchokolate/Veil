@@ -3,11 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -65,21 +62,6 @@ rollback to the previous binary if the health check fails.`,
 	return cmd
 }
 
-// rollbackBinary copies the backup file back over the current binary and
-// removes the backup. Returns an error if the rollback cannot be completed.
-func rollbackBinary(backupPath, currentPath string) error {
-	backupData, err := os.ReadFile(backupPath)
-	if err != nil {
-		return fmt.Errorf("read backup: %w", err)
-	}
-	if err := replaceBinaryAtomic(currentPath, backupData); err != nil {
-		return fmt.Errorf("restore backup: %w", err)
-	}
-	// Best-effort cleanup of the backup.
-	_ = os.Remove(backupPath)
-	return nil
-}
-
 // runSystemctlRestart runs systemctl restart for the given unit.
 var runSystemctlRestart = func(unit string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -122,46 +104,4 @@ func waitForHealthy(addr string, token string, timeout time.Duration) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 	return fmt.Errorf("health check timed out after %v", timeout)
-}
-
-// copyFileData copies file contents (not permissions) from src to dst.
-func copyFileData(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-	return dstFile.Sync()
-}
-
-// replaceBinaryAtomic writes binary data to a temp file and renames it over dst.
-func replaceBinaryAtomic(dst string, data []byte) error {
-	dir := filepath.Dir(dst)
-	tmp, err := os.CreateTemp(dir, ".veil-update-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Chmod(tmpPath, 0o755); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return os.Rename(tmpPath, dst)
 }
