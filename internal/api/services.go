@@ -27,6 +27,7 @@ var allowedServices = map[string]bool{
 	"caddy":     true,
 	"hysteria2": true,
 	"sing-box":  true,
+	"mieru":     true,
 }
 
 var serviceControlRunner = runServiceControl
