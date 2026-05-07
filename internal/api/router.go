@@ -105,25 +105,7 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	}
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
 	RuntimeRoutes{}.Register(mux)
-	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			methodNotAllowed(w, http.MethodPost)
-			return
-		}
-		// Parse /api/services/{name}/restart
-		path := strings.TrimPrefix(r.URL.Path, "/api/services/")
-		parts := strings.SplitN(path, "/", 2)
-		if len(parts) != 2 {
-			writeError(w, "invalid path, expected /api/services/{name}/restart", http.StatusBadRequest)
-			return
-		}
-		name, action := parts[0], parts[1]
-		if action != "restart" {
-			writeError(w, "unsupported action: "+action, http.StatusBadRequest)
-			return
-		}
-		handleServiceAction(w, r, name, action)
-	})
+	ServiceActionRoutes{}.Register(mux)
 	state.register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
