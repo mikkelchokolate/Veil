@@ -65,13 +65,7 @@ func parseSpeedtestCLIJSON(raw []byte) (SpeedtestResult, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return SpeedtestResult{}, err
 	}
-	serverLabel := strings.TrimSpace(payload.Server.Name)
-	sponsor := strings.TrimSpace(payload.Server.Sponsor)
-	if sponsor != "" && serverLabel != "" {
-		serverLabel = sponsor + " - " + serverLabel
-	} else if sponsor != "" {
-		serverLabel = sponsor
-	}
+	serverLabel := NewSpeedtestServerLabel(payload.Server.Sponsor, payload.Server.Name).String()
 	return SpeedtestResult{
 		Server:       serverLabel,
 		PingMS:       payload.Ping,
@@ -100,13 +94,7 @@ func parseOoklaSpeedtestJSON(raw []byte) (SpeedtestResult, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return SpeedtestResult{}, err
 	}
-	server := strings.TrimSpace(payload.Server.Name)
-	isp := strings.TrimSpace(payload.ISP)
-	if isp != "" && server != "" {
-		server = isp + " - " + server
-	} else if isp != "" {
-		server = isp
-	}
+	server := NewSpeedtestServerLabel(payload.ISP, payload.Server.Name).String()
 	return SpeedtestResult{
 		Server:       server,
 		PingMS:       payload.Ping.Latency,
