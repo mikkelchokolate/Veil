@@ -1,20 +1,16 @@
 package cli
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/api"
 	"github.com/veil-panel/veil/internal/secrets"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 const serveDrainTimeout = 5 * time.Second
@@ -60,56 +56,6 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().BoolVar(&autoTLS, "auto-tls", false, "auto-obtain Let's Encrypt TLS certificate using domain/email from state; requires state with domain and email set")
 	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or /var/lib/veil/autocert")
 	return cmd
-}
-
-func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string, webBasePath string) (*http.Server, api.Reloader) {
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: version, Mode: "server", AuthToken: authToken, StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath, WebBasePath: webBasePath})
-	srv := &http.Server{
-		Addr:              listen,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20,
-	}
-	if tlsEnabled {
-		if tlsCert == "" && tlsKey == "" && autoTLSDomain != "" {
-			// Auto-TLS via Let's Encrypt (autocert).
-			mgr := &autocert.Manager{
-				Cache:      autocert.DirCache(autoTLSCacheDir),
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(autoTLSDomain),
-				Email:      autoTLSEmail,
-			}
-			tlsCfg := newServeTLSConfig()
-			tlsCfg.GetCertificate = mgr.GetCertificate
-			srv.TLSConfig = tlsCfg
-		} else {
-			srv.TLSConfig = newServeTLSConfig()
-		}
-	}
-	return srv, reloader
-}
-
-// newServeTLSConfig returns a secure TLS configuration for the serve command.
-// It enforces TLS 1.2 minimum with modern cipher suites and disables insecure
-// features like TLS compression and session tickets.
-func newServeTLSConfig() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-		},
-		PreferServerCipherSuites: true,
-		CurvePreferences: []tls.CurveID{
-			tls.X25519,
-			tls.CurveP256,
-		},
-	}
 }
 
 func resolveServeAuthToken(flagValue string) (token string, source string) {
