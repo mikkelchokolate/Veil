@@ -17,12 +17,21 @@ func BuildClientAccess(settings Settings, inbound Inbound) (ClientAccess, error)
 }
 
 func (a ClientAccess) ClientLinks() []ClientLink {
-	if len(a.credentials) == 0 {
+	credentials := a.credentials
+	fallback := len(credentials) == 0
+	if fallback && a.inbound.Protocol != "mieru" {
 		return []ClientLink{fallbackInboundClientLink(a.settings, a.inbound)}
 	}
-	links := make([]ClientLink, 0, len(a.credentials))
-	for _, credential := range a.credentials {
-		link := ClientLink{Name: a.inbound.Name + "/" + credential.Name, Protocol: a.inbound.Protocol, Transport: a.inbound.Transport, Port: a.inbound.Port}
+	if fallback {
+		credentials = []ClientCredential{NewClientAccessFallbackCredential().Build(a.settings, a.inbound)}
+	}
+	links := make([]ClientLink, 0, len(credentials))
+	for _, credential := range credentials {
+		name := a.inbound.Name + "/" + credential.Name
+		if fallback {
+			name = a.inbound.Name
+		}
+		link := ClientLink{Name: name, Protocol: a.inbound.Protocol, Transport: a.inbound.Transport, Port: a.inbound.Port}
 		switch a.inbound.Protocol {
 		case "naiveproxy":
 			link.URI = naiveClientURI(a.settings.Domain, a.inbound.Port, credential.Username, credential.Password)
