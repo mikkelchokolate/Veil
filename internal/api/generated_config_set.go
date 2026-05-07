@@ -1,9 +1,6 @@
 package api
 
-import (
-	"fmt"
-	"github.com/veil-panel/veil/internal/renderer"
-)
+import "github.com/veil-panel/veil/internal/renderer"
 
 type GeneratedConfigInput struct {
 	ApplyRoot string
@@ -60,25 +57,6 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		configs[paths.Warp()] = body
 	}
 	return configs, nil
-}
-
-func validateGeneratedConfigInboundCardinality(settings Settings, inbounds []Inbound) error {
-	counts := map[string]int{}
-	for _, inbound := range inbounds {
-		if !inbound.Enabled || !stackIncludesProtocol(settings.Stack, inbound.Protocol) {
-			continue
-		}
-		switch inbound.Protocol {
-		case "naiveproxy", "hysteria2":
-			counts[inbound.Protocol]++
-		}
-	}
-	for protocol, count := range counts {
-		if count > 1 {
-			return fmt.Errorf("multiple enabled %s inbounds are not renderable as a single generated config yet", protocol)
-		}
-	}
-	return nil
 }
 
 func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, error) {
