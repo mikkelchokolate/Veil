@@ -42,34 +42,11 @@ func (procSystemStatsSource) Sleep(duration time.Duration) { time.Sleep(duration
 type memInfo struct{ total, used int64 }
 
 func readMeminfo() (memInfo, error) {
-	f, err := os.Open("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return memInfo{}, err
 	}
-	defer f.Close()
-
-	var total, avail, buffers, cached int64
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
-		case strings.HasPrefix(line, "MemTotal:"):
-			total = parseKB(line)
-		case strings.HasPrefix(line, "MemAvailable:"):
-			avail = parseKB(line)
-		case strings.HasPrefix(line, "Buffers:"):
-			buffers = parseKB(line)
-		case strings.HasPrefix(line, "Cached:"):
-			cached = parseKB(line)
-		}
-	}
-	if total == 0 {
-		return memInfo{}, nil
-	}
-	used := total - avail
-	_ = buffers
-	_ = cached
-	return memInfo{total: total, used: used}, nil
+	return NewMeminfoParser().Parse(string(data)), nil
 }
 
 type diskInfo struct{ total, used uint64 }
