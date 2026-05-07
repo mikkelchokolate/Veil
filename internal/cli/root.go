@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -73,51 +72,7 @@ type doctorCommandStatus struct {
 }
 
 func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
-	out := cmd.OutOrStdout()
-	summary := buildDoctorSummary(version)
-	if jsonOutput {
-		_ = json.NewEncoder(out).Encode(summary)
-		return
-	}
-	fmt.Fprintln(out, "Veil doctor")
-	fmt.Fprintf(out, "Version: %s\n", summary.Version)
-	fmt.Fprintf(out, "Runtime: %s\n", summary.Runtime)
-	if summary.Ready {
-		fmt.Fprintln(out, "Ready: yes")
-	} else {
-		fmt.Fprintln(out, "Ready: no")
-	}
-	fmt.Fprintln(out, "Required commands:")
-	for _, command := range summary.Commands {
-		if command.Optional {
-			continue
-		}
-		if !command.Present {
-			if command.Error != "" {
-				fmt.Fprintf(out, "- %s: missing (%s)\n", command.Name, command.Error)
-				continue
-			}
-			fmt.Fprintf(out, "- %s: missing\n", command.Name)
-			continue
-		}
-		fmt.Fprintf(out, "- %s: %s\n", command.Name, command.Path)
-	}
-	fmt.Fprintln(out, "Optional commands:")
-	hasOptional := false
-	for _, command := range summary.Commands {
-		if !command.Optional {
-			continue
-		}
-		hasOptional = true
-		if !command.Present {
-			fmt.Fprintf(out, "- %s: missing (warning)\n", command.Name)
-			continue
-		}
-		fmt.Fprintf(out, "- %s: %s\n", command.Name, command.Path)
-	}
-	if !hasOptional {
-		fmt.Fprintln(out, "- none")
-	}
+	_ = NewDoctorPresentation(cmd.OutOrStdout()).Render(buildDoctorSummary(version), jsonOutput)
 }
 
 // checkLatestVersion fetches the latest Veil release tag from GitHub and
