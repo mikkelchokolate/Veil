@@ -27,16 +27,14 @@ func ValidateClientSubscriptionQuery(query url.Values) error {
 			return fmt.Errorf("unsupported subscription query %q", key)
 		}
 	}
-	format := query.Get("format")
-	if format != "" && format != "base64" && format != "raw" {
-		return fmt.Errorf("format must be base64 or raw")
-	}
-	return nil
+	_, err := NewClientSubscriptionFormatPolicy().Normalize(query.Get("format"))
+	return err
 }
 
 func BuildClientSubscription(response ClientLinksResponse, format string) (ClientSubscription, error) {
-	if format != "" && format != "base64" && format != "raw" {
-		return ClientSubscription{}, fmt.Errorf("format must be base64 or raw")
+	format, err := NewClientSubscriptionFormatPolicy().Normalize(format)
+	if err != nil {
+		return ClientSubscription{}, err
 	}
 	uris := make([]string, 0, len(response.Links))
 	for _, link := range response.Links {
