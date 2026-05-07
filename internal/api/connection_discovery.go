@@ -3,7 +3,6 @@ package api
 import (
 	"bufio"
 	"os"
-	"strings"
 )
 
 type ConnectionDiscovery struct {
@@ -38,30 +37,17 @@ func (d ConnectionDiscovery) listeningSockets(proto string) ([]ConnectionListene
 		return nil, err
 	}
 	listeners := make([]ConnectionListener, 0)
-	for i, line := range lines {
-		if i == 0 {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		stateField := ""
-		if proto == "tcp" && len(fields) > 3 {
-			stateField = fields[3]
-		}
-		if proto == "tcp" && stateField != "0A" {
-			continue
-		}
-		addr, port := parseHexAddress(fields[1])
-		if addr == "" || port == 0 {
+	parser := NewConnectionSocketRowParser()
+	for _, line := range lines {
+		row, ok := parser.Parse(proto, line)
+		if !ok {
 			continue
 		}
 		listeners = append(listeners, ConnectionListener{
-			Proto:   proto,
-			Address: addr,
-			Port:    port,
-			Process: d.source.ProcessByPort(proto, port),
+			Proto:   row.Proto,
+			Address: row.Address,
+			Port:    row.Port,
+			Process: d.source.ProcessByPort(proto, row.Port),
 		})
 	}
 	return listeners, nil
