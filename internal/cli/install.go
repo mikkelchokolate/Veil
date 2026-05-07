@@ -1,14 +1,9 @@
 package cli
 
 import (
-	"bufio"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/installer"
@@ -89,89 +84,6 @@ func writeAuditInstall(auditLog, backupID string, success bool, errMsg string, w
 		Error:        errMsg,
 		WrittenFiles: writtenFiles,
 	})
-}
-
-func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, sharedPort *int, panelPort *int) error {
-	reader := bufio.NewReader(cmd.InOrStdin())
-	out := cmd.OutOrStdout()
-	domainPattern := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$`)
-	if strings.TrimSpace(*domain) == "" {
-		for {
-			fmt.Fprint(out, "Domain for Veil/ACME: ")
-			value, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			candidate := strings.TrimSpace(value)
-			if candidate == "" {
-				fmt.Fprintln(out, "Domain must not be empty.")
-				continue
-			}
-			if !domainPattern.MatchString(candidate) {
-				fmt.Fprintln(out, "Domain must be a valid domain name (e.g. example.com).")
-				continue
-			}
-			*domain = candidate
-			break
-		}
-	}
-	if strings.TrimSpace(*email) == "" {
-		fmt.Fprint(out, "ACME email: ")
-		value, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		*email = strings.TrimSpace(value)
-	}
-	if *sharedPort == 0 {
-		for {
-			fmt.Fprint(out, "Shared proxy port: ")
-			value, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			parsed, err := strconv.Atoi(strings.TrimSpace(value))
-			if err != nil {
-				fmt.Fprintln(out, "Port must be a number between 1 and 65535.")
-				continue
-			}
-			if parsed < 1 || parsed > 65535 {
-				fmt.Fprintln(out, "Port must be between 1 and 65535.")
-				continue
-			}
-			*sharedPort = parsed
-			break
-		}
-	}
-	if *panelPort == 0 {
-		fmt.Fprint(out, "Customize panel port? If no, Veil will choose a random high port. [y/N]: ")
-		value, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		answer := strings.ToLower(strings.TrimSpace(value))
-		if answer == "y" || answer == "yes" {
-			for {
-				fmt.Fprint(out, "Panel TCP port: ")
-				value, err := reader.ReadString('\n')
-				if err != nil {
-					return err
-				}
-				parsed, err := strconv.Atoi(strings.TrimSpace(value))
-				if err != nil {
-					fmt.Fprintln(out, "Port must be a number between 1 and 65535.")
-					continue
-				}
-				if parsed < 1 || parsed > 65535 {
-					fmt.Fprintln(out, "Port must be between 1 and 65535.")
-					continue
-				}
-				*panelPort = parsed
-				break
-			}
-		}
-	}
-	return nil
 }
 
 func randomSecret(label string) string {
