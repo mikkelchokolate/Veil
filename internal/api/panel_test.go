@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestPanelRenderingShellReplacesAllVeilPlaceholders(t *testing.T) {
+	html := renderPanelHTMLBase()
+	if strings.Contains(html, "__VEIL_PANEL_") {
+		t.Fatalf("Panel rendering shell left unresolved placeholder in HTML")
+	}
+	for _, want := range []string{"Veil Panel", "Client profiles", "function loadServiceStatus()", "function saveInbound"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("rendered Panel HTML missing %q", want)
+		}
+	}
+}
+
 func TestPanelUtilityActionsModuleRendersSharedHelpers(t *testing.T) {
 	actions := panelUtilityActionsJS()
 	for _, want := range []string{
