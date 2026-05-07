@@ -75,7 +75,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
-	if stack.InstallNaive || stack.InstallHysteria2 {
+	if stack.RequiresDomain() {
 		if err := ValidateDomain(input.Domain); err != nil {
 			return RURecommendedProfile{}, err
 		}

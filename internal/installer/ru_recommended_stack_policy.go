@@ -29,6 +29,14 @@ func NewRURecommendedStackPolicy(stack Stack) (RURecommendedStackPolicy, error) 
 	}
 }
 
+func (p RURecommendedStackPolicy) RequiresDomain() bool {
+	return p.InstallNaive || p.InstallHysteria2
+}
+
+func (p RURecommendedStackPolicy) RequiresSharedProxyPort() bool {
+	return p.InstallNaive || p.InstallHysteria2
+}
+
 func normalizeStack(stack Stack) (normalized Stack, installNaive bool, installHysteria2 bool, err error) {
 	policy, err := NewRURecommendedStackPolicy(stack)
 	if err != nil {
