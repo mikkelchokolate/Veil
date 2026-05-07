@@ -825,13 +825,6 @@ func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
 	DecryptManagementSnapshot(snapshot, s.cipher)
 }
 
-func defaultApplyRoot(root string) string {
-	if root != "" {
-		return root
-	}
-	return "/etc/veil"
-}
-
 func (s *managementState) load() error {
 	snapshot, ok, err := NewStateStore(s.statePath, s.cipher).Load()
 	if err != nil {
@@ -840,24 +833,7 @@ func (s *managementState) load() error {
 	if !ok {
 		return nil
 	}
-	if snapshot.Settings.PanelListen != "" {
-		s.settings = snapshot.Settings
-	}
-	if snapshot.Inbounds != nil {
-		s.inbounds = snapshot.Inbounds
-	}
-	if snapshot.Rules != nil {
-		s.rules = snapshot.Rules
-	}
-	if snapshot.RoutingPreset != "" {
-		s.routingPreset = snapshot.RoutingPreset
-	}
-	if snapshot.RoutingSource.Repository != "" || len(snapshot.RoutingSource.Files) > 0 {
-		s.routingSource = snapshot.RoutingSource
-	}
-	if snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "" {
-		s.warp = snapshot.Warp
-	}
+	ApplyManagementSnapshot(s, snapshot)
 	return nil
 }
 
