@@ -59,8 +59,8 @@ func newInstallCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&profile, "profile", "default", "install profile: default or ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "both", "install stack: panel, both, naive, or hysteria2")
+	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "install profile: ru-recommended")
+	cmd.Flags().StringVar(&stack, "stack", "", "install stack: panel, both, naive, or hysteria2; default panel unless domain/email/port are supplied")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")

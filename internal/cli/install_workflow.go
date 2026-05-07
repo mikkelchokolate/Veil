@@ -40,6 +40,12 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			return err
 		}
 	}
+	if strings.TrimSpace(opts.Stack) == "" {
+		opts.Stack = "panel"
+		if opts.Domain != "" || opts.Email != "" || opts.SharedPort != 0 {
+			opts.Stack = "both"
+		}
+	}
 	proxyStack := strings.TrimSpace(opts.Stack) != "panel"
 	if proxyStack {
 		if opts.Domain == "" {
