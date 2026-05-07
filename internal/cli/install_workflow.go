@@ -39,14 +39,17 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			return err
 		}
 	}
-	if opts.Domain == "" {
-		return fmt.Errorf("--domain is required for ru-recommended profile")
-	}
-	if opts.Email == "" {
-		return fmt.Errorf("--email is required for ru-recommended profile")
-	}
-	if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
-		return fmt.Errorf("--port is required and must be between 1 and 65535")
+	proxyStack := strings.TrimSpace(opts.Stack) != "panel"
+	if proxyStack {
+		if opts.Domain == "" {
+			return fmt.Errorf("--domain is required for ru-recommended profile")
+		}
+		if opts.Email == "" {
+			return fmt.Errorf("--email is required for ru-recommended profile")
+		}
+		if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
+			return fmt.Errorf("--port is required and must be between 1 and 65535")
+		}
 	}
 	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)
 	if err != nil {
@@ -77,6 +80,8 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	}
 	if built.WebBasePath != "" && built.WebBasePath != "/" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: http://127.0.0.1:%d/\n", panelListenPort)
 	}
 	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.HysteriaSHA256)
 	if planErr == nil {
