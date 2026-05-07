@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -51,22 +50,9 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
 		return fmt.Errorf("--port is required and must be between 1 and 65535")
 	}
-	var parsedPublicIP net.IP
-	if opts.PublicIP != "" {
-		if opts.PublicIP == "auto" {
-			ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
-			defer cancel()
-			var detectErr error
-			parsedPublicIP, detectErr = installer.DetectPublicIP(ctx, installPublicIPClient, installPublicIPEndpoints)
-			if detectErr != nil {
-				return detectErr
-			}
-		} else {
-			parsedPublicIP = net.ParseIP(opts.PublicIP)
-			if parsedPublicIP == nil {
-				return fmt.Errorf("--public-ip must be a valid IPv4 or IPv6 address, or auto")
-			}
-		}
+	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)
+	if err != nil {
+		return err
 	}
 
 	availability, err := installer.DetectPortAvailability([]int{443, 8443})
