@@ -103,21 +103,7 @@ func (m *MetricsCollector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // MetricsMiddleware wraps an http.Handler and tracks request metrics.
 func (m *MetricsCollector) MetricsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/metrics" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		start := time.Now()
-		m.activeRequests.Add(1)
-		defer m.activeRequests.Add(-1)
-
-		// Wrap ResponseWriter to capture status code
-		crw := &codeResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		next.ServeHTTP(crw, r)
-
-		m.TrackRequest(r.Method, r.URL.Path, crw.statusCode, time.Since(start))
-	})
+	return NewMetricsMiddlewareModule(m).Wrap(next)
 }
 
 type codeResponseWriter struct {
