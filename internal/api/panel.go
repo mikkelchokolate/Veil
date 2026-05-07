@@ -50,41 +50,7 @@ __VEIL_PANEL_APPLY_CARD__
 __VEIL_PANEL_DIAGNOSTICS_CARDS__
   </main>
   <script>
-    const tokenInput = document.getElementById('api-token');
-    tokenInput.value = localStorage.getItem('veil_api_token') || '';
-    tokenInput.addEventListener('input', () => {
-      localStorage.setItem('veil_api_token', tokenInput.value);
-    });
-
-    function authHeaders() {
-      const token = localStorage.getItem('veil_api_token') || '';
-      return token ? { 'X-Veil-Token': token } : {};
-    }
-
-    function requestHeaders(extra) {
-      return Object.assign({}, extra || {}, authHeaders());
-    }
-
-    async function loadJSON(path, outputId, options) {
-      const output = document.getElementById(outputId);
-      output.textContent = 'Loading ' + path + '...';
-      const requestOptions = options || {};
-      requestOptions.headers = requestHeaders(requestOptions.headers || {});
-      try {
-        const response = await fetch(path, requestOptions);
-        const text = await response.text();
-        if (!response.ok) {
-          output.textContent = text || ('HTTP ' + response.status);
-          return null;
-        }
-        const parsed = text ? JSON.parse(text) : null;
-        output.textContent = parsed === null ? 'OK' : JSON.stringify(parsed, null, 2);
-        return parsed;
-      } catch (err) {
-        output.textContent = String(err);
-        return null;
-      }
-    }
+__VEIL_PANEL_INTRO_ACTIONS__
 
     function parseReserved(value) {
       if (!value.trim()) {
@@ -157,28 +123,6 @@ __VEIL_PANEL_RUNTIME_STATS_ACTIONS__
 __VEIL_PANEL_APPLY_ACTIONS__
 
 __VEIL_PANEL_DIAGNOSTICS_ACTIONS__
-
-    // Profile preview
-    document.getElementById('profile-preview-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const domain = document.getElementById('profile-domain').value.trim();
-      const email = document.getElementById('profile-email').value.trim();
-      const stack = document.getElementById('profile-stack').value;
-      if (!domain || !email) {
-        document.getElementById('profile-preview-output').textContent = 'Domain and email are required';
-        return;
-      }
-      await loadJSON('/api/profiles/ru-recommended/preview', 'profile-preview-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, email, stack })
-      });
-    });
-
-    // Version
-    document.getElementById('load-version').addEventListener('click', async () => {
-      await loadJSON('/api/version', 'version-output');
-    });
 
     // Auto-load settings and service status on panel open.
     loadSettingsIntoForm();

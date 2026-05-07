@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`veil_api_token`,
+		`function authHeaders()`,
+		`async function loadJSON(path, outputId, options)`,
+		`profile-preview-form`,
+		`/api/profiles/ru-recommended/preview`,
+		`load-version`,
+		`/api/version`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Intro actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T) {
 	cards := panelIntroCardsHTML()
 	for _, want := range []string{
