@@ -64,7 +64,20 @@ type RURecommendedProfile struct {
 	FallbackRoot       string
 }
 
+type RURecommendedProfileModule struct {
+	input RURecommendedInput
+}
+
+func NewRURecommendedProfileModule(input RURecommendedInput) RURecommendedProfileModule {
+	return RURecommendedProfileModule{input: input}
+}
+
 func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, error) {
+	return NewRURecommendedProfileModule(input).Build()
+}
+
+func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
+	input := m.input
 	if err := ValidateDomain(input.Domain); err != nil {
 		return RURecommendedProfile{}, err
 	}
