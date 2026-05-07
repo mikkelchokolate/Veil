@@ -31,17 +31,6 @@ func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bo
 	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
 }
 
-func checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
-	checks := []ServiceHealthResult{}
-	for _, action := range actions {
-		if !action.Success || action.Name == "" {
-			continue
-		}
-		checks = append(checks, serviceHealthChecker(action.Name))
-	}
-	return checks
-}
-
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
 	return s.managementConfigRendererLocked().Render()
 }
