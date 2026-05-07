@@ -45,27 +45,11 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 }
 
 func buildInboundClientLinks(settings Settings, inbound Inbound) ([]ClientLink, error) {
-	credentials, err := BuildClientCredentials(inbound)
+	access, err := BuildClientAccess(settings, inbound)
 	if err != nil {
 		return nil, err
 	}
-	if len(credentials) == 0 {
-		return []ClientLink{fallbackInboundClientLink(settings, inbound)}, nil
-	}
-	links := make([]ClientLink, 0, len(credentials))
-	for _, credential := range credentials {
-		link := ClientLink{Name: inbound.Name + "/" + credential.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
-		switch inbound.Protocol {
-		case "naiveproxy":
-			link.URI = naiveClientURI(settings.Domain, inbound.Port, credential.Username, credential.Password)
-		case "hysteria2":
-			link.URI = hysteria2UserPassClientURI(settings.Domain, inbound.Port, credential.Username, credential.Password, link.Name)
-		default:
-			continue
-		}
-		links = append(links, link)
-	}
-	return links, nil
+	return access.ClientLinks(), nil
 }
 
 func fallbackInboundClientLink(settings Settings, inbound Inbound) ClientLink {

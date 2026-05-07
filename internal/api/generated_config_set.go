@@ -91,7 +91,7 @@ func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, err
 	if password == "" {
 		password = settings.NaivePassword
 	}
-	credentials, err := BuildClientCredentials(inbound)
+	access, err := BuildClientAccess(settings, inbound)
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +101,7 @@ func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, err
 		ListenPort:   inbound.Port,
 		Username:     settings.NaiveUsername,
 		Password:     password,
-		Users:        naiveUsersFromCredentials(credentials),
+		Users:        access.NaiveUsers(),
 		FallbackRoot: settings.FallbackRoot,
 	})
 }
@@ -111,7 +111,7 @@ func renderHysteria2GeneratedConfig(settings Settings, inbound Inbound) (string,
 	if password == "" {
 		password = settings.Hysteria2Password
 	}
-	credentials, err := BuildClientCredentials(inbound)
+	access, err := BuildClientAccess(settings, inbound)
 	if err != nil {
 		return "", err
 	}
@@ -119,23 +119,7 @@ func renderHysteria2GeneratedConfig(settings Settings, inbound Inbound) (string,
 		ListenPort:    inbound.Port,
 		Domain:        settings.Domain,
 		Password:      password,
-		Users:         hysteria2UsersFromCredentials(credentials),
+		Users:         access.Hysteria2Users(),
 		MasqueradeURL: settings.MasqueradeURL,
 	})
-}
-
-func naiveUsersFromCredentials(credentials []ClientCredential) []renderer.NaiveUser {
-	users := make([]renderer.NaiveUser, 0, len(credentials))
-	for _, credential := range credentials {
-		users = append(users, renderer.NaiveUser{Username: credential.Username, Password: credential.Password})
-	}
-	return users
-}
-
-func hysteria2UsersFromCredentials(credentials []ClientCredential) []renderer.Hysteria2User {
-	users := make([]renderer.Hysteria2User, 0, len(credentials))
-	for _, credential := range credentials {
-		users = append(users, renderer.Hysteria2User{Username: credential.Username, Password: credential.Password})
-	}
-	return users
 }
