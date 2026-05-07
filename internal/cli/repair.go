@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/installer"
 )
@@ -26,82 +23,21 @@ func newRepairCommand() *cobra.Command {
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if profile != "ru-recommended" {
-				return fmt.Errorf("profile %q is not implemented yet", profile)
-			}
-			if domain == "" {
-				return fmt.Errorf("--domain is required for ru-recommended profile")
-			}
-			if email == "" {
-				return fmt.Errorf("--email is required for ru-recommended profile")
-			}
-			if sharedPort <= 0 || sharedPort > 65535 {
-				return fmt.Errorf("--port is required and must be between 1 and 65535")
-			}
-			built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
+			return runRepairWorkflow(cmd, repairWorkflowOptions{
+				Profile:      profile,
+				Stack:        stack,
 				Domain:       domain,
 				Email:        email,
-				Stack:        installer.Stack(stack),
-				Port:         sharedPort,
-				Availability: installer.PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-				Secret:       randomSecret,
-				RandomPort:   func() int { return 31874 },
+				SharedPort:   sharedPort,
+				DryRun:       dryRun,
+				Yes:          yes,
+				EtcDir:       etcDir,
+				VarDir:       varDir,
+				SystemdDir:   systemdDir,
+				BackupDir:    backupDir,
+				BackupDirSet: cmd.Flags().Changed("backup-dir"),
+				AuditLog:     auditLog,
 			})
-			if err != nil {
-				return err
-			}
-		plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Veil repair plan")
-		fmt.Fprintln(cmd.OutOrStdout(), plan.Summary())
-		if dryRun {
-			return nil
-		}
-		if !yes {
-			return fmt.Errorf("repair apply requires --yes; rerun with --dry-run to preview")
-		}
-
-		// Default backup directory if not explicitly set
-		actualBackupDir := backupDir
-		if !cmd.Flags().Changed("backup-dir") {
-			actualBackupDir = filepath.Join(varDir, "backups")
-		}
-
-		// Backup existing files before repairing (only on real apply)
-		var backupID string
-		if actualBackupDir != "" && len(plan.Actions) > 0 {
-			paths := make([]string, 0, len(plan.Actions))
-			for _, action := range plan.Actions {
-				paths = append(paths, action.Path)
-			}
-			id, err := installer.BackupBeforeApply(paths, actualBackupDir)
-			if err != nil {
-				_ = writeAuditRepair(auditLog, "", false, err.Error(), nil)
-				return err
-			}
-			backupID = id
-		}
-
-		result, err := installer.ApplyRepairPlan(plan)
-		if err != nil {
-			_ = writeAuditRepair(auditLog, backupID, false, err.Error(), nil)
-			return err
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Repaired files:")
-		for _, path := range result.WrittenFiles {
-			fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
-		}
-		if backupID != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Backup ID: %s\n", backupID)
-		} else if len(plan.Actions) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "No backup created")
-		}
-		if err := writeAuditRepair(auditLog, backupID, true, "", result.WrittenFiles); err != nil {
-			return fmt.Errorf("audit log write failed after successful repair: %w", err)
-		}
-		return nil
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "default", "repair profile: default or ru-recommended")
