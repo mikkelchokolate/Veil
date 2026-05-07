@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/installer"
 )
@@ -21,21 +19,7 @@ func newRollbackCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List available backups",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if backupDir == "" {
-				return fmt.Errorf("--backup-dir is required")
-			}
-			ids, err := installer.NewBackupLifecycle(backupDir).List()
-			if err != nil {
-				return err
-			}
-			if len(ids) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No backups found")
-				return nil
-			}
-			for _, id := range ids {
-				fmt.Fprintln(cmd.OutOrStdout(), id)
-			}
-			return nil
+			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).List()
 		},
 	}
 
@@ -44,26 +28,7 @@ func newRollbackCommand() *cobra.Command {
 		Short: "Restore files from a backup",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if backupDir == "" {
-				return fmt.Errorf("--backup-dir is required")
-			}
-			if !yes {
-				return fmt.Errorf("restore requires --yes to confirm")
-			}
-			backupID := args[0]
-			restored, err := installer.NewBackupLifecycle(backupDir).Restore(backupID)
-			if err != nil {
-				writeAuditRestore(auditLog, backupID, false, err.Error(), nil)
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Restored files:")
-			for _, path := range restored {
-				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
-			}
-			if err := writeAuditRestore(auditLog, backupID, true, "", restored); err != nil {
-				return fmt.Errorf("audit log write failed after successful restore: %w", err)
-			}
-			return nil
+			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Restore(args[0])
 		},
 	}
 
@@ -72,22 +37,7 @@ func newRollbackCommand() *cobra.Command {
 		Short: "Remove a backup after successful restore",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if backupDir == "" {
-				return fmt.Errorf("--backup-dir is required")
-			}
-			if !yes {
-				return fmt.Errorf("cleanup requires --yes to confirm")
-			}
-			backupID := args[0]
-			if err := installer.NewBackupLifecycle(backupDir).Cleanup(backupID); err != nil {
-				_ = writeAuditCleanup(auditLog, backupID, false, err.Error())
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Backup %s removed\n", backupID)
-			if err := writeAuditCleanup(auditLog, backupID, true, ""); err != nil {
-				return fmt.Errorf("audit log write failed after successful cleanup: %w", err)
-			}
-			return nil
+			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Cleanup(args[0])
 		},
 	}
 
