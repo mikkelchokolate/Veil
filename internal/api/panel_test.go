@@ -5,6 +5,46 @@ import (
 	"testing"
 )
 
+func TestPanelDiagnosticsCardsModuleRendersToolControls(t *testing.T) {
+	cards := panelDiagnosticsCardsHTML()
+	for _, want := range []string{
+		`<h2>Speedtest</h2>`,
+		`id="run-speedtest"`,
+		`<h2>DNS lookup</h2>`,
+		`id="run-dns-lookup"`,
+		`<h2>Ping</h2>`,
+		`id="run-ping"`,
+		`<h2>Firewall</h2>`,
+		`id="load-firewall"`,
+		`<h2>Service logs</h2>`,
+		`id="load-logs"`,
+	} {
+		if !strings.Contains(cards, want) {
+			t.Fatalf("Diagnostics cards missing %q", want)
+		}
+	}
+}
+
+func TestPanelRuntimeStatsCardsModuleRendersRuntimeControls(t *testing.T) {
+	cards := panelRuntimeStatsCardsHTML()
+	for _, want := range []string{
+		`<h2>System resources</h2>`,
+		`id="load-system-stats"`,
+		`<h2>Network interfaces</h2>`,
+		`id="load-network-stats"`,
+		`<h2>Listening ports</h2>`,
+		`id="load-connections-stats"`,
+		`<h2>Managed processes</h2>`,
+		`id="load-processes-stats"`,
+		`<h2>Disk usage</h2>`,
+		`id="load-disk-stats"`,
+	} {
+		if !strings.Contains(cards, want) {
+			t.Fatalf("Runtime stats cards missing %q", want)
+		}
+	}
+}
+
 func TestPanelServiceStatusCardModuleRendersOperationalControls(t *testing.T) {
 	card := panelServiceStatusCardHTML()
 	for _, want := range []string{
