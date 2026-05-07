@@ -5,7 +5,7 @@ type ManagedProcessPolicy struct {
 }
 
 func NewManagedProcessPolicy() ManagedProcessPolicy {
-	return ManagedProcessPolicy{names: []string{"caddy", "hysteria2", "sing-box", "veil"}}
+	return ManagedProcessPolicy{names: []string{"caddy", "hysteria2", "sing-box", "veil", "mieru"}}
 }
 
 func (p ManagedProcessPolicy) IsManaged(name string) bool {

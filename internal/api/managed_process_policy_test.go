@@ -4,7 +4,7 @@ import "testing"
 
 func TestManagedProcessPolicyRecognizesVeilManagedProcesses(t *testing.T) {
 	policy := NewManagedProcessPolicy()
-	for _, name := range []string{"caddy", "hysteria2", "sing-box", "veil"} {
+	for _, name := range []string{"caddy", "hysteria2", "sing-box", "veil", "mieru"} {
 		if !policy.IsManaged(name) {
 			t.Fatalf("%s should be managed", name)
 		}
