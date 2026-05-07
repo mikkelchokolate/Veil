@@ -80,12 +80,7 @@ func (m RoutingRuleManagement) index(name string) int {
 	if m.rules == nil {
 		return -1
 	}
-	for idx, rule := range *m.rules {
-		if rule.Name == name {
-			return idx
-		}
-	}
-	return -1
+	return NewRoutingRuleIndex(*m.rules).Index(name)
 }
 
 func (m RoutingRuleManagement) replaceAndSave(next []RoutingRule) error {
