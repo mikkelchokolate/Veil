@@ -84,13 +84,7 @@ func readProcessMemory(pid int) int64 {
 	if err != nil {
 		return 0
 	}
-	fields := strings.Fields(string(data))
-	if len(fields) < 2 {
-		return 0
-	}
-	// RSS in pages (field 1), convert to MB (page size = 4096)
-	rssPages, _ := strconv.ParseInt(fields[1], 10, 64)
-	return rssPages * 4 / 1024 // pages * 4KB / 1024 = MB
+	return NewProcessMemoryParser().Parse(string(data))
 }
 
 func readProcessCPU(pid int, uptimeSec int64) float64 {
