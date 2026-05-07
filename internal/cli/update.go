@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -142,47 +141,6 @@ func updateAssetName() string {
 		arch = "arm64"
 	}
 	return fmt.Sprintf("veil_%s_%s.tar.gz", os, arch)
-}
-
-// githubRelease represents a subset of the GitHub Release API response.
-type githubRelease struct {
-	TagName string        `json:"tag_name"`
-	Assets  []githubAsset `json:"assets"`
-}
-
-type githubAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
-// fetchLatestRelease queries the GitHub API for the latest release.
-func fetchLatestRelease() (*githubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "veil")
-	resp, err := updateHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("GitHub API: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned %s", resp.Status)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	var release githubRelease
-	if err := json.Unmarshal(body, &release); err != nil {
-		return nil, fmt.Errorf("parse release JSON: %w", err)
-	}
-	return &release, nil
 }
 
 // findAssetURL returns the download URL for the named asset.
