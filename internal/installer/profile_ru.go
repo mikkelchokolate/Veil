@@ -108,9 +108,10 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		return RURecommendedProfile{}, err
 	}
 
-	username := "veil"
-	masqueradeURL := "https://www.bing.com/"
-	fallbackRoot := "/var/lib/veil/www"
+	defaults := NewRURecommendedDefaults()
+	username := defaults.Username
+	masqueradeURL := defaults.MasqueradeURL
+	fallbackRoot := defaults.FallbackRoot
 	webBasePath := generateWebBasePath()
 	panelAuthToken := input.Secret("panel")
 	naive := ruRecommendedNaiveArtifacts{}
