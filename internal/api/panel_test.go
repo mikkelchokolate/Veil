@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T) {
+	cards := panelIntroCardsHTML()
+	for _, want := range []string{
+		`Veil Panel`,
+		`<h2>Version</h2>`,
+		`id="load-version"`,
+		`<h2>API token</h2>`,
+		`id="api-token"`,
+		`<h2>Profile preview</h2>`,
+		`id="profile-preview-form"`,
+		`id="profile-preview-output"`,
+	} {
+		if !strings.Contains(cards, want) {
+			t.Fatalf("Intro cards missing %q", want)
+		}
+	}
+}
+
 func TestPanelDiagnosticsCardsModuleRendersToolControls(t *testing.T) {
 	cards := panelDiagnosticsCardsHTML()
 	for _, want := range []string{
