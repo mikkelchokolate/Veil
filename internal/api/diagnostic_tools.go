@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
@@ -73,32 +72,6 @@ func runPing(host string, count int) PingResult {
 		result.LossPct = float64(result.Transmitted-result.Received) / float64(result.Transmitted) * 100
 	}
 	return result
-}
-
-func parsePingOutput(output string, result *PingResult) {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "packets transmitted") {
-			// e.g. "3 packets transmitted, 3 received, 0% packet loss"
-			fmt.Sscanf(line, "%d packets transmitted, %d received", &result.Transmitted, &result.Received)
-		}
-		if strings.Contains(line, "min/avg/max") || strings.Contains(line, "rtt min/avg/max") {
-			// e.g. "rtt min/avg/max/mdev = 1.234/2.345/4.567/0.890 ms"
-			parts := strings.Split(line, "=")
-			if len(parts) == 2 {
-				stats := strings.Fields(strings.TrimSpace(parts[1]))
-				if len(stats) >= 1 {
-					times := strings.Split(stats[0], "/")
-					if len(times) >= 4 {
-						fmt.Sscanf(times[0], "%f", &result.MinMs)
-						fmt.Sscanf(times[1], "%f", &result.AvgMs)
-						fmt.Sscanf(times[2], "%f", &result.MaxMs)
-						fmt.Sscanf(times[3], "%f", &result.StddevMs)
-					}
-				}
-			}
-		}
-	}
 }
 
 func runDNSLookup(host string) ([]string, string, error) {
