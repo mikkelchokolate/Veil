@@ -36,8 +36,8 @@ func (m RoutingRuleManagement) Get(name string) (RoutingRule, bool) {
 }
 
 func (m RoutingRuleManagement) Create(rule RoutingRule) (RoutingRule, error) {
-	if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
-		return RoutingRule{}, ErrRoutingRuleInvalid
+	if err := NewRoutingRuleValidation().ValidateCreate(rule); err != nil {
+		return RoutingRule{}, err
 	}
 	if m.index(rule.Name) >= 0 {
 		return RoutingRule{}, ErrRoutingRuleDuplicateName
@@ -54,8 +54,8 @@ func (m RoutingRuleManagement) Update(name string, update RoutingRule) (RoutingR
 	if idx < 0 {
 		return RoutingRule{}, ErrRoutingRuleNotFound
 	}
-	if update.Match == "" || update.Outbound == "" {
-		return RoutingRule{}, ErrRoutingRuleInvalid
+	if err := NewRoutingRuleValidation().ValidateUpdate(update); err != nil {
+		return RoutingRule{}, err
 	}
 	update.Name = name
 	next := m.List()
