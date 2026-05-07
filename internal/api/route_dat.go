@@ -82,24 +82,9 @@ func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
 }
 
 func verifyRouteDatChecksum(name string, body []byte, checksumText string) error {
-	fields := strings.Fields(checksumText)
-	if len(fields) == 0 {
-		return fmt.Errorf("checksum for %s is empty", name)
-	}
-	expected := ""
-	for i := 0; i < len(fields); i++ {
-		if fields[i] == name && i > 0 {
-			expected = fields[i-1]
-			break
-		}
-	}
-	if expected == "" {
-		expected = fields[0]
-	}
-	expected = strings.TrimPrefix(strings.ToLower(expected), "sha256:")
-	decoded, err := hex.DecodeString(expected)
-	if err != nil || len(decoded) != sha256.Size {
-		return fmt.Errorf("invalid checksum for %s", name)
+	expected, err := NewRouteDatChecksumParser().Parse(name, checksumText)
+	if err != nil {
+		return err
 	}
 	actual := sha256.Sum256(body)
 	if !strings.EqualFold(hex.EncodeToString(actual[:]), expected) {
