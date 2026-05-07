@@ -23,31 +23,7 @@ type ServerInfo struct {
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {
-	mux := http.NewServeMux()
-	state := newManagementState(info)
-	metrics := NewMetricsCollector()
-	basePath := info.WebBasePath
-	if basePath == "" {
-		basePath = "/"
-	}
-	mux.HandleFunc("/metrics", metrics.ServeHTTP)
-	RuntimeRoutes{}.Register(mux)
-	ServiceActionRoutes{}.Register(mux)
-	state.register(mux)
-	PanelRoutes{Info: info, BasePath: basePath}.Register(mux)
-	DiagnosticToolRoutes{}.Register(mux)
-	StatusRoutes{Info: info}.Register(mux)
-	ProfilePreviewRoutes{}.Register(mux)
-	LogRoutes{}.Register(mux)
-	// Wrap the mux to strip the web base path prefix from incoming requests.
-	var handler http.Handler = mux
-	if basePath != "/" {
-		handler = stripBasePathMiddleware(basePath, mux)
-	}
-	rateLimited := rateLimitMiddleware(metrics, handler)
-	authenticated := authMiddleware(info.AuthToken, rateLimited)
-	secured := securityHeadersMiddleware(authenticated)
-	return metrics.MetricsMiddleware(secured), state
+	return NewRouterComposition(info).Build()
 }
 
 // stripBasePathMiddleware removes the base path prefix from request URL before routing.
