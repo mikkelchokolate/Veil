@@ -52,34 +52,12 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		fmt.Fprintf(out, "Updating %s → %s\n", opts.CurrentVersion, release.TagName)
 	}
 
-	// 3. Find the correct asset for this platform
 	assetName := updateAssetName()
-	checksumsName := "checksums.txt"
-	assetURL := findAssetURL(release.Assets, assetName)
-	checksumsURL := findAssetURL(release.Assets, checksumsName)
-	if assetURL == "" {
-		return fmt.Errorf("release %s has no asset %s", release.TagName, assetName)
-	}
-	if checksumsURL == "" {
-		return fmt.Errorf("release %s has no checksums asset", release.TagName)
-	}
-
-	// 4. Download archive and checksums
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
-	archive, err := updateAssetDownloader(assetURL)
-	if err != nil {
-		return fmt.Errorf("download %s: %w", assetName, err)
-	}
-
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
-	checksumsBody, err := updateAssetDownloader(checksumsURL)
+	_, archive, err := downloadVerifiedUpdateAsset(release)
 	if err != nil {
-		return fmt.Errorf("download checksums: %w", err)
-	}
-
-	// 5. Verify archive checksum
-	if err := verifyAssetChecksum(archive, assetName, string(checksumsBody)); err != nil {
-		return fmt.Errorf("checksum verification failed: %w", err)
+		return err
 	}
 	fmt.Fprintln(out, "Checksum verified.")
 
