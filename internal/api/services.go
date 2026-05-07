@@ -22,18 +22,10 @@ type ServiceActionResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
-var allowedServices = map[string]bool{
-	"veil":      true,
-	"caddy":     true,
-	"hysteria2": true,
-	"sing-box":  true,
-	"mieru":     true,
-}
-
 var serviceControlRunner = runServiceControl
 
 func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
-	if !allowedServices[name] {
+	if !NewServiceControlCommand().Allows(name) {
 		writeError(w, "unknown service: "+name, http.StatusBadRequest)
 		return
 	}
@@ -57,7 +49,12 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action st
 
 func runServiceControl(name, action string) ServiceActionResponse {
 	resp := ServiceActionResponse{Service: name, Action: action}
-	cmd := exec.Command("systemctl", action, name+".service")
+	command, ok := NewServiceControlCommand().Build(name, action)
+	if !ok {
+		resp.Error = "unknown service: " + name
+		return resp
+	}
+	cmd := exec.Command(command[0], command[1:]...)
 	out, err := cmd.CombinedOutput()
 	resp.Output = strings.TrimSpace(string(out))
 	if err != nil {
