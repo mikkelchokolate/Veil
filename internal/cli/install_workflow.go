@@ -115,17 +115,11 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if built.WebBasePath != "" && built.WebBasePath != "/" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
 	}
-	plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
-		Platform:        installer.CurrentPlatform(),
-		HysteriaVersion: "v2.6.0",
-		HysteriaSHA256:  opts.HysteriaSHA256,
-		SystemdUnits:    systemdUnitsForProfile(built),
-		PanelPort:       panelListenPort,
-	})
+	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.HysteriaSHA256)
 	if planErr == nil {
 		fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))
-		fmt.Fprintln(cmd.OutOrStdout(), plan.Summary())
+		fmt.Fprintln(cmd.OutOrStdout(), planSummary)
 	}
 	if opts.DryRun {
 		return nil

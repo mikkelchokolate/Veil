@@ -91,17 +91,6 @@ func writeAuditInstall(auditLog, backupID string, success bool, errMsg string, w
 	})
 }
 
-func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
-	units := []string{"veil.service"}
-	if profile.InstallNaive {
-		units = append(units, "veil-naive.service")
-	}
-	if profile.InstallHysteria2 {
-		units = append(units, "veil-hysteria2.service")
-	}
-	return units
-}
-
 func promptInstallOptions(cmd *cobra.Command, domain *string, email *string, sharedPort *int, panelPort *int) error {
 	reader := bufio.NewReader(cmd.InOrStdin())
 	out := cmd.OutOrStdout()
