@@ -18,18 +18,13 @@ type EndpointLimit struct {
 // RateLimiter is a per-IP token bucket rate limiter.
 type RateLimiter struct {
 	buckets        sync.Map
+	engine         *RateLimiterEngine
 	rate           float64
 	burst          int
 	endpointLimits map[string]EndpointLimit
 	mu             sync.RWMutex
 	stopCh         chan struct{}
 	onRateLimited  func() // called when a request is rate-limited
-}
-
-type tokenBucket struct {
-	tokens   float64
-	lastTime time.Time
-	mu       sync.Mutex
 }
 
 // NewRateLimiter creates a new rate limiter with the given default rate and burst.
@@ -41,6 +36,7 @@ func NewRateLimiter(ratePerMinute, burst int) *RateLimiter {
 		burst:  burst,
 		stopCh: make(chan struct{}),
 	}
+	rl.engine = newRateLimiterEngineWithBuckets(&rl.buckets)
 	go rl.cleanupLoop()
 	return rl
 }
@@ -61,31 +57,7 @@ func (rl *RateLimiter) Stop() {
 // allow checks if a request identified by key is allowed under the given rate and burst.
 // Returns allowed=false and the duration to wait before retrying when rate limited.
 func (rl *RateLimiter) allow(key string, rate float64, burst int) (bool, time.Duration) {
-	val, _ := rl.buckets.LoadOrStore(key, &tokenBucket{
-		tokens:   float64(burst),
-		lastTime: time.Now(),
-	})
-	tb := val.(*tokenBucket)
-	tb.mu.Lock()
-	defer tb.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(tb.lastTime).Seconds()
-	tb.tokens += elapsed * rate
-	if tb.tokens > float64(burst) {
-		tb.tokens = float64(burst)
-	}
-	tb.lastTime = now
-
-	if tb.tokens >= 1 {
-		tb.tokens--
-		return true, 0
-	}
-
-	// Calculate time until the next token arrives
-	needed := 1.0 - tb.tokens
-	retryAfter := time.Duration(needed / rate * float64(time.Second))
-	return false, retryAfter
+	return rl.engine.Allow(key, rate, burst)
 }
 
 // Middleware returns an HTTP middleware that rate-limits mutating requests (POST/PUT/DELETE)
@@ -183,15 +155,5 @@ func (rl *RateLimiter) cleanupLoop() {
 }
 
 func (rl *RateLimiter) cleanup() {
-	cutoff := time.Now().Add(-10 * time.Minute)
-	rl.buckets.Range(func(key, value any) bool {
-		tb := value.(*tokenBucket)
-		tb.mu.Lock()
-		lastTime := tb.lastTime
-		tb.mu.Unlock()
-		if lastTime.Before(cutoff) {
-			rl.buckets.Delete(key)
-		}
-		return true
-	})
+	rl.engine.Cleanup(time.Now().Add(-10 * time.Minute))
 }
