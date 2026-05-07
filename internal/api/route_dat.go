@@ -17,18 +17,19 @@ var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var routeDatDownloader = downloadRouteDat
 
 func downloadRouteDat(url string) ([]byte, error) {
-	const maxAttempts = 3
+	retry := NewRouteDatRetryPolicy()
+	maxAttempts := retry.MaxAttempts()
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if attempt > 1 {
-			backoff := time.Duration(1<<(attempt-2)) * time.Second // 1s, 2s, 4s
+			backoff := retry.Backoff(attempt)
 			log.Printf("downloadRouteDat: retry attempt %d/%d after %v (previous error: %v)", attempt, maxAttempts, backoff, lastErr)
 			time.Sleep(backoff)
 		}
 		resp, err := routeDatHTTPClient.Get(url)
 		if err != nil {
 			lastErr = err
-			if !isRetryableError(err) {
+			if !retry.Retryable(err) {
 				return nil, err
 			}
 			continue
@@ -47,7 +48,7 @@ func downloadRouteDat(url string) ([]byte, error) {
 		body, err := io.ReadAll(lr)
 		if err != nil {
 			lastErr = err
-			if !isRetryableError(err) {
+			if !retry.Retryable(err) {
 				return nil, err
 			}
 			continue
@@ -58,28 +59,6 @@ func downloadRouteDat(url string) ([]byte, error) {
 		return body, nil
 	}
 	return nil, fmt.Errorf("download %s failed after %d attempts: %w", url, maxAttempts, lastErr)
-}
-
-// isRetryableError returns true for network errors that are worth retrying.
-// Temporary errors and timeouts are retryable; permanent errors are not.
-func isRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Check for net.Error with Temporary() or Timeout()
-	type temporary interface {
-		Temporary() bool
-	}
-	if t, ok := err.(temporary); ok && t.Temporary() {
-		return true
-	}
-	type timeout interface {
-		Timeout() bool
-	}
-	if t, ok := err.(timeout); ok && t.Timeout() {
-		return true
-	}
-	return false
 }
 
 func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
