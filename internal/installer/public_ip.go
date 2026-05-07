@@ -97,25 +97,3 @@ var docCIDRs = func() []*net.IPNet {
 	}
 	return cidrs
 }()
-
-func isPublicIP(ip net.IP) bool {
-	if ip == nil {
-		return false
-	}
-	// Reject unspecified, loopback, private, link-local, multicast, and CGNAT.
-	if ip.IsUnspecified() || ip.IsLoopback() || ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() {
-		return false
-	}
-	if cgnatCIDR != nil && cgnatCIDR.Contains(ip) {
-		return false
-	}
-	// Reject documentation and reserved test ranges.
-	for _, cidr := range docCIDRs {
-		if cidr != nil && cidr.Contains(ip) {
-			return false
-		}
-	}
-	return true
-}
