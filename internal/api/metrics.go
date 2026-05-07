@@ -3,7 +3,6 @@ package api
 
 import (
 	"net/http"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,29 +58,7 @@ func NewMetricsCollector() *MetricsCollector {
 
 // TrackRequest records an HTTP request for metrics.
 func (m *MetricsCollector) TrackRequest(method, path string, statusCode int, duration time.Duration) {
-	m.requestsTotal.Add(1)
-
-	// Status code counter
-	codeKey := strconv.Itoa(statusCode)
-	if val, ok := m.requestsByCode.Load(codeKey); ok {
-		val.(*atomic.Int64).Add(1)
-	} else {
-		var counter atomic.Int64
-		counter.Store(1)
-		m.requestsByCode.Store(codeKey, &counter)
-	}
-
-	// Path counter (method:path)
-	pathKey := method + ":" + path
-	if val, ok := m.requestsByPath.Load(pathKey); ok {
-		val.(*atomic.Int64).Add(1)
-	} else {
-		var counter atomic.Int64
-		counter.Store(1)
-		m.requestsByPath.Store(pathKey, &counter)
-	}
-
-	m.requestDuration.add(duration)
+	NewMetricsRequestRecorder(m).Record(method, path, statusCode, duration)
 }
 
 // TrackRateLimitHit records a rate-limited request.
