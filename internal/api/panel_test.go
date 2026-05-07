@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
+	card := panelWarpCardHTML()
+	for _, want := range []string{
+		`<h2>WARP</h2>`,
+		`id="warp-form"`,
+		`id="warp-private-key"`,
+		`id="warp-license-key"`,
+		`[REDACTED]`,
+		`id="save-warp-config"`,
+		`id="warp-output"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("WARP card missing %q", want)
+		}
+	}
+}
+
 func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
 	card := panelSettingsCardHTML()
 	for _, want := range []string{
