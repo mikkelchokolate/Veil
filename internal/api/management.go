@@ -3,11 +3,8 @@ package api
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
-
-	"github.com/veil-panel/veil/internal/secrets"
 )
 
 var stagedConfigValidator = runStagedConfigValidators
@@ -17,38 +14,6 @@ var serviceHealthChecker = runFixedServiceHealthCheck
 // Reloader is an optional interface for runtime state reload.
 type Reloader interface {
 	Reload() error
-}
-
-func newManagementState(info ServerInfo) *managementState {
-	keyPath := info.KeyPath
-	if keyPath == "" {
-		keyPath = "/etc/veil/state.key"
-	}
-	model := defaultManagementModel(info.Mode)
-	state := &managementState{
-		statePath: info.StatePath,
-		applyRoot: defaultApplyRoot(info.ApplyRoot),
-		keyPath:   keyPath,
-		settings:  model.Settings,
-		inbounds:  model.Inbounds,
-		rules:     model.Rules,
-		warp:      model.Warp,
-	}
-	key, err := secrets.LoadOrCreateKey(keyPath)
-	if err != nil {
-		log.Printf("error loading encryption key from %s: %v", keyPath, err)
-	} else {
-		cipher, err := secrets.NewCipher(*key)
-		if err != nil {
-			log.Printf("error creating cipher: %v", err)
-		} else {
-			state.cipher = cipher
-		}
-	}
-	if err := state.load(); err != nil {
-		log.Printf("error loading management state from %s: %v", info.StatePath, err)
-	}
-	return state
 }
 
 func (s *managementState) register(mux *http.ServeMux) {

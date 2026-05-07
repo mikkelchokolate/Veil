@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/veil-panel/veil/internal/secrets"
 )
@@ -12,6 +13,44 @@ type ManagementStateLifecycle struct {
 
 func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycle {
 	return ManagementStateLifecycle{state: state}
+}
+
+func newManagementState(info ServerInfo) *managementState {
+	keyPath := info.KeyPath
+	if keyPath == "" {
+		keyPath = "/etc/veil/state.key"
+	}
+	model := defaultManagementModel(info.Mode)
+	state := &managementState{
+		statePath: info.StatePath,
+		applyRoot: defaultApplyRoot(info.ApplyRoot),
+		keyPath:   keyPath,
+		settings:  model.Settings,
+		inbounds:  model.Inbounds,
+		rules:     model.Rules,
+		warp:      model.Warp,
+	}
+	lifecycle := NewManagementStateLifecycle(state)
+	if err := lifecycle.loadOrCreateCipher(); err != nil {
+		log.Printf("error loading encryption key from %s: %v", keyPath, err)
+	}
+	if err := lifecycle.Load(); err != nil {
+		log.Printf("error loading management state from %s: %v", info.StatePath, err)
+	}
+	return state
+}
+
+func (l ManagementStateLifecycle) loadOrCreateCipher() error {
+	key, err := secrets.LoadOrCreateKey(l.state.keyPath)
+	if err != nil {
+		return err
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		return err
+	}
+	l.state.cipher = cipher
+	return nil
 }
 
 func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
