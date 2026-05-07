@@ -5,10 +5,11 @@ import (
 )
 
 var (
-	ErrInboundInvalid                = errors.New("inbound invalid")
-	ErrInboundNotFound               = errors.New("inbound not found")
-	ErrInboundDuplicateName          = errors.New("inbound name already exists")
-	ErrInboundDuplicateTransportPort = errors.New("inbound transport/port already exists")
+	ErrInboundInvalid                      = errors.New("inbound invalid")
+	ErrInboundNotFound                     = errors.New("inbound not found")
+	ErrInboundDuplicateName                = errors.New("inbound name already exists")
+	ErrInboundDuplicateTransportPort       = errors.New("inbound transport/port already exists")
+	ErrInboundUnsupportedProtocolTransport = errors.New("unsupported inbound protocol/transport")
 )
 
 type InboundPasswordGenerator func() string

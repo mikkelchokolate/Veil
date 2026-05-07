@@ -101,6 +101,8 @@ func writeInboundManagementError(w http.ResponseWriter, err error) {
 		writeError(w, "inbound name already exists", http.StatusConflict)
 	case ErrInboundDuplicateTransportPort:
 		writeError(w, "inbound transport/port already exists", http.StatusConflict)
+	case ErrInboundUnsupportedProtocolTransport:
+		writeError(w, "unsupported inbound protocol/transport", http.StatusBadRequest)
 	case ErrInboundNotFound:
 		writeNotFound(w)
 	default:

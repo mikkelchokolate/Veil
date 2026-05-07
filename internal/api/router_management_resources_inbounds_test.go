@@ -178,14 +178,14 @@ func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T)
 	if seedNaive.Code != http.StatusCreated {
 		t.Fatalf("seed naive expected 201, got %d: %s", seedNaive.Code, seedNaive.Body.String())
 	}
-	seedHy2 := httptest.NewRecorder()
-	r.ServeHTTP(seedHy2, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}`)))
-	if seedHy2.Code != http.StatusCreated {
-		t.Fatalf("seed hysteria2 expected 201, got %d: %s", seedHy2.Code, seedHy2.Body.String())
+	seedMieru := httptest.NewRecorder()
+	r.ServeHTTP(seedMieru, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"mieru","protocol":"mieru","transport":"udp","port":8443,"enabled":true}`)))
+	if seedMieru.Code != http.StatusCreated {
+		t.Fatalf("seed mieru expected 201, got %d: %s", seedMieru.Code, seedMieru.Body.String())
 	}
 
 	update := httptest.NewRecorder()
-	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/hysteria2", strings.NewReader(`{"protocol":"hysteria2","transport":"tcp","port":443,"enabled":true}`)))
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/inbounds/mieru", strings.NewReader(`{"protocol":"mieru","transport":"tcp","port":443,"enabled":true}`)))
 	if update.Code != http.StatusConflict {
 		t.Fatalf("expected 409 duplicate transport/port on update, got %d: %s", update.Code, update.Body.String())
 	}
