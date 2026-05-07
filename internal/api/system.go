@@ -24,37 +24,20 @@ type SystemStats struct {
 
 // readSystemStats collects CPU, memory, disk, and load metrics.
 func readSystemStats() (SystemStats, error) {
-	stats := SystemStats{}
-
-	// Memory from /proc/meminfo
-	if mem, err := readMeminfo(); err == nil {
-		stats.MemoryTotalMB = mem.total / 1024
-		stats.MemoryUsedMB = mem.used / 1024
-	}
-
-	// Disk from / (root) statfs
-	if disk, err := readDiskStats("/"); err == nil {
-		stats.DiskTotalGB = float64(disk.total) / 1024 / 1024 / 1024
-		stats.DiskUsedGB = float64(disk.used) / 1024 / 1024 / 1024
-	}
-
-	// Uptime from /proc/uptime
-	if uptime, err := readUptime(); err == nil {
-		stats.UptimeSeconds = uptime
-	}
-
-	// Load average from /proc/loadavg
-	if load, err := readLoadAvg(); err == nil {
-		stats.LoadAvg1 = load.avg1
-		stats.LoadAvg5 = load.avg5
-		stats.LoadAvg15 = load.avg15
-	}
-
-	// CPU percentage (since last call)
-	stats.CPUPercent = cpuPercent()
-
-	return stats, nil
+	return NewSystemStatsCollector(procSystemStatsSource{}).Read()
 }
+
+type procSystemStatsSource struct{}
+
+func (procSystemStatsSource) Meminfo() (memInfo, error) { return readMeminfo() }
+
+func (procSystemStatsSource) DiskStats(path string) (diskInfo, error) { return readDiskStats(path) }
+
+func (procSystemStatsSource) Uptime() (int64, error) { return readUptime() }
+
+func (procSystemStatsSource) LoadAvg() (loadAvg, error) { return readLoadAvg() }
+
+func (procSystemStatsSource) Sleep(duration time.Duration) { time.Sleep(duration) }
 
 type memInfo struct{ total, used int64 }
 
@@ -144,19 +127,14 @@ func parseKB(line string) int64 {
 // cpuPercent returns a rough CPU usage percentage computed from /proc/stat.
 // It stores the previous tick values and returns the delta since last call.
 func cpuPercent() float64 {
-	prevIdle, prevTotal := readCPUTicks()
-	time.Sleep(100 * time.Millisecond)
-	idle, total := readCPUTicks()
-
-	if total == prevTotal {
-		return 0
-	}
-	deltaTotal := total - prevTotal
-	deltaIdle := idle - prevIdle
-	return (1.0 - float64(deltaIdle)/float64(deltaTotal)) * 100
+	return NewSystemStatsCollector(procSystemStatsSource{}).cpuPercent()
 }
 
 func readCPUTicks() (idle, total uint64) {
+	return procSystemStatsSource{}.CPUTicks()
+}
+
+func (procSystemStatsSource) CPUTicks() (idle, total uint64) {
 	f, err := os.Open("/proc/stat")
 	if err != nil {
 		return 0, 0
