@@ -66,17 +66,9 @@ func DownloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 }
 
 func downloadVerifiedBinary(ctx context.Context, client *http.Client, req DownloadRequest) (DownloadResult, error) {
-	if strings.TrimSpace(req.URL) == "" {
-		return DownloadResult{}, fmt.Errorf("download url is required")
-	}
-	if strings.TrimSpace(req.Destination) == "" {
-		return DownloadResult{}, fmt.Errorf("download destination is required")
-	}
-	if strings.TrimSpace(req.SHA256) == "" {
-		return DownloadResult{}, fmt.Errorf("sha256 checksum is required")
-	}
-	if req.Mode == 0 {
-		req.Mode = 0o755
+	req, err := NewBinaryDownloadRequestValidation().Normalize(req)
+	if err != nil {
+		return DownloadResult{}, err
 	}
 	if client == nil {
 		client = http.DefaultClient
