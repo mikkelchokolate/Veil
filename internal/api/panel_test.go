@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelSettingsCardModuleRendersRedactedSettingsControls(t *testing.T) {
+	card := panelSettingsCardHTML()
+	for _, want := range []string{
+		`<h2>Settings</h2>`,
+		`id="settings-form"`,
+		`id="settings-panel-listen"`,
+		`id="settings-naive-password"`,
+		`id="settings-hysteria2-password"`,
+		`[REDACTED]`,
+		`id="save-settings"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Settings card missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientLinksCardModuleRendersCredentialDisclosureControls(t *testing.T) {
 	card := panelClientLinksCardHTML()
 	for _, want := range []string{
