@@ -10,7 +10,7 @@ func TestManagedServiceStatusCatalogBuildsKnownManagedServices(t *testing.T) {
 	if len(services) != 5 {
 		t.Fatalf("services = %+v", services)
 	}
-	want := []struct{ name, unit string }{{"veil", "veil.service"}, {"naive", "caddy.service"}, {"hysteria2", "hysteria2.service"}, {"sing-box", "sing-box.service"}, {"mieru", "mieru.service"}}
+	want := []struct{ name, unit string }{{"veil", "veil.service"}, {"naive", "caddy.service"}, {"hysteria2", "hysteria2.service"}, {"sing-box", "sing-box.service"}, {"mieru", "veil-mieru.service"}}
 	for i, expected := range want {
 		if services[i].Name != expected.name || services[i].Unit != expected.unit || !services[i].Managed || services[i].ActiveState != "active" {
 			t.Fatalf("service[%d] = %+v", i, services[i])

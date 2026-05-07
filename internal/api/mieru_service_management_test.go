@@ -6,7 +6,7 @@ func TestManagedServiceStatusCatalogIncludesMieru(t *testing.T) {
 	services := NewManagedServiceStatusCatalog(func(unit string) ServiceRuntimeStatus { return ServiceRuntimeStatus{Unit: unit} }).List()
 	found := false
 	for _, svc := range services {
-		if svc.Name == "mieru" && svc.Unit == "mieru.service" {
+		if svc.Name == "mieru" && svc.Unit == "veil-mieru.service" {
 			found = true
 		}
 	}

@@ -19,7 +19,7 @@ func (c ManagedServiceStatusCatalog) List() []ServiceStatus {
 		{Name: "naive", Managed: true, Transport: "tcp", Unit: "caddy.service"},
 		{Name: "hysteria2", Managed: true, Transport: "udp", Unit: "hysteria2.service"},
 		{Name: "sing-box", Managed: true, Unit: "sing-box.service"},
-		{Name: "mieru", Managed: true, Unit: "mieru.service"},
+		{Name: "mieru", Managed: true, Unit: "veil-mieru.service"},
 	}
 	for i := range services {
 		runtime := c.read(services[i].Unit)
