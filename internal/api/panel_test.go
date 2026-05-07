@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
+	card := panelApplyCardHTML()
+	for _, want := range []string{
+		`<h2>Apply plan</h2>`,
+		`id="build-apply-plan"`,
+		`id="apply-staged-files"`,
+		`id="apply-live-configs"`,
+		`id="reload-services"`,
+		`id="load-apply-history"`,
+		`id="apply-plan-output"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Apply card missing %q", want)
+		}
+	}
+}
+
 func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing.T) {
 	form := panelInboundFormHTML()
 	for _, want := range []string{

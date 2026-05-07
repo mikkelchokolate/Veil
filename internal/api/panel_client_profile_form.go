@@ -62,6 +62,7 @@ func panelClientProfileActionsJS() string {
 
 func renderPanelHTMLBase() string {
 	html := strings.ReplaceAll(panelHTMLBase, panelInboundFormPlaceholder, panelInboundFormHTML())
+	html = strings.ReplaceAll(html, panelApplyCardPlaceholder, panelApplyCardHTML())
 	replacer := strings.NewReplacer(
 		panelClientProfileControlsPlaceholder, panelClientProfileControlsHTML(),
 		panelClientProfileActionsPlaceholder, panelClientProfileActionsJS(),
