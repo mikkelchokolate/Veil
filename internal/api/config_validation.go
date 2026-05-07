@@ -32,6 +32,8 @@ func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult
 			results = append(results, v.run("hysteria2", path, []string{"hysteria", "server", "--config", path, "--check"}))
 		case strings.HasSuffix(slashPath, "/generated/sing-box/warp.json"):
 			results = append(results, v.run("warp", path, []string{"sing-box", "check", "-c", path}))
+		case strings.HasSuffix(slashPath, "/generated/mieru/server_config.json"):
+			results = append(results, v.run("mieru", path, []string{"mieru", "check", "-c", path}))
 		}
 	}
 	return results
