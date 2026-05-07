@@ -104,87 +104,7 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 		basePath = "/"
 	}
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
-	mux.HandleFunc("/api/system", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			stats, err := readSystemStats()
-			if err != nil {
-				writeError(w, "failed to read system stats", http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, stats)
-		}
-	})
-	mux.HandleFunc("/api/tls", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			certPath := os.Getenv("VEIL_TLS_CERT")
-			writeJSON(w, readTLSCert(certPath))
-		}
-	})
-	mux.HandleFunc("/api/network", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			stats, err := readNetworkStats()
-			if err != nil {
-				writeError(w, "failed to read network stats", http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, stats)
-		}
-	})
-	mux.HandleFunc("/api/connections", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			stats, err := readConnectionsStats()
-			if err != nil {
-				writeError(w, "failed to read connections", http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, stats)
-		}
-	})
-	mux.HandleFunc("/api/processes", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			stats, err := readProcessesStats()
-			if err != nil {
-				writeError(w, "failed to read processes", http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, stats)
-		}
-	})
-	mux.HandleFunc("/api/disk", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			methodNotAllowed(w, http.MethodGet, http.MethodHead)
-			return
-		}
-		setJSONHeaders(w)
-		if r.Method == http.MethodGet {
-			writeJSON(w, readDirDiskStats())
-		}
-	})
+	RuntimeRoutes{}.Register(mux)
 	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)
@@ -479,10 +399,10 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
 	limiter := NewRateLimiter(100, 20) // 100 req/min per IP, burst 20
 	limiter.SetEndpointLimits(map[string]EndpointLimit{
-		"/api/tools/speedtest":   {RatePerMinute: 2, Burst: 1},    // 1 req/30s
-		"/api/tools/dns-lookup":  {RatePerMinute: 10, Burst: 3},   // 10 req/min for DNS lookups
-		"/api/tools/ping":        {RatePerMinute: 5, Burst: 2},    // 5 req/min for ping
-		"/api/logs":              {RatePerMinute: 10, Burst: 3},   // 10 req/min for log reads
+		"/api/tools/speedtest":  {RatePerMinute: 2, Burst: 1},  // 1 req/30s
+		"/api/tools/dns-lookup": {RatePerMinute: 10, Burst: 3}, // 10 req/min for DNS lookups
+		"/api/tools/ping":       {RatePerMinute: 5, Burst: 2},  // 5 req/min for ping
+		"/api/logs":             {RatePerMinute: 10, Burst: 3}, // 10 req/min for log reads
 	})
 	limiter.onRateLimited = func() { metrics.TrackRateLimitHit() }
 	return limiter.Middleware(next)
