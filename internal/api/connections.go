@@ -23,61 +23,11 @@ type ConnectionsStats struct {
 
 // readConnectionsStats reads listening TCP/UDP sockets from /proc/net/tcp, /proc/net/udp.
 func readConnectionsStats() (ConnectionsStats, error) {
-	var stats ConnectionsStats
-	tcp, _ := readListeningSockets("/proc/net/tcp", "tcp")
-	stats.Listeners = append(stats.Listeners, tcp...)
-	udp, _ := readListeningSockets("/proc/net/udp", "udp")
-	stats.Listeners = append(stats.Listeners, udp...)
-	return stats, nil
+	return NewConnectionDiscovery().Read()
 }
 
 func readListeningSockets(path, proto string) ([]ConnectionListener, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var listeners []ConnectionListener
-	scanner := bufio.NewScanner(f)
-	first := true
-	for scanner.Scan() {
-		if first {
-			first = false
-			continue
-		}
-		fields := strings.Fields(scanner.Text())
-		if len(fields) < 4 {
-			continue
-		}
-		// State is field 3 for TCP, but for UDP field 3 is different
-		localField := fields[1] // local_address:port in hex
-		stateField := ""
-		if proto == "tcp" && len(fields) > 3 {
-			stateField = fields[3]
-		}
-
-		// Only listening sockets (0A = LISTEN for TCP; UDP always "listening")
-		if proto == "tcp" && stateField != "0A" {
-			continue
-		}
-
-		addr, port := parseHexAddress(localField)
-		if addr == "" || port == 0 {
-			continue
-		}
-
-		// Try to find process name
-		process := findProcessByPort(proto, port)
-
-		listeners = append(listeners, ConnectionListener{
-			Proto:   proto,
-			Address: addr,
-			Port:    port,
-			Process: process,
-		})
-	}
-	return listeners, nil
+	return newConnectionDiscoveryWithSource(fileConnectionSource{path: path}).listeningSockets(proto)
 }
 
 func parseHexAddress(hex string) (addr string, port int) {
