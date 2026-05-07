@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -129,19 +128,7 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 		if err := VerifySHA256Hex(body, req.SHA256); err != nil {
 			return DownloadResult{}, err
 		}
-		if err := os.MkdirAll(filepath.Dir(req.Destination), 0o755); err != nil {
-			return DownloadResult{}, err
-		}
-		tmp := req.Destination + ".tmp"
-		if err := os.WriteFile(tmp, body, req.Mode); err != nil {
-			return DownloadResult{}, err
-		}
-		if err := os.Chmod(tmp, req.Mode); err != nil {
-			_ = os.Remove(tmp)
-			return DownloadResult{}, err
-		}
-		if err := os.Rename(tmp, req.Destination); err != nil {
-			_ = os.Remove(tmp)
+		if err := NewBinaryAtomicWriter().Write(req.Destination, body, req.Mode); err != nil {
 			return DownloadResult{}, err
 		}
 		return DownloadResult{URL: req.URL, Destination: req.Destination, SHA256: actual, Bytes: int64(len(body))}, nil
