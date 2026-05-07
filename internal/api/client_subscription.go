@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strings"
 )
 
 const clientSubscriptionContentType = "text/plain; charset=utf-8"
@@ -36,11 +35,7 @@ func BuildClientSubscription(response ClientLinksResponse, format string) (Clien
 	if err != nil {
 		return ClientSubscription{}, err
 	}
-	uris := make([]string, 0, len(response.Links))
-	for _, link := range response.Links {
-		uris = append(uris, link.URI)
-	}
-	payload := strings.Join(uris, "\n") + "\n"
+	payload := NewClientSubscriptionPayload(response).Build()
 	subscription := ClientSubscription{ContentType: clientSubscriptionContentType}
 	if format == "raw" {
 		subscription.Body = payload
