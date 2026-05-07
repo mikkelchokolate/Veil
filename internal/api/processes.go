@@ -8,11 +8,11 @@ import (
 
 // ProcessInfo holds information about a running process.
 type ProcessInfo struct {
-	PID            int     `json:"pid"`
-	Name           string  `json:"name"`
-	CPUPercent     float64 `json:"cpuPercent"`
-	MemoryMB       int64   `json:"memoryMB"`
-	UptimeSeconds  int64   `json:"uptimeSeconds"`
+	PID           int     `json:"pid"`
+	Name          string  `json:"name"`
+	CPUPercent    float64 `json:"cpuPercent"`
+	MemoryMB      int64   `json:"memoryMB"`
+	UptimeSeconds int64   `json:"uptimeSeconds"`
 }
 
 // ProcessesStats holds process information for managed services.
@@ -24,13 +24,17 @@ var managedProcessNames = []string{"caddy", "hysteria2", "sing-box", "veil"}
 
 // readProcessesStats finds managed service processes via /proc.
 func readProcessesStats() (ProcessesStats, error) {
-	var stats ProcessesStats
+	return NewProcessDiscovery(procProcessSource{}).Read()
+}
+
+type procProcessSource struct{}
+
+func (procProcessSource) PIDs() ([]int, error) {
 	procs, err := os.ReadDir("/proc")
 	if err != nil {
-		return stats, err
+		return nil, err
 	}
-
-	uptimeSec, _ := readSystemUptime()
+	pids := make([]int, 0, len(procs))
 	for _, proc := range procs {
 		if !proc.IsDir() {
 			continue
@@ -39,23 +43,23 @@ func readProcessesStats() (ProcessesStats, error) {
 		if err != nil {
 			continue
 		}
-		name := readProcessName(pid)
-		if !isManagedProcess(name) {
-			continue
-		}
-		cpu := readProcessCPU(pid, uptimeSec)
-		mem := readProcessMemory(pid)
-		uptime := readProcessUptime(pid, uptimeSec)
-
-		stats.Processes = append(stats.Processes, ProcessInfo{
-			PID:           pid,
-			Name:          name,
-			CPUPercent:    cpu,
-			MemoryMB:      mem,
-			UptimeSeconds: uptime,
-		})
+		pids = append(pids, pid)
 	}
-	return stats, nil
+	return pids, nil
+}
+
+func (procProcessSource) SystemUptime() (int64, error) { return readSystemUptime() }
+
+func (procProcessSource) Name(pid int) string { return readProcessName(pid) }
+
+func (procProcessSource) MemoryMB(pid int) int64 { return readProcessMemory(pid) }
+
+func (procProcessSource) CPUPercent(pid int, uptimeSec int64) float64 {
+	return readProcessCPU(pid, uptimeSec)
+}
+
+func (procProcessSource) UptimeSeconds(pid int, systemUptime int64) int64 {
+	return readProcessUptime(pid, systemUptime)
 }
 
 func isManagedProcess(name string) bool {
@@ -104,7 +108,7 @@ func readProcessCPU(pid int, uptimeSec int64) float64 {
 	if len(fields) < 14 {
 		return 0
 	}
-	utime, _ := strconv.ParseInt(fields[11], 10, 64)  // 14th field after ')'
+	utime, _ := strconv.ParseInt(fields[11], 10, 64) // 14th field after ')'
 	stime, _ := strconv.ParseInt(fields[12], 10, 64)
 	starttime, _ := strconv.ParseInt(fields[19], 10, 64) // 22nd field
 
