@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -10,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -125,30 +122,6 @@ func waitForHealthy(addr string, token string, timeout time.Duration) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 	return fmt.Errorf("health check timed out after %v", timeout)
-}
-
-// extractVeilBinary extracts the "veil" binary from a tar.gz archive.
-func extractVeilBinary(archive []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(strings.NewReader(string(archive)))
-	if err != nil {
-		return nil, fmt.Errorf("gzip decompress: %w", err)
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("tar read: %w", err)
-		}
-		if hdr.Name == "veil" || hdr.Name == "./veil" {
-			const maxBinSize = 100 * 1024 * 1024 // 100 MB
-			return io.ReadAll(io.LimitReader(tr, maxBinSize))
-		}
-	}
-	return nil, fmt.Errorf("veil binary not found in archive")
 }
 
 // copyFileData copies file contents (not permissions) from src to dst.
