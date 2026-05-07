@@ -5,9 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
-	"strconv"
 	"strings"
-	"time"
 )
 
 var dnsLookuper = runDNSLookup
@@ -56,9 +54,10 @@ func (DiagnosticTools) Speedtest(r *http.Request) (SpeedtestResult, error) {
 
 func runPing(host string, count int) PingResult {
 	result := PingResult{Host: host, Transmitted: count}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(count+2)*time.Second)
+	policy := NewPingCommandPolicy()
+	ctx, cancel := context.WithTimeout(context.Background(), policy.Timeout(count))
 	defer cancel()
-	output, err := exec.CommandContext(ctx, "ping", "-c", strconv.Itoa(count), "-W", "2", host).CombinedOutput()
+	output, err := exec.CommandContext(ctx, "ping", policy.Args(host, count)...).CombinedOutput()
 	if err != nil {
 		result.Error = "ping failed: " + strings.TrimSpace(string(output))
 		if result.Error == "ping failed:" {
