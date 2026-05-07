@@ -1,8 +1,6 @@
 package api
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"path/filepath"
 )
@@ -42,18 +40,6 @@ func checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
 		checks = append(checks, serviceHealthChecker(action.Name))
 	}
 	return checks
-}
-
-func requireHealthyServices(checks []ServiceHealthResult) error {
-	for _, check := range checks {
-		if !check.Healthy {
-			if check.Error != "" {
-				return errors.New(check.Error)
-			}
-			return fmt.Errorf("%s health check failed", check.Name)
-		}
-	}
-	return nil
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
