@@ -229,19 +229,15 @@ func newManagementState(info ServerInfo) *managementState {
 	if keyPath == "" {
 		keyPath = "/etc/veil/state.key"
 	}
+	model := defaultManagementModel(info.Mode)
 	state := &managementState{
 		statePath: info.StatePath,
 		applyRoot: defaultApplyRoot(info.ApplyRoot),
 		keyPath:   keyPath,
-		settings:  Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: info.Mode},
-		inbounds: []Inbound{
-			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
-			{Name: "hysteria2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},
-		},
-		rules: []RoutingRule{
-			{Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true},
-		},
-		warp: WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
+		settings:  model.Settings,
+		inbounds:  model.Inbounds,
+		rules:     model.Rules,
+		warp:      model.Warp,
 	}
 	key, err := secrets.LoadOrCreateKey(keyPath)
 	if err != nil {
