@@ -58,7 +58,7 @@ func TestApplyWorkflowRunsAgainstStateAdapter(t *testing.T) {
 
 func TestApplyWorkflowRejectsServicesWithoutLiveApply(t *testing.T) {
 	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
-	workflow := NewApplyWorkflow(state)
+	workflow := NewApplyWorkflow(NewManagementApplyContext(state))
 
 	response, status, err := workflow.RunLocked(ApplyRequest{Confirm: true, ApplyServices: true, ApplyLive: false})
 	if err != nil {

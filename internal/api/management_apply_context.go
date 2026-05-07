@@ -9,7 +9,31 @@ func NewManagementApplyContext(state *managementState) ManagementApplyContext {
 }
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
-	return ctx.state.buildApplyPlanLocked()
+	s := ctx.state
+	return BuildApplyPlan(ApplyPlanInput{
+		Settings:                s.settings,
+		Inbounds:                s.inbounds,
+		Rules:                   s.rules,
+		RoutingSource:           s.routingSource,
+		Warp:                    s.warp,
+		RenderSettingsAvailable: s.hasRenderSettingsLocked(),
+		ValidateInboundRender: func(inbound Inbound) error {
+			switch inbound.Protocol {
+			case "naiveproxy":
+				_, err := s.renderNaiveConfigLocked(inbound)
+				return err
+			case "hysteria2":
+				_, err := s.renderHysteria2ConfigLocked(inbound)
+				return err
+			default:
+				return nil
+			}
+		},
+		ValidateWarpRender: func() error {
+			_, err := s.renderWarpConfigLocked()
+			return err
+		},
+	})
 }
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {

@@ -578,7 +578,7 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	plan := s.buildApplyPlanLocked()
+	plan := NewManagementApplyContext(s).buildApplyPlanLocked()
 	status := http.StatusOK
 	if !plan.Valid {
 		status = http.StatusBadRequest
@@ -627,33 +627,6 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, response)
-}
-
-func (s *managementState) buildApplyPlanLocked() ApplyPlanResponse {
-	return BuildApplyPlan(ApplyPlanInput{
-		Settings:                s.settings,
-		Inbounds:                s.inbounds,
-		Rules:                   s.rules,
-		RoutingSource:           s.routingSource,
-		Warp:                    s.warp,
-		RenderSettingsAvailable: s.hasRenderSettingsLocked(),
-		ValidateInboundRender: func(inbound Inbound) error {
-			switch inbound.Protocol {
-			case "naiveproxy":
-				_, err := s.renderNaiveConfigLocked(inbound)
-				return err
-			case "hysteria2":
-				_, err := s.renderHysteria2ConfigLocked(inbound)
-				return err
-			default:
-				return nil
-			}
-		},
-		ValidateWarpRender: func() error {
-			_, err := s.renderWarpConfigLocked()
-			return err
-		},
-	})
 }
 
 func stackIncludesProtocol(stack string, protocol string) bool {
