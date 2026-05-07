@@ -102,15 +102,7 @@ func (c InboundCatalog) index(name string) int {
 }
 
 func (c InboundCatalog) hasTransportPort(transport string, port int, exceptIndex int) bool {
-	for idx, existing := range c.inbounds {
-		if idx == exceptIndex {
-			continue
-		}
-		if existing.Transport == transport && existing.Port == port {
-			return true
-		}
-	}
-	return false
+	return NewInboundTransportPortIndex(c.inbounds).Has(transport, port, exceptIndex)
 }
 
 func cloneInbounds(inbounds []Inbound) []Inbound {
