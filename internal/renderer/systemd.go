@@ -7,6 +7,7 @@ type SystemdConfig struct {
 	CaddyBinary    string
 	HysteriaBinary string
 	SingBoxBinary  string
+	MieruBinary    string
 	EtcDir         string
 }
 
@@ -23,12 +24,16 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.SingBoxBinary == "" {
 		cfg.SingBoxBinary = "/usr/local/bin/sing-box"
 	}
+	if cfg.MieruBinary == "" {
+		cfg.MieruBinary = "/usr/local/bin/mieru"
+	}
 	if cfg.EtcDir == "" {
 		cfg.EtcDir = "/etc/veil"
 	}
 	caddyfile := filepath.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
 	hysteriaConfig := filepath.Join(cfg.EtcDir, "generated", "hysteria2", "server.yaml")
 	warpConfig := filepath.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
+	mieruConfig := filepath.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
 	return map[string]string{
 		"veil.service": `[Unit]
 Description=Veil panel
@@ -83,6 +88,20 @@ Wants=network-online.target
 Type=simple
 ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
 ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+`,
+		"veil-mieru.service": `[Unit]
+Description=Veil managed Mieru
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=` + cfg.MieruBinary + ` run -c ` + mieruConfig + `
 Restart=on-failure
 RestartSec=3
 

@@ -17,7 +17,7 @@ func (ServiceCommandPolicy) AllowsReload(command []string) bool {
 }
 
 func (ServiceCommandPolicy) AllowsHealth(service string) bool {
-	return service == "veil-naive.service" || service == "veil-hysteria2.service" || service == "veil-warp.service"
+	return service == "veil-naive.service" || service == "veil-hysteria2.service" || service == "veil-warp.service" || service == "veil-mieru.service"
 }
 
 func runFixedServiceAction(command []string) ServiceActionResult {

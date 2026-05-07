@@ -315,8 +315,8 @@ func TestRouterStatus(t *testing.T) {
 	if body.Name != "Veil" || body.Version != "test" || body.Mode != "dev" {
 		t.Fatalf("unexpected status: %+v", body)
 	}
-	if len(body.Services) != 4 {
-		t.Fatalf("expected 4 services, got %+v", body.Services)
+	if len(body.Services) != 5 {
+		t.Fatalf("expected 5 services, got %+v", body.Services)
 	}
 }
 

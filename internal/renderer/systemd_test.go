@@ -13,10 +13,10 @@ func TestRenderSystemdUnits(t *testing.T) {
 		SingBoxBinary:  "/usr/local/bin/sing-box",
 		EtcDir:         "/etc/veil",
 	})
-	if len(units) != 4 {
-		t.Fatalf("expected 4 units, got %d", len(units))
+	if len(units) != 5 {
+		t.Fatalf("expected 5 units, got %d", len(units))
 	}
-	for _, name := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"} {
+	for _, name := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service", "veil-mieru.service"} {
 		if units[name] == "" {
 			t.Fatalf("missing unit %s", name)
 		}
@@ -41,8 +41,8 @@ func TestRenderSystemdUnits(t *testing.T) {
 func TestRenderSystemdUnitsDefaults(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{})
 
-	if len(units) != 4 {
-		t.Fatalf("expected 4 units, got %d", len(units))
+	if len(units) != 5 {
+		t.Fatalf("expected 5 units, got %d", len(units))
 	}
 
 	expectedUnits := []string{
@@ -50,6 +50,7 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 		"veil-naive.service",
 		"veil-hysteria2.service",
 		"veil-warp.service",
+		"veil-mieru.service",
 	}
 	for _, name := range expectedUnits {
 		if units[name] == "" {
