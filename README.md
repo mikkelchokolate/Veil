@@ -88,6 +88,17 @@ veil update --yes --staged
 veil uninstall --yes
 ```
 
+### Backup, rollback, and audit
+
+Repair can write backups and a JSONL audit log. The backup directory must be writable; audit entries are not written during `--dry-run`.
+
+```bash
+veil repair --backup-dir /var/lib/veil/backups --audit-log /var/log/veil/audit.jsonl --yes
+veil rollback list --backup-dir /var/lib/veil/backups
+veil rollback restore <backup-id> --backup-dir /var/lib/veil/backups --yes
+veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
+```
+
 ## Security
 
 - **API token** — required for all management operations when exposed
