@@ -23,6 +23,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		plan.Errors = append(plan.Errors, err.Error())
 	}
 	seen := map[string]bool{}
+	artifacts := NewInboundApplyArtifacts()
 	for _, inbound := range input.Inbounds {
 		if !inbound.Enabled || !stackIncludesProtocol(input.Settings.Stack, inbound.Protocol) {
 			continue
@@ -38,32 +39,23 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
 		}
 		seen[key] = true
-		switch inbound.Protocol {
-		case "naiveproxy":
+		artifact, ok := artifacts.ForProtocol(inbound.Protocol)
+		if !ok {
+			if inbound.Protocol != "" {
+				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
+			}
+			continue
+		}
+		if inbound.Protocol == "naiveproxy" {
 			if err := NewNaiveCaddySettingsRequirement().Validate(input.Settings); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
-			if input.RenderSettingsAvailable && input.ValidateInboundRender != nil {
-				if err := input.ValidateInboundRender(inbound); err != nil {
-					plan.Errors = append(plan.Errors, err.Error())
-				}
-			}
-		case "hysteria2":
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-hysteria2.service")
-			if input.RenderSettingsAvailable && input.ValidateInboundRender != nil {
-				if err := input.ValidateInboundRender(inbound); err != nil {
-					plan.Errors = append(plan.Errors, err.Error())
-				}
-			}
-		case "mieru":
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/mieru/server_config.json")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-mieru.service")
-		default:
-			if inbound.Protocol != "" {
-				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
+		}
+		plan.Configs = appendUnique(plan.Configs, artifact.Config)
+		plan.Actions = appendUnique(plan.Actions, artifact.Action)
+		if artifact.ValidateInboundRender && input.RenderSettingsAvailable && input.ValidateInboundRender != nil {
+			if err := input.ValidateInboundRender(inbound); err != nil {
+				plan.Errors = append(plan.Errors, err.Error())
 			}
 		}
 	}
