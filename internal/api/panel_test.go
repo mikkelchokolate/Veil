@@ -80,6 +80,23 @@ func TestPanelServiceStatusCardModuleRendersOperationalControls(t *testing.T) {
 	}
 }
 
+func TestPanelRoutingActionsModuleRendersRuleAndPresetActions(t *testing.T) {
+	actions := panelRoutingActionsJS()
+	for _, want := range []string{
+		`async function saveRoutingRule(event)`,
+		`async function deleteRoutingRule()`,
+		`async function applyRoutingPreset()`,
+		`/api/routing/rules`,
+		`/api/routing/presets/`,
+		`routing-rule-name`,
+		`routing-preset-profile`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Routing actions missing %q", want)
+		}
+	}
+}
+
 func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
 	card := panelRoutingCardHTML()
 	for _, want := range []string{
