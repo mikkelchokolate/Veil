@@ -65,46 +65,19 @@ func (rl *RateLimiter) allow(key string, rate float64, burst int) (bool, time.Du
 // except for explicitly rate-limited expensive read endpoints.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isMutatingMethod(r.Method) && !isRateLimitedReadPath(r.URL.Path) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		ip := extractClientIP(r)
 
 		rl.mu.RLock()
 		limits := rl.endpointLimits
 		rl.mu.RUnlock()
 
-		// Find the longest matching endpoint prefix
-		if limits != nil {
-			var bestMatch string
-			var bestLimit EndpointLimit
-			for prefix, limit := range limits {
-				if strings.HasPrefix(r.URL.Path, prefix) && len(prefix) > len(bestMatch) {
-					bestMatch = prefix
-					bestLimit = limit
-				}
-			}
-			if bestMatch != "" {
-				rate := float64(bestLimit.RatePerMinute) / 60.0
-				key := bestMatch + ":" + ip
-				allowed, retryAfter := rl.allow(key, rate, bestLimit.Burst)
-				if !allowed {
-					if rl.onRateLimited != nil {
-						rl.onRateLimited()
-					}
-					w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
-					writeError(w, "too many requests", http.StatusTooManyRequests)
-					return
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
+		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits).Decide(r.Method, r.URL.Path, ip)
+		if !decision.Limited {
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		// Default rate limit
-		allowed, retryAfter := rl.allow(ip, rl.rate, rl.burst)
+		allowed, retryAfter := rl.allow(decision.Key, decision.RatePerSecond, decision.Burst)
 		if !allowed {
 			if rl.onRateLimited != nil {
 				rl.onRateLimited()
@@ -115,16 +88,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func isMutatingMethod(method string) bool {
-	return method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete
-}
-
-// isRateLimitedReadPath returns true for GET paths that should be rate-limited
-// (expensive queries like log reading).
-func isRateLimitedReadPath(path string) bool {
-	return strings.HasPrefix(path, "/api/logs")
 }
 
 func extractClientIP(r *http.Request) string {
