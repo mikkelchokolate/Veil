@@ -24,5 +24,8 @@ func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
 	if profile.InstallHysteria2 {
 		units = append(units, "veil-hysteria2.service")
 	}
+	if profile.InstallMieru {
+		units = append(units, "veil-mieru.service")
+	}
 	return units
 }

@@ -30,6 +30,15 @@ func (s InstallPlanSummary) String() string {
 			fmt.Fprintf(&b, "Hysteria2 sha256: %s\n", p.HysteriaBinary.SHA256)
 		}
 	}
+	if p.Profile.InstallMieru {
+		fmt.Fprintf(&b, "Mieru asset: %s\n", p.MieruBinary.URL)
+		fmt.Fprintf(&b, "Mieru install path: %s\n", p.MieruBinary.Destination)
+		if p.MieruBinary.SHA256 == "" {
+			fmt.Fprintf(&b, "Mieru sha256: required before binary download\n")
+		} else {
+			fmt.Fprintf(&b, "Mieru sha256: %s\n", p.MieruBinary.SHA256)
+		}
+	}
 	if p.Profile.InstallNaive {
 		fmt.Fprintf(&b, "Caddy/NaiveProxy build: %s\n", p.CaddyBuild.BinaryPath)
 		for _, command := range p.CaddyBuild.Commands {

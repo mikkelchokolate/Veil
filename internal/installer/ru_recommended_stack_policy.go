@@ -9,12 +9,15 @@ type RURecommendedStackPolicy struct {
 	Stack            Stack
 	InstallNaive     bool
 	InstallHysteria2 bool
+	InstallMieru     bool
 }
 
 func NewRURecommendedStackPolicy(stack Stack) (RURecommendedStackPolicy, error) {
 	switch Stack(strings.TrimSpace(string(stack))) {
 	case StackPanel:
 		return RURecommendedStackPolicy{Stack: StackPanel}, nil
+	case StackMieru:
+		return RURecommendedStackPolicy{Stack: StackMieru, InstallMieru: true}, nil
 	case "", StackBoth:
 		return RURecommendedStackPolicy{Stack: StackBoth, InstallNaive: true, InstallHysteria2: true}, nil
 	case StackNaive:

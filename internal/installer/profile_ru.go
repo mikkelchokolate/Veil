@@ -6,6 +6,7 @@ type Stack string
 
 const (
 	StackPanel     Stack = "panel"
+	StackMieru     Stack = "mieru"
 	StackBoth      Stack = "both"
 	StackNaive     Stack = "naive"
 	StackHysteria2 Stack = "hysteria2"
@@ -33,6 +34,7 @@ type RURecommendedProfile struct {
 	Stack              Stack
 	InstallNaive       bool
 	InstallHysteria2   bool
+	InstallMieru       bool
 	PortPlan           SharedPortPlan
 	Caddyfile          string
 	Hysteria2YAML      string
@@ -122,6 +124,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		Stack:              stack.Stack,
 		InstallNaive:       stack.InstallNaive,
 		InstallHysteria2:   stack.InstallHysteria2,
+		InstallMieru:       stack.InstallMieru,
 		PortPlan:           plan,
 		Caddyfile:          naive.Caddyfile,
 		Hysteria2YAML:      hysteria.ServerYAML,
@@ -137,11 +140,7 @@ func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 }
 
 func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPolicy, error) {
-	normalized, installNaive, installHysteria2, err := normalizeStack(stack)
-	if err != nil {
-		return ruRecommendedStackPolicy{}, err
-	}
-	return RURecommendedStackPolicy{Stack: normalized, InstallNaive: installNaive, InstallHysteria2: installHysteria2}, nil
+	return NewRURecommendedStackPolicy(stack)
 }
 
 func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRecommendedStackPolicy) (SharedPortPlan, error) {

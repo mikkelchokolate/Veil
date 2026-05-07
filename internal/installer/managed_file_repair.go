@@ -85,6 +85,9 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 		if profile.InstallHysteria2 {
 			unitNames = append(unitNames, "veil-hysteria2.service")
 		}
+		if profile.InstallMieru {
+			unitNames = append(unitNames, "veil-mieru.service")
+		}
 		for _, name := range unitNames {
 			files = append(files, managedFile{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})
 		}
