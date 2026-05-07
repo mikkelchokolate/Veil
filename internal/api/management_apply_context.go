@@ -37,21 +37,34 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 }
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
-	return ctx.state.writeApplyStageLocked(plan)
+	s := ctx.state
+	rendered, err := s.renderManagementConfigsLocked()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return WriteApplyStage(ApplyStageInput{
+		ApplyRoot:     s.applyRoot,
+		Cipher:        s.cipher,
+		Plan:          plan,
+		Snapshot:      s.snapshotLocked(),
+		Rendered:      rendered,
+		RoutingSource: s.routingSource,
+		Validate:      stagedConfigValidator,
+	})
 }
 
 func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
-	return ctx.state.promoteStagedConfigsLocked(stagedPaths)
+	return NewLiveConfigPromotion(ctx.state.applyRoot, ctx.reloadPromotedServicesLocked).Promote(stagedPaths)
 }
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
-	return ctx.state.reloadPromotedServicesLocked(liveFiles)
+	return NewPromotedServiceReloader(ctx.state.applyRoot, serviceActionRunner).Reload(liveFiles)
 }
 
 func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
-	return ctx.state.rollbackPromotedConfigsLocked(records, liveFiles)
+	return NewLiveConfigPromotion(ctx.state.applyRoot, ctx.reloadPromotedServicesLocked).Rollback(records, liveFiles)
 }
 
 func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
-	return ctx.state.appendApplyHistoryLocked(stage, success, response)
+	return NewApplyHistoryStore(ctx.state.applyHistoryPathLocked(), maxApplyHistoryEntries).Append(stage, success, response)
 }

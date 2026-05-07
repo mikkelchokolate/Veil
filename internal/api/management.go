@@ -659,26 +659,6 @@ func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) 
 	return NewApplyHistoryStore(s.applyHistoryPathLocked(), maxApplyHistoryEntries).Load()
 }
 
-func (s *managementState) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
-	return NewApplyHistoryStore(s.applyHistoryPathLocked(), maxApplyHistoryEntries).Append(stage, success, response)
-}
-
-func (s *managementState) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
-	rendered, err := s.renderManagementConfigsLocked()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return WriteApplyStage(ApplyStageInput{
-		ApplyRoot:     s.applyRoot,
-		Cipher:        s.cipher,
-		Plan:          plan,
-		Snapshot:      s.snapshotLocked(),
-		Rendered:      rendered,
-		RoutingSource: s.routingSource,
-		Validate:      stagedConfigValidator,
-	})
-}
-
 func requirePassedValidations(validations []ConfigValidationResult) error {
 	for _, validation := range validations {
 		if validation.Skipped || !validation.Valid {
@@ -691,20 +671,9 @@ func requirePassedValidations(validations []ConfigValidationResult) error {
 	return nil
 }
 
-func (s *managementState) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
-	return NewLiveConfigPromotion(s.applyRoot, s.reloadPromotedServicesLocked).Promote(stagedPaths)
-}
-
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
-	return NewLiveConfigPromotion(s.applyRoot, s.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
-}
-
-func (s *managementState) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
-	return NewPromotedServiceReloader(s.applyRoot, serviceActionRunner).Reload(liveFiles)
-}
-
-func (s *managementState) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
-	return NewLiveConfigPromotion(s.applyRoot, s.reloadPromotedServicesLocked).Rollback(records, liveFiles)
+	context := NewManagementApplyContext(s)
+	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
 }
 
 func checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
