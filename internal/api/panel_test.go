@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
+	card := panelRoutingCardHTML()
+	for _, want := range []string{
+		`<h2>Routing rules</h2>`,
+		`id="routing-rule-form"`,
+		`id="routing-rule-name"`,
+		`id="routing-rule-outbound"`,
+		`id="routing-preset-profile"`,
+		`id="apply-routing-preset"`,
+		`id="routing-output"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Routing card missing %q", want)
+		}
+	}
+}
+
 func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
 	card := panelWarpCardHTML()
 	for _, want := range []string{
