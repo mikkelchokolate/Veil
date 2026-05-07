@@ -82,11 +82,12 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 		client = http.DefaultClient
 	}
 
-	const maxAttempts = 3
+	retry := NewBinaryDownloadRetryPolicy()
+	maxAttempts := retry.MaxAttempts()
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if attempt > 1 {
-			backoff := time.Duration(1<<(attempt-2)) * time.Second // 1s, 2s, 4s
+			backoff := retry.Backoff(attempt)
 			log.Printf("DownloadVerifiedBinary: retry attempt %d/%d for %s after %v (previous error: %v)", attempt, maxAttempts, req.URL, backoff, lastErr)
 			select {
 			case <-ctx.Done():
@@ -102,7 +103,7 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			lastErr = err
-			if !isRetryableNetError(err) {
+			if !retry.Retryable(err) {
 				return DownloadResult{}, err
 			}
 			continue
@@ -121,7 +122,7 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 		body, err := io.ReadAll(lr)
 		if err != nil {
 			lastErr = err
-			if !isRetryableNetError(err) {
+			if !retry.Retryable(err) {
 				return DownloadResult{}, err
 			}
 			continue
@@ -154,24 +155,4 @@ func downloadVerifiedBinary(ctx context.Context, client *http.Client, req Downlo
 		return DownloadResult{URL: req.URL, Destination: req.Destination, SHA256: actual, Bytes: int64(len(body))}, nil
 	}
 	return DownloadResult{}, fmt.Errorf("download %s failed after %d attempts: %w", req.URL, maxAttempts, lastErr)
-}
-
-// isRetryableNetError returns true for network errors that are worth retrying.
-func isRetryableNetError(err error) bool {
-	if err == nil {
-		return false
-	}
-	type temporary interface {
-		Temporary() bool
-	}
-	if t, ok := err.(temporary); ok && t.Temporary() {
-		return true
-	}
-	type timeout interface {
-		Timeout() bool
-	}
-	if t, ok := err.(timeout); ok && t.Timeout() {
-		return true
-	}
-	return false
 }
