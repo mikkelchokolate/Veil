@@ -17,23 +17,14 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 	configs := map[string]string{}
 	paths := NewGeneratedConfigPaths(input.ApplyRoot)
 	if hasRenderSettings(input.Settings) {
+		renderer := NewGeneratedInboundConfigRenderer(input.Settings, paths)
 		for _, inbound := range input.Inbounds {
-			if !inbound.Enabled || !stackIncludesProtocol(input.Settings.Stack, inbound.Protocol) {
-				continue
+			artifact, ok, err := renderer.Render(inbound)
+			if err != nil {
+				return nil, err
 			}
-			switch inbound.Protocol {
-			case "naiveproxy":
-				body, err := renderNaiveGeneratedConfig(input.Settings, inbound)
-				if err != nil {
-					return nil, err
-				}
-				configs[paths.Caddyfile()] = body
-			case "hysteria2":
-				body, err := renderHysteria2GeneratedConfig(input.Settings, inbound)
-				if err != nil {
-					return nil, err
-				}
-				configs[paths.Hysteria2()] = body
+			if ok {
+				configs[artifact.Path] = artifact.Body
 			}
 		}
 	}
@@ -57,42 +48,4 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		configs[paths.Warp()] = body
 	}
 	return configs, nil
-}
-
-func renderNaiveGeneratedConfig(settings Settings, inbound Inbound) (string, error) {
-	password := inbound.Password
-	if password == "" {
-		password = settings.NaivePassword
-	}
-	access, err := BuildClientAccess(settings, inbound)
-	if err != nil {
-		return "", err
-	}
-	return renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
-		Domain:       settings.Domain,
-		Email:        settings.Email,
-		ListenPort:   inbound.Port,
-		Username:     settings.NaiveUsername,
-		Password:     password,
-		Users:        access.NaiveUsers(),
-		FallbackRoot: settings.FallbackRoot,
-	})
-}
-
-func renderHysteria2GeneratedConfig(settings Settings, inbound Inbound) (string, error) {
-	password := inbound.Password
-	if password == "" {
-		password = settings.Hysteria2Password
-	}
-	access, err := BuildClientAccess(settings, inbound)
-	if err != nil {
-		return "", err
-	}
-	return renderer.RenderHysteria2(renderer.Hysteria2Config{
-		ListenPort:    inbound.Port,
-		Domain:        settings.Domain,
-		Password:      password,
-		Users:         access.Hysteria2Users(),
-		MasqueradeURL: settings.MasqueradeURL,
-	})
 }

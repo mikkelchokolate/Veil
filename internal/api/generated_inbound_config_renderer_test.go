@@ -1,0 +1,42 @@
+package api
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestGeneratedInboundConfigRendererRendersEnabledInboundArtifact(t *testing.T) {
+	renderer := NewGeneratedInboundConfigRenderer(Settings{
+		Stack:         "naive",
+		Domain:        "example.com",
+		Email:         "admin@example.com",
+		NaiveUsername: "veil",
+		NaivePassword: "global-secret",
+		FallbackRoot:  "/var/lib/veil/www",
+	}, NewGeneratedConfigPaths("/apply"))
+	artifact, ok, err := renderer.Render(Inbound{Name: "naive", Protocol: "naiveproxy", Port: 443, Enabled: true})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected artifact")
+	}
+	if artifact.Path != NewGeneratedConfigPaths("/apply").Caddyfile() {
+		t.Fatalf("path = %q", artifact.Path)
+	}
+	if !strings.Contains(artifact.Body, "global-secret") {
+		t.Fatalf("body missing fallback password:\n%s", artifact.Body)
+	}
+}
+
+func TestGeneratedInboundConfigRendererSkipsDisabledAndExcludedProtocol(t *testing.T) {
+	renderer := NewGeneratedInboundConfigRenderer(Settings{Stack: "naive"}, NewGeneratedConfigPaths("/apply"))
+	for _, inbound := range []Inbound{
+		{Name: "disabled", Protocol: "naiveproxy", Enabled: false},
+		{Name: "excluded", Protocol: "hysteria2", Enabled: true},
+	} {
+		if _, ok, err := renderer.Render(inbound); err != nil || ok {
+			t.Fatalf("Render(%+v) ok=%v err=%v", inbound, ok, err)
+		}
+	}
+}
