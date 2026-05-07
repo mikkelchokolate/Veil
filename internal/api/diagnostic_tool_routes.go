@@ -54,21 +54,7 @@ func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Reque
 		writeError(w, "hostname is required", http.StatusBadRequest)
 		return
 	}
-	addrs, cname, err := dnsLookuper(req.Hostname)
-	result := map[string]any{
-		"hostname":  req.Hostname,
-		"addresses": addrs,
-	}
-	if cname != "" {
-		result["cname"] = cname
-	}
-	if err != nil {
-		result["error"] = err.Error()
-	}
-	if addrs == nil {
-		result["addresses"] = []string{}
-	}
-	writeJSON(w, result)
+	writeJSON(w, DiagnosticTools{}.DNSLookup(req.Hostname))
 }
 
 func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
@@ -94,8 +80,7 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "count must be 1-10", http.StatusBadRequest)
 		return
 	}
-	result := pingRunner(req.Host, req.Count)
-	writeJSON(w, result)
+	writeJSON(w, DiagnosticTools{}.Ping(req.Host, req.Count))
 }
 
 func (DiagnosticToolRoutes) handleSpeedtest(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +92,7 @@ func (DiagnosticToolRoutes) handleSpeedtest(w http.ResponseWriter, r *http.Reque
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	result, err := speedtestRunner(r)
+	result, err := DiagnosticTools{}.Speedtest(r)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusServiceUnavailable)
 		return
