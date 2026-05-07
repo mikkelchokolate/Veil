@@ -15,7 +15,7 @@ func (RuntimeProcFS) Network() (NetworkStats, error) {
 }
 
 func (RuntimeProcFS) Connections() (ConnectionsStats, error) {
-	return readConnectionsStats()
+	return NewConnectionDiscovery().Read()
 }
 
 func (RuntimeProcFS) Processes() (ProcessesStats, error) {
