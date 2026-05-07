@@ -288,8 +288,8 @@ type tempError struct {
 	temporary bool
 }
 
-func (e *tempError) Error() string     { return e.msg }
-func (e *tempError) Temporary() bool   { return e.temporary }
+func (e *tempError) Error() string   { return e.msg }
+func (e *tempError) Temporary() bool { return e.temporary }
 
 // timeoutError implements Timeout() bool.
 type timeoutError struct {
@@ -297,8 +297,8 @@ type timeoutError struct {
 	timeout bool
 }
 
-func (e *timeoutError) Error() string  { return e.msg }
-func (e *timeoutError) Timeout() bool  { return e.timeout }
+func (e *timeoutError) Error() string { return e.msg }
+func (e *timeoutError) Timeout() bool { return e.timeout }
 
 // bothError implements both Temporary() and Timeout().
 type bothError struct {

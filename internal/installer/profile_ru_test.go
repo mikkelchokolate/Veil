@@ -90,12 +90,12 @@ func TestBuildRURecommendedProfileSupportsHysteriaOnly(t *testing.T) {
 
 func TestNormalizeStackTrimsWhitespace(t *testing.T) {
 	tests := []struct {
-		name               string
-		input              Stack
-		wantStack          Stack
-		wantNaive          bool
-		wantHysteria2      bool
-		wantErr            bool
+		name          string
+		input         Stack
+		wantStack     Stack
+		wantNaive     bool
+		wantHysteria2 bool
+		wantErr       bool
 	}{
 		{"empty", "", StackBoth, true, true, false},
 		{"both exact", StackBoth, StackBoth, true, true, false},

@@ -12,10 +12,10 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 	systemdDir := filepath.Join(t.TempDir(), "etc", "systemd", "system")
 
 	profile := RURecommendedProfile{
-		Domain:         "vpn.example.com",
-		InstallNaive:   true,
-		Caddyfile:      "caddy content",
-		Stack:          StackNaive,
+		Domain:       "vpn.example.com",
+		InstallNaive: true,
+		Caddyfile:    "caddy content",
+		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{
@@ -59,10 +59,10 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 	systemdDir := filepath.Join(t.TempDir(), "etc", "systemd", "system")
 
 	profile := RURecommendedProfile{
-		Domain:         "vpn.example.com",
-		InstallNaive:   true,
-		Caddyfile:      "expected caddy content",
-		Stack:          StackNaive,
+		Domain:       "vpn.example.com",
+		InstallNaive: true,
+		Caddyfile:    "expected caddy content",
+		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{
@@ -111,10 +111,10 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 	varDir := filepath.Join(t.TempDir(), "var", "lib", "veil")
 
 	profile := RURecommendedProfile{
-		Domain:         "vpn.example.com",
-		InstallNaive:   true,
-		Caddyfile:      "caddy content",
-		Stack:          StackNaive,
+		Domain:       "vpn.example.com",
+		InstallNaive: true,
+		Caddyfile:    "caddy content",
+		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{

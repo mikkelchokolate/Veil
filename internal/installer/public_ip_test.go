@@ -102,10 +102,10 @@ func TestDetectPublicIPRejectsDocumentationAddresses(t *testing.T) {
 	// RFC 5737 TEST-NET-1, TEST-NET-2, TEST-NET-3 and RFC 2544 benchmark
 	// addresses must all be rejected as non-public.
 	docs := []string{
-		"192.0.2.1",       // TEST-NET-1
-		"198.51.100.42",   // TEST-NET-2
-		"203.0.113.10",    // TEST-NET-3
-		"198.18.0.1",      // RFC 2544 benchmark
+		"192.0.2.1",     // TEST-NET-1
+		"198.51.100.42", // TEST-NET-2
+		"203.0.113.10",  // TEST-NET-3
+		"198.18.0.1",    // RFC 2544 benchmark
 	}
 	for _, addr := range docs {
 		addr := addr // capture loop variable
