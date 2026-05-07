@@ -68,16 +68,7 @@ func (m *MetricsCollector) TrackRateLimitHit() {
 
 // SetServiceStatus updates the gauge for a managed service (1=active, 0=inactive).
 func (m *MetricsCollector) SetServiceStatus(name string, active bool) {
-	m.statusMu.Lock()
-	defer m.statusMu.Unlock()
-	if m.serviceStatus == nil {
-		m.serviceStatus = make(map[string]float64)
-	}
-	if active {
-		m.serviceStatus[name] = 1
-	} else {
-		m.serviceStatus[name] = 0
-	}
+	NewMetricsServiceStatus(m).Set(name, active)
 }
 
 // ActiveRequests returns the current active request count (for use with TrackActiveRequest).
