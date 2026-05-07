@@ -2,7 +2,6 @@ package installer
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/veil-panel/veil/internal/renderer"
@@ -208,25 +207,4 @@ func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, pl
 		return ruRecommendedHysteriaArtifacts{}, err
 	}
 	return ruRecommendedHysteriaArtifacts{Password: password, ServerYAML: yaml, ClientURI: hysteria2URI(password, input.Domain, plan.Port)}, nil
-}
-
-func naiveURL(username, password, domain string, port int) string {
-	u := url.URL{
-		Scheme: "https",
-		User:   url.UserPassword(username, password),
-		Host:   fmt.Sprintf("%s:%d", domain, port),
-	}
-	return u.String()
-}
-
-func hysteria2URI(password, domain string, port int) string {
-	u := url.URL{
-		Scheme: "hysteria2",
-		User:   url.User(password),
-		Host:   fmt.Sprintf("%s:%d", domain, port),
-	}
-	q := u.Query()
-	q.Set("insecure", "0")
-	u.RawQuery = q.Encode()
-	return u.String()
 }
