@@ -25,11 +25,7 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		}
 		response.Links = append(response.Links, links...)
 	}
-	if len(response.Links) == 0 {
-		return ClientLinksResponse{}, errors.New("no enabled client links are available")
-	}
-	response.Count = len(response.Links)
-	return response, nil
+	return NewClientLinksResponseFinalizer().Finalize(response)
 }
 
 func buildInboundClientLinks(settings Settings, inbound Inbound) ([]ClientLink, error) {
