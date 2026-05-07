@@ -265,49 +265,51 @@ func (s *managementState) register(mux *http.ServeMux) {
 }
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewSettingsManagement(&s.settings, s.saveLocked)
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, management.Get())
-	case http.MethodPut:
-		var settings Settings
-		if !decodeJSONRequest(w, r, &settings) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.Settings()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, management.Get())
+		case http.MethodPut:
+			var settings Settings
+			if !decodeJSONRequest(w, r, &settings) {
+				return nil
+			}
+			updated, err := management.Update(settings)
+			if err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
+			writeJSON(w, updated)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPut)
 		}
-		updated, err := management.Update(settings)
-		if err != nil {
-			writeError(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, updated)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut)
-	}
+		return nil
+	})
 }
 
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewInboundManagement(&s.inbounds, s.saveLocked)
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, management.List())
-	case http.MethodPost:
-		var inbound Inbound
-		if !decodeJSONRequest(w, r, &inbound) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.Inbounds()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, management.List())
+		case http.MethodPost:
+			var inbound Inbound
+			if !decodeJSONRequest(w, r, &inbound) {
+				return nil
+			}
+			created, err := management.Create(inbound)
+			if err != nil {
+				writeInboundManagementError(w, err)
+				return nil
+			}
+			writeJSONStatus(w, http.StatusCreated, created)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
-		created, err := management.Create(inbound)
-		if err != nil {
-			writeInboundManagementError(w, err)
-			return
-		}
-		writeJSONStatus(w, http.StatusCreated, created)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPost)
-	}
+		return nil
+	})
 }
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
@@ -316,37 +318,38 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		writeNotFound(w)
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	management := NewInboundManagement(&s.inbounds, s.saveLocked)
-	inbound, ok := management.Get(name)
-	if !ok {
-		writeNotFound(w)
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, inbound)
-	case http.MethodPut:
-		var update Inbound
-		if !decodeJSONRequest(w, r, &update) {
-			return
+	_ = s.withTransaction(func(tx *managementTransaction) error {
+		management := tx.Inbounds()
+		inbound, ok := management.Get(name)
+		if !ok {
+			writeNotFound(w)
+			return nil
 		}
-		updated, err := management.Update(name, update)
-		if err != nil {
-			writeInboundManagementError(w, err)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, inbound)
+		case http.MethodPut:
+			var update Inbound
+			if !decodeJSONRequest(w, r, &update) {
+				return nil
+			}
+			updated, err := management.Update(name, update)
+			if err != nil {
+				writeInboundManagementError(w, err)
+				return nil
+			}
+			writeJSON(w, updated)
+		case http.MethodDelete:
+			if err := management.Delete(name); err != nil {
+				writeInboundManagementError(w, err)
+				return nil
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 		}
-		writeJSON(w, updated)
-	case http.MethodDelete:
-		if err := management.Delete(name); err != nil {
-			writeInboundManagementError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
-	}
+		return nil
+	})
 }
 
 func writeInboundManagementError(w http.ResponseWriter, err error) {
