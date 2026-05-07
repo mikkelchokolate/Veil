@@ -105,12 +105,6 @@ func (c InboundCatalog) hasTransportPort(transport string, port int, exceptIndex
 	return NewInboundTransportPortIndex(c.inbounds).Has(transport, port, exceptIndex)
 }
 
-func cloneInbounds(inbounds []Inbound) []Inbound {
-	out := make([]Inbound, len(inbounds))
-	copy(out, inbounds)
-	return out
-}
-
 func generateInboundPassword() string {
 	buf := make([]byte, 9)
 	if _, err := rand.Read(buf); err != nil {
