@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestPanelClientLinksCardModuleRendersCredentialDisclosureControls(t *testing.T) {
+	card := panelClientLinksCardHTML()
+	for _, want := range []string{
+		`<h2>Client links</h2>`,
+		`id="load-client-links"`,
+		`id="load-client-subscription"`,
+		`id="load-client-subscription-raw"`,
+		`id="download-client-subscription"`,
+		`id="copy-client-links"`,
+		`id="client-links-output"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Client links card missing %q", want)
+		}
+	}
+}
+
 func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	card := panelApplyCardHTML()
 	for _, want := range []string{
