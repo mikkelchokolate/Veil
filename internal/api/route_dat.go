@@ -34,14 +34,15 @@ func downloadRouteDat(url string) ([]byte, error) {
 			}
 			continue
 		}
-		if resp.StatusCode >= 500 {
+		decision := NewRouteDatResponsePolicy().Decide(url, resp.StatusCode, resp.Status)
+		if decision.Retry {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("download %s returned %s", url, resp.Status)
+			lastErr = decision.Err
 			continue
 		}
-		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		if !decision.Accept {
 			resp.Body.Close()
-			return nil, fmt.Errorf("download %s returned %s", url, resp.Status)
+			return nil, decision.Err
 		}
 		defer resp.Body.Close()
 		lr := io.LimitReader(resp.Body, maxRouteDatSize+1)
