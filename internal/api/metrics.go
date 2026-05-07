@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -122,57 +121,7 @@ func (m *MetricsCollector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var b []byte
-
-	// HELP/TYPE + metrics
-	b = append(b, "# HELP veil_uptime_seconds Time since Veil started.\n"...)
-	b = append(b, "# TYPE veil_uptime_seconds gauge\n"...)
-	b = append(b, fmt.Sprintf("veil_uptime_seconds %.0f\n", time.Since(m.startTime).Seconds())...)
-
-	b = append(b, "# HELP veil_http_requests_total Total HTTP requests.\n"...)
-	b = append(b, "# TYPE veil_http_requests_total counter\n"...)
-	b = append(b, fmt.Sprintf("veil_http_requests_total %d\n", m.requestsTotal.Load())...)
-
-	b = append(b, "# HELP veil_http_requests_duration_seconds_avg Average request duration.\n"...)
-	b = append(b, "# TYPE veil_http_requests_duration_seconds_avg gauge\n"...)
-	b = append(b, fmt.Sprintf("veil_http_requests_duration_seconds_avg %f\n", m.requestDuration.average())...)
-
-	b = append(b, "# HELP veil_http_requests_active Currently active requests.\n"...)
-	b = append(b, "# TYPE veil_http_requests_active gauge\n"...)
-	b = append(b, fmt.Sprintf("veil_http_requests_active %d\n", m.activeRequests.Load())...)
-
-	b = append(b, "# HELP veil_rate_limit_hits_total Rate-limited requests.\n"...)
-	b = append(b, "# TYPE veil_rate_limit_hits_total counter\n"...)
-	b = append(b, fmt.Sprintf("veil_rate_limit_hits_total %d\n", m.rateLimitHits.Load())...)
-
-	// Per-status-code counters
-	b = append(b, "# HELP veil_http_requests_by_code_total HTTP requests by status code.\n"...)
-	b = append(b, "# TYPE veil_http_requests_by_code_total counter\n"...)
-	m.requestsByCode.Range(func(key, value any) bool {
-		b = append(b, fmt.Sprintf("veil_http_requests_by_code_total{code=\"%s\"} %d\n", key.(string), value.(*atomic.Int64).Load())...)
-		return true
-	})
-
-	// Per-path counters (top paths)
-	b = append(b, "# HELP veil_http_requests_by_path_total HTTP requests by method and path.\n"...)
-	b = append(b, "# TYPE veil_http_requests_by_path_total counter\n"...)
-	m.requestsByPath.Range(func(key, value any) bool {
-		b = append(b, fmt.Sprintf("veil_http_requests_by_path_total{path=\"%s\"} %d\n", key.(string), value.(*atomic.Int64).Load())...)
-		return true
-	})
-
-	// Service status gauges
-	m.statusMu.RLock()
-	if len(m.serviceStatus) > 0 {
-		b = append(b, "# HELP veil_service_status Service active status (1=active, 0=inactive).\n"...)
-		b = append(b, "# TYPE veil_service_status gauge\n"...)
-		for name, val := range m.serviceStatus {
-			b = append(b, fmt.Sprintf("veil_service_status{service=\"%s\"} %g\n", name, val)...)
-		}
-	}
-	m.statusMu.RUnlock()
-
-	w.Write(b)
+	_, _ = w.Write([]byte(NewMetricsExposition(m).Render()))
 }
 
 // MetricsMiddleware wraps an http.Handler and tracks request metrics.
@@ -196,7 +145,7 @@ func (m *MetricsCollector) MetricsMiddleware(next http.Handler) http.Handler {
 
 type codeResponseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
 	wroteHeader bool
 }
 
