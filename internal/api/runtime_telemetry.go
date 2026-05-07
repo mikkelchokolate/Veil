@@ -12,12 +12,13 @@ type RuntimeTelemetry struct {
 }
 
 func NewRuntimeTelemetry() RuntimeTelemetry {
+	procfs := NewRuntimeProcFS()
 	return RuntimeTelemetry{
-		readSystem:      readSystemStats,
+		readSystem:      procfs.System,
 		readTLSCertPath: func() string { return os.Getenv("VEIL_TLS_CERT") },
-		readNetwork:     readNetworkStats,
-		readConnections: readConnectionsStats,
-		readProcesses:   readProcessesStats,
+		readNetwork:     procfs.Network,
+		readConnections: procfs.Connections,
+		readProcesses:   procfs.Processes,
 		readDisk:        readDirDiskStats,
 	}
 }
