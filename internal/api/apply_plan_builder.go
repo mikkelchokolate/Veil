@@ -19,8 +19,8 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		Configs: []string{},
 		Actions: []string{"validate management state"},
 	}
-	if input.Settings.Stack != "both" && input.Settings.Stack != "naive" && input.Settings.Stack != "hysteria2" {
-		plan.Errors = append(plan.Errors, "unsupported stack: "+input.Settings.Stack)
+	if err := NewStackSelectionValidation().Validate(input.Settings.Stack); err != nil {
+		plan.Errors = append(plan.Errors, err.Error())
 	}
 	seen := map[string]bool{}
 	for _, inbound := range input.Inbounds {
