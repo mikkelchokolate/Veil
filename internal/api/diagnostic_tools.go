@@ -28,20 +28,7 @@ type DiagnosticTools struct{}
 
 func (DiagnosticTools) DNSLookup(hostname string) map[string]any {
 	addrs, cname, err := dnsLookuper(hostname)
-	result := map[string]any{
-		"hostname":  hostname,
-		"addresses": addrs,
-	}
-	if cname != "" {
-		result["cname"] = cname
-	}
-	if err != nil {
-		result["error"] = err.Error()
-	}
-	if addrs == nil {
-		result["addresses"] = []string{}
-	}
-	return result
+	return NewDNSLookupResult(hostname, addrs, cname, err).Map()
 }
 
 func (DiagnosticTools) Ping(host string, count int) PingResult {
