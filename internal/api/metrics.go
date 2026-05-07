@@ -15,7 +15,7 @@ type MetricsCollector struct {
 	requestsByCode  sync.Map // map[int]*atomic.Int64
 	requestsByPath  sync.Map // map[string]*atomic.Int64
 	activeRequests  atomic.Int64
-	requestDuration cumulativeDuration
+	requestDuration *MetricsDurationAccumulator
 
 	// Rate limit metrics
 	rateLimitHits atomic.Int64
@@ -27,32 +27,11 @@ type MetricsCollector struct {
 	startTime time.Time
 }
 
-type cumulativeDuration struct {
-	mu    sync.Mutex
-	total time.Duration
-	count int64
-}
-
-func (d *cumulativeDuration) add(dur time.Duration) {
-	d.mu.Lock()
-	d.total += dur
-	d.count++
-	d.mu.Unlock()
-}
-
-func (d *cumulativeDuration) average() float64 {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.count == 0 {
-		return 0
-	}
-	return d.total.Seconds() / float64(d.count)
-}
-
 // NewMetricsCollector creates a new metrics collector.
 func NewMetricsCollector() *MetricsCollector {
 	return &MetricsCollector{
-		startTime: time.Now(),
+		requestDuration: NewMetricsDurationAccumulator(),
+		startTime:       time.Now(),
 	}
 }
 
