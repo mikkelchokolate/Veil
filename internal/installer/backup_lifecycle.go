@@ -17,21 +17,9 @@ func NewBackupLifecycle(dir string) BackupLifecycle {
 }
 
 func (l BackupLifecycle) BackupExisting(paths []string) (string, error) {
-	baseID := time.Now().UTC().Format("20060102_150405")
-	backupID := baseID
-
-	// Handle collision: if the backup directory already exists (e.g. two backups in
-	// the same second), append a counter suffix until we find a free directory.
-	for suffix := 1; ; suffix++ {
-		backupPath := filepath.Join(l.Dir, backupID)
-		_, statErr := os.Stat(backupPath)
-		if os.IsNotExist(statErr) {
-			break
-		}
-		if statErr != nil {
-			return "", fmt.Errorf("stat backup path %s: %w", backupPath, statErr)
-		}
-		backupID = fmt.Sprintf("%s_%d", baseID, suffix)
+	backupID, err := NewBackupIDPolicy(time.Now, backupPathExists).Next(l.Dir)
+	if err != nil {
+		return "", err
 	}
 
 	backupPath := filepath.Join(l.Dir, backupID)
