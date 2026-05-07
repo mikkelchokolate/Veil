@@ -21,6 +21,7 @@ type ruRecommendedInstallOptions struct {
 	VarDir         string
 	SystemdDir     string
 	PanelPort      int
+	PanelAccess    string
 	SharedPort     int
 	PublicIP       string
 	Interactive    bool
@@ -78,10 +79,14 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
 	}
+	panelAccess, err := NewPanelAccessMode(opts.PanelAccess).Resolve(panelListenPort)
+	if err != nil {
+		return err
+	}
 	if built.WebBasePath != "" && built.WebBasePath != "/" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
 	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: http://127.0.0.1:%d/\n", panelListenPort)
+		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: http://%s/\n", panelAccess.PanelListen)
 	}
 	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.HysteriaSHA256)
 	if planErr == nil {

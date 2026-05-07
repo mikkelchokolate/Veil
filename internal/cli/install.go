@@ -25,6 +25,7 @@ func newInstallCommand() *cobra.Command {
 	var varDir string
 	var systemdDir string
 	var panelPort int
+	var panelAccess string
 	var sharedPort int
 	var publicIP string
 	var interactive bool
@@ -47,6 +48,7 @@ func newInstallCommand() *cobra.Command {
 				VarDir:         varDir,
 				SystemdDir:     systemdDir,
 				PanelPort:      panelPort,
+				PanelAccess:    panelAccess,
 				SharedPort:     sharedPort,
 				PublicIP:       publicIP,
 				Interactive:    interactive,
@@ -68,6 +70,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().IntVar(&sharedPort, "port", 0, "required shared proxy port for NaiveProxy TCP and/or Hysteria2 UDP")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
+	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
