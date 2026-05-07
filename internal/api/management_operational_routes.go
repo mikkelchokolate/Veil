@@ -17,8 +17,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	NewClientLinkDeliveryHeaders().Apply(w.Header())
 	writeJSON(w, response)
 }
 
@@ -45,8 +44,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	NewClientLinkDeliveryHeaders().Apply(w.Header())
 	w.Header().Set("Content-Type", subscription.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, subscription.Filename))
 	_, _ = w.Write([]byte(subscription.Body))
