@@ -20,35 +20,7 @@ func newUninstallCommand() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove Veil panel, services, and configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plan := uninstallPlan()
-
-			fmt.Fprintln(cmd.OutOrStdout(), "Veil uninstall plan")
-			fmt.Fprintln(cmd.OutOrStdout(), plan)
-
-			if dryRun {
-				return nil
-			}
-
-			if !yes {
-				return fmt.Errorf("uninstall requires --yes; rerun with --dry-run to preview")
-			}
-
-			// Stop and disable services
-			for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"} {
-				if err := uninstallServiceStopper(svc); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: service %s: %v\n", svc, err)
-				}
-			}
-
-			// Remove files and directories
-			for _, path := range []string{"/etc/veil", "/var/lib/veil", "/usr/local/bin/veil"} {
-				if err := uninstallFileRemover(path); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: remove %s: %v\n", path, err)
-				}
-			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), "Uninstalled Veil")
-			return nil
+			return NewUninstallWorkflow(uninstallWorkflowOptions{DryRun: dryRun, Yes: yes}, cmd.OutOrStdout(), cmd.ErrOrStderr()).Run()
 		},
 	}
 
@@ -61,11 +33,11 @@ func newUninstallCommand() *cobra.Command {
 func uninstallPlan() string {
 	var b strings.Builder
 	b.WriteString("Stop services:\n")
-	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"} {
+	for _, svc := range uninstallServices() {
 		b.WriteString(fmt.Sprintf("  - %s\n", svc))
 	}
 	b.WriteString("Disable services:\n")
-	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"} {
+	for _, svc := range uninstallServices() {
 		b.WriteString(fmt.Sprintf("  - %s\n", svc))
 	}
 	b.WriteString("Remove files:\n")
