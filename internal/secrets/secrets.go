@@ -10,8 +10,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 )
 
 const (
@@ -115,40 +113,5 @@ func IsEncrypted(value string) bool {
 // but has wrong permissions, they are fixed to 0600. If the file exists but
 // is not exactly 32 bytes, an error is returned.
 func LoadOrCreateKey(path string) (*[KeySize]byte, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("secrets: read key file %s: %w", path, err)
-		}
-		// File does not exist: generate new key
-		return createKeyFile(path)
-	}
-
-	// Fix permissions if needed
-	if info, err := os.Stat(path); err == nil {
-		if info.Mode().Perm() != 0o600 {
-			if err := os.Chmod(path, 0o600); err != nil {
-				return nil, fmt.Errorf("secrets: chmod key file %s: %w", path, err)
-			}
-		}
-	}
-
-	if len(data) != KeySize {
-		return nil, fmt.Errorf("secrets: key file %s has wrong length: %d bytes (expected %d)", path, len(data), KeySize)
-	}
-
-	var key [KeySize]byte
-	copy(key[:], data)
-	return &key, nil
-}
-
-func createKeyFile(path string) (*[KeySize]byte, error) {
-	var key [KeySize]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return nil, fmt.Errorf("secrets: generate key: %w", err)
-	}
-	if err := os.WriteFile(path, key[:], 0o600); err != nil {
-		return nil, fmt.Errorf("secrets: write key file %s: %w", path, err)
-	}
-	return &key, nil
+	return NewKeyFileStore(path).LoadOrCreate()
 }
