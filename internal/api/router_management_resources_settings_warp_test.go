@@ -202,7 +202,7 @@ func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("expected 400 for invalid stack %q, got %d: %s", stack, w.Code, w.Body.String())
 			}
-			if !strings.Contains(w.Body.String(), "stack must be naive, hysteria2, or both") {
+			if !strings.Contains(w.Body.String(), "stack must be panel, mieru, naive, hysteria2, or both") {
 				t.Fatalf("expected stack validation error for %q, got: %s", stack, w.Body.String())
 			}
 		})

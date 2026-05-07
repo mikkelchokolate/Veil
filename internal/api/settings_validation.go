@@ -17,8 +17,8 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {
 		return errors.New("panelListen, stack, and mode are required")
 	}
-	if settings.Stack != "naive" && settings.Stack != "hysteria2" && settings.Stack != "both" {
-		return errors.New("stack must be naive, hysteria2, or both")
+	if settings.Stack != "panel" && settings.Stack != "mieru" && settings.Stack != "naive" && settings.Stack != "hysteria2" && settings.Stack != "both" {
+		return errors.New("stack must be panel, mieru, naive, hysteria2, or both")
 	}
 	if settings.Domain != "" {
 		if err := installer.ValidateDomain(settings.Domain); err != nil {

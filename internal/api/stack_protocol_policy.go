@@ -16,6 +16,10 @@ func (p StackProtocolPolicy) Includes(protocol string) bool {
 		return protocol == "naiveproxy"
 	case "hysteria2":
 		return protocol == "hysteria2"
+	case "mieru":
+		return protocol == "mieru"
+	case "panel":
+		return false
 	default:
 		return false
 	}

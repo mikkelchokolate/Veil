@@ -19,7 +19,7 @@ func TestSettingsValidationPreservesRedactedSecretsAndNormalizesFallbackRoot(t *
 func TestSettingsValidationRejectsInvalidStack(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Stack: "bad", Mode: "server"}
 	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
-	if err == nil || err.Error() != "stack must be naive, hysteria2, or both" {
+	if err == nil || err.Error() != "stack must be panel, mieru, naive, hysteria2, or both" {
 		t.Fatalf("err = %v", err)
 	}
 }
