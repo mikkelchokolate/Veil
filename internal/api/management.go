@@ -20,15 +20,6 @@ func (s *managementState) register(mux *http.ServeMux) {
 	ManagementRoutes{}.Register(mux, s)
 }
 
-func appendUnique(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
-	}
-	return append(values, value)
-}
-
 func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
 }
