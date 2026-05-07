@@ -89,6 +89,8 @@ func (InstallPresentation) StackName(profile installer.RURecommendedProfile) str
 		return string(installer.StackNaive)
 	case profile.InstallHysteria2:
 		return string(installer.StackHysteria2)
+	case profile.InstallMieru:
+		return string(installer.StackMieru)
 	default:
 		return "none"
 	}

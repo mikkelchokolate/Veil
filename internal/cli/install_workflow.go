@@ -46,8 +46,8 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			opts.Stack = "both"
 		}
 	}
-	proxyStack := strings.TrimSpace(opts.Stack) != "panel"
-	if proxyStack {
+	requiresDomainStack := strings.TrimSpace(opts.Stack) == "both" || strings.TrimSpace(opts.Stack) == "naive" || strings.TrimSpace(opts.Stack) == "hysteria2"
+	if requiresDomainStack {
 		if opts.Domain == "" {
 			return fmt.Errorf("--domain is required for ru-recommended profile")
 		}
