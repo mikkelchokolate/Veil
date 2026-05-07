@@ -1,18 +1,16 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 )
 
 // BuildClientLinks creates user-facing client connection links from settings and enabled inbounds.
 // Per-inbound passwords override global settings passwords; empty per-inbound passwords fall back
 // to the global protocol password for backward compatibility.
 func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksResponse, error) {
-	if strings.TrimSpace(settings.Domain) == "" {
-		return ClientLinksResponse{}, errors.New("domain is required to build client links")
+	if err := NewClientLinksSettingsValidation().Validate(settings); err != nil {
+		return ClientLinksResponse{}, err
 	}
 	response := NewClientLinksResponseMetadata(settings).Build()
 	for _, inbound := range inbounds {
