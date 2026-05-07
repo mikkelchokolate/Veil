@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,17 +22,11 @@ func NewStagedConfigValidator(run ConfigValidationRunner) StagedConfigValidator 
 
 func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult {
 	results := []ConfigValidationResult{}
+	catalog := NewConfigValidationCatalog()
 	for _, path := range paths {
-		slashPath := filepath.ToSlash(path)
-		switch {
-		case strings.HasSuffix(slashPath, "/generated/caddy/Caddyfile"):
-			results = append(results, v.run("caddy", path, []string{"caddy", "validate", "--config", path}))
-		case strings.HasSuffix(slashPath, "/generated/hysteria2/server.yaml"):
-			results = append(results, v.run("hysteria2", path, []string{"hysteria", "server", "--config", path, "--check"}))
-		case strings.HasSuffix(slashPath, "/generated/sing-box/warp.json"):
-			results = append(results, v.run("warp", path, []string{"sing-box", "check", "-c", path}))
-		case strings.HasSuffix(slashPath, "/generated/mieru/server_config.json"):
-			results = append(results, v.run("mieru", path, []string{"mieru", "check", "-c", path}))
+		validation, ok := catalog.Match(path)
+		if ok {
+			results = append(results, v.run(validation.Name, validation.Config, validation.Command))
 		}
 	}
 	return results
