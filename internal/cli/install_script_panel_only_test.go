@@ -16,7 +16,7 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 		`STACK="panel"`,
 		`PANEL_ACCESS="local"`,
 		`--panel-access`,
-		`panel, naive, hysteria2, or both`,
+		`panel, mieru, naive, hysteria2, or both`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q", want)

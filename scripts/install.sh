@@ -30,7 +30,7 @@ Options:
   --domain DOMAIN      Domain used for ACME and client configs
   --email EMAIL        ACME email
   --port PORT          Shared proxy port passed to veil install; omit it to use the interactive prompt
-  --stack STACK        panel, naive, hysteria2, or both, default panel
+  --stack STACK        panel, mieru, naive, hysteria2, or both, default panel
   --panel-access MODE  local, direct, or caddy, default local
   --panel-port PORT    Panel TCP port; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply

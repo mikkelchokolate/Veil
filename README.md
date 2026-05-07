@@ -37,6 +37,14 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
   --yes
 ```
 
+Mieru-only runtime install without Caddy/domain:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- \
+  --stack mieru \
+  --yes
+```
+
 NaiveProxy/Hysteria2 install with Caddy and domain:
 
 ```bash
