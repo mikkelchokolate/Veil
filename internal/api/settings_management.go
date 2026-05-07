@@ -39,14 +39,3 @@ func (m SettingsManagement) Update(update Settings) (Settings, error) {
 	}
 	return redactedSettings(update), nil
 }
-
-func redactedSettings(settings Settings) Settings {
-	redacted := settings
-	if redacted.NaivePassword != "" {
-		redacted.NaivePassword = "[REDACTED]"
-	}
-	if redacted.Hysteria2Password != "" {
-		redacted.Hysteria2Password = "[REDACTED]"
-	}
-	return redacted
-}
