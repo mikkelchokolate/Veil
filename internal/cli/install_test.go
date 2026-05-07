@@ -58,6 +58,44 @@ func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	}
 }
 
+func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing.T) {
+	oldApply := installApplyFunc
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		t.Fatalf("dry-run must not apply files")
+		return installer.ApplyResult{}, nil
+	}
+	t.Cleanup(func() { installApplyFunc = oldApply })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	err := runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
+		Profile:    "ru-recommended",
+		Stack:      "both",
+		Domain:     "example.com",
+		Email:      "admin@example.com",
+		SharedPort: 31874,
+		DryRun:     true,
+		EtcDir:     "/etc/veil",
+		VarDir:     "/var/lib/veil",
+	})
+	if err != nil {
+		t.Fatalf("runRURecommendedInstall: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Veil ru-recommended dry run",
+		"Panel URL: https://example.com/",
+		"Install plan",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer

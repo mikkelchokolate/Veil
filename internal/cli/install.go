@@ -2,17 +2,13 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"net"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/installer"
@@ -45,135 +41,25 @@ func newInstallCommand() *cobra.Command {
 		Use:   "install",
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if profile != "ru-recommended" {
-				return fmt.Errorf("profile %q is not implemented yet", profile)
-			}
-			if interactive {
-				if err := promptInstallOptions(cmd, &domain, &email, &sharedPort, &panelPort); err != nil {
-					return err
-				}
-			}
-			if domain == "" {
-				return fmt.Errorf("--domain is required for ru-recommended profile")
-			}
-			if email == "" {
-				return fmt.Errorf("--email is required for ru-recommended profile")
-			}
-			if sharedPort <= 0 || sharedPort > 65535 {
-				return fmt.Errorf("--port is required and must be between 1 and 65535")
-			}
-			var parsedPublicIP net.IP
-			if publicIP != "" {
-				if publicIP == "auto" {
-					ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
-					defer cancel()
-					var detectErr error
-					parsedPublicIP, detectErr = installer.DetectPublicIP(ctx, installPublicIPClient, installPublicIPEndpoints)
-					if detectErr != nil {
-						return detectErr
-					}
-				} else {
-					parsedPublicIP = net.ParseIP(publicIP)
-					if parsedPublicIP == nil {
-						return fmt.Errorf("--public-ip must be a valid IPv4 or IPv6 address, or auto")
-					}
-				}
-			}
-
-			availability, err := installer.DetectPortAvailability([]int{443, 8443})
-			if err != nil {
-				return err
-			}
-			randomPort := func() int {
-				port, err := installer.RandomHighPort()
-				if err != nil {
-					return 31874
-				}
-				return port
-			}
-			install, err := installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
-				Domain:          domain,
-				Email:           email,
-				Stack:           installer.Stack(stack),
-				Port:            sharedPort,
-				PanelPort:       panelPort,
-				Availability:    availability,
-				Secret:          randomSecret,
-				RandomPort:      randomPort,
-				RandomPanelPort: installer.RandomHighPort,
+			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
+				Profile:        profile,
+				Stack:          stack,
+				Domain:         domain,
+				Email:          email,
+				DryRun:         dryRun,
+				Yes:            yes,
+				EtcDir:         etcDir,
+				VarDir:         varDir,
+				SystemdDir:     systemdDir,
+				PanelPort:      panelPort,
+				SharedPort:     sharedPort,
+				PublicIP:       publicIP,
+				Interactive:    interactive,
+				HysteriaSHA256: hysteriaSHA256,
+				AuditLog:       auditLog,
+				BackupDir:      backupDir,
+				BackupDirSet:   cmd.Flags().Changed("backup-dir"),
 			})
-			if err != nil {
-				return err
-			}
-			built := install.Profile
-			panelListenPort := install.PanelPort
-			panelRandom := install.PanelRandom
-			printRURecommended(cmd, built, dryRun)
-			if parsedPublicIP != nil {
-				ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
-				defer cancel()
-				dnsCheck, err := installer.CheckDomainDNS(ctx, installDNSResolver, domain, parsedPublicIP)
-				if err != nil {
-					return err
-				}
-				printDNSCheck(cmd, dnsCheck)
-			}
-			if panelRandom {
-				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (random)\n", panelListenPort)
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
-			}
-			if built.WebBasePath != "" && built.WebBasePath != "/" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
-			}
-			plan, planErr := installer.BuildInstallPlan(built, installer.InstallPlanInput{
-				Platform:        installer.CurrentPlatform(),
-				HysteriaVersion: "v2.6.0",
-				HysteriaSHA256:  hysteriaSHA256,
-				SystemdUnits:    systemdUnitsForProfile(built),
-				PanelPort:       panelListenPort,
-			})
-			if planErr == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
-				fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))
-				fmt.Fprintln(cmd.OutOrStdout(), plan.Summary())
-			}
-			if dryRun {
-				return nil
-			}
-			if !yes {
-				if interactive {
-					fmt.Fprint(cmd.OutOrStdout(), "Apply install plan? [y/N]: ")
-					answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-					if err != nil {
-						return fmt.Errorf("read confirmation: %w", err)
-					}
-					if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-						return fmt.Errorf("install cancelled")
-					}
-				} else {
-					return fmt.Errorf("apply mode requires --yes; rerun with --dry-run to preview")
-				}
-			}
-			actualBackupDir := backupDir
-			if !cmd.Flags().Changed("backup-dir") {
-				actualBackupDir = filepath.Join(varDir, "backups")
-			}
-			result, err := installApplyFunc(built, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, BackupDir: actualBackupDir})
-			if err != nil {
-				_ = writeAuditInstall(auditLog, result.BackupID, false, err.Error(), nil)
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
-			for _, path := range result.WrittenFiles {
-				fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
-			}
-			fmt.Fprintln(cmd.OutOrStdout())
-			fmt.Fprint(cmd.OutOrStdout(), installCredentialSummary(built))
-			if err := writeAuditInstall(auditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
-				return fmt.Errorf("audit log write failed after successful install: %w", err)
-			}
-			return nil
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "default", "install profile: default or ru-recommended")
