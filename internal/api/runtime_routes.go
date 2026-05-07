@@ -1,9 +1,6 @@
 package api
 
-import (
-	"net/http"
-	"os"
-)
+import "net/http"
 
 type RuntimeRoutes struct{}
 
@@ -27,7 +24,7 @@ func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := readSystemStats()
+		stats, err := NewRuntimeTelemetry().System()
 		if err != nil {
 			writeError(w, "failed to read system stats", http.StatusInternalServerError)
 			return
@@ -43,8 +40,7 @@ func handleTLSRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		certPath := os.Getenv("VEIL_TLS_CERT")
-		writeJSON(w, readTLSCert(certPath))
+		writeJSON(w, NewRuntimeTelemetry().TLS())
 	}
 }
 
@@ -55,7 +51,7 @@ func handleNetworkRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := readNetworkStats()
+		stats, err := NewRuntimeTelemetry().Network()
 		if err != nil {
 			writeError(w, "failed to read network stats", http.StatusInternalServerError)
 			return
@@ -71,7 +67,7 @@ func handleConnectionsRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := readConnectionsStats()
+		stats, err := NewRuntimeTelemetry().Connections()
 		if err != nil {
 			writeError(w, "failed to read connections", http.StatusInternalServerError)
 			return
@@ -87,7 +83,7 @@ func handleProcessesRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := readProcessesStats()
+		stats, err := NewRuntimeTelemetry().Processes()
 		if err != nil {
 			writeError(w, "failed to read processes", http.StatusInternalServerError)
 			return
@@ -103,6 +99,6 @@ func handleDiskRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, readDirDiskStats())
+		writeJSON(w, NewRuntimeTelemetry().Disk())
 	}
 }
