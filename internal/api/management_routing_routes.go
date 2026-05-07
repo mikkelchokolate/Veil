@@ -89,7 +89,7 @@ func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Re
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	writeJSON(w, RoutingPresetResponse{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: append([]RoutingRule(nil), s.rules...), Presets: routingPresetProfiles()})
+	writeJSON(w, NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).WithPresets(routingPresetProfiles()).Build())
 }
 
 func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +116,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, RoutingPresetResponse{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: append([]RoutingRule(nil), s.rules...)})
+	writeJSON(w, NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build())
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
