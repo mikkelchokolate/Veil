@@ -28,18 +28,6 @@ func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) 
 	return NewApplyHistoryStore(s.applyHistoryPathLocked(), maxApplyHistoryEntries).Load()
 }
 
-func requirePassedValidations(validations []ConfigValidationResult) error {
-	for _, validation := range validations {
-		if validation.Skipped || !validation.Valid {
-			if validation.Error != "" {
-				return errors.New(validation.Error)
-			}
-			return fmt.Errorf("%s validation did not pass", validation.Name)
-		}
-	}
-	return nil
-}
-
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
 	context := NewManagementApplyContext(s)
 	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
