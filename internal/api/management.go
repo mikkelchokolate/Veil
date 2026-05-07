@@ -20,19 +20,6 @@ func (s *managementState) register(mux *http.ServeMux) {
 	ManagementRoutes{}.Register(mux, s)
 }
 
-func stackIncludesProtocol(stack string, protocol string) bool {
-	switch stack {
-	case "both":
-		return true
-	case "naive":
-		return protocol == "naiveproxy"
-	case "hysteria2":
-		return protocol == "hysteria2"
-	default:
-		return false
-	}
-}
-
 func appendUnique(values []string, value string) []string {
 	for _, existing := range values {
 		if existing == value {
