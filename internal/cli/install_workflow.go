@@ -46,17 +46,8 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			opts.Stack = "both"
 		}
 	}
-	requiresDomainStack := strings.TrimSpace(opts.Stack) == "both" || strings.TrimSpace(opts.Stack) == "naive" || strings.TrimSpace(opts.Stack) == "hysteria2"
-	if requiresDomainStack {
-		if opts.Domain == "" {
-			return fmt.Errorf("--domain is required for ru-recommended profile")
-		}
-		if opts.Email == "" {
-			return fmt.Errorf("--email is required for ru-recommended profile")
-		}
-		if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
-			return fmt.Errorf("--port is required and must be between 1 and 65535")
-		}
+	if err := NewRURecommendedInstallRequirements(opts.Stack).Validate(opts); err != nil {
+		return err
 	}
 	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)
 	if err != nil {
