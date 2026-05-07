@@ -67,12 +67,7 @@ func readUptime() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	fields := strings.Fields(string(data))
-	if len(fields) == 0 {
-		return 0, nil
-	}
-	secs, _ := strconv.ParseFloat(fields[0], 64)
-	return int64(secs), nil
+	return NewUptimeParser().Parse(string(data)), nil
 }
 
 type loadAvg struct{ avg1, avg5, avg15 float64 }
