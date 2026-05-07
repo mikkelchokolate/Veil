@@ -3,8 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -87,42 +85,5 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		return nil
 	}
 
-	// 10. Restart service and health check (with optional staged rollback)
-	addr := resolveStatusListen(opts.Listen)
-	if !strings.Contains(addr, "://") {
-		addr = "http://" + addr
-	}
-	token, _ := resolveServeAuthToken(opts.AuthToken)
-
-	fmt.Fprintln(out, "Restarting veil.service...")
-	if err := runSystemctlRestart("veil.service"); err != nil {
-		if opts.Staged {
-			fmt.Fprintf(out, "Restart failed, rolling back to previous binary...\n")
-			if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
-				return fmt.Errorf("restart failed and rollback also failed: restart: %w; rollback: %v", err, rollbackErr)
-			}
-			fmt.Fprintln(out, "Rolled back to previous binary.")
-			return fmt.Errorf("restart failed, rolled back: %w", err)
-		}
-		return fmt.Errorf("restart failed (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
-	}
-	fmt.Fprintln(out, "Service restarted. Running health check...")
-
-	if err := waitForHealthy(addr, token, 10*time.Second); err != nil {
-		if opts.Staged {
-			fmt.Fprintf(out, "Health check failed, rolling back to previous binary...\n")
-			if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
-				return fmt.Errorf("health check failed and rollback also failed: health: %w; rollback: %v", err, rollbackErr)
-			}
-			// Restart again after rollback to get the old binary running
-			if restartErr := runSystemctlRestart("veil.service"); restartErr != nil {
-				fmt.Fprintf(out, "Warning: rollback binary installed but restart failed: %v\n", restartErr)
-			}
-			fmt.Fprintln(out, "Rolled back to previous binary.")
-			return fmt.Errorf("health check failed, rolled back: %w", err)
-		}
-		return fmt.Errorf("health check failed after restart (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
-	}
-	fmt.Fprintf(out, "Service healthy. Update complete.\n")
-	return nil
+	return restartUpdatedVeil(cmd, currentPath, backupPath, opts)
 }
