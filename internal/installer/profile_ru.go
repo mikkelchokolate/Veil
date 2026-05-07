@@ -68,6 +68,24 @@ type RURecommendedProfileModule struct {
 	input RURecommendedInput
 }
 
+type ruRecommendedStackPolicy struct {
+	Stack            Stack
+	InstallNaive     bool
+	InstallHysteria2 bool
+}
+
+type ruRecommendedNaiveArtifacts struct {
+	Password  string
+	Caddyfile string
+	ClientURL string
+}
+
+type ruRecommendedHysteriaArtifacts struct {
+	Password   string
+	ServerYAML string
+	ClientURI  string
+}
+
 func NewRURecommendedProfileModule(input RURecommendedInput) RURecommendedProfileModule {
 	return RURecommendedProfileModule{input: input}
 }
@@ -77,93 +95,121 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 }
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
-	input := m.input
+	input := m.normalizedInput()
 	if err := ValidateDomain(input.Domain); err != nil {
 		return RURecommendedProfile{}, err
 	}
 	if err := ValidateEmail(input.Email); err != nil {
 		return RURecommendedProfile{}, err
 	}
-	if input.Secret == nil {
-		input.Secret = func(label string) string { return label }
+	stack, err := m.stackPolicy(input.Stack)
+	if err != nil {
+		return RURecommendedProfile{}, err
 	}
-	if input.RandomPort == nil {
-		input.RandomPort = func() int { return 443 }
-	}
-	stack, installNaive, installHysteria2, err := normalizeStack(input.Stack)
+	plan, err := m.portPlan(input, stack)
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
 
-	plan := PlanStackPort(input.Availability, []int{443, 8443}, input.RandomPort, installNaive, installHysteria2)
-	if input.Port > 0 {
-		plan, err = PlanExplicitStackPort(input.Availability, input.Port, installNaive, installHysteria2)
-		if err != nil {
-			return RURecommendedProfile{}, err
-		}
-	}
 	username := "veil"
 	masqueradeURL := "https://www.bing.com/"
 	fallbackRoot := "/var/lib/veil/www"
 	webBasePath := generateWebBasePath()
-	var naivePassword string
-	var hysteriaPassword string
 	panelAuthToken := input.Secret("panel")
-	var caddyfile string
-	var hysteriaYAML string
-	var naiveClientURL string
-	var hysteriaClientURI string
+	naive := ruRecommendedNaiveArtifacts{}
+	hysteria := ruRecommendedHysteriaArtifacts{}
 
-	if installNaive {
-		naivePassword = input.Secret("naive")
-		caddyfile, err = renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
-			Domain:       input.Domain,
-			Email:        input.Email,
-			ListenPort:   plan.Port,
-			Username:     username,
-			Password:     naivePassword,
-			FallbackRoot: fallbackRoot,
-			PanelPort:    input.PanelPort,
-			WebBasePath:  webBasePath,
-		})
+	if stack.InstallNaive {
+		naive, err = m.naiveArtifacts(input, plan, username, fallbackRoot, webBasePath)
 		if err != nil {
 			return RURecommendedProfile{}, err
 		}
-		naiveClientURL = naiveURL(username, naivePassword, input.Domain, plan.Port)
 	}
-	if installHysteria2 {
-		hysteriaPassword = input.Secret("hysteria2")
-		hysteriaYAML, err = renderer.RenderHysteria2(renderer.Hysteria2Config{
-			ListenPort:    plan.Port,
-			Domain:        input.Domain,
-			Password:      hysteriaPassword,
-			MasqueradeURL: masqueradeURL,
-		})
+	if stack.InstallHysteria2 {
+		hysteria, err = m.hysteriaArtifacts(input, plan, masqueradeURL)
 		if err != nil {
 			return RURecommendedProfile{}, err
 		}
-		hysteriaClientURI = hysteria2URI(hysteriaPassword, input.Domain, plan.Port)
 	}
 
 	return RURecommendedProfile{
 		Domain:             input.Domain,
 		Email:              input.Email,
 		Username:           username,
-		NaivePassword:      naivePassword,
-		Hysteria2Password:  hysteriaPassword,
+		NaivePassword:      naive.Password,
+		Hysteria2Password:  hysteria.Password,
 		PanelAuthToken:     panelAuthToken,
 		WebBasePath:        webBasePath,
-		Stack:              stack,
-		InstallNaive:       installNaive,
-		InstallHysteria2:   installHysteria2,
+		Stack:              stack.Stack,
+		InstallNaive:       stack.InstallNaive,
+		InstallHysteria2:   stack.InstallHysteria2,
 		PortPlan:           plan,
-		Caddyfile:          caddyfile,
-		Hysteria2YAML:      hysteriaYAML,
-		NaiveClientURL:     naiveClientURL,
-		Hysteria2ClientURI: hysteriaClientURI,
+		Caddyfile:          naive.Caddyfile,
+		Hysteria2YAML:      hysteria.ServerYAML,
+		NaiveClientURL:     naive.ClientURL,
+		Hysteria2ClientURI: hysteria.ClientURI,
 		MasqueradeURL:      masqueradeURL,
 		FallbackRoot:       fallbackRoot,
 	}, nil
+}
+
+func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
+	input := m.input
+	if input.Secret == nil {
+		input.Secret = func(label string) string { return label }
+	}
+	if input.RandomPort == nil {
+		input.RandomPort = func() int { return 443 }
+	}
+	return input
+}
+
+func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPolicy, error) {
+	normalized, installNaive, installHysteria2, err := normalizeStack(stack)
+	if err != nil {
+		return ruRecommendedStackPolicy{}, err
+	}
+	return ruRecommendedStackPolicy{Stack: normalized, InstallNaive: installNaive, InstallHysteria2: installHysteria2}, nil
+}
+
+func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRecommendedStackPolicy) (SharedPortPlan, error) {
+	plan := PlanStackPort(input.Availability, []int{443, 8443}, input.RandomPort, stack.InstallNaive, stack.InstallHysteria2)
+	if input.Port <= 0 {
+		return plan, nil
+	}
+	return PlanExplicitStackPort(input.Availability, input.Port, stack.InstallNaive, stack.InstallHysteria2)
+}
+
+func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan SharedPortPlan, username, fallbackRoot, webBasePath string) (ruRecommendedNaiveArtifacts, error) {
+	password := input.Secret("naive")
+	caddyfile, err := renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
+		Domain:       input.Domain,
+		Email:        input.Email,
+		ListenPort:   plan.Port,
+		Username:     username,
+		Password:     password,
+		FallbackRoot: fallbackRoot,
+		PanelPort:    input.PanelPort,
+		WebBasePath:  webBasePath,
+	})
+	if err != nil {
+		return ruRecommendedNaiveArtifacts{}, err
+	}
+	return ruRecommendedNaiveArtifacts{Password: password, Caddyfile: caddyfile, ClientURL: naiveURL(username, password, input.Domain, plan.Port)}, nil
+}
+
+func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, plan SharedPortPlan, masqueradeURL string) (ruRecommendedHysteriaArtifacts, error) {
+	password := input.Secret("hysteria2")
+	yaml, err := renderer.RenderHysteria2(renderer.Hysteria2Config{
+		ListenPort:    plan.Port,
+		Domain:        input.Domain,
+		Password:      password,
+		MasqueradeURL: masqueradeURL,
+	})
+	if err != nil {
+		return ruRecommendedHysteriaArtifacts{}, err
+	}
+	return ruRecommendedHysteriaArtifacts{Password: password, ServerYAML: yaml, ClientURI: hysteria2URI(password, input.Domain, plan.Port)}, nil
 }
 
 func naiveURL(username, password, domain string, port int) string {
