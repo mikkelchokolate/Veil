@@ -18,6 +18,7 @@ release-check:
 	go vet ./...
 	go test ./... -count=1
 	make build
+	bash -n scripts/install.sh scripts/uninstall.sh
 	git diff --check
 	@test -z "$$(git status --short)" || (git status --short && exit 1)
 

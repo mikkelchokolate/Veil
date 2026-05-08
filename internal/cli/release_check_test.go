@@ -36,7 +36,7 @@ func TestMakefileDefinesReleaseCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	makefile := string(body)
-	for _, want := range []string{"release-check:", "go vet ./...", "go test ./... -count=1", "make build", "git diff --check", "git status --short"} {
+	for _, want := range []string{"release-check:", "go vet ./...", "go test ./... -count=1", "make build", "bash -n scripts/install.sh scripts/uninstall.sh", "git diff --check", "git status --short"} {
 		if !strings.Contains(makefile, want) {
 			t.Fatalf("Makefile missing %q:\n%s", want, makefile)
 		}
