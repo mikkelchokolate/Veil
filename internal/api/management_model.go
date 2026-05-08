@@ -21,7 +21,7 @@ func defaultManagementModel(info ServerInfo) managementModel {
 		panelAccess = "caddy"
 	}
 	return managementModel{
-		Settings: Settings{PanelListen: panelListen, PanelAccess: panelAccess, WebBasePath: webBasePath, Stack: "both", Mode: info.Mode, Domain: info.Domain, Email: info.Email},
+		Settings: Settings{PanelListen: panelListen, PanelAccess: panelAccess, WebBasePath: webBasePath, Stack: "panel", Mode: info.Mode, Domain: info.Domain, Email: info.Email},
 		Inbounds: []Inbound{},
 		Rules: []RoutingRule{
 			{Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true},

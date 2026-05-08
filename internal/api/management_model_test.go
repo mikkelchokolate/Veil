@@ -4,7 +4,7 @@ import "testing"
 
 func TestDefaultManagementModelStartsWithoutInitialInboundsAndKeepsRouting(t *testing.T) {
 	model := defaultManagementModel(ServerInfo{Mode: "server"})
-	if model.Settings.PanelListen != "127.0.0.1:2096" || model.Settings.Mode != "server" {
+	if model.Settings.PanelListen != "127.0.0.1:2096" || model.Settings.Mode != "server" || model.Settings.Stack != "panel" {
 		t.Fatalf("unexpected default settings: %+v", model.Settings)
 	}
 	if len(model.Inbounds) != 0 {
