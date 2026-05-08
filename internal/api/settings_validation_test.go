@@ -29,6 +29,14 @@ func TestSettingsValidationNormalizesLegacyProtocolStackSelection(t *testing.T) 
 	}
 }
 
+func TestSettingsValidationRejectsCaddyPanelAccessWithoutDomainAndEmail(t *testing.T) {
+	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server"}
+	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+	if err == nil || err.Error() != "--domain and --email are required for caddy Panel access" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSettingsValidationRejectsCaddyPanelAccessWithoutWebBasePath(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", Stack: "panel", Mode: "server"}
 	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
