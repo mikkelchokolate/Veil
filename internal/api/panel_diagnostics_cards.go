@@ -1,5 +1,7 @@
 package api
 
+import "strings"
+
 const panelDiagnosticsCardsPlaceholder = "__VEIL_PANEL_DIAGNOSTICS_CARDS__"
 
 func panelDiagnosticsCardsHTML() string {
@@ -54,11 +56,7 @@ func panelDiagnosticsCardsHTML() string {
         <div>
           <label for="log-unit">Service unit</label>
           <select id="log-unit">
-            <option value="veil">veil</option>
-            <option value="caddy">caddy (NaiveProxy)</option>
-            <option value="hysteria2">hysteria2</option>
-            <option value="sing-box">sing-box (WARP)</option>
-          </select>
+` + panelManagedLogUnitOptionsHTML() + `          </select>
         </div>
         <div>
           <label for="log-lines">Lines</label>
@@ -70,4 +68,19 @@ func panelDiagnosticsCardsHTML() string {
       </div>
       <pre id="logs-output" style="max-height: 400px; overflow-y: auto;">Not loaded</pre>
     </div>`
+}
+
+func panelManagedLogUnitOptionsHTML() string {
+	var b strings.Builder
+	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+		unitName := strings.TrimSuffix(runtime.Unit, ".service")
+		b.WriteString(`            <option value="`)
+		b.WriteString(unitName)
+		b.WriteString(`">`)
+		b.WriteString(runtime.Name)
+		b.WriteString(" (")
+		b.WriteString(runtime.Unit)
+		b.WriteString(")</option>\n")
+	}
+	return b.String()
 }
