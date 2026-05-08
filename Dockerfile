@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Veil — management panel for NaiveProxy and Hysteria2
+# Veil — management panel for NaiveProxy, Hysteria2, and Mieru
 #
 # Build:
 #   docker build -t veil .
@@ -39,7 +39,9 @@ RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(git describe --tags
 FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata \
-    && adduser -D -h /var/lib/veil veil
+    && adduser -D -h /var/lib/veil veil \
+    && mkdir -p /etc/veil /var/lib/veil \
+    && chown -R veil:veil /etc/veil /var/lib/veil
 
 COPY --from=builder /veil /usr/local/bin/veil
 
