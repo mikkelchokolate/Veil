@@ -33,8 +33,12 @@ The network binding selected by an Inbound, composed from transport and port. TC
 _Avoid_: listener key, socket id
 
 **Mieru**:
-A proxy protocol/runtime that Veil can manage as Inbounds with TCP or UDP transport bindings.
+A proxy protocol/runtime that Veil can manage as Inbounds with TCP or UDP transport bindings. Mieru ports come from Inbounds; they are not shared proxy ports allocated by Veil install.
 _Avoid_: mieru stack, mizaru
+
+**Inbound protocol catalog**:
+The protocol capability source for Inbound protocol IDs, display names, allowed transports, stack inclusion, Caddy requirement, firewall labels, Generated config set rendering, Apply workflow actions, and Client link delivery.
+_Avoid_: protocol switch list, UI enum, scattered protocol constants
 
 **Client profile**:
 A named user credential attached to an Inbound.
@@ -67,6 +71,7 @@ _Avoid_: logging, masking
 - **Panel access** may be direct/local without a **Panel URL**, or HTTPS through Caddy with a **Panel URL**.
 - The **Panel** manages zero or more **Inbounds**.
 - Each **Inbound** has exactly one **Transport binding**.
+- **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
 - The **Generated config set** is promoted by the **Apply workflow**.
@@ -88,3 +93,4 @@ _Avoid_: logging, masking
 - "service" may mean systemd unit or domain module — in architecture reviews use **Module** for code structure and name systemd units explicitly.
 - Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but NaiveProxy and Hysteria2 are not yet renderable into one **Generated config set**; apply plan must reject those instead of silently overwriting generated files.
 - Mieru **Inbounds** are expected to aggregate into one **Generated config set** so TCP and UDP **Transport bindings** can share a numeric port.
+- Protocol-specific behavior should live behind catalog **Modules** so adding another protocol does not require editing Panel copy, Inbound form options, firewall planning, Generated config set rendering, Client link delivery, and Apply workflow logic separately.
