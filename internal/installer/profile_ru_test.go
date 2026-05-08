@@ -31,39 +31,6 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	}
 }
 
-func TestNormalizeStackTrimsWhitespaceAndNormalizesLegacyStacksToPanel(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   Stack
-		wantErr bool
-	}{
-		{"empty", "", false},
-		{"both exact", StackBoth, false},
-		{"both with spaces", " both ", false},
-		{"naive with spaces", " naive ", false},
-		{"hysteria2 with spaces", " hysteria2 ", false},
-		{"mieru with spaces", " mieru ", false},
-		{"invalid", "bogus", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotStack, gotNaive, gotHy2, err := normalizeStack(tt.input)
-			if tt.wantErr && err == nil {
-				t.Fatalf("expected error for %q", tt.input)
-			}
-			if !tt.wantErr && err != nil {
-				t.Fatalf("unexpected error for %q: %v", tt.input, err)
-			}
-			if tt.wantErr {
-				return
-			}
-			if gotStack != StackPanel || gotNaive || gotHy2 {
-				t.Fatalf("normalizeStack(%q) = %q naive=%v hy2=%v, want panel false false", tt.input, gotStack, gotNaive, gotHy2)
-			}
-		})
-	}
-}
-
 func TestBuildRURecommendedProfileRejectsMissingDomainForPanelCaddyAccess(t *testing.T) {
 	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Email: "admin@example.com", Secret: func(label string) string { return "secret" }})
 	if err == nil {

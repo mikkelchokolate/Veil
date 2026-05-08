@@ -40,13 +40,16 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T)
 		"ruRecommendedNaiveArtifacts":    true,
 		"ruRecommendedHysteriaArtifacts": true,
 		"RURecommendedPortPolicy":        true,
+		"RURecommendedStackPolicy":       true,
 		"SharedPortPlan":                 true,
 	}
 	forbiddenFuncs := map[string]bool{
-		"NewRURecommendedPortPolicy": true,
-		"PlanSharedPort":             true,
-		"PlanStackPort":              true,
-		"PlanExplicitStackPort":      true,
+		"NewRURecommendedPortPolicy":  true,
+		"NewRURecommendedStackPolicy": true,
+		"normalizeStack":              true,
+		"PlanSharedPort":              true,
+		"PlanStackPort":               true,
+		"PlanExplicitStackPort":       true,
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {
