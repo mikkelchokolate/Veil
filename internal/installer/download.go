@@ -77,7 +77,7 @@ func CaddyPanelBuildHint(binaryPath string) BuildHint {
 	if binaryPath == "" {
 		binaryPath = "/usr/local/bin/caddy"
 	}
-	return BuildHint{BinaryPath: binaryPath, Commands: []string{"install standard Caddy at " + binaryPath}}
+	return BuildHint{BinaryPath: binaryPath, Commands: []string{"requires standard Caddy at " + binaryPath}}
 }
 
 func CaddyNaiveBuildHint(binaryPath string) BuildHint {
