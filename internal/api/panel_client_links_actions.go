@@ -37,7 +37,7 @@ func panelClientLinksActionsJS() string {
           output.textContent = JSON.stringify(body, null, 2);
           return;
         }
-        const configs = (body.links || []).filter(link => link.protocol === 'mieru' && link.config).map(link => ({ name: link.name, config: JSON.parse(link.config) }));
+        const configs = (body.artifacts || []).filter(artifact => artifact.protocol === 'mieru' && artifact.content).map(artifact => ({ name: artifact.name, config: JSON.parse(artifact.content) }));
         if (!configs.length) {
           output.textContent = 'No Mieru client configs available';
           return;

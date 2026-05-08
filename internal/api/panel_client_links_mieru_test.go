@@ -16,7 +16,7 @@ func TestPanelClientLinksMentionsMieruClientConfigs(t *testing.T) {
 
 func TestPanelClientLinksActionsCanDownloadMieruConfigs(t *testing.T) {
 	actions := panelClientLinksActionsJS()
-	for _, want := range []string{"downloadMieruConfigs", "link.config", "mieru-client-configs.json"} {
+	for _, want := range []string{"downloadMieruConfigs", "artifact.content", "mieru-client-configs.json"} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Client links actions missing %q", want)
 		}

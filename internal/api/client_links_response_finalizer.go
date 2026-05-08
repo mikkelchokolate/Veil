@@ -13,5 +13,6 @@ func (ClientLinksResponseFinalizer) Finalize(response ClientLinksResponse) (Clie
 		return ClientLinksResponse{}, errors.New("no enabled client links are available")
 	}
 	response.Count = len(response.Links)
+	response.Artifacts = NewClientAccessDelivery(response).Artifacts()
 	return response, nil
 }

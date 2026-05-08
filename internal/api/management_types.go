@@ -83,19 +83,20 @@ type WarpConfig struct {
 }
 
 type ClientLinksResponse struct {
-	SchemaVersion              string       `json:"schemaVersion"`
-	Domain                     string       `json:"domain"`
-	Stack                      string       `json:"stack"`
-	SubscriptionURL            string       `json:"subscriptionUrl"`
-	Base64SubscriptionURL      string       `json:"base64SubscriptionUrl"`
-	RawSubscriptionURL         string       `json:"rawSubscriptionUrl"`
-	DefaultSubscriptionFormat  string       `json:"defaultSubscriptionFormat"`
-	Base64SubscriptionFilename string       `json:"base64SubscriptionFilename"`
-	RawSubscriptionFilename    string       `json:"rawSubscriptionFilename"`
-	SubscriptionContentType    string       `json:"subscriptionContentType"`
-	SubscriptionFormats        []string     `json:"subscriptionFormats"`
-	Count                      int          `json:"count"`
-	Links                      []ClientLink `json:"links"`
+	SchemaVersion              string           `json:"schemaVersion"`
+	Domain                     string           `json:"domain"`
+	Stack                      string           `json:"stack"`
+	SubscriptionURL            string           `json:"subscriptionUrl"`
+	Base64SubscriptionURL      string           `json:"base64SubscriptionUrl"`
+	RawSubscriptionURL         string           `json:"rawSubscriptionUrl"`
+	DefaultSubscriptionFormat  string           `json:"defaultSubscriptionFormat"`
+	Base64SubscriptionFilename string           `json:"base64SubscriptionFilename"`
+	RawSubscriptionFilename    string           `json:"rawSubscriptionFilename"`
+	SubscriptionContentType    string           `json:"subscriptionContentType"`
+	SubscriptionFormats        []string         `json:"subscriptionFormats"`
+	Count                      int              `json:"count"`
+	Links                      []ClientLink     `json:"links"`
+	Artifacts                  []ClientArtifact `json:"artifacts,omitempty"`
 }
 
 type ClientLink struct {
@@ -105,6 +106,14 @@ type ClientLink struct {
 	Port      int    `json:"port"`
 	URI       string `json:"uri"`
 	Config    string `json:"config,omitempty"`
+}
+
+type ClientArtifact struct {
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	Kind     string `json:"kind"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
 }
 
 type ApplyPlanResponse struct {
