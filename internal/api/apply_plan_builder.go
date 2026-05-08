@@ -64,7 +64,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	}
 	if input.Warp.Enabled {
 		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
-		plan.Actions = appendUnique(plan.Actions, "reload veil-warp.service")
+		if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
+			plan.Actions = appendUnique(plan.Actions, action)
+		}
 		if input.ValidateWarpRender != nil {
 			if err := input.ValidateWarpRender(); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())

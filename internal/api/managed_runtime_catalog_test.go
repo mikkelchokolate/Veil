@@ -28,6 +28,21 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 	}
 }
 
+func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T) {
+	catalog := NewManagedRuntimeCatalog()
+	for _, tc := range []struct{ key, action string }{
+		{"naiveproxy", "reload veil-naive.service"},
+		{"hysteria2", "reload veil-hysteria2.service"},
+		{"mieru", "restart veil-mieru.service"},
+		{"sing-box", "reload veil-warp.service"},
+	} {
+		action, ok := catalog.ApplyAction(tc.key)
+		if !ok || action != tc.action {
+			t.Fatalf("ApplyAction(%q) = %q %v, want %q", tc.key, action, ok, tc.action)
+		}
+	}
+}
+
 func TestManagedRuntimeCatalogBuildsServiceActionCommandsFromCanonicalUnits(t *testing.T) {
 	command, ok := NewManagedRuntimeCatalog().ServiceActionCommand("caddy", "restart")
 	if !ok {

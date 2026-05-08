@@ -11,10 +11,14 @@ type InboundApplyArtifacts struct {
 }
 
 func NewInboundApplyArtifacts() InboundApplyArtifacts {
+	catalog := NewManagedRuntimeCatalog()
+	naiveAction, _ := catalog.ApplyAction("naiveproxy")
+	hysteriaAction, _ := catalog.ApplyAction("hysteria2")
+	mieruAction, _ := catalog.ApplyAction("mieru")
 	return InboundApplyArtifacts{byProtocol: map[string]InboundApplyArtifact{
-		"naiveproxy": {Config: "/etc/veil/generated/caddy/Caddyfile", Action: "reload veil-naive.service", ValidateInboundRender: true},
-		"hysteria2":  {Config: "/etc/veil/generated/hysteria2/server.yaml", Action: "reload veil-hysteria2.service", ValidateInboundRender: true},
-		"mieru":      {Config: "/etc/veil/generated/mieru/server_config.json", Action: "restart veil-mieru.service"},
+		"naiveproxy": {Config: "/etc/veil/generated/caddy/Caddyfile", Action: naiveAction, ValidateInboundRender: true},
+		"hysteria2":  {Config: "/etc/veil/generated/hysteria2/server.yaml", Action: hysteriaAction, ValidateInboundRender: true},
+		"mieru":      {Config: "/etc/veil/generated/mieru/server_config.json", Action: mieruAction},
 	}}
 }
 

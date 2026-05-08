@@ -5,6 +5,7 @@ import "path/filepath"
 type ManagedRuntime struct {
 	Name             string
 	ActionName       string
+	Protocol         string
 	Transport        string
 	Unit             string
 	PromotedSubpath  string
@@ -20,10 +21,10 @@ type ManagedRuntimeCatalog struct {
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	return ManagedRuntimeCatalog{runtimes: []ManagedRuntime{
 		{Name: "veil", ActionName: "veil", Unit: "veil.service", ManualRestart: true},
-		{Name: "naive", ActionName: "caddy", Transport: "tcp", Unit: "veil-naive.service", PromotedSubpath: "caddy/Caddyfile", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
-		{Name: "hysteria2", ActionName: "hysteria2", Transport: "udp", Unit: "veil-hysteria2.service", PromotedSubpath: "hysteria2/server.yaml", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
+		{Name: "naive", ActionName: "caddy", Protocol: "naiveproxy", Transport: "tcp", Unit: "veil-naive.service", PromotedSubpath: "caddy/Caddyfile", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
+		{Name: "hysteria2", ActionName: "hysteria2", Protocol: "hysteria2", Transport: "udp", Unit: "veil-hysteria2.service", PromotedSubpath: "hysteria2/server.yaml", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
 		{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
-		{Name: "mieru", ActionName: "mieru", Unit: "veil-mieru.service", PromotedSubpath: "mieru/server_config.json", PromotedVerb: "restart", ManualRestart: true, HealthCheckAfter: true},
+		{Name: "mieru", ActionName: "mieru", Protocol: "mieru", Unit: "veil-mieru.service", PromotedSubpath: "mieru/server_config.json", PromotedVerb: "restart", ManualRestart: true, HealthCheckAfter: true},
 	}}
 }
 
@@ -31,6 +32,18 @@ func (c ManagedRuntimeCatalog) Runtimes() []ManagedRuntime {
 	runtimes := make([]ManagedRuntime, len(c.runtimes))
 	copy(runtimes, c.runtimes)
 	return runtimes
+}
+
+func (c ManagedRuntimeCatalog) ApplyAction(key string) (string, bool) {
+	for _, runtime := range c.runtimes {
+		if runtime.PromotedVerb == "" {
+			continue
+		}
+		if runtime.Protocol == key || runtime.Name == key || runtime.ActionName == key {
+			return runtime.PromotedVerb + " " + runtime.Unit, true
+		}
+	}
+	return "", false
 }
 
 func (c ManagedRuntimeCatalog) ServiceActionCommand(actionName, action string) ([]string, bool) {
