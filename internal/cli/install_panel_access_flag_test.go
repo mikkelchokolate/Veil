@@ -16,7 +16,7 @@ func TestInstallPanelOnlyHonorsDirectPanelAccessFlag(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install dry-run: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "Panel access: http://0.0.0.0:2096/") {
+	if !strings.Contains(out.String(), "Panel access: https://0.0.0.0:2096/") {
 		t.Fatalf("missing direct Panel access output:\n%s", out.String())
 	}
 }

@@ -119,16 +119,21 @@ func (ServeEnvironment) WebBasePath(flagValue string) (path string, source strin
 	return "/", "default"
 }
 
-func (ServeEnvironment) TLS(cert, key string) (enabled bool, source string) {
+func (e ServeEnvironment) TLS(cert, key string) (enabled bool, source string) {
+	enabled, source, _, _ = e.TLSFiles(cert, key)
+	return enabled, source
+}
+
+func (ServeEnvironment) TLSFiles(cert, key string) (enabled bool, source string, certPath string, keyPath string) {
 	if cert != "" && key != "" {
-		return true, "--tls-cert / --tls-key"
+		return true, "--tls-cert / --tls-key", cert, key
 	}
 	if c := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")); c != "" {
 		if k := strings.TrimSpace(os.Getenv("VEIL_TLS_KEY")); k != "" {
-			return true, "VEIL_TLS_CERT / VEIL_TLS_KEY"
+			return true, "VEIL_TLS_CERT / VEIL_TLS_KEY", c, k
 		}
 	}
-	return false, ""
+	return false, "", "", ""
 }
 
 func (e ServeEnvironment) AutoTLS(autoTLS bool, autoTLSDir string, statePath string, keyPath string) (enabled bool, err error) {
@@ -225,3 +230,6 @@ func readSettingsFromState(statePath, keyPath string) (string, string, error) {
 	return NewServeEnvironment().SettingsFromState(statePath, keyPath)
 }
 func resolveServeTLS(cert, key string) (bool, string) { return NewServeEnvironment().TLS(cert, key) }
+func resolveServeTLSFiles(cert, key string) (bool, string, string, string) {
+	return NewServeEnvironment().TLSFiles(cert, key)
+}

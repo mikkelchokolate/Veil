@@ -84,7 +84,11 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if built.WebBasePath != "" && built.WebBasePath != "/" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
 	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: http://%s/\n", panelAccess.PanelListen)
+		scheme := "http"
+		if built.PanelTLSEnabled {
+			scheme = "https"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: %s://%s/\n", scheme, panelAccess.PanelListen)
 	}
 	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.HysteriaSHA256)
 	if planErr == nil {

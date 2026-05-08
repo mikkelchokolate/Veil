@@ -74,6 +74,9 @@ func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
 			t.Fatalf("veil.env missing %q:\n%s", want, string(envBody))
 		}
 	}
+	if strings.Contains(string(envBody), "VEIL_TLS_CERT=") || strings.Contains(string(envBody), "VEIL_TLS_KEY=") {
+		t.Fatalf("Panel Caddy access should terminate TLS in Caddy, not Panel:\n%s", string(envBody))
+	}
 	body, err := os.ReadFile(result.CaddyfilePath)
 	if err != nil {
 		t.Fatalf("panel Caddyfile should be written: %v", err)

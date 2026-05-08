@@ -25,7 +25,7 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 	applyRoot, applyRootSource := resolveServeApplyRoot(opts.ApplyRoot)
 	keyPath, keySource := resolveServeKeyPath(opts.KeyPath)
 	webBasePath, _ := resolveServeWebBasePath(opts.WebBasePath)
-	tlsEnabled, tlsSource := resolveServeTLS(opts.TLSCert, opts.TLSKey)
+	tlsEnabled, tlsSource, tlsCert, tlsKey := resolveServeTLSFiles(opts.TLSCert, opts.TLSKey)
 	if opts.AutoTLS && !tlsEnabled {
 		autoTLSEnabled, autoTLSErr := resolveServeAutoTLS(opts.AutoTLS, opts.AutoTLSDir, statePath, keyPath)
 		if autoTLSErr != nil {
@@ -33,6 +33,8 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 		}
 		tlsEnabled = autoTLSEnabled
 		tlsSource = "auto-tls (Let's Encrypt)"
+		tlsCert = ""
+		tlsKey = ""
 	}
 	return serveConfig{
 		Listen:          listen,
@@ -51,5 +53,7 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 		WebBasePath:     webBasePath,
 		TLSEnabled:      tlsEnabled,
 		TLSSource:       tlsSource,
+		TLSCert:         tlsCert,
+		TLSKey:          tlsKey,
 	}, nil
 }

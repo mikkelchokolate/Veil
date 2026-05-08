@@ -33,8 +33,8 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		ApplyRoot:   cfg.ApplyRoot,
 		KeyPath:     cfg.KeyPath,
 		TLSEnabled:  cfg.TLSEnabled,
-		TLSCert:     opts.TLSCert,
-		TLSKey:      opts.TLSKey,
+		TLSCert:     cfg.TLSCert,
+		TLSKey:      cfg.TLSKey,
 		PanelAccess: cfg.PanelAccess,
 		Domain:      cfg.Domain,
 		Email:       cfg.Email,
@@ -62,5 +62,5 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", cfg.TokenSource)
 	}
 
-	return runServeLifecycle(cmd, server, stateReloader, cfg.TLSEnabled, opts.TLSCert, opts.TLSKey)
+	return runServeLifecycle(cmd, server, stateReloader, cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey)
 }

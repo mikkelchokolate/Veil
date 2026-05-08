@@ -17,7 +17,7 @@ func TestInstallDryRunPanelOnlyDoesNotRequireDomainEmailOrProxyPort(t *testing.T
 		t.Fatalf("panel-only dry-run should not require domain/email/port: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Panel access:") || strings.Contains(got, "Generated Caddyfile") || strings.Contains(got, "Generated Hysteria2 server.yaml") {
+	if !strings.Contains(got, "Panel access: https://") || strings.Contains(got, "Generated Caddyfile") || strings.Contains(got, "Generated Hysteria2 server.yaml") {
 		t.Fatalf("unexpected panel-only dry-run output:\n%s", got)
 	}
 }

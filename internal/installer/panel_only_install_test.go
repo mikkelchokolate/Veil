@@ -1,8 +1,10 @@
 package installer
 
 import (
+	"crypto/tls"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +22,40 @@ func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
 	}
 	if !hasFirewallAction(plan, "2096/tcp") {
 		t.Fatalf("expected panel firewall rule: %+v", plan.FirewallActions)
+	}
+}
+
+func TestPanelOnlyInstallWritesSelfSignedPanelTLS(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
+	}
+	dir := t.TempDir()
+	_, err = ApplyRURecommendedProfile(profile, ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd")})
+	if err != nil {
+		t.Fatalf("ApplyRURecommendedProfile: %v", err)
+	}
+	certPath := filepath.Join(dir, "etc", "veil", "panel", "tls.crt")
+	keyPath := filepath.Join(dir, "etc", "veil", "panel", "tls.key")
+	envBody, err := os.ReadFile(filepath.Join(dir, "etc", "veil", "veil.env"))
+	if err != nil {
+		t.Fatalf("read veil.env: %v", err)
+	}
+	for _, want := range []string{"VEIL_TLS_CERT=" + certPath, "VEIL_TLS_KEY=" + keyPath} {
+		if !strings.Contains(string(envBody), want) {
+			t.Fatalf("veil.env missing %q:\n%s", want, string(envBody))
+		}
+	}
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		t.Fatalf("read panel TLS cert: %v", err)
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("read panel TLS key: %v", err)
+	}
+	if _, err := tls.X509KeyPair(certPEM, keyPEM); err != nil {
+		t.Fatalf("panel TLS key pair should be valid: %v", err)
 	}
 }
 

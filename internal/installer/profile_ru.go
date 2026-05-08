@@ -39,6 +39,9 @@ type RURecommendedProfile struct {
 	PanelAuthToken     string
 	PanelListen        string
 	PanelAccess        string
+	PanelTLSEnabled    bool
+	PanelTLSCertPEM    string
+	PanelTLSKeyPEM     string
 	WebBasePath        string
 	Stack              Stack
 	InstallNaive       bool
@@ -109,6 +112,14 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	}
 	panelAuthToken := input.Secret("panel")
 	panelListen := recommendedPanelListen(input.PanelAccess, input.PanelPort)
+	panelTLS := PanelTLSMaterial{}
+	panelTLSEnabled := !panelCaddy
+	if panelTLSEnabled {
+		panelTLS, err = NewPanelTLS().Generate(input.Domain)
+		if err != nil {
+			return RURecommendedProfile{}, err
+		}
+	}
 	naive := ruRecommendedNaiveArtifacts{}
 	hysteria := ruRecommendedHysteriaArtifacts{}
 
@@ -139,6 +150,9 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelAuthToken:     panelAuthToken,
 		PanelListen:        panelListen,
 		PanelAccess:        input.PanelAccess,
+		PanelTLSEnabled:    panelTLSEnabled,
+		PanelTLSCertPEM:    panelTLS.CertPEM,
+		PanelTLSKeyPEM:     panelTLS.KeyPEM,
 		WebBasePath:        webBasePath,
 		Stack:              stack.Stack,
 		InstallNaive:       stack.InstallNaive,

@@ -10,21 +10,21 @@ One command, answer a few questions, done:
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash
 ```
 
-By default Veil can be installed as a **panel-only** control plane. You do not need a domain or Caddy unless you choose HTTPS Panel access or add a NaiveProxy Inbound.
+By default Veil can be installed as a **panel-only** control plane. You do not need a domain or Caddy unless you choose Caddy Panel access or add a NaiveProxy Inbound.
 
-After install you'll see either direct Panel access:
+After install you'll see either direct/local Panel access over generated self-signed HTTPS:
 
 ```text
-Panel access: http://127.0.0.1:2096/
+Panel access: https://127.0.0.1:2096/
 ```
 
-or, if you choose Caddy/HTTPS Panel access:
+or, if you choose Caddy Panel access:
 
 ```text
 Panel URL: https://vpn.example.com/a1b2c3d4e5f6/
 ```
 
-The HTTPS Panel URL path is randomly generated — only you know it.
+The HTTPS Panel URL path is randomly generated — only you know it. Direct/local Panel access uses a self-signed certificate, so the browser may ask you to trust it.
 
 ### Non-interactive examples
 
@@ -103,7 +103,7 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 ## Security
 
 - **API token** — required for all management operations when exposed
-- **Optional HTTPS Panel access** — via Caddy and random Web base path
+- **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
 - **TLS 1.2+** — when HTTPS is enabled
 - **Rate limiting** — protects expensive endpoints

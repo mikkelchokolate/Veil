@@ -17,6 +17,8 @@ type serveConfig struct {
 	WebBasePath     string
 	TLSEnabled      bool
 	TLSSource       string
+	TLSCert         string
+	TLSKey          string
 }
 
 func resolveServeConfig(opts serveWorkflowOptions) (serveConfig, error) {

@@ -9,7 +9,7 @@ import (
 
 func installCredentialSummary(profile installer.RURecommendedProfile) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Panel: https://%s%s\n", profile.Domain, profile.WebBasePath)
+	fmt.Fprintf(&b, "Panel: %s\n", installPanelURL(profile))
 	fmt.Fprintf(&b, "Username: %s\n", profile.Username)
 	if profile.InstallNaive && profile.NaivePassword != "" {
 		fmt.Fprintf(&b, "NaiveProxy password: %s\n", profile.NaivePassword)
@@ -18,4 +18,18 @@ func installCredentialSummary(profile installer.RURecommendedProfile) string {
 		fmt.Fprintf(&b, "Hysteria2 password: %s\n", profile.Hysteria2Password)
 	}
 	return b.String()
+}
+
+func installPanelURL(profile installer.RURecommendedProfile) string {
+	if profile.Domain != "" && profile.WebBasePath != "" {
+		return "https://" + profile.Domain + profile.WebBasePath
+	}
+	if profile.PanelListen != "" {
+		scheme := "http"
+		if profile.PanelTLSEnabled {
+			scheme = "https"
+		}
+		return scheme + "://" + profile.PanelListen + "/"
+	}
+	return "https://" + profile.Domain + profile.WebBasePath
 }

@@ -69,6 +69,14 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 	if profile.InstallHysteria2 {
 		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"), Content: profile.Hysteria2YAML, Mode: 0o600})
 	}
+	panelTLSCertPath := filepath.Join(paths.EtcDir, "panel", "tls.crt")
+	panelTLSKeyPath := filepath.Join(paths.EtcDir, "panel", "tls.key")
+	if profile.PanelTLSEnabled {
+		files = append(files,
+			managedFile{Path: panelTLSCertPath, Content: profile.PanelTLSCertPEM, Mode: 0o644},
+			managedFile{Path: panelTLSKeyPath, Content: profile.PanelTLSKeyPEM, Mode: 0o600},
+		)
+	}
 	if profile.PanelAuthToken != "" {
 		envContent := "VEIL_API_TOKEN=" + profile.PanelAuthToken + "\n"
 		if profile.PanelListen != "" {
@@ -82,6 +90,10 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 		}
 		if profile.Email != "" {
 			envContent += "VEIL_EMAIL=" + profile.Email + "\n"
+		}
+		if profile.PanelTLSEnabled {
+			envContent += "VEIL_TLS_CERT=" + panelTLSCertPath + "\n"
+			envContent += "VEIL_TLS_KEY=" + panelTLSKeyPath + "\n"
 		}
 		if profile.WebBasePath != "" && profile.WebBasePath != "/" {
 			envContent += "VEIL_WEB_BASE_PATH=" + profile.WebBasePath + "\n"
