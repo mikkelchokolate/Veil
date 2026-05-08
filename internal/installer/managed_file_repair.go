@@ -101,7 +101,7 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o600})
 	}
 	if paths.SystemdDir != "" {
-		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary})
+		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
 		unitNames := []string{"veil.service"}
 		if profile.InstallNaive || profile.InstallPanelCaddy {
 			unitNames = append(unitNames, "veil-naive.service")

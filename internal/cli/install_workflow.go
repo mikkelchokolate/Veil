@@ -30,6 +30,7 @@ type ruRecommendedInstallOptions struct {
 	AuditLog       string
 	BackupDir      string
 	BackupDirSet   bool
+	CaddyBinary    string
 }
 
 func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
@@ -100,9 +101,11 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if opts.DryRun {
 		return nil
 	}
-	if err := validateInstallRuntimePrerequisites(built); err != nil {
+	caddyBinary, err := validateInstallRuntimePrerequisites(built)
+	if err != nil {
 		return err
 	}
+	opts.CaddyBinary = caddyBinary
 	if !opts.Yes {
 		if err := confirmInstallPlan(cmd, opts.Interactive); err != nil {
 			return err
@@ -111,11 +114,13 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	return applyRURecommendedInstall(cmd, built, opts)
 }
 
-func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) error {
+func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) (string, error) {
 	if profile.InstallPanelCaddy || profile.InstallNaive {
-		if _, err := commandLookPath("caddy"); err != nil {
-			return fmt.Errorf("caddy is required for caddy Panel access; install Caddy or use --panel-access local/direct")
+		path, err := commandLookPath("caddy")
+		if err != nil {
+			return "", fmt.Errorf("caddy is required for caddy Panel access; install Caddy or use --panel-access local/direct")
 		}
+		return path, nil
 	}
-	return nil
+	return "", nil
 }

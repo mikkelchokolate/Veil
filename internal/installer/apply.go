@@ -6,11 +6,12 @@ import (
 )
 
 type ApplyPaths struct {
-	EtcDir     string
-	VarDir     string
-	SystemdDir string
-	BackupDir  string
-	VeilBinary string
+	EtcDir      string
+	VarDir      string
+	SystemdDir  string
+	BackupDir   string
+	VeilBinary  string
+	CaddyBinary string
 }
 
 type ApplyResult struct {

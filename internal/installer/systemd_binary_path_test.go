@@ -15,13 +15,32 @@ func TestInstallApplyRendersVeilUnitWithSelectedBinaryPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desiredFiles: %v", err)
 	}
-	unit := ""
-	for _, file := range files {
-		if filepath.Base(file.Path) == "veil.service" {
-			unit = file.Content
-		}
-	}
+	unit := managedFileContent(files, "veil.service")
 	if !strings.Contains(unit, "ExecStart=/opt/veil/bin/veil serve") {
 		t.Fatalf("veil.service should use selected binary path:\n%s", unit)
 	}
+}
+
+func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
+	dir := t.TempDir()
+	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", Caddyfile: "example.com { respond ok }"}
+	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd"), CaddyBinary: "/usr/bin/caddy"}
+
+	files, err := NewManagedFileRepair(profile, paths).desiredFiles()
+	if err != nil {
+		t.Fatalf("desiredFiles: %v", err)
+	}
+	unit := managedFileContent(files, "veil-naive.service")
+	if !strings.Contains(unit, "ExecStart=/usr/bin/caddy run --config") || !strings.Contains(unit, "ExecReload=/usr/bin/caddy reload --config") {
+		t.Fatalf("veil-naive.service should use resolved Caddy binary path:\n%s", unit)
+	}
+}
+
+func managedFileContent(files []managedFile, name string) string {
+	for _, file := range files {
+		if filepath.Base(file.Path) == name {
+			return file.Content
+		}
+	}
+	return ""
 }

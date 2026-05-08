@@ -29,7 +29,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if err != nil {
 		veilBinary = ""
 	}
-	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: systemdDir, BackupDir: actualBackupDir, VeilBinary: veilBinary})
+	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: systemdDir, BackupDir: actualBackupDir, VeilBinary: veilBinary, CaddyBinary: opts.CaddyBinary})
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
