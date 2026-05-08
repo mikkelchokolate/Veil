@@ -22,7 +22,7 @@ func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPla
 	if executableErr != nil {
 		veilBinary = ""
 	}
-	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary})
+	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary, CaddyBinary: resolvedRepairBinaryPath("caddy")})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
@@ -54,7 +54,7 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 			return installer.RepairPlan{}, err
 		}
 	}
-	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: opts.EtcDir})
+	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: opts.EtcDir, CaddyBinary: resolvedRepairBinaryPath("caddy")})
 	for _, unitName := range runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp) {
 		body := units[unitName]
 		if body == "" || opts.SystemdDir == "" {
@@ -65,6 +65,14 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 		}
 	}
 	return plan, nil
+}
+
+func resolvedRepairBinaryPath(name string) string {
+	path, err := commandLookPath(name)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 func repairStateCipher(keyPath string) *secrets.Cipher {
