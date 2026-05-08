@@ -6,7 +6,7 @@ import (
 )
 
 func TestInstallPlanSummaryDoesNotPrintSharedPortWithoutSharedProxyRuntime(t *testing.T) {
-	plan := InstallPlan{Profile: RURecommendedProfile{Stack: StackMieru, InstallMieru: true}, MieruBinary: BinaryAcquisition{URL: "https://example.com/mieru", Destination: "/usr/local/bin/mieru"}}
+	plan := InstallPlan{Profile: RURecommendedProfile{Stack: Stack("mieru"), InstallMieru: true}, MieruBinary: BinaryAcquisition{URL: "https://example.com/mieru", Destination: "/usr/local/bin/mieru"}}
 	summary := NewInstallPlanSummary(plan).String()
 	if strings.Contains(summary, "Shared port:") || strings.Contains(summary, "NaiveProxy:") || strings.Contains(summary, "Hysteria2:") {
 		t.Fatalf("Mieru runtime summary should not mention shared proxy port:\n%s", summary)

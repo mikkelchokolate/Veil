@@ -8,7 +8,7 @@ import (
 
 func mustRUProfile(t *testing.T, stack Stack) RURecommendedProfile {
 	t.Helper()
-	if stack == StackBoth {
+	if stack == Stack("both") {
 		return RURecommendedProfile{Domain: "example.com", Stack: StackPanel, InstallNaive: true, InstallHysteria2: true, Caddyfile: "forward_proxy", Hysteria2YAML: "listen: :443", PanelAuthToken: "secret-panel"}
 	}
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{

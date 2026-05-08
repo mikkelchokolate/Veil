@@ -55,6 +55,12 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 		"isTCPBusy":                   true,
 		"isUDPBusy":                   true,
 	}
+	forbiddenConsts := map[string]bool{
+		"StackBoth":      true,
+		"StackMieru":     true,
+		"StackNaive":     true,
+		"StackHysteria2": true,
+	}
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
@@ -71,13 +77,22 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 		for _, decl := range file.Decls {
 			switch typedDecl := decl.(type) {
 			case *ast.GenDecl:
-				if typedDecl.Tok != token.TYPE {
-					continue
-				}
-				for _, spec := range typedDecl.Specs {
-					typeSpec := spec.(*ast.TypeSpec)
-					if forbiddenTypes[typeSpec.Name.Name] {
-						t.Fatalf("legacy install-time protocol planning type %s remains in %s", typeSpec.Name.Name, name)
+				switch typedDecl.Tok {
+				case token.TYPE:
+					for _, spec := range typedDecl.Specs {
+						typeSpec := spec.(*ast.TypeSpec)
+						if forbiddenTypes[typeSpec.Name.Name] {
+							t.Fatalf("legacy install-time protocol planning type %s remains in %s", typeSpec.Name.Name, name)
+						}
+					}
+				case token.CONST:
+					for _, spec := range typedDecl.Specs {
+						valueSpec := spec.(*ast.ValueSpec)
+						for _, constName := range valueSpec.Names {
+							if forbiddenConsts[constName.Name] {
+								t.Fatalf("legacy protocol stack constant %s remains in %s", constName.Name, name)
+							}
+						}
 					}
 				}
 			case *ast.FuncDecl:

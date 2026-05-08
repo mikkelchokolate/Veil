@@ -13,7 +13,7 @@ var _apply_repair_deps = []any{
 
 func TestBuildRepairPlanDetectsMissingAndDriftedFiles(t *testing.T) {
 	dir := t.TempDir()
-	profile := mustRUProfile(t, StackBoth)
+	profile := mustRUProfile(t, Stack("both"))
 	paths := ApplyPaths{
 		EtcDir:     filepath.Join(dir, "etc", "veil"),
 		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
@@ -50,7 +50,7 @@ func TestBuildRepairPlanDetectsMissingAndDriftedFiles(t *testing.T) {
 
 func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
 	dir := t.TempDir()
-	profile := mustRUProfile(t, StackBoth)
+	profile := mustRUProfile(t, Stack("both"))
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd")}
 	result, err := ApplyRURecommendedProfile(profile, paths)
 	if err != nil {

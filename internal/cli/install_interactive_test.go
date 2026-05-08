@@ -14,7 +14,7 @@ import (
 )
 
 var _installTestDeps_interactive = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
+	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.Stack("both"),
 }
 
 func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {

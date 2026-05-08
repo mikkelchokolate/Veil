@@ -10,13 +10,7 @@ type SecretFunc func(label string) string
 
 type Stack string
 
-const (
-	StackPanel     Stack = "panel"
-	StackMieru     Stack = "mieru"
-	StackBoth      Stack = "both"
-	StackNaive     Stack = "naive"
-	StackHysteria2 Stack = "hysteria2"
-)
+const StackPanel Stack = "panel"
 
 type RURecommendedInput struct {
 	Domain      string

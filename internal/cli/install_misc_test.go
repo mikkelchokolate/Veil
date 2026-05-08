@@ -15,7 +15,7 @@ import (
 )
 
 var _installTestDeps_misc = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
+	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.Stack("both"),
 }
 
 func TestRURecommendedInstallOptionsDoesNotExposeSharedProxyPort(t *testing.T) {
