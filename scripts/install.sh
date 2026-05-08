@@ -161,12 +161,12 @@ curl -fsSL "${checksums_url}" -o "${checksums}"
 # Verify checksum with a uniqueness guard so a forged duplicate cannot mask the expected asset.
 (
   cd "${tmpdir}"
-  count=$(grep -c "  ${asset}$" checksums.txt)
+  count=$(awk -v asset="${asset}" '$2 == asset { count++ } END { print count+0 }' checksums.txt)
   if [[ "${count}" -ne 1 ]]; then
     echo "expected exactly one checksum for ${asset} in checksums.txt, got ${count}" >&2
     exit 1
   fi
-  grep "  ${asset}$" checksums.txt | sha256sum -c -
+  awk -v asset="${asset}" '$2 == asset { print }' checksums.txt | sha256sum -c -
 )
 
 tar -xzf "${archive}" -C "${tmpdir}"
