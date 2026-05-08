@@ -6,8 +6,8 @@ func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPla
 	built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 		Domain:       opts.Domain,
 		Email:        opts.Email,
-		Stack:        installer.Stack(opts.Stack),
-		Port:         opts.SharedPort,
+		Stack:        installer.StackPanel,
+		Port:         0,
 		Availability: installer.PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
 		Secret:       randomSecret,
 		RandomPort:   func() int { return 31874 },

@@ -5,38 +5,26 @@ import (
 	"testing"
 )
 
-func TestBuildRepairPlanFromOptionsBuildsMieruPlanWithoutDomainOrPort(t *testing.T) {
+func TestBuildRepairPlanFromOptionsBuildsPanelInstallPlan(t *testing.T) {
 	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
 		Profile:    "ru-recommended",
-		Stack:      "mieru",
+		Stack:      "panel",
 		EtcDir:     t.TempDir(),
 		VarDir:     t.TempDir(),
 		SystemdDir: t.TempDir(),
 	})
 	if err != nil {
-		t.Fatalf("buildRepairPlanFromOptions Mieru: %v", err)
-	}
-	summary := plan.Summary()
-	if !strings.Contains(summary, "veil-mieru.service") || strings.Contains(summary, "generated/caddy/Caddyfile") || strings.Contains(summary, "hysteria2") {
-		t.Fatalf("unexpected Mieru repair summary:\n%s", summary)
-	}
-}
-
-func TestBuildRepairPlanFromOptionsBuildsRURecommendedPlan(t *testing.T) {
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
-		Profile:    "ru-recommended",
-		Stack:      "hysteria2",
-		Domain:     "example.com",
-		Email:      "admin@example.com",
-		SharedPort: 443,
-		EtcDir:     t.TempDir(),
-		VarDir:     t.TempDir(),
-	})
-	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
 	summary := plan.Summary()
-	if !strings.Contains(summary, "hysteria2") || strings.Contains(summary, "generated/caddy/Caddyfile") {
-		t.Fatalf("unexpected hysteria2 repair summary:\n%s", summary)
+	for _, want := range []string{"veil.service", "panel/tls.crt", "veil.env"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("repair summary missing %q:\n%s", want, summary)
+		}
+	}
+	for _, unwanted := range []string{"generated/caddy/Caddyfile", "hysteria2", "veil-mieru.service"} {
+		if strings.Contains(summary, unwanted) {
+			t.Fatalf("Panel install repair should not include %q:\n%s", unwanted, summary)
+		}
 	}
 }

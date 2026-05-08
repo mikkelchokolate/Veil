@@ -17,7 +17,7 @@ func TestRepairCommandRejectsInvalidProfile(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"repair", "--profile", "invalid-profile", "--domain", "example.com", "--email", "admin@example.com", "--port", "443", "--dry-run"})
+	cmd.SetArgs([]string{"repair", "--profile", "invalid-profile", "--dry-run"})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -28,78 +28,33 @@ func TestRepairCommandRejectsInvalidProfile(t *testing.T) {
 	}
 }
 
-func TestRepairCommandAllowsMieruWithoutDomainEmailOrPort(t *testing.T) {
+func TestRepairCommandRejectsProtocolStackSelection(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--stack", "mieru", "--dry-run"})
+
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "Veil repair only repairs Panel install") {
+		t.Fatalf("expected protocol stack rejection, got %v\n%s", err, out.String())
+	}
+}
+
+func TestRepairCommandDoesNotRequireDeprecatedDomainEmailOrPort(t *testing.T) {
 	dir := t.TempDir()
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--stack", "mieru", "--etc-dir", filepath.Join(dir, "etc", "veil"), "--var-dir", filepath.Join(dir, "var", "lib", "veil"), "--systemd-dir", filepath.Join(dir, "systemd"), "--dry-run"})
+	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--etc-dir", filepath.Join(dir, "etc", "veil"), "--var-dir", filepath.Join(dir, "var", "lib", "veil"), "--systemd-dir", filepath.Join(dir, "systemd"), "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Mieru repair should not require domain/email/port: %v\n%s", err, out.String())
+		t.Fatalf("Panel repair should not require deprecated domain/email/port: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "veil-mieru.service") {
-		t.Fatalf("Mieru repair plan should mention veil-mieru.service:\n%s", out.String())
-	}
-}
-
-func TestRepairCommandRejectsMissingDomain(t *testing.T) {
-	cmd := NewRootCommand("test")
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--email", "admin@example.com", "--port", "443", "--dry-run"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatalf("expected error for missing domain, got nil\noutput: %s", out.String())
-	}
-	if !strings.Contains(err.Error(), "--domain is required") {
-		t.Fatalf("expected '--domain is required' error, got: %v", err)
-	}
-}
-
-func TestRepairCommandRejectsMissingEmail(t *testing.T) {
-	cmd := NewRootCommand("test")
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--domain", "example.com", "--port", "443", "--dry-run"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatalf("expected error for missing email, got nil\noutput: %s", out.String())
-	}
-	if !strings.Contains(err.Error(), "--email is required") {
-		t.Fatalf("expected '--email is required' error, got: %v", err)
-	}
-}
-
-func TestRepairCommandRejectsInvalidPort(t *testing.T) {
-	tests := []struct {
-		name string
-		port string
-	}{
-		{"zero port", "0"},
-		{"negative port", "-1"},
-		{"port above max", "99999"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewRootCommand("test")
-			var out bytes.Buffer
-			cmd.SetOut(&out)
-			cmd.SetErr(&out)
-			cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", tt.port, "--dry-run"})
-
-			err := cmd.Execute()
-			if err == nil {
-				t.Fatalf("expected error for invalid port %s, got nil\noutput: %s", tt.port, out.String())
-			}
-			if !strings.Contains(err.Error(), "--port is required") {
-				t.Fatalf("expected '--port is required' error for port %s, got: %v", tt.port, err)
-			}
-		})
+	for _, want := range []string{"Veil repair plan", "veil.service"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("repair output missing %q:\n%s", want, out.String())
+		}
 	}
 }

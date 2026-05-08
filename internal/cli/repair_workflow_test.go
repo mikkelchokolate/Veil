@@ -13,14 +13,11 @@ func TestRunRepairWorkflowDryRunPrintsPlanWithoutApply(t *testing.T) {
 	cmd.SetErr(&out)
 
 	err := runRepairWorkflow(cmd, repairWorkflowOptions{
-		Profile:    "ru-recommended",
-		Stack:      "both",
-		Domain:     "example.com",
-		Email:      "admin@example.com",
-		SharedPort: 443,
-		DryRun:     true,
-		EtcDir:     t.TempDir(),
-		VarDir:     t.TempDir(),
+		Profile: "ru-recommended",
+		Stack:   "panel",
+		DryRun:  true,
+		EtcDir:  t.TempDir(),
+		VarDir:  t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("runRepairWorkflow: %v\n%s", err, out.String())

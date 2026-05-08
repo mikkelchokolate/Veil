@@ -41,10 +41,10 @@ func newRepairCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "default", "repair profile: default or ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "both", "proxy stack to repair: panel, mieru, both, naive, or hysteria2")
-	cmd.Flags().StringVar(&domain, "domain", "", "domain for regenerated managed files")
-	cmd.Flags().StringVar(&email, "email", "", "ACME email")
-	cmd.Flags().IntVar(&sharedPort, "port", 0, "required shared proxy port for NaiveProxy TCP and/or Hysteria2 UDP")
+	cmd.Flags().StringVar(&stack, "stack", "panel", "deprecated; repair uses Panel install and Panel state")
+	cmd.Flags().StringVar(&domain, "domain", "", "deprecated; protocols are configured as Panel Inbounds")
+	cmd.Flags().StringVar(&email, "email", "", "deprecated; protocols are configured as Panel Inbounds")
+	cmd.Flags().IntVar(&sharedPort, "port", 0, "deprecated; protocol ports come from Panel Inbounds")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print repair plan without writing files")
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm repairing planned files")
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")

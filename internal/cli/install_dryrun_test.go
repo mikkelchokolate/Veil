@@ -260,7 +260,7 @@ func TestRepairDryRunReportsMissingManagedFiles(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Veil repair plan", "repair missing", "Caddyfile", "server.yaml", "veil.service"} {
+	for _, want := range []string{"Veil repair plan", "repair missing", "panel/tls.crt", "veil.env", "veil.service"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
