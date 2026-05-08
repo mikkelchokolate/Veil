@@ -13,6 +13,8 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 		`async function loadJSON(path, outputId, options)`,
 		`profile-preview-form`,
 		`/api/profiles/ru-recommended/preview`,
+		`profilePreviewDomainRequired`,
+		`profilePreviewDomainRequired[stack]`,
 		`load-version`,
 		`/api/version`,
 	} {
@@ -20,12 +22,16 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 			t.Fatalf("Intro actions missing %q", want)
 		}
 	}
+	if strings.Contains(actions, `if (!domain || !email)`) {
+		t.Fatalf("Mieru/panel profile preview must not be blocked by unconditional domain/email validation:\n%s", actions)
+	}
 }
 
 func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T) {
 	cards := panelIntroCardsHTML()
 	for _, want := range []string{
 		`Veil Panel`,
+		`NaiveProxy, Hysteria2, and Mieru management`,
 		`<h2>Version</h2>`,
 		`id="load-version"`,
 		`<h2>API token</h2>`,
@@ -36,6 +42,16 @@ func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T
 	} {
 		if !strings.Contains(cards, want) {
 			t.Fatalf("Intro cards missing %q", want)
+		}
+	}
+}
+
+func TestPanelIntroProfilePreviewExposesAllStacks(t *testing.T) {
+	cards := panelIntroCardsHTML()
+	for _, stack := range NewStackSelectionCatalog().Stacks() {
+		want := `<option value="` + stack + `">` + stack + `</option>`
+		if !strings.Contains(cards, want) {
+			t.Fatalf("Profile preview stack options missing %q:\n%s", want, cards)
 		}
 	}
 }

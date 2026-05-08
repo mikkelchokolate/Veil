@@ -23,3 +23,17 @@ func TestPanelSettingsCardIncludesMieruAndPanelStacks(t *testing.T) {
 		}
 	}
 }
+
+func TestStackSelectionCatalogOwnsProfilePreviewDomainRequirements(t *testing.T) {
+	catalog := NewStackSelectionCatalog()
+	for _, stack := range []string{"panel", "mieru"} {
+		if catalog.RequiresDomain(stack) {
+			t.Fatalf("stack %q must not require domain/email", stack)
+		}
+	}
+	for _, stack := range []string{"both", "naive", "hysteria2"} {
+		if !catalog.RequiresDomain(stack) {
+			t.Fatalf("stack %q must require domain/email", stack)
+		}
+	}
+}

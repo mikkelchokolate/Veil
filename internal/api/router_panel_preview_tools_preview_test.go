@@ -91,6 +91,29 @@ func TestRURecommendedPreviewEndpointHonorsStack(t *testing.T) {
 	}
 }
 
+func TestRURecommendedPreviewEndpointAcceptsMieruWithoutDomainEmail(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"stack":"mieru"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response RURecommendedPreviewResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Stack != "mieru" || !response.InstallMieru || response.InstallNaive || response.InstallHysteria2 {
+		t.Fatalf("unexpected Mieru preview response: %+v", response)
+	}
+	if response.Caddyfile != "" || response.Hysteria2YAML != "" || response.NaiveClientURL != "" || response.Hysteria2ClientURI != "" {
+		t.Fatalf("Mieru preview should not render Naive/Hysteria artifacts: %+v", response)
+	}
+}
+
 func TestRURecommendedPreviewEndpointRejectsInvalidStack(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"bad"}`)

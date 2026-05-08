@@ -18,7 +18,7 @@ func panelIntroActionsJS() string {
       return Object.assign({}, extra || {}, authHeaders());
     }
 
-    async function loadJSON(path, outputId, options) {
+` + panelProfilePreviewDomainRequirementsJS() + `    async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = 'Loading ' + path + '...';
       const requestOptions = options || {};
@@ -44,8 +44,8 @@ func panelIntroActionsJS() string {
       const domain = document.getElementById('profile-domain').value.trim();
       const email = document.getElementById('profile-email').value.trim();
       const stack = document.getElementById('profile-stack').value;
-      if (!domain || !email) {
-        document.getElementById('profile-preview-output').textContent = 'Domain and email are required';
+      if (profilePreviewDomainRequired[stack] && (!domain || !email)) {
+        document.getElementById('profile-preview-output').textContent = 'Domain and email are required for this stack';
         return;
       }
       await loadJSON('/api/profiles/ru-recommended/preview', 'profile-preview-output', {

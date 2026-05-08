@@ -5,7 +5,7 @@ const panelIntroCardsPlaceholder = "__VEIL_PANEL_INTRO_CARDS__"
 func panelIntroCardsHTML() string {
 	return `    <h1>Veil Panel</h1>
     <div class="card">
-      <p>Web panel for NaiveProxy TCP + Hysteria2 UDP management. Use the sections below to configure and apply settings.</p>
+      <p>Web panel for NaiveProxy, Hysteria2, and Mieru management. Use the sections below to configure and apply settings.</p>
       <p>Status API: <code>/api/status</code> &middot; Version: <code>/api/version</code> &middot; Firewall: <code>/api/firewall</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Network: <code>/api/network</code> &middot; DNS: <code>/api/tools/dns-lookup</code> &middot; Ping: <code>/api/tools/ping</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
     </div>
     <div class="card">
@@ -22,7 +22,7 @@ func panelIntroCardsHTML() string {
     </div>
     <div class="card">
       <h2>Profile preview</h2>
-      <p>Preview a <code>ru-recommended</code> install profile without writing anything — generated Caddyfile, Hysteria2 YAML, and client URIs.</p>
+      <p>Preview a <code>ru-recommended</code> install profile without writing anything. Domain and email are required only for NaiveProxy/Hysteria2 stacks.</p>
       <form id="profile-preview-form">
         <div class="form-grid">
           <div>
@@ -36,10 +36,7 @@ func panelIntroCardsHTML() string {
           <div>
             <label for="profile-stack">Stack</label>
             <select id="profile-stack">
-              <option value="both">both</option>
-              <option value="naive">naive</option>
-              <option value="hysteria2">hysteria2</option>
-            </select>
+` + panelStackOptionsHTML() + `            </select>
           </div>
         </div>
         <div class="actions">

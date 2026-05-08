@@ -16,6 +16,9 @@ type RURecommendedPreviewResponse struct {
 	Domain             string `json:"domain"`
 	Email              string `json:"email"`
 	Stack              string `json:"stack"`
+	InstallNaive       bool   `json:"installNaive"`
+	InstallHysteria2   bool   `json:"installHysteria2"`
+	InstallMieru       bool   `json:"installMieru"`
 	Port               int    `json:"port"`
 	NaiveClientURL     string `json:"naiveClientURL"`
 	Hysteria2ClientURI string `json:"hysteria2ClientURI"`
@@ -61,6 +64,9 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		Domain:             profile.Domain,
 		Email:              profile.Email,
 		Stack:              string(profile.Stack),
+		InstallNaive:       profile.InstallNaive,
+		InstallHysteria2:   profile.InstallHysteria2,
+		InstallMieru:       profile.InstallMieru,
 		Port:               profile.PortPlan.Port,
 		NaiveClientURL:     redactProfileSecrets(profile, profile.NaiveClientURL),
 		Hysteria2ClientURI: redactProfileSecrets(profile, profile.Hysteria2ClientURI),
