@@ -2,21 +2,20 @@ package installer
 
 import "testing"
 
-func TestRURecommendedStackPolicyNormalizesStackAndInstallFlags(t *testing.T) {
+func TestRURecommendedStackPolicyNormalizesLegacyStacksToPanel(t *testing.T) {
 	cases := []struct {
-		name          string
-		input         Stack
-		wantStack     Stack
-		wantNaive     bool
-		wantHysteria2 bool
-		wantErr       bool
+		name    string
+		input   Stack
+		wantErr bool
 	}{
-		{"empty", "", StackBoth, true, true, false},
-		{"both exact", StackBoth, StackBoth, true, true, false},
-		{"both with spaces", " both ", StackBoth, true, true, false},
-		{"naive with spaces", " naive ", StackNaive, true, false, false},
-		{"hysteria2 with spaces", " hysteria2 ", StackHysteria2, false, true, false},
-		{"invalid", "bogus", "", false, false, true},
+		{"empty", "", false},
+		{"panel", StackPanel, false},
+		{"both exact", StackBoth, false},
+		{"both with spaces", " both ", false},
+		{"naive with spaces", " naive ", false},
+		{"hysteria2 with spaces", " hysteria2 ", false},
+		{"mieru with spaces", " mieru ", false},
+		{"invalid", "bogus", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -30,8 +29,8 @@ func TestRURecommendedStackPolicyNormalizesStackAndInstallFlags(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRURecommendedStackPolicy: %v", err)
 			}
-			if policy.Stack != tc.wantStack || policy.InstallNaive != tc.wantNaive || policy.InstallHysteria2 != tc.wantHysteria2 {
-				t.Fatalf("policy = %+v", policy)
+			if policy.Stack != StackPanel || policy.InstallNaive || policy.InstallHysteria2 || policy.InstallMieru {
+				t.Fatalf("policy = %+v, want panel-only", policy)
 			}
 		})
 	}

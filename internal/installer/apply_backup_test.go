@@ -16,11 +16,12 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	backupDir := filepath.Join(dir, "backups")
 
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		Secret:      func(label string) string { return "secret-" + label },
+		RandomPort:  func() int { return 31874 },
+		PanelPort:   2096,
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
@@ -65,7 +66,7 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	}
 
 	// Verify current Caddyfile has new content
-	assertFileContains(t, oldCaddyPath, "forward_proxy")
+	assertFileContains(t, oldCaddyPath, "reverse_proxy")
 }
 
 func TestApplyWithoutBackupDirDoesNotBackup(t *testing.T) {
@@ -101,11 +102,12 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	backupDir := filepath.Join(dir, "backups")
 
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		Secret:      func(label string) string { return "secret-" + label },
+		RandomPort:  func() int { return 31874 },
+		PanelPort:   2096,
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
@@ -149,7 +151,7 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	if string(body) == "pre-apply content" {
 		t.Fatalf("Caddyfile should have been overwritten")
 	}
-	assertFileContains(t, oldCaddyPath, "forward_proxy")
+	assertFileContains(t, oldCaddyPath, "reverse_proxy")
 
 	body, _ = os.ReadFile(veilEnvPath)
 	if string(body) == "VEIL_API_TOKEN=old-token\n" {

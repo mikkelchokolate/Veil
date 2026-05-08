@@ -11,14 +11,11 @@ var _apply_install_apply_deps = []any{
 	os.ReadFile, filepath.Join, strings.Contains, testing.T{},
 }
 
-func TestApplyRURecommendedProfileWritesGeneratedFiles(t *testing.T) {
+func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	dir := t.TempDir()
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		Secret:     func(label string) string { return "secret-" + label },
+		RandomPort: func() int { return 31874 },
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
@@ -33,50 +30,49 @@ func TestApplyRURecommendedProfileWritesGeneratedFiles(t *testing.T) {
 		t.Fatalf("apply profile: %v", err)
 	}
 
-	assertFileContains(t, result.CaddyfilePath, "forward_proxy")
-	assertFileContains(t, result.Hysteria2Path, "listen: :443")
-	assertFileContains(t, result.FallbackIndexPath, "Veil")
-	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
-	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_TLS_CERT=")
-	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	if len(result.WrittenFiles) != 9 {
-		t.Fatalf("expected 9 written files, got %+v", result.WrittenFiles)
-	}
-}
-
-func TestApplyRURecommendedProfileWritesOnlySelectedStackFiles(t *testing.T) {
-	dir := t.TempDir()
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Stack:        StackHysteria2,
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
-	})
-	if err != nil {
-		t.Fatalf("build profile: %v", err)
-	}
-
-	result, err := ApplyRURecommendedProfile(profile, ApplyPaths{
-		EtcDir:     filepath.Join(dir, "etc", "veil"),
-		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
-		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
-	})
-	if err != nil {
-		t.Fatalf("apply profile: %v", err)
-	}
-
-	assertFileContains(t, result.Hysteria2Path, "listen: :443")
 	assertFileMissing(t, result.CaddyfilePath)
+	assertFileMissing(t, result.Hysteria2Path)
 	assertFileMissing(t, result.FallbackIndexPath)
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_TLS_CERT=")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-naive.service"))
-	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"), "hysteria2")
-	if len(result.WrittenFiles) != 6 {
-		t.Fatalf("expected 6 written files, got %+v", result.WrittenFiles)
+	if len(result.WrittenFiles) != 4 {
+		t.Fatalf("expected 4 written files, got %+v", result.WrittenFiles)
+	}
+}
+
+func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
+	dir := t.TempDir()
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		Secret:      func(label string) string { return "secret-" + label },
+		RandomPort:  func() int { return 31874 },
+		PanelPort:   2096,
+	})
+	if err != nil {
+		t.Fatalf("build profile: %v", err)
+	}
+
+	result, err := ApplyRURecommendedProfile(profile, ApplyPaths{
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
+	})
+	if err != nil {
+		t.Fatalf("apply profile: %v", err)
+	}
+
+	assertFileContains(t, result.CaddyfilePath, "reverse_proxy 127.0.0.1:2096")
+	assertFileContains(t, result.FallbackIndexPath, "Veil")
+	assertFileMissing(t, result.Hysteria2Path)
+	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
+	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
+	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-naive.service"), "caddy")
+	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"))
+	if len(result.WrittenFiles) != 5 {
+		t.Fatalf("expected 5 written files, got %+v", result.WrittenFiles)
 	}
 }
 

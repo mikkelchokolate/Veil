@@ -14,16 +14,8 @@ type RURecommendedStackPolicy struct {
 
 func NewRURecommendedStackPolicy(stack Stack) (RURecommendedStackPolicy, error) {
 	switch Stack(strings.TrimSpace(string(stack))) {
-	case StackPanel:
+	case "", StackPanel, StackMieru, StackBoth, StackNaive, StackHysteria2:
 		return RURecommendedStackPolicy{Stack: StackPanel}, nil
-	case StackMieru:
-		return RURecommendedStackPolicy{Stack: StackMieru, InstallMieru: true}, nil
-	case "", StackBoth:
-		return RURecommendedStackPolicy{Stack: StackBoth, InstallNaive: true, InstallHysteria2: true}, nil
-	case StackNaive:
-		return RURecommendedStackPolicy{Stack: StackNaive, InstallNaive: true}, nil
-	case StackHysteria2:
-		return RURecommendedStackPolicy{Stack: StackHysteria2, InstallHysteria2: true}, nil
 	default:
 		return RURecommendedStackPolicy{}, fmt.Errorf("unsupported stack %q", stack)
 	}
