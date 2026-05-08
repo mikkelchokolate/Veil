@@ -232,6 +232,7 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"go test ./... -count=1",
 		"go vet ./...",
 		"make build",
+		"bash -n scripts/install.sh scripts/uninstall.sh",
 		"git diff --check",
 		"needs: [quality, release]",
 	} {
@@ -251,6 +252,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"go test ./... -count=1",
 		"go vet ./...",
 		"make build",
+		"bash -n scripts/install.sh scripts/uninstall.sh",
 		"git diff --check",
 	} {
 		if !strings.Contains(workflow, want) {

@@ -16,4 +16,5 @@ jobs:
       - run: go vet ./...
       - run: make build
       - run: go test ./... -count=1
+      - run: bash -n scripts/install.sh scripts/uninstall.sh
       - run: git diff --check
