@@ -22,6 +22,15 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	if _, ok := NormalizeSettingsStack(input.Settings.Stack); !ok {
 		plan.Errors = append(plan.Errors, "stack must be panel; protocols are configured as Panel inbounds")
 	}
+	if input.Settings.PanelAccess == "caddy" {
+		if _, _, err := NewPanelCaddyAccess().Route(input.Settings); err != nil {
+			plan.Errors = append(plan.Errors, err.Error())
+		} else {
+			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
+			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
+			plan.Runtimes = appendUnique(plan.Runtimes, "veil-naive.service")
+		}
+	}
 	seen := map[string]bool{}
 	capabilities := NewApplyProtocolCapabilityCatalog()
 	for _, inbound := range input.Inbounds {
@@ -60,7 +69,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	if err := validateGeneratedConfigInboundCardinality(input.Settings, input.Inbounds); err != nil {
 		plan.Errors = append(plan.Errors, err.Error())
 	}
-	plan.Runtimes = NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits()
+	for _, unit := range NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits() {
+		plan.Runtimes = appendUnique(plan.Runtimes, unit)
+	}
 	if input.Warp.Enabled {
 		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
 		if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
