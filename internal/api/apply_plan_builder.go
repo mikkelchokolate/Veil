@@ -32,6 +32,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		}
 	}
 	seen := map[string]bool{}
+	protocols := NewInboundProtocolCatalog()
 	capabilities := NewApplyProtocolCapabilityCatalog()
 	for _, inbound := range input.Inbounds {
 		if !inbound.Enabled {
@@ -42,6 +43,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		}
 		if inbound.Port <= 0 {
 			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
+		}
+		if input.Settings.PanelAccess == "caddy" && inbound.Transport == "tcp" && inbound.Port == 443 && !protocols.RequiresCaddy(inbound.Protocol) {
+			plan.Errors = append(plan.Errors, "panel caddy access uses 443/tcp; choose another TCP port for inbound "+inbound.Name)
 		}
 		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
 		if seen[key] {

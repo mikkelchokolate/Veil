@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestBuildApplyPlanRejectsPanelCaddyTCP443RuntimeConflict(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
+		Inbounds: []Inbound{{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+	})
+	if plan.Valid || !strings.Contains(strings.Join(plan.Errors, "\n"), "panel caddy access uses 443/tcp") {
+		t.Fatalf("Panel Caddy should reject non-Caddy TCP 443 inbound conflict: %+v", plan)
+	}
+}
+
 func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
