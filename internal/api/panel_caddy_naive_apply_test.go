@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestGeneratedConfigSetRendersPanelCaddyAccessWithoutNaiveInbound(t *testing.T) {
+	root := t.TempDir()
+	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
+		ApplyRoot: root,
+		Settings: Settings{
+			PanelListen: "127.0.0.1:2096",
+			PanelAccess: "caddy",
+			WebBasePath: "/panel-secret/",
+			Stack:       "panel",
+			Mode:        "server",
+			Domain:      "panel.example.com",
+			Email:       "admin@example.com",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildGeneratedConfigSet: %v", err)
+	}
+	caddyfile := configs[filepath.Join(root, "generated", "caddy", "Caddyfile")]
+	for _, want := range []string{"panel.example.com", "tls admin@example.com", "handle_path /panel-secret/*", "reverse_proxy 127.0.0.1:2096"} {
+		if !strings.Contains(caddyfile, want) {
+			t.Fatalf("Panel Caddyfile missing %q:\n%s", want, caddyfile)
+		}
+	}
+	if strings.Contains(caddyfile, "forward_proxy") {
+		t.Fatalf("Panel-only Caddyfile should not include NaiveProxy forward_proxy:\n%s", caddyfile)
+	}
+}
+
 func TestNaiveGeneratedConfigPreservesPanelCaddyAccessRoute(t *testing.T) {
 	root := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
