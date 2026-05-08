@@ -13,6 +13,9 @@ func NewRURecommendedPortPolicy(availability PortAvailability, randomPort func()
 }
 
 func (p RURecommendedPortPolicy) Plan(explicitPort int, stack RURecommendedStackPolicy) (SharedPortPlan, error) {
+	if !stack.RequiresSharedProxyPort() {
+		return SharedPortPlan{}, nil
+	}
 	if explicitPort > 0 {
 		return PlanExplicitStackPort(p.availability, explicitPort, stack.InstallNaive, stack.InstallHysteria2)
 	}

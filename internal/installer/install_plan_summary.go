@@ -16,7 +16,9 @@ func NewInstallPlanSummary(plan InstallPlan) InstallPlanSummary {
 func (s InstallPlanSummary) String() string {
 	p := s.plan
 	var b strings.Builder
-	fmt.Fprintf(&b, "Shared port: %d\n", p.Profile.PortPlan.Port)
+	if p.Profile.InstallNaive || p.Profile.InstallHysteria2 {
+		fmt.Fprintf(&b, "Shared port: %d\n", p.Profile.PortPlan.Port)
+	}
 	if p.Profile.InstallNaive {
 		fmt.Fprintf(&b, "NaiveProxy: tcp/%d\n", p.Profile.PortPlan.Naive.Port)
 	}

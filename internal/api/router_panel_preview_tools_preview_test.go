@@ -106,7 +106,7 @@ func TestRURecommendedPreviewEndpointAcceptsMieruWithoutDomainEmail(t *testing.T
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Stack != "mieru" || !response.InstallMieru || response.InstallNaive || response.InstallHysteria2 {
+	if response.Stack != "mieru" || !response.InstallMieru || response.InstallNaive || response.InstallHysteria2 || response.Port != 0 {
 		t.Fatalf("unexpected Mieru preview response: %+v", response)
 	}
 	if response.Caddyfile != "" || response.Hysteria2YAML != "" || response.NaiveClientURL != "" || response.Hysteria2ClientURI != "" {
