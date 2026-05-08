@@ -21,8 +21,8 @@ func panelIntroCardsHTML() string {
       <input id="api-token" type="password" autocomplete="off" placeholder="Optional API token">
     </div>
     <div class="card">
-      <h2>Profile preview</h2>
-      <p>Preview a <code>ru-recommended</code> install profile without writing anything. Domain and email are required only for NaiveProxy/Hysteria2 stacks.</p>
+      <h2>Panel install preview</h2>
+      <p>Preview a Panel-only <code>ru-recommended</code> install without writing anything. Choose Caddy only when the Panel should be reachable by HTTPS domain without a port.</p>
       <form id="profile-preview-form">
         <div class="form-grid">
           <div>
@@ -34,13 +34,16 @@ func panelIntroCardsHTML() string {
             <input id="profile-email" type="email" autocomplete="off" placeholder="admin@example.com">
           </div>
           <div>
-            <label for="profile-stack">Stack</label>
-            <select id="profile-stack">
-` + panelStackOptionsHTML() + `            </select>
+            <label for="profile-panel-access">Panel access</label>
+            <select id="profile-panel-access">
+              <option value="local">local</option>
+              <option value="direct">direct</option>
+              <option value="caddy">caddy</option>
+            </select>
           </div>
         </div>
         <div class="actions">
-          <button id="preview-profile" type="submit">Preview profile</button>
+          <button id="preview-profile" type="submit">Preview Panel install</button>
         </div>
       </form>
       <pre id="profile-preview-output">Not generated</pre>

@@ -13,8 +13,8 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 		`async function loadJSON(path, outputId, options)`,
 		`profile-preview-form`,
 		`/api/profiles/ru-recommended/preview`,
-		`profilePreviewDomainRequired`,
-		`profilePreviewDomainRequired[stack]`,
+		`profile-panel-access`,
+		`panelAccess === 'caddy'`,
 		`load-version`,
 		`/api/version`,
 	} {
@@ -22,8 +22,8 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 			t.Fatalf("Intro actions missing %q", want)
 		}
 	}
-	if strings.Contains(actions, `if (!domain || !email)`) {
-		t.Fatalf("Mieru/panel profile preview must not be blocked by unconditional domain/email validation:\n%s", actions)
+	if strings.Contains(actions, `profilePreviewDomainRequired`) || strings.Contains(actions, `profile-stack`) {
+		t.Fatalf("Panel preview must not expose stack selection:\n%s", actions)
 	}
 }
 
@@ -36,8 +36,9 @@ func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T
 		`id="load-version"`,
 		`<h2>API token</h2>`,
 		`id="api-token"`,
-		`<h2>Profile preview</h2>`,
+		`<h2>Panel install preview</h2>`,
 		`id="profile-preview-form"`,
+		`id="profile-panel-access"`,
 		`id="profile-preview-output"`,
 	} {
 		if !strings.Contains(cards, want) {
@@ -46,12 +47,11 @@ func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T
 	}
 }
 
-func TestPanelIntroProfilePreviewExposesAllStacks(t *testing.T) {
+func TestPanelIntroProfilePreviewDoesNotExposeStackOptions(t *testing.T) {
 	cards := panelIntroCardsHTML()
-	for _, stack := range NewStackSelectionCatalog().Stacks() {
-		want := `<option value="` + stack + `">` + stack + `</option>`
-		if !strings.Contains(cards, want) {
-			t.Fatalf("Profile preview stack options missing %q:\n%s", want, cards)
+	for _, unwanted := range []string{`id="profile-stack"`, `<option value="both">`, `<option value="mieru">`, `<option value="naive">`, `<option value="hysteria2">`} {
+		if strings.Contains(cards, unwanted) {
+			t.Fatalf("Profile preview should not expose stack option %q:\n%s", unwanted, cards)
 		}
 	}
 }

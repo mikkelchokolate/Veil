@@ -18,7 +18,7 @@ func panelIntroActionsJS() string {
       return Object.assign({}, extra || {}, authHeaders());
     }
 
-` + panelProfilePreviewDomainRequirementsJS() + `    async function loadJSON(path, outputId, options) {
+    async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = 'Loading ' + path + '...';
       const requestOptions = options || {};
@@ -43,15 +43,15 @@ func panelIntroActionsJS() string {
       event.preventDefault();
       const domain = document.getElementById('profile-domain').value.trim();
       const email = document.getElementById('profile-email').value.trim();
-      const stack = document.getElementById('profile-stack').value;
-      if (profilePreviewDomainRequired[stack] && (!domain || !email)) {
-        document.getElementById('profile-preview-output').textContent = 'Domain and email are required for this stack';
+      const panelAccess = document.getElementById('profile-panel-access').value;
+      if (panelAccess === 'caddy' && (!domain || !email)) {
+        document.getElementById('profile-preview-output').textContent = 'Domain and email are required for Caddy Panel access';
         return;
       }
       await loadJSON('/api/profiles/ru-recommended/preview', 'profile-preview-output', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, email, stack })
+        body: JSON.stringify({ domain, email, panelAccess })
       });
     });
 

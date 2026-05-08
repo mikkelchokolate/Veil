@@ -35,65 +35,9 @@ func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
 	}
 }
 
-func TestRURecommendedPreviewEndpoint(t *testing.T) {
+func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-	var response map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response["domain"] != "example.com" {
-		t.Fatalf("unexpected response: %+v", response)
-	}
-	if response["caddyfile"] == "" || response["hysteria2YAML"] == "" {
-		t.Fatalf("expected rendered configs: %+v", response)
-	}
-	encoded, _ := json.Marshal(response)
-	if strings.Contains(string(encoded), "preview-naive") || strings.Contains(string(encoded), "preview-hysteria2") || strings.Contains(string(encoded), "preview-panel") {
-		t.Fatalf("preview response leaked generated secrets: %s", string(encoded))
-	}
-	if !strings.Contains(string(encoded), "[REDACTED]") {
-		t.Fatalf("preview response should include redaction markers: %s", string(encoded))
-	}
-}
-
-func TestRURecommendedPreviewEndpointHonorsStack(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"naive"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-	var response map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response["stack"] != "naive" {
-		t.Fatalf("expected stack naive, got %+v", response)
-	}
-	if response["caddyfile"] == "" || response["hysteria2YAML"] != "" {
-		t.Fatalf("expected only naive preview output: %+v", response)
-	}
-	if response["naiveClientURL"] == "" || response["hysteria2ClientURI"] != "" {
-		t.Fatalf("expected only naive client link: %+v", response)
-	}
-}
-
-func TestRURecommendedPreviewEndpointAcceptsMieruWithoutDomainEmail(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"stack":"mieru"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
 
@@ -106,17 +50,53 @@ func TestRURecommendedPreviewEndpointAcceptsMieruWithoutDomainEmail(t *testing.T
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Stack != "mieru" || !response.InstallMieru || response.InstallNaive || response.InstallHysteria2 || response.Port != 0 {
-		t.Fatalf("unexpected Mieru preview response: %+v", response)
-	}
-	if response.Caddyfile != "" || response.Hysteria2YAML != "" || response.NaiveClientURL != "" || response.Hysteria2ClientURI != "" {
-		t.Fatalf("Mieru preview should not render Naive/Hysteria artifacts: %+v", response)
+	if response.Stack != "panel" || response.InstallNaive || response.InstallHysteria2 || response.InstallMieru || response.Caddyfile != "" || response.Hysteria2YAML != "" {
+		t.Fatalf("preview should default to Panel-only: %+v", response)
 	}
 }
 
-func TestRURecommendedPreviewEndpointRejectsInvalidStack(t *testing.T) {
+func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"bad"}`)
+	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","panelAccess":"caddy"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response RURecommendedPreviewResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Stack != "panel" || response.PanelAccess != "caddy" || response.PanelURL == "" || response.Caddyfile == "" {
+		t.Fatalf("expected Panel Caddy preview: %+v", response)
+	}
+	if response.InstallNaive || response.InstallHysteria2 || response.InstallMieru || response.Hysteria2YAML != "" || response.NaiveClientURL != "" || response.Hysteria2ClientURI != "" {
+		t.Fatalf("Panel Caddy preview should not render protocol artifacts: %+v", response)
+	}
+	if strings.Contains(response.Caddyfile, "forward_proxy") || !strings.Contains(response.Caddyfile, "reverse_proxy 127.0.0.1:") {
+		t.Fatalf("unexpected Panel Caddyfile:\n%s", response.Caddyfile)
+	}
+}
+
+func TestRURecommendedPreviewEndpointRejectsProtocolStack(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"naive"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "only supports Panel") {
+		t.Fatalf("expected protocol stack rejection, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRURecommendedPreviewEndpointRequiresDomainEmailForPanelCaddy(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"panelAccess":"caddy"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
 
