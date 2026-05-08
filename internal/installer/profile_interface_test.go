@@ -64,6 +64,7 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 		"BinaryDownloadRetryPolicy":       true,
 		"BinaryRepairAction":              true,
 		"BinaryRepairPlan":                true,
+		"InstallClientLinks":              true,
 	}
 	forbiddenFuncs := map[string]bool{
 		"NewRURecommendedPortPolicy":         true,
@@ -87,6 +88,9 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 		"BuildBinaryRepairPlan":              true,
 		"DownloadVerifiedBinary":             true,
 		"downloadVerifiedBinary":             true,
+		"NewInstallClientLinks":              true,
+		"naiveURL":                           true,
+		"hysteria2URI":                       true,
 	}
 	forbiddenConsts := map[string]bool{
 		"StackBoth":      true,
