@@ -42,7 +42,7 @@ func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedP
 	fmt.Fprintf(p.out, "Veil ru-recommended %s\n", mode)
 	fmt.Fprintf(p.out, "Domain: %s\n", profile.Domain)
 	fmt.Fprintf(p.out, "Email: %s\n", profile.Email)
-	fmt.Fprintf(p.out, "Stack: %s\n", p.StackName(profile))
+	fmt.Fprintln(p.out, "Install scope: Panel")
 	if profile.PortPlan.Changed {
 		fmt.Fprintf(p.out, "Port changed: %s\n", profile.PortPlan.Reason)
 	}
@@ -81,21 +81,6 @@ func (InstallPresentation) RedactProfileSecrets(profile installer.RURecommendedP
 	return text
 }
 
-func (InstallPresentation) StackName(profile installer.RURecommendedProfile) string {
-	switch {
-	case profile.InstallNaive && profile.InstallHysteria2:
-		return string(installer.StackBoth)
-	case profile.InstallNaive:
-		return string(installer.StackNaive)
-	case profile.InstallHysteria2:
-		return string(installer.StackHysteria2)
-	case profile.InstallMieru:
-		return string(installer.StackMieru)
-	default:
-		return string(installer.StackPanel)
-	}
-}
-
 func printDNSCheck(cmd *cobra.Command, check installer.DNSCheck) {
 	NewInstallPresentation(cmd.OutOrStdout()).PrintDNSCheck(check)
 }
@@ -106,8 +91,4 @@ func printRURecommended(cmd *cobra.Command, profile installer.RURecommendedProfi
 
 func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
 	return NewInstallPresentation(io.Discard).RedactProfileSecrets(profile, text)
-}
-
-func stackName(profile installer.RURecommendedProfile) string {
-	return NewInstallPresentation(io.Discard).StackName(profile)
 }

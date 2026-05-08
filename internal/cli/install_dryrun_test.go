@@ -68,7 +68,7 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Veil ru-recommended dry run",
-		"Stack: panel",
+		"Install scope: Panel",
 		"Panel port:",
 		"(random)",
 		"ufw allow ",

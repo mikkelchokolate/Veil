@@ -17,12 +17,12 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 		t.Fatalf("install dry-run: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Stack: panel", "Panel URL: https://panel.example.com/", "Generated Caddyfile", "reverse_proxy 127.0.0.1:2096"} {
+	for _, want := range []string{"Install scope: Panel", "Panel URL: https://panel.example.com/", "Generated Caddyfile", "reverse_proxy 127.0.0.1:2096"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"NaiveProxy TCP port:", "Hysteria2 UDP port:", "Mieru asset:", "forward_proxy", "Shared port:"} {
+	for _, unwanted := range []string{"Stack:", "NaiveProxy TCP port:", "Hysteria2 UDP port:", "Mieru asset:", "forward_proxy", "Shared port:"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("panel Caddy install should not include %q:\n%s", unwanted, got)
 		}

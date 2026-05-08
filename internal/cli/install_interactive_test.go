@@ -31,7 +31,7 @@ func TestInstallInteractivePromptsOnlyForPanelPortByDefault(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Customize panel port?",
-		"Stack: panel",
+		"Install scope: Panel",
 		"Panel port:",
 		"(random)",
 	} {

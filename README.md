@@ -32,28 +32,21 @@ Panel-only local access:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- \
-  --stack panel \
   --panel-access local \
   --yes
 ```
 
-Mieru-only runtime install without Caddy/domain:
+Panel HTTPS access through Caddy on a domain, without exposing the Panel port:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- \
-  --stack mieru \
-  --yes
-```
-
-NaiveProxy/Hysteria2 install with Caddy and domain:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- \
+  --panel-access caddy \
   --domain vpn.example.com \
   --email admin@example.com \
-  --port 443 \
   --yes
 ```
+
+Protocol runtimes are not selected during install. Open the Panel after install and add NaiveProxy, Hysteria2, or Mieru as Inbounds.
 
 ## Inbounds
 
