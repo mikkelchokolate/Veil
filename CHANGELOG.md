@@ -2,6 +2,22 @@
 
 All notable changes to Veil will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Added end-to-end Mieru Inbounds, generated config, client artifacts, managed runtime metadata, firewall planning, apply validation, live promotion, repair, and uninstall coverage.
+- Added optional HTTPS Panel access through Caddy with a random Web base path.
+- Added self-signed Panel TLS for direct/local Panel access without Caddy.
+- Added protocol runtime provisioning reporting in Apply plans.
+
+### Changed
+
+- Veil install is Panel-only; protocols are configured later as Panel Inbounds.
+- Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility.
+- NaiveProxy client links use the `naive+https://` scheme.
+- Protocol capabilities now drive Inbound options, Generated config set rendering, Client link delivery, Apply actions, managed runtimes, and repair planning.
+
 ## [v0.3.16] — 2026-05-06
 
 ### Changed
