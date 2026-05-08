@@ -7,10 +7,8 @@ type StackSelectionValidation struct{}
 func NewStackSelectionValidation() StackSelectionValidation { return StackSelectionValidation{} }
 
 func (StackSelectionValidation) Validate(stack string) error {
-	switch stack {
-	case "panel", "mieru", "both", "naive", "hysteria2":
+	if NewStackSelectionCatalog().Supports(stack) {
 		return nil
-	default:
-		return fmt.Errorf("unsupported stack: %s", stack)
 	}
+	return fmt.Errorf("unsupported stack: %s", stack)
 }

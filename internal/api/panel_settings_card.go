@@ -16,10 +16,7 @@ func panelSettingsCardHTML() string {
             <div>
               <label for="settings-stack">Stack</label>
               <select id="settings-stack">
-                <option value="both">both</option>
-                <option value="naive">naive</option>
-                <option value="hysteria2">hysteria2</option>
-              </select>
+` + panelSettingsStackOptionsHTML() + `              </select>
             </div>
             <div>
               <label for="settings-mode">Mode</label>
