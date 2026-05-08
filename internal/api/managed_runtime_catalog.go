@@ -1,5 +1,7 @@
 package api
 
+import "path/filepath"
+
 type ManagedRuntime struct {
 	Name             string
 	ActionName       string
@@ -47,6 +49,19 @@ func (c ManagedRuntimeCatalog) AllowsActionName(actionName string) bool {
 		}
 	}
 	return false
+}
+
+func (c ManagedRuntimeCatalog) PromotedCommands(applyRoot string, liveFiles []string) [][]string {
+	commands := [][]string{}
+	for _, runtime := range c.runtimes {
+		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
+			continue
+		}
+		if containsPath(liveFiles, filepath.Join(applyRoot, "live", filepath.FromSlash(runtime.PromotedSubpath))) {
+			commands = append(commands, []string{"systemctl", runtime.PromotedVerb, runtime.Unit})
+		}
+	}
+	return commands
 }
 
 func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {

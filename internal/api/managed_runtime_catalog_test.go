@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 	catalog := NewManagedRuntimeCatalog()
@@ -33,6 +36,26 @@ func TestManagedRuntimeCatalogBuildsServiceActionCommandsFromCanonicalUnits(t *t
 	want := []string{"systemctl", "restart", "veil-naive.service"}
 	if !equalStrings(command, want) {
 		t.Fatalf("command = %+v, want %+v", command, want)
+	}
+}
+
+func TestManagedRuntimeCatalogBuildsPromotedCommandsFromLiveFiles(t *testing.T) {
+	root := t.TempDir()
+	commands := NewManagedRuntimeCatalog().PromotedCommands(root, []string{
+		filepath.Join(root, "live", "caddy", "Caddyfile"),
+		filepath.Join(root, "live", "mieru", "server_config.json"),
+	})
+	want := [][]string{
+		{"systemctl", "reload", "veil-naive.service"},
+		{"systemctl", "restart", "veil-mieru.service"},
+	}
+	if len(commands) != len(want) {
+		t.Fatalf("commands = %+v", commands)
+	}
+	for i := range want {
+		if !equalStrings(commands[i], want[i]) {
+			t.Fatalf("commands = %+v, want %+v", commands, want)
+		}
 	}
 }
 
