@@ -46,7 +46,7 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm repairing planned files")
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
-	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
+	cmd.Flags().StringVar(&systemdDir, "systemd-dir", defaultSystemdDir, "systemd unit output directory")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	for _, name := range []string{"stack", "domain", "email", "port"} {
