@@ -9,8 +9,12 @@ import (
 type RURecommendedPreviewRequest struct {
 	Domain      string `json:"domain"`
 	Email       string `json:"email"`
-	Stack       string `json:"stack,omitempty"`
 	PanelAccess string `json:"panelAccess,omitempty"`
+}
+
+type ruRecommendedPreviewWireRequest struct {
+	RURecommendedPreviewRequest
+	Stack string `json:"stack,omitempty"`
 }
 
 type RURecommendedPreviewResponse struct {
@@ -36,14 +40,15 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	var req RURecommendedPreviewRequest
-	if !decodeJSONRequest(w, r, &req) {
+	var wireReq ruRecommendedPreviewWireRequest
+	if !decodeJSONRequest(w, r, &wireReq) {
 		return
 	}
-	if req.Stack != "" && req.Stack != "panel" {
+	if wireReq.Stack != "" && wireReq.Stack != "panel" {
 		writeError(w, "profile preview only supports Panel install; configure protocols as Panel Inbounds", http.StatusBadRequest)
 		return
 	}
+	req := wireReq.RURecommendedPreviewRequest
 	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 		Domain:      req.Domain,
 		Email:       req.Email,

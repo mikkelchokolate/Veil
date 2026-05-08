@@ -1,6 +1,15 @@
 package api
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestRURecommendedPreviewRequestDoesNotExposeLegacyStack(t *testing.T) {
+	if _, ok := reflect.TypeOf(RURecommendedPreviewRequest{}).FieldByName("Stack"); ok {
+		t.Fatalf("RURecommendedPreviewRequest should not expose legacy stack; protocol choices are Panel Inbounds")
+	}
+}
 
 func TestProfilePreviewRoutesIncludesRURecommendedPreviewPath(t *testing.T) {
 	paths := ProfilePreviewRoutes{}.Paths()
