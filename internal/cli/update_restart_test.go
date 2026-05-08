@@ -3,11 +3,29 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestWaitForHealthySupportsGeneratedPanelTLSOnLoopback(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	if err := waitForHealthy(server.URL, "", time.Second); err != nil {
+		t.Fatalf("waitForHealthy should trust generated Panel TLS on loopback: %v", err)
+	}
+}
 
 func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {
 	dir := t.TempDir()

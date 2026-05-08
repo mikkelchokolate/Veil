@@ -92,7 +92,7 @@ func waitForHealthy(addr string, token string, timeout time.Duration) error {
 		if token != "" {
 			req.Header.Set("X-Veil-Token", token)
 		}
-		resp, err := updateHTTPClient.Do(req)
+		resp, err := statusHTTPClient(addr + "/healthz").Do(req)
 		cancel()
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
