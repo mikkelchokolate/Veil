@@ -13,8 +13,12 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		return ClientLinksResponse{}, err
 	}
 	response := NewClientLinksResponseMetadata(settings).Build()
+	mieruLinks, err := NewMieruClientAccessAggregator().Build(settings, inbounds)
+	if err != nil {
+		return ClientLinksResponse{}, err
+	}
 	for _, inbound := range inbounds {
-		if !inbound.Enabled {
+		if !inbound.Enabled || inbound.Protocol == "mieru" {
 			continue
 		}
 		links, err := buildInboundClientLinks(settings, inbound)
@@ -23,6 +27,7 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		}
 		response.Links = append(response.Links, links...)
 	}
+	response.Links = append(response.Links, mieruLinks...)
 	return NewClientLinksResponseFinalizer().Finalize(response)
 }
 
