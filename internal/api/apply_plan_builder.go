@@ -23,7 +23,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		plan.Errors = append(plan.Errors, err.Error())
 	}
 	seen := map[string]bool{}
-	artifacts := NewInboundApplyArtifacts()
+	capabilities := NewApplyProtocolCapabilityCatalog()
 	for _, inbound := range input.Inbounds {
 		if !inbound.Enabled || !stackIncludesProtocol(input.Settings.Stack, inbound.Protocol) {
 			continue
@@ -39,21 +39,19 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
 		}
 		seen[key] = true
-		artifact, ok := artifacts.ForProtocol(inbound.Protocol)
+		capability, ok := capabilities.ForProtocol(inbound.Protocol)
 		if !ok {
 			if inbound.Protocol != "" {
 				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
 			}
 			continue
 		}
-		if inbound.Protocol == "naiveproxy" {
-			if err := NewNaiveCaddySettingsRequirement().Validate(input.Settings); err != nil {
-				plan.Errors = append(plan.Errors, err.Error())
-			}
+		if err := capability.ValidateSettings(input.Settings); err != nil {
+			plan.Errors = append(plan.Errors, err.Error())
 		}
-		plan.Configs = appendUnique(plan.Configs, artifact.Config)
-		plan.Actions = appendUnique(plan.Actions, artifact.Action)
-		if artifact.ValidateInboundRender && (!artifact.RequiresRenderSettings || input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
+		plan.Configs = appendUnique(plan.Configs, capability.Config)
+		plan.Actions = appendUnique(plan.Actions, capability.Action)
+		if capability.ShouldValidateRender(input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
 			if err := input.ValidateInboundRender(inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
