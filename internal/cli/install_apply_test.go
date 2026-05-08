@@ -37,6 +37,9 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *te
 	if gotPaths.BackupDir != "/var/lib/veil/backups" {
 		t.Fatalf("BackupDir = %q", gotPaths.BackupDir)
 	}
+	if gotPaths.SystemdDir != "/etc/systemd/system" {
+		t.Fatalf("SystemdDir = %q", gotPaths.SystemdDir)
+	}
 	for _, want := range []string{"Written files:", "/etc/veil/veil.env", "Panel: https://example.com/panel/", "NaiveProxy password: naive-secret", "Hysteria2 password: hy2-secret"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output missing %q:\n%s", want, out.String())

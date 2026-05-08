@@ -10,6 +10,8 @@ import (
 	"github.com/veil-panel/veil/internal/installer"
 )
 
+const defaultSystemdDir = "/etc/systemd/system"
+
 type ruRecommendedInstallOptions struct {
 	Profile        string
 	Stack          string

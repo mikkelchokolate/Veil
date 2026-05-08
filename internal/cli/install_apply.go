@@ -13,7 +13,11 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if !opts.BackupDirSet {
 		actualBackupDir = filepath.Join(opts.VarDir, "backups")
 	}
-	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: actualBackupDir})
+	systemdDir := opts.SystemdDir
+	if systemdDir == "" {
+		systemdDir = defaultSystemdDir
+	}
+	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: systemdDir, BackupDir: actualBackupDir})
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
