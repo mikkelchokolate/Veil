@@ -26,6 +26,7 @@ func TestDoctorCommandPrintsReadinessSummary(t *testing.T) {
 		"Required commands:",
 		"caddy:",
 		"hysteria:",
+		"mieru:",
 		"sing-box:",
 		"ufw:",
 	} {
@@ -65,6 +66,7 @@ func TestDoctorCommandPrintsJSONReadinessSummary(t *testing.T) {
 		`"commands"`,
 		`"name":"caddy"`,
 		`"name":"hysteria"`,
+		`"name":"mieru"`,
 		`"name":"sing-box"`,
 		`"name":"ufw"`,
 		`"name":"systemctl","error":"command not found","present":false`,
@@ -81,7 +83,7 @@ func TestDoctorCommandPrintsJSONReadinessSummary(t *testing.T) {
 func TestDoctorCommandReportsOverallReadiness(t *testing.T) {
 	oldLookPath := commandLookPath
 	commandLookPath = func(name string) (string, error) {
-		if name == "hysteria" {
+		if name == "systemctl" {
 			return "", errCommandNotFound
 		}
 		return "/usr/bin/" + name, nil
@@ -105,7 +107,7 @@ func TestDoctorCommandReportsOverallReadiness(t *testing.T) {
 	if !strings.Contains(got, "Ready: no") {
 		t.Fatalf("doctor output missing readiness verdict:\n%s", got)
 	}
-	if !strings.Contains(got, "hysteria: missing (command not found)") {
+	if !strings.Contains(got, "systemctl: missing (command not found)") {
 		t.Fatalf("doctor output missing command error detail:\n%s", got)
 	}
 }

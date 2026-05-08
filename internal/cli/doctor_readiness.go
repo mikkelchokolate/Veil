@@ -16,8 +16,8 @@ func (d DoctorReadiness) Summary() doctorSummary {
 		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
 		Ready:   true,
 	}
-	required := []string{"caddy", "hysteria", "sing-box", "systemctl"}
-	optional := []string{"ufw"}
+	required := []string{"systemctl"}
+	optional := []string{"caddy", "hysteria", "mieru", "sing-box", "ufw"}
 
 	for _, name := range required {
 		status := doctorCommandStatus{Name: name}
