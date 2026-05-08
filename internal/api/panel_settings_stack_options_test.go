@@ -24,6 +24,28 @@ func TestPanelSettingsCardIncludesMieruAndPanelStacks(t *testing.T) {
 	}
 }
 
+func TestStackSelectionCatalogOwnsProtocolInclusion(t *testing.T) {
+	catalog := NewStackSelectionCatalog()
+	cases := []struct {
+		stack    string
+		protocol string
+		want     bool
+	}{
+		{"panel", "mieru", false},
+		{"mieru", "mieru", true},
+		{"mieru", "naiveproxy", false},
+		{"both", "naiveproxy", true},
+		{"both", "hysteria2", true},
+		{"both", "mieru", true},
+		{"both", "unknown", false},
+	}
+	for _, tc := range cases {
+		if got := catalog.IncludesProtocol(tc.stack, tc.protocol); got != tc.want {
+			t.Fatalf("IncludesProtocol(%q,%q) = %v, want %v", tc.stack, tc.protocol, got, tc.want)
+		}
+	}
+}
+
 func TestStackSelectionCatalogOwnsProfilePreviewDomainRequirements(t *testing.T) {
 	catalog := NewStackSelectionCatalog()
 	for _, stack := range []string{"panel", "mieru"} {

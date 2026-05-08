@@ -8,6 +8,8 @@ import (
 type StackSelection struct {
 	Name           string
 	RequiresDomain bool
+	Protocols      []string
+	AllProtocols   bool
 }
 
 type StackSelectionCatalog struct {
@@ -17,10 +19,10 @@ type StackSelectionCatalog struct {
 func NewStackSelectionCatalog() StackSelectionCatalog {
 	return StackSelectionCatalog{selections: []StackSelection{
 		{Name: "panel"},
-		{Name: "mieru"},
-		{Name: "both", RequiresDomain: true},
-		{Name: "naive", RequiresDomain: true},
-		{Name: "hysteria2", RequiresDomain: true},
+		{Name: "mieru", Protocols: []string{"mieru"}},
+		{Name: "both", RequiresDomain: true, AllProtocols: true},
+		{Name: "naive", RequiresDomain: true, Protocols: []string{"naiveproxy"}},
+		{Name: "hysteria2", RequiresDomain: true, Protocols: []string{"hysteria2"}},
 	}}
 }
 
@@ -44,6 +46,22 @@ func (c StackSelectionCatalog) Supports(stack string) bool {
 func (c StackSelectionCatalog) RequiresDomain(stack string) bool {
 	selection, ok := c.selection(stack)
 	return ok && selection.RequiresDomain
+}
+
+func (c StackSelectionCatalog) IncludesProtocol(stack string, protocol string) bool {
+	selection, ok := c.selection(stack)
+	if !ok {
+		return false
+	}
+	if selection.AllProtocols {
+		return NewInboundProtocolCatalog().Supports(protocol)
+	}
+	for _, allowed := range selection.Protocols {
+		if allowed == protocol {
+			return true
+		}
+	}
+	return false
 }
 
 func (c StackSelectionCatalog) selection(stack string) (StackSelection, bool) {

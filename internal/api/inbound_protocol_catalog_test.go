@@ -4,6 +4,14 @@ import "testing"
 
 func TestInboundProtocolCatalogKnowsSupportedProtocolsAndTransports(t *testing.T) {
 	catalog := NewInboundProtocolCatalog()
+	for _, protocol := range []string{"naiveproxy", "hysteria2", "mieru"} {
+		if !catalog.Supports(protocol) {
+			t.Fatalf("protocol %q should be supported", protocol)
+		}
+	}
+	if catalog.Supports("unknown") {
+		t.Fatal("unknown protocol should not be supported")
+	}
 	for _, tc := range []struct {
 		protocol  string
 		transport string

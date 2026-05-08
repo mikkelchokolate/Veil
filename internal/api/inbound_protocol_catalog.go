@@ -43,6 +43,11 @@ func (c InboundProtocolCatalog) FirewallService(protocol string) (string, bool) 
 	return choice.FirewallService, true
 }
 
+func (c InboundProtocolCatalog) Supports(protocol string) bool {
+	_, ok := c.choice(protocol)
+	return ok
+}
+
 func (c InboundProtocolCatalog) SupportsTransport(protocol, transport string) bool {
 	choice, ok := c.choice(protocol)
 	if !ok {

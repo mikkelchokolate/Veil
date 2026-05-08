@@ -9,20 +9,7 @@ func NewStackProtocolPolicy(stack string) StackProtocolPolicy {
 }
 
 func (p StackProtocolPolicy) Includes(protocol string) bool {
-	switch p.stack {
-	case "both":
-		return true
-	case "naive":
-		return protocol == "naiveproxy"
-	case "hysteria2":
-		return protocol == "hysteria2"
-	case "mieru":
-		return protocol == "mieru"
-	case "panel":
-		return false
-	default:
-		return false
-	}
+	return NewStackSelectionCatalog().IncludesProtocol(p.stack, protocol)
 }
 
 func stackIncludesProtocol(stack string, protocol string) bool {
