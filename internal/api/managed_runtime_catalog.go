@@ -1,6 +1,9 @@
 package api
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"sort"
+)
 
 type ManagedRuntime struct {
 	Name             string
@@ -19,13 +22,42 @@ type ManagedRuntimeCatalog struct {
 }
 
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	return ManagedRuntimeCatalog{runtimes: []ManagedRuntime{
-		{Name: "veil", ActionName: "veil", Unit: "veil.service", ManualRestart: true},
-		{Name: "naive", ActionName: "caddy", Protocol: "naiveproxy", Transport: "tcp", Unit: "veil-naive.service", PromotedSubpath: "caddy/Caddyfile", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
-		{Name: "hysteria2", ActionName: "hysteria2", Protocol: "hysteria2", Transport: "udp", Unit: "veil-hysteria2.service", PromotedSubpath: "hysteria2/server.yaml", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
-		{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true},
-		{Name: "mieru", ActionName: "mieru", Protocol: "mieru", Unit: "veil-mieru.service", PromotedSubpath: "mieru/server_config.json", PromotedVerb: "restart", ManualRestart: true, HealthCheckAfter: true},
-	}}
+	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: "veil.service", ManualRestart: true}}
+	ordered := []struct {
+		Order   int
+		Runtime ManagedRuntime
+	}{}
+	for _, capability := range NewProtocolCapabilityCatalog().All() {
+		if capability.RuntimeUnit == "" {
+			continue
+		}
+		ordered = append(ordered, struct {
+			Order   int
+			Runtime ManagedRuntime
+		}{
+			Order: capability.RuntimeOrder,
+			Runtime: ManagedRuntime{
+				Name:             capability.RuntimeName,
+				ActionName:       capability.RuntimeActionName,
+				Protocol:         capability.Protocol,
+				Transport:        capability.RuntimeTransport,
+				Unit:             capability.RuntimeUnit,
+				PromotedSubpath:  capability.PromotedSubpath,
+				PromotedVerb:     capability.PromotedVerb,
+				ManualRestart:    true,
+				HealthCheckAfter: true,
+			},
+		})
+	}
+	ordered = append(ordered, struct {
+		Order   int
+		Runtime ManagedRuntime
+	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Order < ordered[j].Order })
+	for _, item := range ordered {
+		runtimes = append(runtimes, item.Runtime)
+	}
+	return ManagedRuntimeCatalog{runtimes: runtimes}
 }
 
 func (c ManagedRuntimeCatalog) Runtimes() []ManagedRuntime {

@@ -9,7 +9,13 @@ type ProtocolCapability struct {
 	GeneratedConfigPath    string
 	GeneratedConfigSuffix  string
 	ApplyAction            string
+	RuntimeName            string
+	RuntimeActionName      string
 	RuntimeUnit            string
+	RuntimeTransport       string
+	RuntimeOrder           int
+	PromotedSubpath        string
+	PromotedVerb           string
 	ValidateInboundRender  bool
 	RequiresRenderSettings bool
 	RequiresCaddySettings  bool
@@ -26,10 +32,6 @@ type ProtocolCapabilityCatalog struct {
 }
 
 func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
-	runtimes := NewManagedRuntimeCatalog()
-	naiveAction, _ := runtimes.ApplyAction("naiveproxy")
-	hysteriaAction, _ := runtimes.ApplyAction("hysteria2")
-	mieruAction, _ := runtimes.ApplyAction("mieru")
 	return ProtocolCapabilityCatalog{capabilities: []ProtocolCapability{
 		{
 			Protocol:               "naiveproxy",
@@ -39,8 +41,14 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			RequiresCaddy:          true,
 			GeneratedConfigPath:    "/etc/veil/generated/caddy/Caddyfile",
 			GeneratedConfigSuffix:  "/generated/caddy/Caddyfile",
-			ApplyAction:            naiveAction,
+			ApplyAction:            "reload veil-naive.service",
+			RuntimeName:            "naive",
+			RuntimeActionName:      "caddy",
 			RuntimeUnit:            "veil-naive.service",
+			RuntimeTransport:       "tcp",
+			RuntimeOrder:           10,
+			PromotedSubpath:        "caddy/Caddyfile",
+			PromotedVerb:           "reload",
 			ValidateInboundRender:  true,
 			RequiresRenderSettings: true,
 			RequiresCaddySettings:  true,
@@ -76,8 +84,14 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			FirewallService:        "Veil Hysteria2",
 			GeneratedConfigPath:    "/etc/veil/generated/hysteria2/server.yaml",
 			GeneratedConfigSuffix:  "/generated/hysteria2/server.yaml",
-			ApplyAction:            hysteriaAction,
+			ApplyAction:            "reload veil-hysteria2.service",
+			RuntimeName:            "hysteria2",
+			RuntimeActionName:      "hysteria2",
 			RuntimeUnit:            "veil-hysteria2.service",
+			RuntimeTransport:       "udp",
+			RuntimeOrder:           20,
+			PromotedSubpath:        "hysteria2/server.yaml",
+			PromotedVerb:           "reload",
 			ValidateInboundRender:  true,
 			RequiresRenderSettings: true,
 			ValidationName:         "hysteria2",
@@ -112,8 +126,13 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			FirewallService:       "Veil Mieru",
 			GeneratedConfigPath:   "/etc/veil/generated/mieru/server_config.json",
 			GeneratedConfigSuffix: "/generated/mieru/server_config.json",
-			ApplyAction:           mieruAction,
+			ApplyAction:           "restart veil-mieru.service",
+			RuntimeName:           "mieru",
+			RuntimeActionName:     "mieru",
 			RuntimeUnit:           "veil-mieru.service",
+			RuntimeOrder:          40,
+			PromotedSubpath:       "mieru/server_config.json",
+			PromotedVerb:          "restart",
 			ValidateInboundRender: true,
 			ValidationName:        "mieru",
 			ValidationCommand:     func(path string) []string { return []string{"mieru", "check", "-c", path} },
