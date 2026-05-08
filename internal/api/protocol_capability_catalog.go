@@ -17,6 +17,8 @@ type ProtocolCapability struct {
 	ValidationCommand      func(string) []string
 	MaxEnabled             int
 	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
+	ProfileClientLink      func(ClientAccessLinkInput) (ClientLink, bool)
+	FallbackClientLink     func(ClientAccessLinkInput) (ClientLink, bool)
 }
 
 type ProtocolCapabilityCatalog struct {
@@ -52,6 +54,20 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 				body, err := renderNaiveGeneratedConfig(input.Settings, input.Inbounds[0])
 				return GeneratedConfigArtifact{Path: input.Paths.Caddyfile(), Body: body}, true, err
 			},
+			ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				link := newProtocolClientLink(input)
+				link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password)
+				return link, true
+			},
+			FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				link := newProtocolClientLink(input)
+				password := input.Inbound.Password
+				if password == "" {
+					password = input.Settings.NaivePassword
+				}
+				link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Settings.NaiveUsername, password)
+				return link, true
+			},
 		},
 		{
 			Protocol:               "hysteria2",
@@ -74,6 +90,20 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 				body, err := renderHysteria2GeneratedConfig(input.Settings, input.Inbounds[0])
 				return GeneratedConfigArtifact{Path: input.Paths.Hysteria2(), Body: body}, true, err
 			},
+			ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				link := newProtocolClientLink(input)
+				link.URI = hysteria2UserPassClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name)
+				return link, true
+			},
+			FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				link := newProtocolClientLink(input)
+				password := input.Inbound.Password
+				if password == "" {
+					password = input.Settings.Hysteria2Password
+				}
+				link.URI = hysteria2ClientURI(input.Settings.Domain, input.Inbound.Port, password, input.Inbound.Name)
+				return link, true
+			},
 		},
 		{
 			Protocol:              "mieru",
@@ -89,6 +119,13 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			ValidationCommand:     func(path string) []string { return []string{"mieru", "check", "-c", path} },
 			RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
 				return NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
+			},
+			ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				return mieruClientConfigLink(input)
+			},
+			FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
+				input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
+				return mieruClientConfigLink(input)
 			},
 		},
 	}}

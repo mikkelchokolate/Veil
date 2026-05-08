@@ -7,7 +7,7 @@ func TestProtocolCapabilityCatalogCoversMieruEndToEnd(t *testing.T) {
 	if !ok {
 		t.Fatal("missing Mieru protocol capability")
 	}
-	if capability.GeneratedConfigPath != "/etc/veil/generated/mieru/server_config.json" || capability.ApplyAction != "restart veil-mieru.service" || capability.RuntimeUnit != "veil-mieru.service" || capability.RenderGeneratedConfig == nil {
+	if capability.GeneratedConfigPath != "/etc/veil/generated/mieru/server_config.json" || capability.ApplyAction != "restart veil-mieru.service" || capability.RuntimeUnit != "veil-mieru.service" || capability.RenderGeneratedConfig == nil || capability.ProfileClientLink == nil {
 		t.Fatalf("Mieru generated/apply/runtime capability = %+v", capability)
 	}
 	if len(capability.Transports) != 2 || capability.Transports[0] != "tcp" || capability.Transports[1] != "udp" {

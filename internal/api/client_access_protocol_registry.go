@@ -18,55 +18,12 @@ type ClientAccessLinkInput struct {
 }
 
 func NewClientAccessProtocolRegistry() ClientAccessProtocolRegistry {
-	protocols := []ClientAccessProtocol{
-		{
-			Protocol: "naiveproxy",
-			ProfileLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				link := newProtocolClientLink(input)
-				link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password)
-				return link, true
-			},
-			FallbackLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				link := newProtocolClientLink(input)
-				password := input.Inbound.Password
-				if password == "" {
-					password = input.Settings.NaivePassword
-				}
-				link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Settings.NaiveUsername, password)
-				return link, true
-			},
-		},
-		{
-			Protocol: "hysteria2",
-			ProfileLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				link := newProtocolClientLink(input)
-				link.URI = hysteria2UserPassClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name)
-				return link, true
-			},
-			FallbackLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				link := newProtocolClientLink(input)
-				password := input.Inbound.Password
-				if password == "" {
-					password = input.Settings.Hysteria2Password
-				}
-				link.URI = hysteria2ClientURI(input.Settings.Domain, input.Inbound.Port, password, input.Inbound.Name)
-				return link, true
-			},
-		},
-		{
-			Protocol: "mieru",
-			ProfileLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				return mieruClientConfigLink(input)
-			},
-			FallbackLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
-				return mieruClientConfigLink(input)
-			},
-		},
-	}
 	byProtocol := map[string]ClientAccessProtocol{}
-	for _, protocol := range protocols {
-		byProtocol[protocol.Protocol] = protocol
+	for _, capability := range NewProtocolCapabilityCatalog().All() {
+		if capability.ProfileClientLink == nil && capability.FallbackClientLink == nil {
+			continue
+		}
+		byProtocol[capability.Protocol] = ClientAccessProtocol{Protocol: capability.Protocol, ProfileLink: capability.ProfileClientLink, FallbackLink: capability.FallbackClientLink}
 	}
 	return ClientAccessProtocolRegistry{protocols: byProtocol}
 }
