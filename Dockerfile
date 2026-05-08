@@ -50,7 +50,7 @@ ENV VEIL_STATE_PATH=/var/lib/veil/state.json \
     VEIL_KEY_PATH=/etc/veil/state.key
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD veil status --json || exit 1
+    CMD veil status --listen http://127.0.0.1:2096 --json || exit 1
 
 USER veil
 EXPOSE 2096
