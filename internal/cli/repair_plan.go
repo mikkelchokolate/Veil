@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/veil-panel/veil/internal/api"
@@ -92,6 +93,16 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 	if webBasePath := values["VEIL_WEB_BASE_PATH"]; webBasePath != "" {
 		profile.WebBasePath = webBasePath
 	}
+	if profile.PanelAccess == "caddy" {
+		profile.PanelTLSEnabled = false
+		profile.PanelTLSCertPEM = ""
+		profile.PanelTLSKeyPEM = ""
+		profile.InstallPanelCaddy = true
+		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: profile.Domain, Email: profile.Email, PanelPort: panelPortFromListen(profile.PanelListen), WebBasePath: profile.WebBasePath})
+		if err == nil {
+			profile.Caddyfile = caddyfile
+		}
+	}
 	certPath := values["VEIL_TLS_CERT"]
 	if certPath == "" {
 		certPath = filepath.Join(etcDir, "panel", "tls.crt")
@@ -107,6 +118,21 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 		profile.PanelTLSCertPEM = string(cert)
 		profile.PanelTLSKeyPEM = string(key)
 	}
+}
+
+func panelPortFromListen(listen string) int {
+	_, portString, ok := strings.Cut(strings.TrimSpace(listen), ":")
+	if !ok {
+		return 0
+	}
+	for strings.Contains(portString, ":") {
+		_, portString, _ = strings.Cut(portString, ":")
+	}
+	port, err := strconv.Atoi(portString)
+	if err != nil {
+		return 0
+	}
+	return port
 }
 
 func readRepairEnv(path string) map[string]string {

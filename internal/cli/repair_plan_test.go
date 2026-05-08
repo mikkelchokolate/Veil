@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,6 +49,36 @@ func TestBuildRepairPlanFromOptionsPreservesExistingPanelSecrets(t *testing.T) {
 	for _, unwanted := range []string{"veil.env", "panel/tls.crt", "panel/tls.key"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("repair should preserve existing panel secret material, but planned %q:\n%s", unwanted, summary)
+		}
+	}
+}
+
+func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T) {
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	systemdDir := t.TempDir()
+	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "original-" + label }})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile: %v", err)
+	}
+	if _, err := installer.ApplyRURecommendedProfile(profile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
+		t.Fatalf("ApplyRURecommendedProfile: %v", err)
+	}
+	if err := os.Remove(filepath.Join(etcDir, "generated", "caddy", "Caddyfile")); err != nil {
+		t.Fatalf("remove Caddyfile: %v", err)
+	}
+	if err := os.Remove(filepath.Join(systemdDir, "veil-naive.service")); err != nil {
+		t.Fatalf("remove veil-naive.service: %v", err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	summary := plan.Summary()
+	for _, want := range []string{"generated/caddy/Caddyfile", "veil-naive.service"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("Panel Caddy repair summary missing %q:\n%s", want, summary)
 		}
 	}
 }
