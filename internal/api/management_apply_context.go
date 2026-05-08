@@ -25,6 +25,9 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 			case "hysteria2":
 				_, err := s.renderHysteria2ConfigLocked(inbound)
 				return err
+			case "mieru":
+				_, err := s.managementConfigRendererLocked().RenderInbound(inbound)
+				return err
 			default:
 				return nil
 			}

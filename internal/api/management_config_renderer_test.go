@@ -24,6 +24,16 @@ func TestManagementConfigRendererBuildsGeneratedConfigSet(t *testing.T) {
 	}
 }
 
+func TestManagementConfigRendererValidatesMieruInboundRender(t *testing.T) {
+	renderer := NewManagementConfigRenderer(ManagementConfigInput{Settings: Settings{Stack: "mieru"}})
+
+	_, err := renderer.RenderInbound(Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true})
+
+	if err == nil || err.Error() != "mieru user name and password are required" {
+		t.Fatalf("expected Mieru render validation error, got %v", err)
+	}
+}
+
 func TestRenderWarpRoutingRulesUsesEnabledRulesOnly(t *testing.T) {
 	rules := RenderWarpRoutingRules([]RoutingRule{
 		{Match: "geoip:ru", Outbound: "direct", Enabled: true},

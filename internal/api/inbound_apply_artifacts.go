@@ -1,9 +1,10 @@
 package api
 
 type InboundApplyArtifact struct {
-	Config                string
-	Action                string
-	ValidateInboundRender bool
+	Config                 string
+	Action                 string
+	ValidateInboundRender  bool
+	RequiresRenderSettings bool
 }
 
 type InboundApplyArtifacts struct {
@@ -16,9 +17,9 @@ func NewInboundApplyArtifacts() InboundApplyArtifacts {
 	hysteriaAction, _ := catalog.ApplyAction("hysteria2")
 	mieruAction, _ := catalog.ApplyAction("mieru")
 	return InboundApplyArtifacts{byProtocol: map[string]InboundApplyArtifact{
-		"naiveproxy": {Config: "/etc/veil/generated/caddy/Caddyfile", Action: naiveAction, ValidateInboundRender: true},
-		"hysteria2":  {Config: "/etc/veil/generated/hysteria2/server.yaml", Action: hysteriaAction, ValidateInboundRender: true},
-		"mieru":      {Config: "/etc/veil/generated/mieru/server_config.json", Action: mieruAction},
+		"naiveproxy": {Config: "/etc/veil/generated/caddy/Caddyfile", Action: naiveAction, ValidateInboundRender: true, RequiresRenderSettings: true},
+		"hysteria2":  {Config: "/etc/veil/generated/hysteria2/server.yaml", Action: hysteriaAction, ValidateInboundRender: true, RequiresRenderSettings: true},
+		"mieru":      {Config: "/etc/veil/generated/mieru/server_config.json", Action: mieruAction, ValidateInboundRender: true},
 	}}
 }
 

@@ -38,6 +38,12 @@ func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error)
 		return renderNaiveGeneratedConfig(r.input.Settings, inbound)
 	case "hysteria2":
 		return renderHysteria2GeneratedConfig(r.input.Settings, inbound)
+	case "mieru":
+		config, ok, err := NewMieruGeneratedConfigModel(r.input.Settings).Build([]Inbound{inbound})
+		if err != nil || !ok {
+			return "", err
+		}
+		return renderer.RenderMieru(config)
 	default:
 		return "", nil
 	}

@@ -5,21 +5,22 @@ import "testing"
 func TestInboundApplyArtifactsReturnsProtocolConfigsAndActions(t *testing.T) {
 	artifacts := NewInboundApplyArtifacts()
 	cases := []struct {
-		protocol string
-		config   string
-		action   string
-		validate bool
+		protocol               string
+		config                 string
+		action                 string
+		validate               bool
+		requiresRenderSettings bool
 	}{
-		{"naiveproxy", "/etc/veil/generated/caddy/Caddyfile", "reload veil-naive.service", true},
-		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "reload veil-hysteria2.service", true},
-		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", false},
+		{"naiveproxy", "/etc/veil/generated/caddy/Caddyfile", "reload veil-naive.service", true, true},
+		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "reload veil-hysteria2.service", true, true},
+		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false},
 	}
 	for _, tc := range cases {
 		artifact, ok := artifacts.ForProtocol(tc.protocol)
 		if !ok {
 			t.Fatalf("%s should be supported", tc.protocol)
 		}
-		if artifact.Config != tc.config || artifact.Action != tc.action || artifact.ValidateInboundRender != tc.validate {
+		if artifact.Config != tc.config || artifact.Action != tc.action || artifact.ValidateInboundRender != tc.validate || artifact.RequiresRenderSettings != tc.requiresRenderSettings {
 			t.Fatalf("artifact for %s = %+v", tc.protocol, artifact)
 		}
 	}

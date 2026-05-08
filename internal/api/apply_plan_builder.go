@@ -53,7 +53,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		}
 		plan.Configs = appendUnique(plan.Configs, artifact.Config)
 		plan.Actions = appendUnique(plan.Actions, artifact.Action)
-		if artifact.ValidateInboundRender && input.RenderSettingsAvailable && input.ValidateInboundRender != nil {
+		if artifact.ValidateInboundRender && (!artifact.RequiresRenderSettings || input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
 			if err := input.ValidateInboundRender(inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
