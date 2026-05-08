@@ -13,7 +13,6 @@ PANEL_PORT=""
 YES=""
 DRY_RUN=""
 FORCE=""
-RUN_BIN="${INSTALL_DIR}/veil"
 
 usage() {
   cat <<USAGE
@@ -76,6 +75,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
 done
+
+RUN_BIN="${INSTALL_DIR}/veil"
 
 require_cmd curl
 require_cmd tar

@@ -102,6 +102,18 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	marker := "done\n\nRUN_BIN=\"${INSTALL_DIR}/veil\"\n\nrequire_cmd curl"
+	if !strings.Contains(script, marker) {
+		t.Fatalf("install.sh should resolve RUN_BIN after parsing --install-dir before idempotency path:\n%s", script)
+	}
+}
+
 func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
