@@ -57,6 +57,24 @@ func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	msg := "Veil install only installs Panel; configure protocols as Panel Inbounds."
+	if strings.Count(script, msg) != 1 {
+		t.Fatalf("install.sh should centralize legacy stack rejection once before side effects, count=%d:\n%s", strings.Count(script, msg), script)
+	}
+	msgIndex := strings.Index(script, msg)
+	for _, sideEffect := range []string{"# Idempotency:", "Downloading Veil", "curl -fsSL \"${download_url}\"", "install -m 0755"} {
+		if idx := strings.Index(script, sideEffect); idx >= 0 && msgIndex > idx {
+			t.Fatalf("legacy stack rejection should appear before %q:\n%s", sideEffect, script)
+		}
+	}
+}
+
 func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {

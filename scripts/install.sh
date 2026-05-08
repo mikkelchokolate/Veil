@@ -80,6 +80,11 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
+if [[ "${STACK}" != "panel" ]]; then
+  echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
+  exit 1
+fi
+
 # Idempotency: skip download if veil is already installed and --force not set
 if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
   echo "Veil is already installed at ${INSTALL_DIR}/veil"
@@ -90,10 +95,6 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
   if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
-  if [[ "${STACK}" != "panel" ]]; then
-    echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
-    exit 1
-  fi
   exec "${INSTALL_DIR}/veil" install "${args[@]}"
 fi
 
@@ -161,10 +162,5 @@ if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
 if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
 if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
-
-if [[ "${STACK}" != "panel" ]]; then
-  echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
-  exit 1
-fi
 
 exec "${INSTALL_DIR}/veil" install "${args[@]}"
