@@ -44,6 +44,10 @@ func uninstallPlan() string {
 	for _, path := range []string{"/etc/veil", "/var/lib/veil"} {
 		b.WriteString(fmt.Sprintf("  - %s\n", path))
 	}
+	b.WriteString("Remove systemd units:\n")
+	for _, path := range uninstallSystemdUnitPaths() {
+		b.WriteString(fmt.Sprintf("  - %s\n", path))
+	}
 	b.WriteString("Remove binary:\n")
 	b.WriteString(fmt.Sprintf("  - %s\n", "/usr/local/bin/veil"))
 	return b.String()

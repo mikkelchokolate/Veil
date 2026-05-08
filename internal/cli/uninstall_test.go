@@ -39,6 +39,9 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"Stop services:",
 		"Disable services:",
 		"Remove files:",
+		"Remove systemd units:",
+		"/etc/systemd/system/veil.service",
+		"/etc/systemd/system/veil-mieru.service",
 		"Remove binary:",
 	} {
 		if !strings.Contains(got, want) {
@@ -92,7 +95,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 
 	// Verify files/dirs are removed
-	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/usr/local/bin/veil"} {
+	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
 		found := false
 		for _, r := range removed {
 			if r == path {

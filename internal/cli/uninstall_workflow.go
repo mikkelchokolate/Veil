@@ -57,5 +57,18 @@ func uninstallServices() []string {
 }
 
 func uninstallPaths() []string {
-	return []string{"/etc/veil", "/var/lib/veil", "/usr/local/bin/veil"}
+	paths := []string{"/etc/veil", "/var/lib/veil"}
+	paths = append(paths, uninstallSystemdUnitPaths()...)
+	paths = append(paths, "/usr/local/bin/veil")
+	return paths
+}
+
+func uninstallSystemdUnitPaths() []string {
+	return []string{
+		"/etc/systemd/system/veil.service",
+		"/etc/systemd/system/veil-naive.service",
+		"/etc/systemd/system/veil-hysteria2.service",
+		"/etc/systemd/system/veil-warp.service",
+		"/etc/systemd/system/veil-mieru.service",
+	}
 }
