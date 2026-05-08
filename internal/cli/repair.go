@@ -8,9 +8,9 @@ import (
 func newRepairCommand() *cobra.Command {
 	var profile string
 	var stack string
-	var domain string
-	var email string
-	var sharedPort int
+	var deprecatedDomain string
+	var deprecatedEmail string
+	var deprecatedPort int
 	var dryRun bool
 	var yes bool
 	var etcDir string
@@ -26,9 +26,6 @@ func newRepairCommand() *cobra.Command {
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:      profile,
 				Stack:        stack,
-				Domain:       domain,
-				Email:        email,
-				SharedPort:   sharedPort,
 				DryRun:       dryRun,
 				Yes:          yes,
 				EtcDir:       etcDir,
@@ -42,9 +39,9 @@ func newRepairCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "repair profile: ru-recommended")
 	cmd.Flags().StringVar(&stack, "stack", "panel", "deprecated; repair uses Panel install and Panel state")
-	cmd.Flags().StringVar(&domain, "domain", "", "deprecated; protocols are configured as Panel Inbounds")
-	cmd.Flags().StringVar(&email, "email", "", "deprecated; protocols are configured as Panel Inbounds")
-	cmd.Flags().IntVar(&sharedPort, "port", 0, "deprecated; protocol ports come from Panel Inbounds")
+	cmd.Flags().StringVar(&deprecatedDomain, "domain", "", "deprecated; protocols are configured as Panel Inbounds")
+	cmd.Flags().StringVar(&deprecatedEmail, "email", "", "deprecated; protocols are configured as Panel Inbounds")
+	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; protocol ports come from Panel Inbounds")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print repair plan without writing files")
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm repairing planned files")
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")

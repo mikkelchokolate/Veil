@@ -4,12 +4,22 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 var _repair_validation_deps = []any{
 	bytes.Buffer{}, os.ReadFile, filepath.Join, strings.Contains, testing.T{},
+}
+
+func TestRepairWorkflowOptionsDoNotExposeDeprecatedProtocolInstallInputs(t *testing.T) {
+	optionsType := reflect.TypeOf(repairWorkflowOptions{})
+	for _, field := range []string{"Domain", "Email", "SharedPort"} {
+		if _, ok := optionsType.FieldByName(field); ok {
+			t.Fatalf("repairWorkflowOptions should not expose deprecated protocol install field %s", field)
+		}
+	}
 }
 
 func TestRepairHelpHidesLegacyStackDomainEmailAndPortFlags(t *testing.T) {

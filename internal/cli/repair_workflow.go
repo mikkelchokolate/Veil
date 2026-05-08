@@ -9,9 +9,6 @@ import (
 type repairWorkflowOptions struct {
 	Profile      string
 	Stack        string
-	Domain       string
-	Email        string
-	SharedPort   int
 	DryRun       bool
 	Yes          bool
 	EtcDir       string
