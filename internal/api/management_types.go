@@ -118,10 +118,11 @@ type ClientArtifact struct {
 }
 
 type ApplyPlanResponse struct {
-	Valid   bool     `json:"valid"`
-	Errors  []string `json:"errors,omitempty"`
-	Configs []string `json:"configs"`
-	Actions []string `json:"actions"`
+	Valid    bool     `json:"valid"`
+	Errors   []string `json:"errors,omitempty"`
+	Configs  []string `json:"configs"`
+	Actions  []string `json:"actions"`
+	Runtimes []string `json:"runtimes,omitempty"`
 }
 
 type ApplyRequest struct {

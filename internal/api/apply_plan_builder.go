@@ -60,6 +60,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	if err := validateGeneratedConfigInboundCardinality(input.Settings, input.Inbounds); err != nil {
 		plan.Errors = append(plan.Errors, err.Error())
 	}
+	plan.Runtimes = NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits()
 	if input.Warp.Enabled {
 		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
 		if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
