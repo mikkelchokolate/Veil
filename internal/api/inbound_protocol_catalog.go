@@ -13,11 +13,11 @@ type InboundProtocolCatalog struct {
 }
 
 func NewInboundProtocolCatalog() InboundProtocolCatalog {
-	return InboundProtocolCatalog{choices: []InboundProtocolChoice{
-		{Protocol: "naiveproxy", DisplayName: "NaiveProxy", Transports: []string{"tcp"}, FirewallService: "Veil NaiveProxy", RequiresCaddy: true},
-		{Protocol: "hysteria2", DisplayName: "Hysteria2", Transports: []string{"udp"}, FirewallService: "Veil Hysteria2"},
-		{Protocol: "mieru", DisplayName: "Mieru", Transports: []string{"tcp", "udp"}, FirewallService: "Veil Mieru"},
-	}}
+	choices := []InboundProtocolChoice{}
+	for _, capability := range NewProtocolCapabilityCatalog().All() {
+		choices = append(choices, InboundProtocolChoice{Protocol: capability.Protocol, DisplayName: capability.DisplayName, Transports: capability.Transports, FirewallService: capability.FirewallService, RequiresCaddy: capability.RequiresCaddy})
+	}
+	return InboundProtocolCatalog{choices: choices}
 }
 
 func (c InboundProtocolCatalog) Choices() []InboundProtocolChoice {
