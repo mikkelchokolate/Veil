@@ -39,14 +39,6 @@ func (s *managementState) hasRenderSettingsLocked() bool {
 	return s.managementConfigRendererLocked().HasRenderSettings()
 }
 
-func (s *managementState) renderNaiveConfigLocked(inbound Inbound) (string, error) {
-	return s.managementConfigRendererLocked().RenderInbound(inbound)
-}
-
-func (s *managementState) renderHysteria2ConfigLocked(inbound Inbound) (string, error) {
-	return s.managementConfigRendererLocked().RenderInbound(inbound)
-}
-
 func (s *managementState) renderWarpConfigLocked() (string, error) {
 	return s.managementConfigRendererLocked().RenderWarp()
 }

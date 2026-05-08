@@ -18,19 +18,8 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 		Warp:                    s.warp,
 		RenderSettingsAvailable: s.hasRenderSettingsLocked(),
 		ValidateInboundRender: func(inbound Inbound) error {
-			switch inbound.Protocol {
-			case "naiveproxy":
-				_, err := s.renderNaiveConfigLocked(inbound)
-				return err
-			case "hysteria2":
-				_, err := s.renderHysteria2ConfigLocked(inbound)
-				return err
-			case "mieru":
-				_, err := s.managementConfigRendererLocked().RenderInbound(inbound)
-				return err
-			default:
-				return nil
-			}
+			_, err := s.managementConfigRendererLocked().RenderInbound(inbound)
+			return err
 		},
 		ValidateWarpRender: func() error {
 			_, err := s.renderWarpConfigLocked()

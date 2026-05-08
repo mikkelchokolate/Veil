@@ -33,20 +33,8 @@ func (r ManagementConfigRenderer) HasRenderSettings() bool {
 }
 
 func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error) {
-	switch inbound.Protocol {
-	case "naiveproxy":
-		return renderNaiveGeneratedConfig(r.input.Settings, inbound)
-	case "hysteria2":
-		return renderHysteria2GeneratedConfig(r.input.Settings, inbound)
-	case "mieru":
-		config, ok, err := NewMieruGeneratedConfigModel(r.input.Settings).Build([]Inbound{inbound})
-		if err != nil || !ok {
-			return "", err
-		}
-		return renderer.RenderMieru(config)
-	default:
-		return "", nil
-	}
+	artifact, _, err := NewGeneratedConfigProtocolRegistry().RenderInbound(r.input.Settings, NewGeneratedConfigPaths(r.input.ApplyRoot), inbound)
+	return artifact.Body, err
 }
 
 func (r ManagementConfigRenderer) RenderWarp() (string, error) {

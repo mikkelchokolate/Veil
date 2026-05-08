@@ -92,6 +92,23 @@ func (r GeneratedConfigProtocolRegistry) Render(input GeneratedConfigInput) (map
 	return configs, nil
 }
 
+func (r GeneratedConfigProtocolRegistry) RenderInbound(settings Settings, paths GeneratedConfigPaths, inbound Inbound) (GeneratedConfigArtifact, bool, error) {
+	protocol, ok := r.protocol(inbound.Protocol)
+	if !ok {
+		return GeneratedConfigArtifact{}, false, nil
+	}
+	return protocol.Render(GeneratedConfigProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}})
+}
+
+func (r GeneratedConfigProtocolRegistry) protocol(protocol string) (GeneratedConfigProtocol, bool) {
+	for _, candidate := range r.protocols {
+		if candidate.Protocol == protocol {
+			return candidate, true
+		}
+	}
+	return GeneratedConfigProtocol{}, false
+}
+
 func (GeneratedConfigProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, protocol string) []Inbound {
 	selected := []Inbound{}
 	for _, inbound := range inbounds {

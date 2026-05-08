@@ -61,6 +61,20 @@ func TestGeneratedConfigProtocolRegistryRendersProtocolArtifacts(t *testing.T) {
 	}
 }
 
+func TestGeneratedConfigProtocolRegistryRendersSingleInboundForPlanValidation(t *testing.T) {
+	artifact, ok, err := NewGeneratedConfigProtocolRegistry().RenderInbound(
+		Settings{Stack: "mieru"},
+		NewGeneratedConfigPaths(t.TempDir()),
+		Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret"},
+	)
+	if err != nil {
+		t.Fatalf("RenderInbound: %v", err)
+	}
+	if !ok || !strings.Contains(artifact.Body, `"protocol": "TCP"`) || !strings.Contains(artifact.Body, `"password": "secret"`) {
+		t.Fatalf("single inbound artifact = %+v ok=%v", artifact, ok)
+	}
+}
+
 func TestGeneratedConfigProtocolRegistryRendersMieruWithoutSharedRenderSettings(t *testing.T) {
 	root := t.TempDir()
 	configs, err := NewGeneratedConfigProtocolRegistry().Render(GeneratedConfigInput{
