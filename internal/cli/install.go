@@ -16,7 +16,6 @@ var installApplyFunc = installer.ApplyRURecommendedProfile
 
 func newInstallCommand() *cobra.Command {
 	var profile string
-	var legacyStack string
 	var domain string
 	var email string
 	var dryRun bool
@@ -26,17 +25,17 @@ func newInstallCommand() *cobra.Command {
 	var systemdDir string
 	var panelPort int
 	var panelAccess string
-	var deprecatedPort int
 	var publicIP string
 	var interactive bool
 	var auditLog string
 	var backupDir string
 
+	legacy := NewLegacyCLICompatibility()
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := rejectLegacyCLIStackSelection(legacyStack, "Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
+			if err := legacy.RejectStackSelection("Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
 				return err
 			}
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
@@ -60,7 +59,6 @@ func newInstallCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "install profile: ru-recommended")
-	cmd.Flags().StringVar(&legacyStack, "stack", "", "deprecated; Veil install only installs Panel, protocols are configured as Panel Inbounds")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")
@@ -68,15 +66,13 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", defaultSystemdDir, "systemd unit output directory")
-	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 2096, "panel TCP port; pass 0 to select a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
-	_ = cmd.Flags().MarkHidden("stack")
-	_ = cmd.Flags().MarkHidden("port")
+	legacy.RegisterInstallFlags(cmd)
 	return cmd
 }
 
