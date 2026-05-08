@@ -15,7 +15,7 @@ All notable changes to Veil will be documented in this file.
 
 - Veil install is Panel-only; protocols are configured later as Panel Inbounds.
 - Veil install writes systemd units by default, defaults direct/local Panel access to port 2096, requires root in the curl installer only for real applies, avoids binary install side effects during curl `--dry-run`, validates missing installer option values before side effects, requires exactly one checksum match for release assets, rejects legacy stack requests before side effects, preserves interactive prompts through `/dev/tty`, and runs daemon-reload/enable/restart for installed Panel units.
-- Veil install and repair render systemd units and install plans with the resolved Caddy binary path when Panel Caddy access is used.
+- Veil install and repair render systemd units and install plans with the resolved Caddy binary path when Panel Caddy access is used, and packaged systemd unit templates now match the renderer including `veil.env`, WARP, and Mieru units.
 - Veil status and staged update health checks prefer local generated Panel TLS and trust loopback self-signed Panel certificates.
 - Panel Caddy access now renders, plans, validates, repairs, and exposes firewall rules end-to-end even when no NaiveProxy Inbound exists, while rejecting non-Caddy TCP/443 runtime conflicts.
 - Docker runtime directories are writable by the non-root `veil` user, Docker health checks use explicit HTTP for the default non-TLS server, and local/CI release gates now include a build plus installer script syntax/help checks.
