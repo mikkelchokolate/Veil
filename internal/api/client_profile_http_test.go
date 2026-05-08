@@ -38,7 +38,7 @@ func TestInboundCreateThroughHTTPGeneratesClientProfilePassword(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
-	if !strings.Contains(w2.Body.String(), "https://alice:"+inbound.Profiles[0].Password+"@vpn.example.com:9443") {
+	if !strings.Contains(w2.Body.String(), "naive+https://alice:"+inbound.Profiles[0].Password+"@vpn.example.com:9443") {
 		t.Fatalf("client links do not use generated client profile password: %s", w2.Body.String())
 	}
 }

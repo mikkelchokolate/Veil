@@ -11,7 +11,7 @@ func NewInstallClientLinks() InstallClientLinks { return InstallClientLinks{} }
 
 func (InstallClientLinks) Naive(username, password, domain string, port int) string {
 	u := url.URL{
-		Scheme: "https",
+		Scheme: "naive+https",
 		User:   url.UserPassword(username, password),
 		Host:   fmt.Sprintf("%s:%d", domain, port),
 	}

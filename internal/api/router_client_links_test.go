@@ -74,7 +74,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	for _, link := range response.Links {
 		links[link.Name] = link
 	}
-	if links["naive"].Protocol != "naiveproxy" || links["naive"].Transport != "tcp" || links["naive"].Port != 443 || links["naive"].URI != "https://veil:naive-secret@vpn.example.com:443" {
+	if links["naive"].Protocol != "naiveproxy" || links["naive"].Transport != "tcp" || links["naive"].Port != 443 || links["naive"].URI != "naive+https://veil:naive-secret@vpn.example.com:443" {
 		t.Fatalf("unexpected naive link: %+v", links["naive"])
 	}
 	if links["hysteria2"].Protocol != "hysteria2" || links["hysteria2"].Transport != "udp" || links["hysteria2"].Port != 443 || !strings.HasPrefix(links["hysteria2"].URI, "hysteria2://hy2-secret@vpn.example.com:443/") || !strings.Contains(links["hysteria2"].URI, "sni=vpn.example.com") {

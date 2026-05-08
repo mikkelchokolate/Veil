@@ -15,7 +15,7 @@ func TestRURecommendedNaiveArtifactsBuildsPasswordConfigAndClientLink(t *testing
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if artifacts.Password != "secret-naive" || artifacts.ClientURL != "https://veil:secret-naive@example.com:443" {
+	if artifacts.Password != "secret-naive" || artifacts.ClientURL != "naive+https://veil:secret-naive@example.com:443" {
 		t.Fatalf("artifacts = %+v", artifacts)
 	}
 	if !strings.Contains(artifacts.Caddyfile, "reverse_proxy 127.0.0.1:2096") || !strings.Contains(artifacts.Caddyfile, "handle_path /panelpath/*") {

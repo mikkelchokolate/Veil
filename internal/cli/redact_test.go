@@ -12,7 +12,7 @@ func TestRedactProfileSecretsHidesGeneratedCredentials(t *testing.T) {
 		NaivePassword:      "naive-secret",
 		Hysteria2Password:  "hy2-secret",
 		PanelAuthToken:     "panel-secret",
-		NaiveClientURL:     "https://veil:naive-secret@example.com:443",
+		NaiveClientURL:     "naive+https://veil:naive-secret@example.com:443",
 		Hysteria2ClientURI: "hysteria2://hy2-secret@example.com:443?insecure=0",
 		Caddyfile:          "basicauth veil naive-secret",
 		Hysteria2YAML:      "password: hy2-secret",

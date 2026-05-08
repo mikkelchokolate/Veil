@@ -25,7 +25,7 @@ func TestBuildRURecommendedProfileCreatesSamePortConfigsAndLinks(t *testing.T) {
 	if !strings.Contains(profile.Hysteria2YAML, "listen: :443") {
 		t.Fatalf("expected Hysteria2 listen port:\n%s", profile.Hysteria2YAML)
 	}
-	if !strings.Contains(profile.NaiveClientURL, "https://veil:secret-naive@example.com:443") {
+	if !strings.Contains(profile.NaiveClientURL, "naive+https://veil:secret-naive@example.com:443") {
 		t.Fatalf("bad naive url: %s", profile.NaiveClientURL)
 	}
 	if !strings.Contains(profile.Hysteria2ClientURI, "hysteria2://secret-hysteria2@example.com:443") {
