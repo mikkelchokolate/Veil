@@ -36,7 +36,7 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
 	if opts.Interactive {
-		if err := promptInstallOptions(cmd, opts.PanelAccess, &opts.Domain, &opts.Email, &opts.SharedPort, &opts.PanelPort); err != nil {
+		if err := promptInstallOptions(cmd, opts.PanelAccess, &opts.Domain, &opts.Email, &opts.PanelPort); err != nil {
 			return err
 		}
 	}

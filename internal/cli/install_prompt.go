@@ -20,7 +20,7 @@ func NewInstallPrompt(in io.Reader, out io.Writer) InstallPrompt {
 	return InstallPrompt{in: in, out: out}
 }
 
-func (p InstallPrompt) PromptMissingOptions(panelAccess string, domain *string, email *string, sharedPort *int, panelPort *int) error {
+func (p InstallPrompt) PromptMissingOptions(panelAccess string, domain *string, email *string, panelPort *int) error {
 	reader := bufio.NewReader(p.in)
 	domainPattern := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$`)
 	if panelAccess == "caddy" {
@@ -84,6 +84,6 @@ func (p InstallPrompt) PromptMissingOptions(panelAccess string, domain *string, 
 	return nil
 }
 
-func promptInstallOptions(cmd *cobra.Command, panelAccess string, domain *string, email *string, sharedPort *int, panelPort *int) error {
-	return NewInstallPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(panelAccess, domain, email, sharedPort, panelPort)
+func promptInstallOptions(cmd *cobra.Command, panelAccess string, domain *string, email *string, panelPort *int) error {
+	return NewInstallPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(panelAccess, domain, email, panelPort)
 }
