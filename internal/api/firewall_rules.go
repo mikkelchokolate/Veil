@@ -22,7 +22,9 @@ func BuildFirewallRuleResponses(settings Settings, inbounds []Inbound) []firewal
 			builder.Add(inbound.Port, inbound.Transport, service)
 		}
 	}
-	if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
+	if settings.PanelAccess == "caddy" {
+		builder.Add(443, "tcp", "Veil panel HTTPS")
+	} else if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
 		if port, err := strconv.Atoi(portStr); err == nil {
 			builder.Add(port, "tcp", "Veil panel")
 		}

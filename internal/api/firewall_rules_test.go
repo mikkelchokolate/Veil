@@ -2,6 +2,16 @@ package api
 
 import "testing"
 
+func TestBuildFirewallRuleResponsesForPanelCaddyDoesNotExposePrivatePanelPort(t *testing.T) {
+	rules := BuildFirewallRuleResponses(
+		Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy"},
+		nil,
+	)
+	if hasFirewallRule(rules, 2096, "tcp") || !hasFirewallService(rules, 443, "tcp", "Veil panel HTTPS") {
+		t.Fatalf("panel Caddy firewall rules = %+v", rules)
+	}
+}
+
 func TestBuildFirewallRuleResponsesIncludesMieruTransportBindings(t *testing.T) {
 	rules := BuildFirewallRuleResponses(
 		Settings{PanelListen: "127.0.0.1:2096"},
