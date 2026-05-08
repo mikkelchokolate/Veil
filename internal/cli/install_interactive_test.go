@@ -17,7 +17,7 @@ var _installTestDeps_interactive = []any{
 	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
 }
 
-func TestInstallInteractivePromptsOnlyForPanelPortByDefault(t *testing.T) {
+func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetIn(strings.NewReader("n\n"))
@@ -30,16 +30,15 @@ func TestInstallInteractivePromptsOnlyForPanelPortByDefault(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"Customize panel port?",
 		"Install scope: Panel",
-		"Panel port:",
-		"(random)",
+		"Panel port: 2096",
+		"Panel access: https://127.0.0.1:2096/",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"Domain for Veil/ACME:", "ACME email:", "Shared proxy port:"} {
+	for _, unwanted := range []string{"Customize panel port?", "Domain for Veil/ACME:", "ACME email:", "Shared proxy port:"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("default interactive install should not prompt %q:\n%s", unwanted, got)
 		}
@@ -52,7 +51,7 @@ func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	cmd.SetIn(strings.NewReader("y\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-port", "0", "--interactive", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
@@ -105,7 +104,7 @@ func TestInstallInteractiveRejectsInvalidPanelPortAndReprompts(t *testing.T) {
 	cmd.SetIn(strings.NewReader("y\n0\n99999\nxyz\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-port", "0", "--interactive", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())

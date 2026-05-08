@@ -30,7 +30,7 @@ Options:
   --domain DOMAIN      Domain used for Panel Caddy access
   --email EMAIL        ACME email for Panel Caddy access
   --panel-access MODE  local, direct, or caddy, default local
-  --panel-port PORT    Panel TCP port; 0 means random high port in veil install
+  --panel-port PORT    Panel TCP port, default 2096; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
   --force              Force re-install even if veil is already installed

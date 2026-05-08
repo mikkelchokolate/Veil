@@ -68,7 +68,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", defaultSystemdDir, "systemd unit output directory")
 	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; protocols are configured as Panel Inbounds")
-	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
+	cmd.Flags().IntVar(&panelPort, "panel-port", 2096, "panel TCP port; pass 0 to select a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")

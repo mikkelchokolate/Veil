@@ -69,10 +69,9 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	for _, want := range []string{
 		"Veil ru-recommended dry run",
 		"Install scope: Panel",
-		"Panel port:",
-		"(random)",
-		"ufw allow ",
-		"/tcp comment Veil panel",
+		"Panel port: 2096",
+		"Panel access: https://127.0.0.1:2096/",
+		"ufw allow 2096/tcp comment Veil panel",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
