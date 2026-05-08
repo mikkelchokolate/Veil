@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,30 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q:\n%s", want, script)
 		}
+	}
+}
+
+func TestCurlInstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
+	cmd := exec.Command("bash", "../../scripts/install.sh", "--domain")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected install.sh --domain to fail")
+	}
+	got := string(out)
+	if !strings.Contains(got, "Missing value for --domain") || strings.Contains(got, "Downloading Veil") {
+		t.Fatalf("unexpected install.sh --domain output:\n%s", got)
+	}
+}
+
+func TestCurlUninstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
+	cmd := exec.Command("bash", "../../scripts/uninstall.sh", "--install-dir")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected uninstall.sh --install-dir to fail")
+	}
+	got := string(out)
+	if !strings.Contains(got, "Missing value for --install-dir") || strings.Contains(got, "Nothing to uninstall") {
+		t.Fatalf("unexpected uninstall.sh --install-dir output:\n%s", got)
 	}
 }
 

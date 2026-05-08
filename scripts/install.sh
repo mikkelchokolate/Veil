@@ -61,17 +61,26 @@ run_veil_install() {
   exec "${RUN_BIN}" install "${args[@]}"
 }
 
+require_value() {
+  local flag="$1"
+  local value="${2:-}"
+  if [[ -z "${value}" || "${value}" == --* ]]; then
+    echo "Missing value for ${flag}" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    --install-dir) INSTALL_DIR="$2"; shift 2 ;;
-    --profile) PROFILE="$2"; shift 2 ;;
-    --domain) DOMAIN="$2"; shift 2 ;;
-    --email) EMAIL="$2"; shift 2 ;;
-    --port) shift 2 ;;
-    --stack) STACK="$2"; shift 2 ;;
-    --panel-access) PANEL_ACCESS="$2"; shift 2 ;;
-    --panel-port) PANEL_PORT="$2"; shift 2 ;;
+    --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
+    --install-dir) require_value "$1" "${2:-}"; INSTALL_DIR="$2"; shift 2 ;;
+    --profile) require_value "$1" "${2:-}"; PROFILE="$2"; shift 2 ;;
+    --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;
+    --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
+    --port) require_value "$1" "${2:-}"; shift 2 ;;
+    --stack) require_value "$1" "${2:-}"; STACK="$2"; shift 2 ;;
+    --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
+    --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --force) FORCE="1"; shift ;;
