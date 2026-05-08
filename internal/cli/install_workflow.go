@@ -22,7 +22,6 @@ type ruRecommendedInstallOptions struct {
 	SystemdDir     string
 	PanelPort      int
 	PanelAccess    string
-	SharedPort     int
 	PublicIP       string
 	Interactive    bool
 	HysteriaSHA256 string

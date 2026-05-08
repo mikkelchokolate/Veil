@@ -26,7 +26,7 @@ func newInstallCommand() *cobra.Command {
 	var systemdDir string
 	var panelPort int
 	var panelAccess string
-	var sharedPort int
+	var deprecatedPort int
 	var publicIP string
 	var interactive bool
 	var hysteriaSHA256 string
@@ -49,7 +49,6 @@ func newInstallCommand() *cobra.Command {
 				SystemdDir:     systemdDir,
 				PanelPort:      panelPort,
 				PanelAccess:    panelAccess,
-				SharedPort:     sharedPort,
 				PublicIP:       publicIP,
 				Interactive:    interactive,
 				HysteriaSHA256: hysteriaSHA256,
@@ -68,7 +67,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
-	cmd.Flags().IntVar(&sharedPort, "port", 0, "deprecated; protocols are configured as Panel Inbounds")
+	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")

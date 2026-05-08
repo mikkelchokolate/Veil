@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -15,6 +16,12 @@ import (
 
 var _installTestDeps_misc = []any{
 	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
+}
+
+func TestRURecommendedInstallOptionsDoesNotExposeSharedProxyPort(t *testing.T) {
+	if _, ok := reflect.TypeOf(ruRecommendedInstallOptions{}).FieldByName("SharedPort"); ok {
+		t.Fatal("ruRecommendedInstallOptions should not expose shared proxy port planning")
+	}
 }
 
 func TestInstallHelpHidesLegacyStackAndPortFlags(t *testing.T) {
