@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/veil-panel/veil/internal/installer"
 )
@@ -71,11 +70,5 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 }
 
 func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
-	for _, secret := range []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken} {
-		if secret == "" {
-			continue
-		}
-		text = strings.ReplaceAll(text, secret, "[REDACTED]")
-	}
-	return text
+	return NewCredentialDisclosure().RedactText(text, []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken})
 }

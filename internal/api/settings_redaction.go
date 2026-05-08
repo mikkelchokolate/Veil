@@ -6,12 +6,9 @@ func NewSettingsRedaction() SettingsRedaction { return SettingsRedaction{} }
 
 func (SettingsRedaction) Redact(settings Settings) Settings {
 	redacted := settings
-	if redacted.NaivePassword != "" {
-		redacted.NaivePassword = "[REDACTED]"
-	}
-	if redacted.Hysteria2Password != "" {
-		redacted.Hysteria2Password = "[REDACTED]"
-	}
+	disclosure := NewCredentialDisclosure()
+	redacted.NaivePassword = disclosure.Redact(redacted.NaivePassword)
+	redacted.Hysteria2Password = disclosure.Redact(redacted.Hysteria2Password)
 	return redacted
 }
 

@@ -36,12 +36,9 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 			return errors.New("panelListen must be host:port")
 		}
 	}
-	if settings.NaivePassword == "[REDACTED]" {
-		settings.NaivePassword = current.NaivePassword
-	}
-	if settings.Hysteria2Password == "[REDACTED]" {
-		settings.Hysteria2Password = current.Hysteria2Password
-	}
+	disclosure := NewCredentialDisclosure()
+	settings.NaivePassword = disclosure.PreserveRedacted(settings.NaivePassword, current.NaivePassword)
+	settings.Hysteria2Password = disclosure.PreserveRedacted(settings.Hysteria2Password, current.Hysteria2Password)
 	if settings.FallbackRoot != "" {
 		settings.FallbackRoot = filepath.Clean(settings.FallbackRoot)
 		if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {

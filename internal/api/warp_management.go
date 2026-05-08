@@ -24,12 +24,9 @@ func (m WarpManagement) Update(update WarpConfig) (WarpConfig, error) {
 	if m.warp != nil {
 		current = *m.warp
 	}
-	if update.LicenseKey == "[REDACTED]" {
-		update.LicenseKey = current.LicenseKey
-	}
-	if update.PrivateKey == "[REDACTED]" {
-		update.PrivateKey = current.PrivateKey
-	}
+	disclosure := NewCredentialDisclosure()
+	update.LicenseKey = disclosure.PreserveRedacted(update.LicenseKey, current.LicenseKey)
+	update.PrivateKey = disclosure.PreserveRedacted(update.PrivateKey, current.PrivateKey)
 	setWarpDefaults(&update)
 	if m.warp != nil {
 		*m.warp = update
@@ -42,12 +39,9 @@ func (m WarpManagement) Update(update WarpConfig) (WarpConfig, error) {
 
 func redactedWarp(warp WarpConfig) WarpConfig {
 	redacted := warp
-	if redacted.PrivateKey != "" {
-		redacted.PrivateKey = "[REDACTED]"
-	}
-	if redacted.LicenseKey != "" {
-		redacted.LicenseKey = "[REDACTED]"
-	}
+	disclosure := NewCredentialDisclosure()
+	redacted.PrivateKey = disclosure.Redact(redacted.PrivateKey)
+	redacted.LicenseKey = disclosure.Redact(redacted.LicenseKey)
 	return redacted
 }
 
