@@ -16,14 +16,7 @@ func NewInstallPlanSummary(plan InstallPlan) InstallPlanSummary {
 func (s InstallPlanSummary) String() string {
 	p := s.plan
 	var b strings.Builder
-	if p.Profile.InstallNaive || p.Profile.InstallHysteria2 {
-		fmt.Fprintf(&b, "Shared port: %d\n", p.Profile.PortPlan.Port)
-	}
-	if p.Profile.InstallNaive {
-		fmt.Fprintf(&b, "NaiveProxy: tcp/%d\n", p.Profile.PortPlan.Naive.Port)
-	}
 	if p.Profile.InstallHysteria2 {
-		fmt.Fprintf(&b, "Hysteria2: udp/%d\n", p.Profile.PortPlan.Hysteria2.Port)
 		fmt.Fprintf(&b, "Hysteria2 asset: %s\n", p.HysteriaURL)
 		fmt.Fprintf(&b, "Hysteria2 install path: %s\n", p.HysteriaBinary.Destination)
 		if p.HysteriaBinary.SHA256 == "" {

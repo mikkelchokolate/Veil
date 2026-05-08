@@ -17,7 +17,6 @@ func TestInstallPresentationPrintsRedactedRURecommendedProfile(t *testing.T) {
 		NaiveClientURL: "naive+https://veil:naive-secret@example.com:443",
 		Caddyfile:      "basicauth veil naive-secret",
 		PanelAuthToken: "panel-secret",
-		PortPlan:       installer.SharedPortPlan{Naive: installer.EndpointPlan{Port: 443}},
 	}
 	var out bytes.Buffer
 

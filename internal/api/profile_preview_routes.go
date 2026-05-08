@@ -22,7 +22,6 @@ type RURecommendedPreviewResponse struct {
 	InstallMieru       bool   `json:"installMieru"`
 	PanelAccess        string `json:"panelAccess"`
 	PanelURL           string `json:"panelUrl,omitempty"`
-	Port               int    `json:"port"`
 	NaiveClientURL     string `json:"naiveClientURL"`
 	Hysteria2ClientURI string `json:"hysteria2ClientURI"`
 	Caddyfile          string `json:"caddyfile"`
@@ -76,7 +75,6 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		InstallMieru:       profile.InstallMieru,
 		PanelAccess:        req.PanelAccess,
 		PanelURL:           panelURL,
-		Port:               profile.PortPlan.Port,
 		NaiveClientURL:     redactProfileSecrets(profile, profile.NaiveClientURL),
 		Hysteria2ClientURI: redactProfileSecrets(profile, profile.Hysteria2ClientURI),
 		Caddyfile:          redactProfileSecrets(profile, profile.Caddyfile),

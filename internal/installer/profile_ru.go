@@ -44,7 +44,6 @@ type RURecommendedProfile struct {
 	InstallHysteria2   bool
 	InstallMieru       bool
 	InstallPanelCaddy  bool
-	PortPlan           SharedPortPlan
 	Caddyfile          string
 	Hysteria2YAML      string
 	NaiveClientURL     string
@@ -89,8 +88,6 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 			return RURecommendedProfile{}, err
 		}
 	}
-	plan := SharedPortPlan{}
-
 	defaults := NewRURecommendedDefaults()
 	username := defaults.Username
 	masqueradeURL := defaults.MasqueradeURL
@@ -136,7 +133,6 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		InstallHysteria2:   false,
 		InstallMieru:       false,
 		InstallPanelCaddy:  panelCaddy,
-		PortPlan:           plan,
 		Caddyfile:          caddyfile,
 		Hysteria2YAML:      "",
 		NaiveClientURL:     "",

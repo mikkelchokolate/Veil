@@ -43,15 +43,6 @@ func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedP
 	fmt.Fprintf(p.out, "Domain: %s\n", profile.Domain)
 	fmt.Fprintf(p.out, "Email: %s\n", profile.Email)
 	fmt.Fprintln(p.out, "Install scope: Panel")
-	if profile.PortPlan.Changed {
-		fmt.Fprintf(p.out, "Port changed: %s\n", profile.PortPlan.Reason)
-	}
-	if profile.InstallNaive {
-		fmt.Fprintf(p.out, "NaiveProxy TCP port: %d\n", profile.PortPlan.Naive.Port)
-	}
-	if profile.InstallHysteria2 {
-		fmt.Fprintf(p.out, "Hysteria2 UDP port: %d\n", profile.PortPlan.Hysteria2.Port)
-	}
 	if profile.InstallNaive {
 		fmt.Fprintf(p.out, "NaiveProxy client URL: %s\n", p.RedactProfileSecrets(profile, profile.NaiveClientURL))
 	}

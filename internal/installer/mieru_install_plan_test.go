@@ -11,7 +11,7 @@ func TestLegacyMieruInstallStackNormalizesToPanelOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
-	if profile.Stack != StackPanel || profile.InstallMieru || profile.PortPlan.Port != 0 {
+	if profile.Stack != StackPanel || profile.InstallMieru {
 		t.Fatalf("Mieru stack should normalize to Panel install; configure Mieru as Panel Inbounds: %+v", profile)
 	}
 	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096, MieruVersion: "v3.12.0"})
