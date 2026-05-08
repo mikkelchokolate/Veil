@@ -34,25 +34,6 @@ func buildInboundClientLinks(settings Settings, inbound Inbound) ([]ClientLink, 
 	return access.ClientLinks(), nil
 }
 
-func fallbackInboundClientLink(settings Settings, inbound Inbound) ClientLink {
-	link := ClientLink{Name: inbound.Name, Protocol: inbound.Protocol, Transport: inbound.Transport, Port: inbound.Port}
-	switch inbound.Protocol {
-	case "naiveproxy":
-		password := inbound.Password
-		if password == "" {
-			password = settings.NaivePassword
-		}
-		link.URI = naiveClientURI(settings.Domain, inbound.Port, settings.NaiveUsername, password)
-	case "hysteria2":
-		password := inbound.Password
-		if password == "" {
-			password = settings.Hysteria2Password
-		}
-		link.URI = hysteria2ClientURI(settings.Domain, inbound.Port, password, inbound.Name)
-	}
-	return link
-}
-
 func naiveClientURI(domain string, port int, username string, password string) string {
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("https://%s@%s:%d", userinfo, domain, port)

@@ -17,38 +17,7 @@ func BuildClientAccess(settings Settings, inbound Inbound) (ClientAccess, error)
 }
 
 func (a ClientAccess) ClientLinks() []ClientLink {
-	credentials := a.credentials
-	fallback := len(credentials) == 0
-	if fallback && a.inbound.Protocol != "mieru" {
-		return []ClientLink{fallbackInboundClientLink(a.settings, a.inbound)}
-	}
-	if fallback {
-		credentials = []ClientCredential{NewClientAccessFallbackCredential().Build(a.settings, a.inbound)}
-	}
-	links := make([]ClientLink, 0, len(credentials))
-	for _, credential := range credentials {
-		name := a.inbound.Name + "/" + credential.Name
-		if fallback {
-			name = a.inbound.Name
-		}
-		link := ClientLink{Name: name, Protocol: a.inbound.Protocol, Transport: a.inbound.Transport, Port: a.inbound.Port}
-		switch a.inbound.Protocol {
-		case "naiveproxy":
-			link.URI = naiveClientURI(a.settings.Domain, a.inbound.Port, credential.Username, credential.Password)
-		case "hysteria2":
-			link.URI = hysteria2UserPassClientURI(a.settings.Domain, a.inbound.Port, credential.Username, credential.Password, link.Name)
-		case "mieru":
-			config, err := NewMieruClientConfig().Build(a.settings, a.inbound, link.Name, credential)
-			if err != nil {
-				continue
-			}
-			link.Config = config
-		default:
-			continue
-		}
-		links = append(links, link)
-	}
-	return links
+	return NewClientAccessProtocolRegistry().BuildLinks(a.settings, a.inbound, a.credentials)
 }
 
 func (a ClientAccess) NaiveUsers() []renderer.NaiveUser {
