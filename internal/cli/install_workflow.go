@@ -50,7 +50,7 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if opts.Stack != "panel" {
 		return fmt.Errorf("Veil install only installs Panel; configure protocols as Panel Inbounds")
 	}
-	if err := NewRURecommendedInstallRequirements(opts.Stack).Validate(opts); err != nil {
+	if err := NewRURecommendedInstallRequirements().Validate(opts); err != nil {
 		return err
 	}
 	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)

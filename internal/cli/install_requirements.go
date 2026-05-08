@@ -2,12 +2,10 @@ package cli
 
 import "fmt"
 
-type RURecommendedInstallRequirements struct {
-	stack string
-}
+type RURecommendedInstallRequirements struct{}
 
-func NewRURecommendedInstallRequirements(stack string) RURecommendedInstallRequirements {
-	return RURecommendedInstallRequirements{stack: stack}
+func NewRURecommendedInstallRequirements() RURecommendedInstallRequirements {
+	return RURecommendedInstallRequirements{}
 }
 
 func (r RURecommendedInstallRequirements) Validate(opts ruRecommendedInstallOptions) error {
