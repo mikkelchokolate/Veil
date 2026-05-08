@@ -53,7 +53,7 @@ func (w UninstallWorkflow) Run() error {
 }
 
 func uninstallServices() []string {
-	return []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"}
+	return []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service", "veil-mieru.service"}
 }
 
 func uninstallPaths() []string {

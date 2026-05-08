@@ -78,7 +78,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 
 	// Verify services are stopped
-	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service"} {
+	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service", "veil-mieru.service"} {
 		found := false
 		for _, s := range stopped {
 			if s == svc {
