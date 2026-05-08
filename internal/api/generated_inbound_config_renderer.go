@@ -17,7 +17,7 @@ func NewGeneratedInboundConfigRenderer(settings Settings, paths GeneratedConfigP
 }
 
 func (r GeneratedInboundConfigRenderer) Render(inbound Inbound) (GeneratedConfigArtifact, bool, error) {
-	if !inbound.Enabled || !stackIncludesProtocol(r.settings.Stack, inbound.Protocol) {
+	if !inbound.Enabled {
 		return GeneratedConfigArtifact{}, false, nil
 	}
 	return NewGeneratedConfigProtocolRegistry().RenderInbound(r.settings, r.paths, inbound)

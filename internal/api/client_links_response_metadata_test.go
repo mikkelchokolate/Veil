@@ -4,7 +4,7 @@ import "testing"
 
 func TestClientLinksResponseMetadataBuildsStableSubscriptionFields(t *testing.T) {
 	response := NewClientLinksResponseMetadata(Settings{Domain: "example.com", Stack: "both"}).Build()
-	if response.SchemaVersion != "v1" || response.Domain != "example.com" || response.Stack != "both" {
+	if response.SchemaVersion != "v1" || response.Domain != "example.com" || response.Stack != "panel" {
 		t.Fatalf("response = %+v", response)
 	}
 	if response.SubscriptionURL != "/api/client-links/subscription" || response.Base64SubscriptionURL == "" || response.RawSubscriptionURL == "" {

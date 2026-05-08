@@ -14,7 +14,7 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 	}
 	response := NewClientLinksResponseMetadata(settings).Build()
 	for _, inbound := range inbounds {
-		if !inbound.Enabled || !stackAllowsProtocol(settings.Stack, inbound.Protocol) {
+		if !inbound.Enabled {
 			continue
 		}
 		links, err := buildInboundClientLinks(settings, inbound)

@@ -73,6 +73,13 @@ func stringSlicesEqual(left []string, right []string) bool {
 }
 
 func writeRenderableManagementState(path string, stack string) error {
+	inbounds := `[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
+		]`
+	if stack == "naive" {
+		inbounds = `[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}]`
+	}
 	return os.WriteFile(path, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
@@ -86,10 +93,7 @@ func writeRenderableManagementState(path string, stack string) error {
 			"masqueradeURL":"https://www.bing.com/",
 			"fallbackRoot":"/var/lib/veil/www"
 		},
-		"inbounds":[
-			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
-			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
-		],
+		"inbounds":`+inbounds+`,
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
 	}`), 0o600)

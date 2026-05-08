@@ -112,7 +112,7 @@ func (r GeneratedConfigProtocolRegistry) protocol(protocol string) (GeneratedCon
 func (GeneratedConfigProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, protocol string) []Inbound {
 	selected := []Inbound{}
 	for _, inbound := range inbounds {
-		if inbound.Enabled && inbound.Protocol == protocol && stackIncludesProtocol(settings.Stack, inbound.Protocol) {
+		if inbound.Enabled && inbound.Protocol == protocol {
 			selected = append(selected, inbound)
 		}
 	}

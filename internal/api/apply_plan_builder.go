@@ -19,13 +19,13 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		Configs: []string{},
 		Actions: []string{"validate management state"},
 	}
-	if err := NewStackSelectionValidation().Validate(input.Settings.Stack); err != nil {
-		plan.Errors = append(plan.Errors, err.Error())
+	if _, ok := NormalizeSettingsStack(input.Settings.Stack); !ok {
+		plan.Errors = append(plan.Errors, "stack must be panel; protocols are configured as Panel inbounds")
 	}
 	seen := map[string]bool{}
 	capabilities := NewApplyProtocolCapabilityCatalog()
 	for _, inbound := range input.Inbounds {
-		if !inbound.Enabled || !stackIncludesProtocol(input.Settings.Stack, inbound.Protocol) {
+		if !inbound.Enabled {
 			continue
 		}
 		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" {

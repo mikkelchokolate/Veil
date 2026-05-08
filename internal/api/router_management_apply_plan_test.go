@@ -81,10 +81,10 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	}
 }
 
-func TestManagementApplyPlanHonorsSelectedStack(t *testing.T) {
+func TestManagementApplyPlanDoesNotUseStackToSelectProtocols(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret"},
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
@@ -106,11 +106,11 @@ func TestManagementApplyPlanHonorsSelectedStack(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") {
-		t.Fatalf("expected caddy config in naive stack plan: %+v", response.Configs)
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+		t.Fatalf("expected all enabled Inbounds in apply plan regardless of legacy stack: %+v", response.Configs)
 	}
-	if containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") || containsString(response.Actions, "reload veil-hysteria2.service") {
-		t.Fatalf("did not expect hysteria2 in naive-only stack plan: %+v %+v", response.Configs, response.Actions)
+	if !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2.service") {
+		t.Fatalf("expected all enabled Inbound actions regardless of legacy stack: %+v", response.Actions)
 	}
 }
 
@@ -136,8 +136,8 @@ func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "unsupported stack") {
-		t.Fatalf("expected unsupported stack error: %+v", response.Errors)
+	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "protocols are configured as Panel inbounds") {
+		t.Fatalf("expected stack compatibility error: %+v", response.Errors)
 	}
 }
 

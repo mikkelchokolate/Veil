@@ -29,11 +29,11 @@ func TestGeneratedInboundConfigRendererRendersEnabledInboundArtifact(t *testing.
 	}
 }
 
-func TestGeneratedInboundConfigRendererSkipsDisabledAndExcludedProtocol(t *testing.T) {
-	renderer := NewGeneratedInboundConfigRenderer(Settings{Stack: "naive"}, NewGeneratedConfigPaths("/apply"))
+func TestGeneratedInboundConfigRendererSkipsDisabledAndUnsupportedProtocol(t *testing.T) {
+	renderer := NewGeneratedInboundConfigRenderer(Settings{Stack: "panel"}, NewGeneratedConfigPaths("/apply"))
 	for _, inbound := range []Inbound{
 		{Name: "disabled", Protocol: "naiveproxy", Enabled: false},
-		{Name: "excluded", Protocol: "hysteria2", Enabled: true},
+		{Name: "unsupported", Protocol: "unknown", Enabled: true},
 	} {
 		if _, ok, err := renderer.Render(inbound); err != nil || ok {
 			t.Fatalf("Render(%+v) ok=%v err=%v", inbound, ok, err)

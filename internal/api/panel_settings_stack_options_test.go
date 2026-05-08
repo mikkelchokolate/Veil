@@ -5,21 +5,18 @@ import (
 	"testing"
 )
 
-func TestPanelSettingsStackOptionsRenderAllSupportedStacks(t *testing.T) {
+func TestPanelSettingsStackOptionsArePanelOnlyForLegacyClients(t *testing.T) {
 	html := panelSettingsStackOptionsHTML()
-	for _, stack := range NewStackSelectionCatalog().Stacks() {
-		want := `<option value="` + stack + `">` + stack + `</option>`
-		if !strings.Contains(html, want) {
-			t.Fatalf("stack options missing %q in %s", want, html)
-		}
+	if strings.TrimSpace(html) != `<option value="panel">panel</option>` {
+		t.Fatalf("legacy stack options should be panel-only, got %q", html)
 	}
 }
 
-func TestPanelSettingsCardIncludesMieruAndPanelStacks(t *testing.T) {
+func TestPanelSettingsCardHidesStackSelection(t *testing.T) {
 	card := panelSettingsCardHTML()
-	for _, want := range []string{`<option value="panel">panel</option>`, `<option value="mieru">mieru</option>`} {
-		if !strings.Contains(card, want) {
-			t.Fatalf("Settings card missing stack option %q:\n%s", want, card)
+	for _, unwanted := range []string{`id="settings-stack"`, `>Stack</label>`, `<option value="both">both</option>`, `<option value="mieru">mieru</option>`} {
+		if strings.Contains(card, unwanted) {
+			t.Fatalf("Settings card should not expose stack selection %q:\n%s", unwanted, card)
 		}
 	}
 }
@@ -31,13 +28,12 @@ func TestStackSelectionCatalogOwnsProtocolInclusion(t *testing.T) {
 		protocol string
 		want     bool
 	}{
-		{"panel", "mieru", false},
-		{"mieru", "mieru", true},
-		{"mieru", "naiveproxy", false},
-		{"both", "naiveproxy", true},
-		{"both", "hysteria2", true},
+		{"panel", "naiveproxy", true},
+		{"panel", "hysteria2", true},
+		{"panel", "mieru", true},
 		{"both", "mieru", true},
-		{"both", "unknown", false},
+		{"naive", "hysteria2", true},
+		{"panel", "unknown", false},
 	}
 	for _, tc := range cases {
 		if got := catalog.IncludesProtocol(tc.stack, tc.protocol); got != tc.want {
@@ -48,14 +44,14 @@ func TestStackSelectionCatalogOwnsProtocolInclusion(t *testing.T) {
 
 func TestStackSelectionCatalogOwnsProfilePreviewDomainRequirements(t *testing.T) {
 	catalog := NewStackSelectionCatalog()
-	for _, stack := range []string{"panel", "mieru"} {
+	for _, stack := range []string{"panel"} {
 		if catalog.RequiresDomain(stack) {
 			t.Fatalf("stack %q must not require domain/email", stack)
 		}
 	}
-	for _, stack := range []string{"both", "naive", "hysteria2"} {
-		if !catalog.RequiresDomain(stack) {
-			t.Fatalf("stack %q must require domain/email", stack)
+	for _, stack := range []string{"both", "naive", "hysteria2", "mieru"} {
+		if catalog.RequiresDomain(stack) {
+			t.Fatalf("legacy stack %q must not drive domain/email requirements", stack)
 		}
 	}
 }

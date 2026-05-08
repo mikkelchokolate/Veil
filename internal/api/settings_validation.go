@@ -14,12 +14,14 @@ type SettingsValidation struct{}
 func NewSettingsValidation() SettingsValidation { return SettingsValidation{} }
 
 func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Settings) error {
-	if settings.PanelListen == "" || settings.Stack == "" || settings.Mode == "" {
-		return errors.New("panelListen, stack, and mode are required")
+	if settings.PanelListen == "" || settings.Mode == "" {
+		return errors.New("panelListen and mode are required")
 	}
-	if err := NewStackSelectionValidation().Validate(settings.Stack); err != nil {
-		return errors.New("stack must be panel, mieru, naive, hysteria2, or both")
+	stack, ok := NormalizeSettingsStack(settings.Stack)
+	if !ok {
+		return errors.New("stack must be panel; protocols are configured as Panel inbounds")
 	}
+	settings.Stack = stack
 	if settings.Domain != "" {
 		if err := installer.ValidateDomain(settings.Domain); err != nil {
 			return errors.New("domain: " + err.Error())

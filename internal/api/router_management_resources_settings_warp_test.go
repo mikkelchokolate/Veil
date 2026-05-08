@@ -202,7 +202,7 @@ func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("expected 400 for invalid stack %q, got %d: %s", stack, w.Code, w.Body.String())
 			}
-			if !strings.Contains(w.Body.String(), "stack must be panel, mieru, naive, hysteria2, or both") {
+			if !strings.Contains(w.Body.String(), "stack must be panel; protocols are configured as Panel inbounds") {
 				t.Fatalf("expected stack validation error for %q, got: %s", stack, w.Body.String())
 			}
 		})
@@ -270,7 +270,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	settingsRead := httptest.NewRecorder()
 	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
-	if !strings.Contains(settingsRead.Body.String(), `"stack":"naive"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
+	if !strings.Contains(settingsRead.Body.String(), `"stack":"panel"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
 		t.Fatalf("persisted settings missing updates: %s", settingsRead.Body.String())
 	}
 

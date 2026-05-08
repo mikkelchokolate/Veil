@@ -14,11 +14,6 @@ func panelSettingsCardHTML() string {
               <input id="settings-panel-listen" autocomplete="off" placeholder="127.0.0.1:2096">
             </div>
             <div>
-              <label for="settings-stack">Stack</label>
-              <select id="settings-stack">
-` + panelSettingsStackOptionsHTML() + `              </select>
-            </div>
-            <div>
               <label for="settings-mode">Mode</label>
               <input id="settings-mode" autocomplete="off" placeholder="server">
             </div>

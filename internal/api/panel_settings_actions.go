@@ -9,7 +9,6 @@ func panelSettingsActionsJS() string {
         return;
       }
       document.getElementById('settings-panel-listen').value = data.panelListen || '';
-      document.getElementById('settings-stack').value = data.stack || 'both';
       document.getElementById('settings-mode').value = data.mode || '';
       document.getElementById('settings-domain').value = data.domain || '';
       document.getElementById('settings-email').value = data.email || '';
@@ -27,7 +26,7 @@ func panelSettingsActionsJS() string {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           panelListen: document.getElementById('settings-panel-listen').value,
-          stack: document.getElementById('settings-stack').value,
+          stack: 'panel',
           mode: document.getElementById('settings-mode').value,
           domain: document.getElementById('settings-domain').value,
           email: document.getElementById('settings-email').value,

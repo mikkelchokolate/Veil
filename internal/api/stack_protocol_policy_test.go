@@ -2,19 +2,19 @@ package api
 
 import "testing"
 
-func TestStackProtocolPolicyIncludesExpectedProtocols(t *testing.T) {
+func TestStackProtocolPolicyIsLegacyAdapterThatDoesNotSelectProtocols(t *testing.T) {
 	cases := []struct {
 		stack    string
 		protocol string
 		want     bool
 	}{
+		{"panel", "naiveproxy", true},
+		{"panel", "hysteria2", true},
+		{"panel", "mieru", true},
 		{"both", "naiveproxy", true},
-		{"both", "hysteria2", true},
-		{"naive", "naiveproxy", true},
-		{"naive", "hysteria2", false},
-		{"hysteria2", "hysteria2", true},
-		{"hysteria2", "naiveproxy", false},
-		{"bogus", "naiveproxy", false},
+		{"naive", "hysteria2", true},
+		{"bogus", "mieru", true},
+		{"panel", "unknown", false},
 	}
 	for _, tc := range cases {
 		if got := NewStackProtocolPolicy(tc.stack).Includes(tc.protocol); got != tc.want {

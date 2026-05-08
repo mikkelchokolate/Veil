@@ -36,5 +36,5 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 }
 
 func (m MieruGeneratedConfigModel) includes(inbound Inbound) bool {
-	return inbound.Enabled && inbound.Protocol == "mieru" && stackIncludesProtocol(m.settings.Stack, inbound.Protocol)
+	return inbound.Enabled && inbound.Protocol == "mieru"
 }

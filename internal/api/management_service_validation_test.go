@@ -20,20 +20,19 @@ var _managementTestDeps_service_validation = []any{
 	bytes.Buffer{}, rand.Reader, fmt.Sprintf, log.Printf, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, time.Second, secrets.IsEncrypted,
 }
 
-func TestStackAllowsProtocolRejectsCrossStackProtocols(t *testing.T) {
+func TestStackAllowsProtocolDoesNotSelectPanelProtocols(t *testing.T) {
 	tests := []struct {
 		stack    string
 		protocol string
 		want     bool
 	}{
-		{"naive", "naiveproxy", true},
-		{"naive", "hysteria2", false},
-		{"hysteria2", "hysteria2", true},
-		{"hysteria2", "naiveproxy", false},
-		{"both", "naiveproxy", true},
-		{"both", "hysteria2", true},
+		{"panel", "naiveproxy", true},
+		{"panel", "hysteria2", true},
+		{"panel", "mieru", true},
+		{"naive", "hysteria2", true},
+		{"both", "mieru", true},
 		{"unknown", "naiveproxy", true},
-		{"unknown", "hysteria2", true},
+		{"panel", "unknown", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.stack+"/"+tt.protocol, func(t *testing.T) {

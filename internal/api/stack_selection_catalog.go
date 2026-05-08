@@ -8,8 +8,6 @@ import (
 type StackSelection struct {
 	Name           string
 	RequiresDomain bool
-	Protocols      []string
-	AllProtocols   bool
 }
 
 type StackSelectionCatalog struct {
@@ -17,13 +15,7 @@ type StackSelectionCatalog struct {
 }
 
 func NewStackSelectionCatalog() StackSelectionCatalog {
-	return StackSelectionCatalog{selections: []StackSelection{
-		{Name: "panel"},
-		{Name: "mieru", Protocols: []string{"mieru"}},
-		{Name: "both", RequiresDomain: true, AllProtocols: true},
-		{Name: "naive", RequiresDomain: true, Protocols: []string{"naiveproxy"}},
-		{Name: "hysteria2", RequiresDomain: true, Protocols: []string{"hysteria2"}},
-	}}
+	return StackSelectionCatalog{selections: []StackSelection{{Name: "panel"}}}
 }
 
 func (c StackSelectionCatalog) Selections() []StackSelection {
@@ -49,19 +41,7 @@ func (c StackSelectionCatalog) RequiresDomain(stack string) bool {
 }
 
 func (c StackSelectionCatalog) IncludesProtocol(stack string, protocol string) bool {
-	selection, ok := c.selection(stack)
-	if !ok {
-		return false
-	}
-	if selection.AllProtocols {
-		return NewInboundProtocolCatalog().Supports(protocol)
-	}
-	for _, allowed := range selection.Protocols {
-		if allowed == protocol {
-			return true
-		}
-	}
-	return false
+	return NewInboundProtocolCatalog().Supports(protocol)
 }
 
 func (c StackSelectionCatalog) selection(stack string) (StackSelection, bool) {

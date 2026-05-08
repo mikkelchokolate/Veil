@@ -2,23 +2,19 @@ package api
 
 import "testing"
 
-func TestClientLinkStackPolicyAllowsExpectedProtocols(t *testing.T) {
+func TestClientLinkStackPolicyIsLegacyAdapterThatAllowsPanelInboundProtocols(t *testing.T) {
 	cases := []struct {
 		stack    string
 		protocol string
 		want     bool
 	}{
-		{"naive", "naiveproxy", true},
-		{"naive", "hysteria2", false},
-		{"hysteria2", "hysteria2", true},
-		{"hysteria2", "naiveproxy", false},
+		{"panel", "naiveproxy", true},
+		{"panel", "hysteria2", true},
+		{"panel", "mieru", true},
+		{"naive", "mieru", true},
 		{"both", "naiveproxy", true},
-		{"both", "mieru", true},
-		{"mieru", "mieru", true},
-		{"mieru", "naiveproxy", false},
-		{"panel", "mieru", false},
-		{"", "hysteria2", true},
-		{"unknown", "naiveproxy", true},
+		{"unknown", "hysteria2", true},
+		{"panel", "unknown", false},
 	}
 	for _, tc := range cases {
 		if got := NewClientLinkStackPolicy(tc.stack).Allows(tc.protocol); got != tc.want {
