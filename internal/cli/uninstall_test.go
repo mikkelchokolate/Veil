@@ -50,6 +50,29 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 	}
 }
 
+func TestUninstallDryRunHonorsCustomPaths(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"uninstall", "--dry-run", "--etc-dir", "/tmp/veil-etc", "--var-dir", "/tmp/veil-var", "--systemd-dir", "/tmp/systemd", "--install-dir", "/opt/veil/bin"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{"/tmp/veil-etc", "/tmp/veil-var", "/tmp/systemd/veil.service", "/tmp/systemd/veil-mieru.service", "/opt/veil/bin/veil"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("custom uninstall plan missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/usr/local/bin/veil"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("custom uninstall plan should not include default %q:\n%s", unwanted, got)
+		}
+	}
+}
+
 func TestUninstallYesExecutesUninstall(t *testing.T) {
 	origStop := uninstallServiceStopper
 	origRemove := uninstallFileRemover
