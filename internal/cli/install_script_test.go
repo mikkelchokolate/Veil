@@ -43,6 +43,20 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if !strings.Contains(script, "| sudo bash") {
+		t.Fatalf("install.sh usage should show sudo for systemd install:\n%s", script)
+	}
+	if strings.Contains(script, "| bash\n") || strings.Contains(script, "| bash -s --") {
+		t.Fatalf("install.sh usage should not show non-root bash install examples:\n%s", script)
+	}
+}
+
 func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
