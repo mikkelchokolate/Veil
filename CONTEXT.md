@@ -5,8 +5,8 @@ Veil is a control plane for installing, configuring, and operating NaiveProxy, H
 ## Language
 
 **Veil install**:
-An interactive or scripted setup flow that chooses Panel access, optionally chooses proxy runtimes, generates credentials, renders managed files, and prints the panel access summary.
-_Avoid_: bootstrap, setup wizard
+An interactive or scripted setup flow that installs the Panel, chooses Panel access, generates Panel credentials, optionally renders Panel Caddy access, and prints the Panel access summary. Protocol runtimes are configured later as Panel Inbounds.
+_Avoid_: bootstrap, setup wizard, protocol stack installer
 
 **Panel**:
 The browser UI and HTTP management surface used to operate Veil after install.
@@ -23,6 +23,10 @@ _Avoid_: dashboard link, admin URL
 **Panel access**:
 The way a user reaches the Panel: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy.
 _Avoid_: dashboard exposure, admin binding
+
+**Panel Caddy access**:
+A Panel access mode where Caddy terminates HTTPS on a domain and reverse-proxies a Web base path to the local Panel port. It is not NaiveProxy and does not imply any protocol runtime.
+_Avoid_: Naive Caddy stack, shared proxy port Panel
 
 **Inbound**:
 A named proxy entry that defines protocol, transport, port, enabled state, and optional password.
@@ -66,9 +70,9 @@ _Avoid_: logging, masking
 
 ## Relationships
 
-- A **Veil install** always produces **Panel access** and credentials, and may produce a **Generated config set** when proxy runtimes are selected.
+- A **Veil install** always produces **Panel access** and credentials; it does not select or install protocol stacks.
 - A **Panel URL** contains exactly one **Web base path**.
-- **Panel access** may be direct/local without a **Panel URL**, or HTTPS through Caddy with a **Panel URL**.
+- **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**.
 - The **Panel** manages zero or more **Inbounds**.
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
@@ -77,6 +81,7 @@ _Avoid_: logging, masking
 - The **Generated config set** is promoted by the **Apply workflow**.
 - The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
+- `stack` is a legacy Settings field. New Panel systems must treat protocols as **Inbounds** and normalize legacy protocol stack values to `panel` where compatibility is needed.
 
 ## Example dialogue
 
@@ -94,3 +99,4 @@ _Avoid_: logging, masking
 - Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but NaiveProxy and Hysteria2 are not yet renderable into one **Generated config set**; apply plan must reject those instead of silently overwriting generated files.
 - Mieru **Inbounds** are expected to aggregate into one **Generated config set** so TCP and UDP **Transport bindings** can share a numeric port.
 - Protocol-specific behavior should live behind catalog **Modules** so adding another protocol does not require editing Panel copy, Inbound form options, firewall planning, Generated config set rendering, Client link delivery, and Apply workflow logic separately.
+- `both` is not a valid product concept now that Veil has more than two protocols. Do not introduce new user-facing stack choices.
