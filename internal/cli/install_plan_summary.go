@@ -18,7 +18,7 @@ func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile
 
 func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
 	units := []string{"veil.service"}
-	if profile.InstallNaive {
+	if profile.InstallNaive || profile.InstallPanelCaddy {
 		units = append(units, "veil-naive.service")
 	}
 	if profile.InstallHysteria2 {
