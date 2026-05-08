@@ -3,9 +3,6 @@ package api
 import (
 	"net"
 	"strconv"
-	"strings"
-
-	"github.com/veil-panel/veil/internal/firewall"
 )
 
 type firewallRuleResponse struct {
@@ -15,55 +12,49 @@ type firewallRuleResponse struct {
 }
 
 func BuildFirewallRuleResponses(settings Settings, inbounds []Inbound) []firewallRuleResponse {
-	sharedPort := 0
-	enableTCP := false
-	enableUDP := false
+	builder := NewFirewallRuleResponseBuilder()
 	for _, inbound := range inbounds {
 		if !inbound.Enabled {
 			continue
 		}
-		if inbound.Port > 0 && sharedPort == 0 {
-			sharedPort = inbound.Port
-		}
 		switch inbound.Protocol {
 		case "naiveproxy":
-			enableTCP = true
+			builder.Add(inbound.Port, "tcp", "Veil NaiveProxy")
 		case "hysteria2":
-			enableUDP = true
+			builder.Add(inbound.Port, "udp", "Veil Hysteria2")
+		case "mieru":
+			builder.Add(inbound.Port, inbound.Transport, "Veil Mieru")
 		}
 	}
-	panelPort := 0
 	if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
-		if p, err := strconv.Atoi(portStr); err == nil {
-			panelPort = p
+		if port, err := strconv.Atoi(portStr); err == nil {
+			builder.Add(port, "tcp", "Veil panel")
 		}
 	}
-	plan := firewall.UFWPlan(firewall.Config{
-		SharedPort: sharedPort,
-		PanelPort:  panelPort,
-		EnableTCP:  enableTCP,
-		EnableUDP:  enableUDP,
-	})
-	rules := make([]firewallRuleResponse, 0, len(plan))
-	for _, r := range plan {
-		if len(r.Args) < 2 {
-			continue
-		}
-		portProto := r.Args[1]
-		parts := strings.SplitN(portProto, "/", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		port, _ := strconv.Atoi(parts[0])
-		proto := parts[1]
-		service := ""
-		for i, arg := range r.Args {
-			if arg == "comment" && i+1 < len(r.Args) {
-				service = r.Args[i+1]
-				break
-			}
-		}
-		rules = append(rules, firewallRuleResponse{Port: port, Protocol: proto, Service: service})
+	return builder.Rules()
+}
+
+type FirewallRuleResponseBuilder struct {
+	rules []firewallRuleResponse
+	seen  map[string]bool
+}
+
+func NewFirewallRuleResponseBuilder() FirewallRuleResponseBuilder {
+	return FirewallRuleResponseBuilder{seen: map[string]bool{}}
+}
+
+func (b *FirewallRuleResponseBuilder) Add(port int, protocol string, service string) {
+	if port <= 0 || (protocol != "tcp" && protocol != "udp") {
+		return
 	}
-	return rules
+	key := protocol + ":" + strconv.Itoa(port)
+	if b.seen[key] {
+		return
+	}
+	b.seen[key] = true
+	b.rules = append(b.rules, firewallRuleResponse{Port: port, Protocol: protocol, Service: service})
+}
+
+func (b FirewallRuleResponseBuilder) Rules() []firewallRuleResponse {
+	return append([]firewallRuleResponse(nil), b.rules...)
 }
