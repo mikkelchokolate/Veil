@@ -9,7 +9,6 @@ import (
 
 func TestBuildRURecommendedInstallPlanSummaryUsesPanelOnlySystemdUnits(t *testing.T) {
 	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-		Stack:     installer.StackHysteria2,
 		Secret:    func(label string) string { return "secret-" + label },
 		PanelPort: 2096,
 	})

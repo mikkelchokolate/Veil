@@ -9,7 +9,6 @@ import (
 
 func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Stack:       StackPanel,
 		PanelAccess: "caddy",
 		Domain:      "panel.example.com",
 		Email:       "admin@example.com",
@@ -35,7 +34,7 @@ func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 }
 
 func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "secret-" + label }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +54,7 @@ func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
 }
 
 func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "secret-" + label }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatal(err)
 	}

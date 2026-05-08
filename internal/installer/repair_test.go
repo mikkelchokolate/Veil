@@ -15,7 +15,6 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 		Domain:       "vpn.example.com",
 		InstallNaive: true,
 		Caddyfile:    "caddy content",
-		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{
@@ -62,7 +61,6 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 		Domain:       "vpn.example.com",
 		InstallNaive: true,
 		Caddyfile:    "expected caddy content",
-		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{
@@ -114,7 +112,6 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 		Domain:       "vpn.example.com",
 		InstallNaive: true,
 		Caddyfile:    "caddy content",
-		Stack:        StackNaive,
 	}
 
 	paths := ApplyPaths{

@@ -21,28 +21,6 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	}
 }
 
-func TestBuildRURecommendedProfileDoesNotPlanSharedProxyPortForLegacyStacks(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackBoth, Secret: func(label string) string { return "secret-" + label }})
-	if err != nil {
-		t.Fatalf("legacy stack should not check shared proxy port availability: %v", err)
-	}
-	if profile.PortPlan.Port != 0 || profile.PortPlan.Reason != "" {
-		t.Fatalf("legacy stack should not create shared proxy port plan: %+v", profile.PortPlan)
-	}
-}
-
-func TestBuildRURecommendedProfileNormalizesLegacyProtocolStacksToPanelOnly(t *testing.T) {
-	for _, stack := range []Stack{"", StackBoth, StackNaive, StackHysteria2, StackMieru} {
-		profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: stack, Secret: func(label string) string { return "secret-" + label }})
-		if err != nil {
-			t.Fatalf("BuildRURecommendedProfile(%q): %v", stack, err)
-		}
-		if profile.Stack != StackPanel || profile.InstallNaive || profile.InstallHysteria2 || profile.InstallMieru || profile.PortPlan.Port != 0 {
-			t.Fatalf("legacy stack %q should normalize to panel-only, got %+v", stack, profile)
-		}
-	}
-}
-
 func TestNormalizeStackTrimsWhitespaceAndNormalizesLegacyStacksToPanel(t *testing.T) {
 	tests := []struct {
 		name    string

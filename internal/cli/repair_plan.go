@@ -13,7 +13,6 @@ import (
 
 func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPlan, error) {
 	built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-		Stack:  installer.StackPanel,
 		Secret: randomSecret,
 	})
 	if err != nil {

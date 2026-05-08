@@ -10,15 +10,15 @@ import (
 
 // TLSCertInfo holds TLS certificate information.
 type TLSCertInfo struct {
-	Path         string  `json:"path"`
-	Subject      string  `json:"subject"`
-	Issuer       string  `json:"issuer"`
-	NotBefore    string  `json:"notBefore"`
-	NotAfter     string  `json:"notAfter"`
-	DaysRemaining int   `json:"daysRemaining"`
-	DNSNames     []string `json:"dnsNames,omitempty"`
-	Valid        bool    `json:"valid"`
-	Error        string  `json:"error,omitempty"`
+	Path          string   `json:"path"`
+	Subject       string   `json:"subject"`
+	Issuer        string   `json:"issuer"`
+	NotBefore     string   `json:"notBefore"`
+	NotAfter      string   `json:"notAfter"`
+	DaysRemaining int      `json:"daysRemaining"`
+	DNSNames      []string `json:"dnsNames,omitempty"`
+	Valid         bool     `json:"valid"`
+	Error         string   `json:"error,omitempty"`
 }
 
 // readTLSCert reads and parses a TLS certificate file.

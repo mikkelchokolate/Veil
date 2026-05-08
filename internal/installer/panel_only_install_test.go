@@ -9,7 +9,7 @@ import (
 )
 
 func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
 }
 
 func TestPanelOnlyInstallWritesSelfSignedPanelTLS(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
@@ -61,7 +61,6 @@ func TestPanelOnlyInstallWritesSelfSignedPanelTLS(t *testing.T) {
 
 func TestPanelOnlyInstallDoesNotRequireDomainAndWritesNoProxyConfigs(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Stack:     StackPanel,
 		Secret:    func(label string) string { return "secret-" + label },
 		PanelPort: 2096,
 	})

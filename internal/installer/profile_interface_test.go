@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestRURecommendedProfileInputDoesNotExposeSharedProxyPortPlanning(t *testing.T) {
+func TestRURecommendedProfileInputDoesNotExposeProtocolInstallPlanning(t *testing.T) {
 	inputType := reflect.TypeOf(RURecommendedInput{})
-	for _, field := range []string{"Port", "Availability", "RandomPort"} {
+	for _, field := range []string{"Stack", "Port", "Availability", "RandomPort"} {
 		if _, ok := inputType.FieldByName(field); ok {
-			t.Fatalf("RURecommendedInput should not expose shared proxy port planning field %s", field)
+			t.Fatalf("RURecommendedInput should not expose protocol install planning field %s", field)
 		}
 	}
 }

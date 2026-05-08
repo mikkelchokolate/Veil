@@ -21,7 +21,6 @@ const (
 type RURecommendedInput struct {
 	Domain      string
 	Email       string
-	Stack       Stack
 	PanelAccess string
 	Secret      SecretFunc
 	PanelPort   int
@@ -81,10 +80,6 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
-	stack, err := m.stackPolicy(input.Stack)
-	if err != nil {
-		return RURecommendedProfile{}, err
-	}
 	panelCaddy := input.PanelAccess == "caddy"
 	if panelCaddy {
 		if err := ValidateDomain(input.Domain); err != nil {
@@ -107,6 +102,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	panelAuthToken := input.Secret("panel")
 	panelListen := recommendedPanelListen(input.PanelAccess, input.PanelPort)
 	panelTLS := PanelTLSMaterial{}
+	var err error
 	panelTLSEnabled := !panelCaddy
 	if panelTLSEnabled {
 		panelTLS, err = NewPanelTLS().Generate(input.Domain)
@@ -135,7 +131,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelTLSCertPEM:    panelTLS.CertPEM,
 		PanelTLSKeyPEM:     panelTLS.KeyPEM,
 		WebBasePath:        webBasePath,
-		Stack:              stack.Stack,
+		Stack:              StackPanel,
 		InstallNaive:       false,
 		InstallHysteria2:   false,
 		InstallMieru:       false,
@@ -152,10 +148,6 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 
 func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 	return NewRURecommendedInputDefaults().Apply(m.input)
-}
-
-func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPolicy, error) {
-	return NewRURecommendedStackPolicy(stack)
 }
 
 func recommendedPanelListen(panelAccess string, panelPort int) string {

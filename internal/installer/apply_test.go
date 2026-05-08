@@ -14,7 +14,6 @@ func mustRUProfile(t *testing.T, stack Stack) RURecommendedProfile {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		Domain: "example.com",
 		Email:  "admin@example.com",
-		Stack:  stack,
 		Secret: func(label string) string { return "secret-" + label },
 	})
 	if err != nil {

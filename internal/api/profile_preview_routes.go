@@ -55,7 +55,6 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 		Domain:      req.Domain,
 		Email:       req.Email,
-		Stack:       installer.StackPanel,
 		PanelAccess: req.PanelAccess,
 		PanelPort:   2096,
 		Secret:      func(label string) string { return "preview-" + label },

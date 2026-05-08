@@ -32,7 +32,6 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		Domain:      input.Domain,
 		Email:       input.Email,
-		Stack:       StackPanel,
 		PanelAccess: input.PanelAccess,
 		Secret:      input.Secret,
 		PanelPort:   panelPort,

@@ -6,7 +6,6 @@ func TestRURecommendedProfileModuleBuildsPanelInstallPolicy(t *testing.T) {
 	profile, err := NewRURecommendedProfileModule(RURecommendedInput{
 		Domain:    "vpn.example.com",
 		Email:     "admin@example.com",
-		Stack:     StackBoth,
 		Secret:    func(label string) string { return "secret-" + label },
 		PanelPort: 2096,
 	}).Build()
