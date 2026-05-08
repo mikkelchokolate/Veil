@@ -14,9 +14,10 @@ All notable changes to Veil will be documented in this file.
 ### Changed
 
 - Veil install is Panel-only; protocols are configured later as Panel Inbounds.
-- Veil install writes systemd units by default, defaults direct/local Panel access to port 2096, requires root in the curl installer, rejects legacy stack requests before side effects, preserves interactive prompts through `/dev/tty`, and runs daemon-reload/enable/restart for installed Panel units.
+- Veil install writes systemd units by default, defaults direct/local Panel access to port 2096, requires root in the curl installer only for real applies, avoids binary install side effects during curl `--dry-run`, rejects legacy stack requests before side effects, preserves interactive prompts through `/dev/tty`, and runs daemon-reload/enable/restart for installed Panel units.
 - Veil install and repair render systemd units and install plans with the resolved Caddy binary path when Panel Caddy access is used.
 - Veil status and staged update health checks prefer local generated Panel TLS and trust loopback self-signed Panel certificates.
+- Panel Caddy access now renders, plans, validates, repairs, and exposes firewall rules end-to-end even when no NaiveProxy Inbound exists, while rejecting non-Caddy TCP/443 runtime conflicts.
 - Veil repair writes systemd units by default, reloads systemd after repairing unit files, preserves existing Panel secrets/TLS material, and repairs Panel Caddy access files from either existing env or encrypted Panel state.
 - Veil uninstall removes managed systemd unit files, honors custom install/config/systemd paths, and runs daemon-reload after uninstall.
 - Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility.
