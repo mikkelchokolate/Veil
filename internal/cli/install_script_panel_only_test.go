@@ -16,7 +16,8 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 		`STACK="panel"`,
 		`PANEL_ACCESS="local"`,
 		`--panel-access`,
-		`panel, mieru, naive, hysteria2, or both`,
+		`Deprecated; only panel is accepted`,
+		`Veil install only installs Panel; configure protocols as Panel Inbounds.`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q", want)

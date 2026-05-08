@@ -27,18 +27,18 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 	}
 }
 
-func TestCurlInstallScriptDoesNotDefaultSharedProxyPort(t *testing.T) {
+func TestCurlInstallScriptTreatsSharedProxyPortAsDeprecated(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := string(body)
-	for _, unwanted := range []string{`PORT="443"`, "default 443", "preferred shared TCP/UDP port"} {
+	for _, unwanted := range []string{`PORT="443"`, "default 443", "preferred shared TCP/UDP port", "Shared proxy port passed to veil install"} {
 		if strings.Contains(script, unwanted) {
 			t.Fatalf("install.sh should require/prompt for shared proxy port, found %q:\n%s", unwanted, script)
 		}
 	}
-	for _, want := range []string{"--port PORT", "Shared proxy port passed to veil install; omit it to use the interactive prompt"} {
+	for _, want := range []string{"--port PORT", "Deprecated; protocols are configured inside the Panel"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing port guidance %q:\n%s", want, script)
 		}

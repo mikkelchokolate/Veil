@@ -21,16 +21,16 @@ Veil installer
 
 Usage:
   curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- --profile ru-recommended --domain example.com --email admin@example.com --port 443
+  curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- --profile ru-recommended --panel-access caddy --domain example.com --email admin@example.com
 
 Options:
   --version VERSION    Release tag to install, default latest
   --install-dir DIR    Directory for the veil binary, default /usr/local/bin
   --profile NAME       default or ru-recommended, default ru-recommended
-  --domain DOMAIN      Domain used for ACME and client configs
-  --email EMAIL        ACME email
-  --port PORT          Shared proxy port passed to veil install; omit it to use the interactive prompt
-  --stack STACK        panel, mieru, naive, hysteria2, or both, default panel
+  --domain DOMAIN      Domain used for Panel Caddy access
+  --email EMAIL        ACME email for Panel Caddy access
+  --port PORT          Deprecated; protocols are configured inside the Panel
+  --stack STACK        Deprecated; only panel is accepted
   --panel-access MODE  local, direct, or caddy, default local
   --panel-port PORT    Panel TCP port; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply
@@ -89,10 +89,13 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
   args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
-  if [[ -n "${PORT}" ]]; then args+=(--port "${PORT}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
   if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
+  if [[ "${STACK}" != "panel" ]]; then
+    echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
+    exit 1
+  fi
   exec "${INSTALL_DIR}/veil" install "${args[@]}"
 fi
 
@@ -157,9 +160,13 @@ echo "Installed ${INSTALL_DIR}/veil"
 args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
-if [[ -n "${PORT}" ]]; then args+=(--port "${PORT}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
 if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
 if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
+
+if [[ "${STACK}" != "panel" ]]; then
+  echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
+  exit 1
+fi
 
 exec "${INSTALL_DIR}/veil" install "${args[@]}"

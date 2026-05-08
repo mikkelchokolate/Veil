@@ -5,21 +5,19 @@ import (
 	"testing"
 )
 
-func TestRURecommendedInstallRequirementsAllowPanelAndMieruWithoutDomainOrPort(t *testing.T) {
-	for _, stack := range []string{"panel", "mieru"} {
-		if err := NewRURecommendedInstallRequirements(stack).Validate(ruRecommendedInstallOptions{Stack: stack}); err != nil {
-			t.Fatalf("stack %q should not require domain/email/port: %v", stack, err)
-		}
+func TestRURecommendedInstallRequirementsAllowPanelWithoutDomainOrPort(t *testing.T) {
+	if err := NewRURecommendedInstallRequirements("panel").Validate(ruRecommendedInstallOptions{Stack: "panel"}); err != nil {
+		t.Fatalf("panel install should not require domain/email/port: %v", err)
 	}
 }
 
-func TestRURecommendedInstallRequirementsRequireDomainEmailAndPortForProxyStacks(t *testing.T) {
-	err := NewRURecommendedInstallRequirements("both").Validate(ruRecommendedInstallOptions{Stack: "both"})
-	if err == nil || !strings.Contains(err.Error(), "--domain is required") {
-		t.Fatalf("missing domain err = %v", err)
+func TestRURecommendedInstallRequirementsRequireDomainEmailForPanelCaddy(t *testing.T) {
+	err := NewRURecommendedInstallRequirements("panel").Validate(ruRecommendedInstallOptions{Stack: "panel", PanelAccess: "caddy"})
+	if err == nil || !strings.Contains(err.Error(), "--domain and --email are required for caddy Panel access") {
+		t.Fatalf("missing panel caddy domain/email err = %v", err)
 	}
-	err = NewRURecommendedInstallRequirements("both").Validate(ruRecommendedInstallOptions{Stack: "both", Domain: "example.com", Email: "admin@example.com", SharedPort: 443})
+	err = NewRURecommendedInstallRequirements("panel").Validate(ruRecommendedInstallOptions{Stack: "panel", PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com"})
 	if err != nil {
-		t.Fatalf("valid proxy requirements: %v", err)
+		t.Fatalf("valid panel caddy requirements: %v", err)
 	}
 }

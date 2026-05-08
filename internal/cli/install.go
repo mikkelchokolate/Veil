@@ -60,7 +60,7 @@ func newInstallCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "install profile: ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "", "install stack: panel, mieru, both, naive, or hysteria2; default panel unless domain/email/port are supplied")
+	cmd.Flags().StringVar(&stack, "stack", "", "deprecated; Veil install only installs Panel, protocols are configured as Panel Inbounds")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")
@@ -68,7 +68,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&etcDir, "etc-dir", "/etc/veil", "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", "/var/lib/veil", "Veil state directory")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
-	cmd.Flags().IntVar(&sharedPort, "port", 0, "required shared proxy port for NaiveProxy TCP and/or Hysteria2 UDP")
+	cmd.Flags().IntVar(&sharedPort, "port", 0, "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().IntVar(&panelPort, "panel-port", 0, "panel TCP port; 0 selects a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")

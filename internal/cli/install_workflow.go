@@ -40,8 +40,12 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 			return err
 		}
 	}
-	if strings.TrimSpace(opts.Stack) == "" {
+	opts.Stack = strings.TrimSpace(opts.Stack)
+	if opts.Stack == "" {
 		opts.Stack = "panel"
+	}
+	if opts.Stack != "panel" {
+		return fmt.Errorf("Veil install only installs Panel; configure protocols as Panel Inbounds")
 	}
 	if err := NewRURecommendedInstallRequirements(opts.Stack).Validate(opts); err != nil {
 		return err

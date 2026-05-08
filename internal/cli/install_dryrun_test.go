@@ -31,14 +31,14 @@ func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing
 	cmd.SetErr(&out)
 
 	err := runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
-		Profile:    "ru-recommended",
-		Stack:      "both",
-		Domain:     "example.com",
-		Email:      "admin@example.com",
-		SharedPort: 31874,
-		DryRun:     true,
-		EtcDir:     "/etc/veil",
-		VarDir:     "/var/lib/veil",
+		Profile:     "ru-recommended",
+		Stack:       "panel",
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		DryRun:      true,
+		EtcDir:      "/etc/veil",
+		VarDir:      "/var/lib/veil",
 	})
 	if err != nil {
 		t.Fatalf("runRURecommendedInstall: %v\n%s", err, out.String())
@@ -85,39 +85,16 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	}
 }
 
-func TestInstallDryRunHonorsStackSelection(t *testing.T) {
+func TestInstallDryRunRejectsProtocolStackSelection(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--stack", "hysteria2", "--dry-run"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v\n%s", err, out.String())
-	}
-	got := out.String()
-	for _, want := range []string{
-		"Stack: hysteria2",
-		"Hysteria2 UDP port:",
-		"Hysteria2 client URI:",
-		"Generated Hysteria2 server.yaml",
-		"ufw allow ",
-		"/udp comment Veil Hysteria2",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("output missing %q:\n%s", want, got)
-		}
-	}
-	for _, unwanted := range []string{
-		"NaiveProxy TCP port:",
-		"NaiveProxy client URL:",
-		"Generated Caddyfile",
-		"Caddy/NaiveProxy build:",
-		"/tcp comment Veil NaiveProxy",
-	} {
-		if strings.Contains(got, unwanted) {
-			t.Fatalf("output should not contain %q:\n%s", unwanted, got)
-		}
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "Veil install only installs Panel") {
+		t.Fatalf("expected protocol stack rejection, got %v\n%s", err, out.String())
 	}
 }
 
@@ -239,7 +216,7 @@ func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
 	}
 }
 
-func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
+func TestInstallDryRunIgnoresHysteriaChecksumForPanelOnlyInstall(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -248,7 +225,7 @@ func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874", "--stack", "hysteria2",
+		"--email", "admin@example.com",
 		"--hysteria-sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"--dry-run",
 	})
@@ -257,8 +234,8 @@ func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Hysteria2 sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
-		t.Fatalf("expected supplied checksum in install plan:\n%s", got)
+	if strings.Contains(got, "Hysteria2 sha256:") || strings.Contains(got, "Hysteria2 asset:") {
+		t.Fatalf("Panel install should not plan Hysteria2 binary work:\n%s", got)
 	}
 }
 
