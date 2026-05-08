@@ -21,7 +21,7 @@ All notable changes to Veil will be documented in this file.
 - Docker runtime directories are writable by the non-root `veil` user, Docker health checks use explicit HTTP for the default non-TLS server, and local `make release-check` now includes a build plus shell syntax checks for installer scripts.
 - Veil repair writes systemd units by default, reloads systemd after repairing unit files, preserves existing Panel secrets/TLS material, and repairs Panel Caddy access files from either existing env or encrypted Panel state.
 - Veil uninstall removes managed systemd unit files, honors custom install/config/systemd paths, and runs daemon-reload after uninstall; the curl uninstaller forwards those paths and allows non-root dry-run previews.
-- Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility.
+- Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility; dead install-time protocol artifact, stack policy, shared port planning, and port availability Modules were removed from the installer.
 - NaiveProxy client links use the `naive+https://` scheme.
 - Protocol capabilities now drive Inbound options, Generated config set rendering, Client link delivery, Apply actions, managed runtimes, and repair planning.
 
