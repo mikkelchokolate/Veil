@@ -162,6 +162,42 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	}
 }
 
+func TestCurlUninstallScriptSupportsSudoAndCustomPaths(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/uninstall.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{
+		"| sudo bash",
+		`ETC_DIR="${VEIL_ETC_DIR:-/etc/veil}"`,
+		`VAR_DIR="${VEIL_VAR_DIR:-/var/lib/veil}"`,
+		`SYSTEMD_DIR="${VEIL_SYSTEMD_DIR:-/etc/systemd/system}"`,
+		`--etc-dir "${ETC_DIR}"`,
+		`--var-dir "${VAR_DIR}"`,
+		`--systemd-dir "${SYSTEMD_DIR}"`,
+		`--install-dir "${INSTALL_DIR}"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("uninstall.sh missing %q:\n%s", want, script)
+		}
+	}
+}
+
+func TestCurlUninstallScriptDryRunDoesNotRequireRoot(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/uninstall.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if strings.Contains(script, `if [[ "${EUID}" -ne 0 ]]; then`) {
+		t.Fatalf("uninstall.sh should not require root for --dry-run:\n%s", script)
+	}
+	if !strings.Contains(script, `if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then`) {
+		t.Fatalf("uninstall.sh root check should be skipped for dry-run:\n%s", script)
+	}
+}
+
 func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
