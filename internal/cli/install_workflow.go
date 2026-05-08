@@ -13,25 +13,24 @@ import (
 const defaultSystemdDir = "/etc/systemd/system"
 
 type ruRecommendedInstallOptions struct {
-	Profile        string
-	Stack          string
-	Domain         string
-	Email          string
-	DryRun         bool
-	Yes            bool
-	EtcDir         string
-	VarDir         string
-	SystemdDir     string
-	PanelPort      int
-	PanelPortSet   bool
-	PanelAccess    string
-	PublicIP       string
-	Interactive    bool
-	HysteriaSHA256 string
-	AuditLog       string
-	BackupDir      string
-	BackupDirSet   bool
-	CaddyBinary    string
+	Profile      string
+	Stack        string
+	Domain       string
+	Email        string
+	DryRun       bool
+	Yes          bool
+	EtcDir       string
+	VarDir       string
+	SystemdDir   string
+	PanelPort    int
+	PanelPortSet bool
+	PanelAccess  string
+	PublicIP     string
+	Interactive  bool
+	AuditLog     string
+	BackupDir    string
+	BackupDirSet bool
+	CaddyBinary  string
 }
 
 func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
@@ -95,7 +94,7 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: %s://%s/\n", scheme, panelAccess.PanelListen)
 	}
-	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.HysteriaSHA256)
+	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort)
 	if planErr == nil {
 		fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))

@@ -215,29 +215,6 @@ func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
 	}
 }
 
-func TestInstallDryRunIgnoresHysteriaChecksumForPanelOnlyInstall(t *testing.T) {
-	cmd := NewRootCommand("test")
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{
-		"install",
-		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--hysteria-sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"--dry-run",
-	})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v\n%s", err, out.String())
-	}
-	got := out.String()
-	if strings.Contains(got, "Hysteria2 sha256:") || strings.Contains(got, "Hysteria2 asset:") {
-		t.Fatalf("Panel install should not plan Hysteria2 binary work:\n%s", got)
-	}
-}
-
 func TestRepairDryRunReportsMissingManagedFiles(t *testing.T) {
 	dir := t.TempDir()
 	cmd := NewRootCommand("test")

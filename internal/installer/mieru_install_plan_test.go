@@ -14,7 +14,7 @@ func TestLegacyMieruInstallStackNormalizesToPanelOnly(t *testing.T) {
 	if profile.InstallPanelCaddy {
 		t.Fatalf("Mieru legacy install should still produce Panel-only install; configure Mieru as Panel Inbounds: %+v", profile)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096, MieruVersion: "v3.12.0"})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}

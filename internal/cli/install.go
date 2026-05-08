@@ -29,7 +29,6 @@ func newInstallCommand() *cobra.Command {
 	var deprecatedPort int
 	var publicIP string
 	var interactive bool
-	var hysteriaSHA256 string
 	var auditLog string
 	var backupDir string
 
@@ -38,24 +37,23 @@ func newInstallCommand() *cobra.Command {
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
-				Profile:        profile,
-				Stack:          stack,
-				Domain:         domain,
-				Email:          email,
-				DryRun:         dryRun,
-				Yes:            yes,
-				EtcDir:         etcDir,
-				VarDir:         varDir,
-				SystemdDir:     systemdDir,
-				PanelPort:      panelPort,
-				PanelPortSet:   cmd.Flags().Changed("panel-port"),
-				PanelAccess:    panelAccess,
-				PublicIP:       publicIP,
-				Interactive:    interactive,
-				HysteriaSHA256: hysteriaSHA256,
-				AuditLog:       auditLog,
-				BackupDir:      backupDir,
-				BackupDirSet:   cmd.Flags().Changed("backup-dir"),
+				Profile:      profile,
+				Stack:        stack,
+				Domain:       domain,
+				Email:        email,
+				DryRun:       dryRun,
+				Yes:          yes,
+				EtcDir:       etcDir,
+				VarDir:       varDir,
+				SystemdDir:   systemdDir,
+				PanelPort:    panelPort,
+				PanelPortSet: cmd.Flags().Changed("panel-port"),
+				PanelAccess:  panelAccess,
+				PublicIP:     publicIP,
+				Interactive:  interactive,
+				AuditLog:     auditLog,
+				BackupDir:    backupDir,
+				BackupDirSet: cmd.Flags().Changed("backup-dir"),
 			})
 		},
 	}
@@ -72,13 +70,11 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().IntVar(&panelPort, "panel-port", 2096, "panel TCP port; pass 0 to select a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
-	cmd.Flags().StringVar(&hysteriaSHA256, "hysteria-sha256", "", "expected sha256 for the Hysteria2 release asset before binary download")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	_ = cmd.Flags().MarkHidden("stack")
 	_ = cmd.Flags().MarkHidden("port")
-	_ = cmd.Flags().MarkHidden("hysteria-sha256")
 	return cmd
 }
 

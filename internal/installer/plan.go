@@ -6,14 +6,10 @@ import (
 )
 
 type InstallPlanInput struct {
-	Platform        Platform
-	HysteriaVersion string
-	HysteriaSHA256  string
-	MieruVersion    string
-	MieruSHA256     string
-	SystemdUnits    []string
-	PanelPort       int
-	CaddyBinary     string
+	Platform     Platform
+	SystemdUnits []string
+	PanelPort    int
+	CaddyBinary  string
 }
 
 type InstallPlan struct {
@@ -23,13 +19,6 @@ type InstallPlan struct {
 	SystemdActions  []service.SystemdAction
 	FirewallActions []firewall.Rule
 	PanelTools      []string
-}
-
-type BinaryAcquisition struct {
-	Name        string
-	URL         string
-	Destination string
-	SHA256      string
 }
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {

@@ -15,11 +15,5 @@ func (d InstallPlanDefaults) Apply(input InstallPlanInput) InstallPlanInput {
 	if input.Platform.OS == "" {
 		input.Platform = d.currentPlatform()
 	}
-	if input.HysteriaVersion == "" {
-		input.HysteriaVersion = "v2.6.0"
-	}
-	if input.MieruVersion == "" {
-		input.MieruVersion = "v3.12.0"
-	}
 	return input
 }

@@ -35,34 +35,58 @@ func TestRURecommendedInstallInputDoesNotExposeProtocolStackSelection(t *testing
 	}
 }
 
+func TestInstallPlanInputDoesNotExposeProtocolBinaryPlanning(t *testing.T) {
+	inputType := reflect.TypeOf(InstallPlanInput{})
+	for _, field := range []string{"HysteriaVersion", "HysteriaSHA256", "MieruVersion", "MieruSHA256"} {
+		if _, ok := inputType.FieldByName(field); ok {
+			t.Fatalf("InstallPlanInput should not expose install-time protocol binary planning field %s", field)
+		}
+	}
+}
+
 func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) {
 	forbiddenTypes := map[string]bool{
-		"RURecommendedNaiveArtifacts":    true,
-		"RURecommendedHysteriaArtifacts": true,
-		"ruRecommendedNaiveArtifacts":    true,
-		"ruRecommendedHysteriaArtifacts": true,
-		"RURecommendedPortPolicy":        true,
-		"RURecommendedStackPolicy":       true,
-		"SharedPortPlan":                 true,
-		"PortAvailability":               true,
-		"HysteriaBinaryAcquisition":      true,
-		"MieruBinaryAcquisition":         true,
+		"RURecommendedNaiveArtifacts":     true,
+		"RURecommendedHysteriaArtifacts":  true,
+		"ruRecommendedNaiveArtifacts":     true,
+		"ruRecommendedHysteriaArtifacts":  true,
+		"RURecommendedPortPolicy":         true,
+		"RURecommendedStackPolicy":        true,
+		"SharedPortPlan":                  true,
+		"PortAvailability":                true,
+		"HysteriaBinaryAcquisition":       true,
+		"MieruBinaryAcquisition":          true,
+		"BinaryAcquisition":               true,
+		"BinaryAcquisitionModule":         true,
+		"BinaryDownloadRequestValidation": true,
+		"BinaryDownloadResponseDecision":  true,
+		"BinaryDownloadResponsePolicy":    true,
+		"BinaryDownloadRetryPolicy":       true,
+		"BinaryRepairAction":              true,
+		"BinaryRepairPlan":                true,
 	}
 	forbiddenFuncs := map[string]bool{
-		"NewRURecommendedPortPolicy":   true,
-		"NewRURecommendedStackPolicy":  true,
-		"normalizeStack":               true,
-		"PlanSharedPort":               true,
-		"PlanStackPort":                true,
-		"PlanExplicitStackPort":        true,
-		"DetectPortAvailability":       true,
-		"isTCPBusy":                    true,
-		"isUDPBusy":                    true,
-		"Hysteria2ReleaseAssetURL":     true,
-		"hysteriaArch":                 true,
-		"CaddyNaiveBuildHint":          true,
-		"NewHysteriaBinaryAcquisition": true,
-		"NewMieruBinaryAcquisition":    true,
+		"NewRURecommendedPortPolicy":         true,
+		"NewRURecommendedStackPolicy":        true,
+		"normalizeStack":                     true,
+		"PlanSharedPort":                     true,
+		"PlanStackPort":                      true,
+		"PlanExplicitStackPort":              true,
+		"DetectPortAvailability":             true,
+		"isTCPBusy":                          true,
+		"isUDPBusy":                          true,
+		"Hysteria2ReleaseAssetURL":           true,
+		"hysteriaArch":                       true,
+		"CaddyNaiveBuildHint":                true,
+		"NewHysteriaBinaryAcquisition":       true,
+		"NewMieruBinaryAcquisition":          true,
+		"NewBinaryAcquisitionModule":         true,
+		"NewBinaryDownloadRequestValidation": true,
+		"NewBinaryDownloadResponsePolicy":    true,
+		"NewBinaryDownloadRetryPolicy":       true,
+		"BuildBinaryRepairPlan":              true,
+		"DownloadVerifiedBinary":             true,
+		"downloadVerifiedBinary":             true,
 	}
 	forbiddenConsts := map[string]bool{
 		"StackBoth":      true,

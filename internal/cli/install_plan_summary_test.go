@@ -16,7 +16,7 @@ func TestBuildRURecommendedInstallPlanSummaryUsesPanelOnlySystemdUnits(t *testin
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
 
-	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096, "")
+	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096)
 	if err != nil {
 		t.Fatalf("buildRURecommendedInstallPlanSummary: %v", err)
 	}
