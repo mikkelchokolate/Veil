@@ -22,9 +22,9 @@ func TestServiceControlCommandPreservesExistingServiceUnitsAndRejectsUnknown(t *
 	module := NewServiceControlCommand()
 	for _, tc := range []struct{ name, unit string }{
 		{"veil", "veil.service"},
-		{"caddy", "caddy.service"},
-		{"hysteria2", "hysteria2.service"},
-		{"sing-box", "sing-box.service"},
+		{"caddy", "veil-naive.service"},
+		{"hysteria2", "veil-hysteria2.service"},
+		{"sing-box", "veil-warp.service"},
 	} {
 		command, ok := module.Build(tc.name, "restart")
 		if !ok || command[2] != tc.unit {
