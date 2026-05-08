@@ -14,7 +14,7 @@ All notable changes to Veil will be documented in this file.
 ### Changed
 
 - Veil install is Panel-only; protocols are configured later as Panel Inbounds.
-- Veil install writes systemd units by default and runs daemon-reload/enable/restart for installed Panel units.
+- Veil install writes systemd units by default, requires root in the curl installer, and runs daemon-reload/enable/restart for installed Panel units.
 - Veil repair writes systemd units by default and reloads systemd after repairing unit files.
 - Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility.
 - NaiveProxy client links use the `naive+https://` scheme.
