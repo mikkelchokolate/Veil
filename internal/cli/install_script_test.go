@@ -352,26 +352,20 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 	}
 }
 
-func TestCurlInstallScriptChecksumFailsWhenMissing(t *testing.T) {
+func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := string(body)
-	found := false
 	for _, want := range []string{
-		"wc -l",
-		"grep -c",
-		"No checksum",
-		"no matching checksum",
-		"checksum not found",
+		`count=$(grep -c "  ${asset}$" checksums.txt)`,
+		`if [[ "${count}" -ne 1 ]]; then`,
+		`expected exactly one checksum for ${asset} in checksums.txt, got ${count}`,
+		`grep "  ${asset}$" checksums.txt | sha256sum -c -`,
 	} {
-		if strings.Contains(script, want) {
-			found = true
-			break
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh missing checksum uniqueness guard %q:\n%s", want, script)
 		}
-	}
-	if !found {
-		t.Fatalf("install.sh missing checksum match-count guard (wc -l / grep -c / error pattern); checksum verification is fragile:\n%s", script)
 	}
 }

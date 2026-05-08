@@ -158,12 +158,12 @@ echo "Downloading Veil ${VERSION} for ${os}/${arch} from ${REPO}..."
 curl -fsSL "${download_url}" -o "${archive}"
 curl -fsSL "${checksums_url}" -o "${checksums}"
 
-# Verify checksum with match-count guard: exit if grep finds no matching line
+# Verify checksum with a uniqueness guard so a forged duplicate cannot mask the expected asset.
 (
   cd "${tmpdir}"
   count=$(grep -c "  ${asset}$" checksums.txt)
-  if [[ "${count}" -eq 0 ]]; then
-    echo "no matching checksum for ${asset} in checksums.txt" >&2
+  if [[ "${count}" -ne 1 ]]; then
+    echo "expected exactly one checksum for ${asset} in checksums.txt, got ${count}" >&2
     exit 1
   fi
   grep "  ${asset}$" checksums.txt | sha256sum -c -
