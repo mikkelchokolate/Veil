@@ -16,7 +16,7 @@ var (
 func NewRootCommand(version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "veil",
-		Short: "Veil panel and CLI for NaiveProxy + Hysteria2",
+		Short: "Veil panel and CLI for protocols through Panel Inbounds",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
