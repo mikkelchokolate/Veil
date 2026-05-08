@@ -26,17 +26,26 @@ func NewStatusQuery(opts statusQueryOptions, out io.Writer) StatusQuery {
 
 func (q StatusQuery) Run(ctx context.Context) error {
 	addr := resolveStatusListen(q.opts.Listen)
-	if !strings.Contains(addr, "://") {
-		addr = "http://" + addr
-	}
+	candidates := statusCandidateAddrs(addr)
 	token, _ := resolveServeAuthToken(q.opts.AuthToken)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	status, err := fetchStatus(ctx, addr+"/api/status", token)
-	if err != nil {
-		return fmt.Errorf("fetch status from %s: %w", addr, err)
+	var lastErr error
+	for _, candidate := range candidates {
+		status, err := fetchStatus(ctx, candidate+"/api/status", token)
+		if err == nil {
+			return q.Render(status)
+		}
+		lastErr = err
 	}
-	return q.Render(status)
+	return fmt.Errorf("fetch status from %s: %w", strings.Join(candidates, ", "), lastErr)
+}
+
+func statusCandidateAddrs(addr string) []string {
+	if strings.Contains(addr, "://") {
+		return []string{addr}
+	}
+	return []string{"https://" + addr, "http://" + addr}
 }
 
 func (q StatusQuery) Render(status *statusResponse) error {

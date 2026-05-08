@@ -81,25 +81,28 @@ var execCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 // waitForHealthy polls the /healthz endpoint until it returns 200 or times out.
 func waitForHealthy(addr string, token string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	candidates := statusCandidateAddrs(addr)
 	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr+"/healthz", nil)
-		if err != nil {
+		for _, candidate := range candidates {
+			url := candidate + "/healthz"
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				cancel()
+				continue
+			}
+			if token != "" {
+				req.Header.Set("X-Veil-Token", token)
+			}
+			resp, err := statusHTTPClient(url).Do(req)
 			cancel()
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-		if token != "" {
-			req.Header.Set("X-Veil-Token", token)
-		}
-		resp, err := statusHTTPClient(addr + "/healthz").Do(req)
-		cancel()
-		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-			return nil
-		}
-		if resp != nil {
-			resp.Body.Close()
+			if err == nil && resp.StatusCode == http.StatusOK {
+				resp.Body.Close()
+				return nil
+			}
+			if resp != nil {
+				resp.Body.Close()
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

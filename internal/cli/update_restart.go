@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -13,9 +12,6 @@ var updateHealthChecker = waitForHealthy
 func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateWorkflowOptions) error {
 	out := cmd.OutOrStdout()
 	addr := resolveStatusListen(opts.Listen)
-	if !strings.Contains(addr, "://") {
-		addr = "http://" + addr
-	}
 	token, _ := resolveServeAuthToken(opts.AuthToken)
 
 	fmt.Fprintln(out, "Restarting veil.service...")
