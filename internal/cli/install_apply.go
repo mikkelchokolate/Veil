@@ -34,12 +34,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
 	}
-	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{Platform: installer.CurrentPlatform(), SystemdUnits: systemdUnitsForProfile(profile), PanelPort: 0})
-	if err != nil {
-		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-		return err
-	}
-	if err := installSystemdRunFunc(plan.SystemdActions); err != nil {
+	if err := installSystemdRunFunc(service.SystemdApplyPlan(systemdUnitsForProfile(profile))); err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 		return err
 	}
