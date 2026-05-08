@@ -15,6 +15,8 @@ type ProtocolCapability struct {
 	RequiresCaddySettings  bool
 	ValidationName         string
 	ValidationCommand      func(string) []string
+	MaxEnabled             int
+	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
 }
 
 type ProtocolCapabilityCatalog struct {
@@ -42,6 +44,14 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			RequiresCaddySettings:  true,
 			ValidationName:         "caddy",
 			ValidationCommand:      func(path string) []string { return []string{"caddy", "validate", "--config", path} },
+			MaxEnabled:             1,
+			RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
+				if len(input.Inbounds) == 0 {
+					return GeneratedConfigArtifact{}, false, nil
+				}
+				body, err := renderNaiveGeneratedConfig(input.Settings, input.Inbounds[0])
+				return GeneratedConfigArtifact{Path: input.Paths.Caddyfile(), Body: body}, true, err
+			},
 		},
 		{
 			Protocol:               "hysteria2",
@@ -56,6 +66,14 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			RequiresRenderSettings: true,
 			ValidationName:         "hysteria2",
 			ValidationCommand:      func(path string) []string { return []string{"hysteria", "server", "--config", path, "--check"} },
+			MaxEnabled:             1,
+			RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
+				if len(input.Inbounds) == 0 {
+					return GeneratedConfigArtifact{}, false, nil
+				}
+				body, err := renderHysteria2GeneratedConfig(input.Settings, input.Inbounds[0])
+				return GeneratedConfigArtifact{Path: input.Paths.Hysteria2(), Body: body}, true, err
+			},
 		},
 		{
 			Protocol:              "mieru",
@@ -69,6 +87,9 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			ValidateInboundRender: true,
 			ValidationName:        "mieru",
 			ValidationCommand:     func(path string) []string { return []string{"mieru", "check", "-c", path} },
+			RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
+				return NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
+			},
 		},
 	}}
 }

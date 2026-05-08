@@ -20,38 +20,14 @@ type GeneratedConfigProtocolRenderInput struct {
 }
 
 func NewGeneratedConfigProtocolRegistry() GeneratedConfigProtocolRegistry {
-	return GeneratedConfigProtocolRegistry{protocols: []GeneratedConfigProtocol{
-		{
-			Protocol:               "naiveproxy",
-			MaxEnabled:             1,
-			RequiresRenderSettings: true,
-			Render: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-				if len(input.Inbounds) == 0 {
-					return GeneratedConfigArtifact{}, false, nil
-				}
-				body, err := renderNaiveGeneratedConfig(input.Settings, input.Inbounds[0])
-				return GeneratedConfigArtifact{Path: input.Paths.Caddyfile(), Body: body}, true, err
-			},
-		},
-		{
-			Protocol:               "hysteria2",
-			MaxEnabled:             1,
-			RequiresRenderSettings: true,
-			Render: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-				if len(input.Inbounds) == 0 {
-					return GeneratedConfigArtifact{}, false, nil
-				}
-				body, err := renderHysteria2GeneratedConfig(input.Settings, input.Inbounds[0])
-				return GeneratedConfigArtifact{Path: input.Paths.Hysteria2(), Body: body}, true, err
-			},
-		},
-		{
-			Protocol: "mieru",
-			Render: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-				return NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
-			},
-		},
-	}}
+	protocols := []GeneratedConfigProtocol{}
+	for _, capability := range NewProtocolCapabilityCatalog().All() {
+		if capability.RenderGeneratedConfig == nil {
+			continue
+		}
+		protocols = append(protocols, GeneratedConfigProtocol{Protocol: capability.Protocol, MaxEnabled: capability.MaxEnabled, RequiresRenderSettings: capability.RequiresRenderSettings, Render: capability.RenderGeneratedConfig})
+	}
+	return GeneratedConfigProtocolRegistry{protocols: protocols}
 }
 
 func (r GeneratedConfigProtocolRegistry) Validate(settings Settings, inbounds []Inbound) error {
