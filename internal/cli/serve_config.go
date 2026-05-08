@@ -1,6 +1,8 @@
 package cli
 
 type serveConfig struct {
+	Listen          string
+	ListenSource    string
 	Token           string
 	TokenSource     string
 	StatePath       string
@@ -9,6 +11,9 @@ type serveConfig struct {
 	ApplyRootSource string
 	KeyPath         string
 	KeySource       string
+	PanelAccess     string
+	Domain          string
+	Email           string
 	WebBasePath     string
 	TLSEnabled      bool
 	TLSSource       string

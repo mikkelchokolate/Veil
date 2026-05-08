@@ -19,6 +19,9 @@ type serveHTTPServerOptions struct {
 	TLSEnabled  bool
 	TLSCert     string
 	TLSKey      string
+	PanelAccess string
+	Domain      string
+	Email       string
 	WebBasePath string
 }
 
@@ -32,7 +35,7 @@ func NewServeHTTPServer(opts serveHTTPServerOptions) ServeHTTPServer {
 
 func (s ServeHTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, WebBasePath: opts.WebBasePath})
+	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath})
 	srv := &http.Server{
 		Addr:              opts.Listen,
 		Handler:           handler,

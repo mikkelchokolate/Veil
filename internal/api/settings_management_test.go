@@ -37,6 +37,19 @@ func TestSettingsManagementPreservesRedactedPasswordsAndSaves(t *testing.T) {
 	}
 }
 
+func TestSettingsManagementPreservesPanelCaddyAccessFieldsWhenFormOmitsThem(t *testing.T) {
+	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server"}
+	management := NewSettingsManagement(&settings, func() error { return nil })
+
+	_, err := management.Update(Settings{PanelListen: "127.0.0.1:2096", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if settings.PanelAccess != "caddy" || settings.WebBasePath != "/panel-secret/" {
+		t.Fatalf("Panel Caddy access fields not preserved: %+v", settings)
+	}
+}
+
 func TestSettingsManagementRejectsInvalidSettingsWithoutSave(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev"}
 	saves := 0

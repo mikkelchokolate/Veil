@@ -25,12 +25,26 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	if err != nil {
 		return err
 	}
-	server, stateReloader := newServeHTTPServer(opts.Listen, opts.Version, cfg.Token, cfg.StatePath, cfg.ApplyRoot, cfg.KeyPath, cfg.TLSEnabled, opts.TLSCert, opts.TLSKey, cfg.WebBasePath)
+	server, stateReloader := NewServeHTTPServer(serveHTTPServerOptions{
+		Listen:      cfg.Listen,
+		Version:     opts.Version,
+		AuthToken:   cfg.Token,
+		StatePath:   cfg.StatePath,
+		ApplyRoot:   cfg.ApplyRoot,
+		KeyPath:     cfg.KeyPath,
+		TLSEnabled:  cfg.TLSEnabled,
+		TLSCert:     opts.TLSCert,
+		TLSKey:      opts.TLSKey,
+		PanelAccess: cfg.PanelAccess,
+		Domain:      cfg.Domain,
+		Email:       cfg.Email,
+		WebBasePath: cfg.WebBasePath,
+	}).Build()
 	tlsLabel := "http"
 	if cfg.TLSEnabled {
 		tlsLabel = "https"
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s://%s\n", tlsLabel, opts.Listen)
+	fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s://%s\n", tlsLabel, cfg.Listen)
 	fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", cfg.StatePath, cfg.StateSource)
 	fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", cfg.ApplyRoot, cfg.ApplyRootSource)
 	fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", cfg.KeyPath, cfg.KeySource)

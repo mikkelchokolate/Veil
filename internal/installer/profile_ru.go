@@ -1,6 +1,10 @@
 package installer
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"fmt"
+
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 type SecretFunc func(label string) string
 
@@ -33,6 +37,8 @@ type RURecommendedProfile struct {
 	NaivePassword      string
 	Hysteria2Password  string
 	PanelAuthToken     string
+	PanelListen        string
+	PanelAccess        string
 	WebBasePath        string
 	Stack              Stack
 	InstallNaive       bool
@@ -102,6 +108,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		webBasePath = generateWebBasePath()
 	}
 	panelAuthToken := input.Secret("panel")
+	panelListen := recommendedPanelListen(input.PanelAccess, input.PanelPort)
 	naive := ruRecommendedNaiveArtifacts{}
 	hysteria := ruRecommendedHysteriaArtifacts{}
 
@@ -130,6 +137,8 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		NaivePassword:      naive.Password,
 		Hysteria2Password:  hysteria.Password,
 		PanelAuthToken:     panelAuthToken,
+		PanelListen:        panelListen,
+		PanelAccess:        input.PanelAccess,
 		WebBasePath:        webBasePath,
 		Stack:              stack.Stack,
 		InstallNaive:       stack.InstallNaive,
@@ -164,4 +173,14 @@ func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan 
 
 func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, plan SharedPortPlan, masqueradeURL string) (ruRecommendedHysteriaArtifacts, error) {
 	return NewRURecommendedHysteriaArtifacts().Build(input, plan, RURecommendedDefaults{MasqueradeURL: masqueradeURL})
+}
+
+func recommendedPanelListen(panelAccess string, panelPort int) string {
+	if panelPort <= 0 {
+		panelPort = 2096
+	}
+	if panelAccess == "direct" {
+		return fmt.Sprintf("0.0.0.0:%d", panelPort)
+	}
+	return fmt.Sprintf("127.0.0.1:%d", panelPort)
 }

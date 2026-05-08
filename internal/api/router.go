@@ -19,6 +19,10 @@ type ServerInfo struct {
 	StatePath   string
 	ApplyRoot   string
 	KeyPath     string
+	PanelListen string
+	PanelAccess string
+	Domain      string
+	Email       string
 	WebBasePath string
 }
 

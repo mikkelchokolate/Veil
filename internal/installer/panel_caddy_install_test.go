@@ -65,6 +65,15 @@ func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyRURecommendedProfile: %v", err)
 	}
+	envBody, err := os.ReadFile(filepath.Join(dir, "etc", "veil", "veil.env"))
+	if err != nil {
+		t.Fatalf("read veil.env: %v", err)
+	}
+	for _, want := range []string{"VEIL_LISTEN=127.0.0.1:2096", "VEIL_PANEL_ACCESS=caddy", "VEIL_DOMAIN=panel.example.com", "VEIL_EMAIL=admin@example.com", "VEIL_WEB_BASE_PATH="} {
+		if !strings.Contains(string(envBody), want) {
+			t.Fatalf("veil.env missing %q:\n%s", want, string(envBody))
+		}
+	}
 	body, err := os.ReadFile(result.CaddyfilePath)
 	if err != nil {
 		t.Fatalf("panel Caddyfile should be written: %v", err)

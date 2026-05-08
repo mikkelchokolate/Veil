@@ -18,6 +18,18 @@ func panelSettingsCardHTML() string {
               <input id="settings-mode" autocomplete="off" placeholder="server">
             </div>
             <div>
+              <label for="settings-panel-access">Panel access</label>
+              <select id="settings-panel-access">
+                <option value="local">local</option>
+                <option value="direct">direct</option>
+                <option value="caddy">caddy</option>
+              </select>
+            </div>
+            <div>
+              <label for="settings-web-base-path">Web base path</label>
+              <input id="settings-web-base-path" autocomplete="off" placeholder="/panel-secret/">
+            </div>
+            <div>
               <label for="settings-domain">Domain</label>
               <input id="settings-domain" autocomplete="off" placeholder="vpn.example.com">
             </div>

@@ -38,7 +38,7 @@ func newServeCommand(version string) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:2096", "HTTP/HTTPS listen address")
+	cmd.Flags().StringVar(&listen, "listen", "", "HTTP/HTTPS listen address; defaults to VEIL_LISTEN or 127.0.0.1:2096")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")

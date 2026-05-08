@@ -20,7 +20,7 @@ func newManagementState(info ServerInfo) *managementState {
 	if keyPath == "" {
 		keyPath = "/etc/veil/state.key"
 	}
-	model := defaultManagementModel(info.Mode)
+	model := defaultManagementModel(info)
 	state := &managementState{
 		statePath: info.StatePath,
 		applyRoot: defaultApplyRoot(info.ApplyRoot),
@@ -105,7 +105,7 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		return
 	}
 	if snapshot.Settings.PanelListen != "" {
-		state.settings = snapshot.Settings
+		state.settings = mergeSettingsDefaults(snapshot.Settings, state.settings)
 	}
 	if snapshot.Inbounds != nil {
 		state.inbounds = snapshot.Inbounds

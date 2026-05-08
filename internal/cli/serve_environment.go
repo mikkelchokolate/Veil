@@ -15,6 +15,16 @@ type ServeEnvironment struct{}
 
 func NewServeEnvironment() ServeEnvironment { return ServeEnvironment{} }
 
+func (ServeEnvironment) Listen(flagValue string) (listen string, source string) {
+	if listen := strings.TrimSpace(flagValue); listen != "" {
+		return listen, "--listen"
+	}
+	if listen := strings.TrimSpace(os.Getenv("VEIL_LISTEN")); listen != "" {
+		return listen, "VEIL_LISTEN"
+	}
+	return "127.0.0.1:2096", "default"
+}
+
 func (ServeEnvironment) AuthToken(flagValue string) (token string, source string) {
 	if token := strings.TrimSpace(flagValue); token != "" {
 		return token, "--auth-token"
@@ -85,6 +95,18 @@ func (ServeEnvironment) KeyPath(flagValue string) (path string, source string) {
 		return path, "VEIL_KEY_PATH"
 	}
 	return "/etc/veil/state.key", "default"
+}
+
+func (ServeEnvironment) PanelAccess() string {
+	return strings.TrimSpace(os.Getenv("VEIL_PANEL_ACCESS"))
+}
+
+func (ServeEnvironment) Domain() string {
+	return strings.TrimSpace(os.Getenv("VEIL_DOMAIN"))
+}
+
+func (ServeEnvironment) Email() string {
+	return strings.TrimSpace(os.Getenv("VEIL_EMAIL"))
 }
 
 func (ServeEnvironment) WebBasePath(flagValue string) (path string, source string) {
@@ -174,6 +196,9 @@ func cleanWebBasePath(path string) string {
 	return path
 }
 
+func resolveServeListen(flagValue string) (string, string) {
+	return NewServeEnvironment().Listen(flagValue)
+}
 func resolveServeAuthToken(flagValue string) (string, string) {
 	return NewServeEnvironment().AuthToken(flagValue)
 }

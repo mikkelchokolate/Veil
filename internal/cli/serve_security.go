@@ -12,11 +12,13 @@ func NewServeSecurity(opts serveWorkflowOptions) ServeSecurity {
 
 func (s ServeSecurity) Resolve() (serveConfig, error) {
 	opts := s.opts
-	if err := validateServeListen(opts.Listen); err != nil {
+	env := NewServeEnvironment()
+	listen, listenSource := resolveServeListen(opts.Listen)
+	if err := validateServeListen(listen); err != nil {
 		return serveConfig{}, err
 	}
 	token, tokenSource := resolveServeAuthToken(opts.AuthToken)
-	if err := validateServeAuthBinding(opts.Listen, tokenSource); err != nil {
+	if err := validateServeAuthBinding(listen, tokenSource); err != nil {
 		return serveConfig{}, err
 	}
 	statePath, stateSource := resolveServeStatePath(opts.StatePath)
@@ -33,6 +35,8 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 		tlsSource = "auto-tls (Let's Encrypt)"
 	}
 	return serveConfig{
+		Listen:          listen,
+		ListenSource:    listenSource,
 		Token:           token,
 		TokenSource:     tokenSource,
 		StatePath:       statePath,
@@ -41,6 +45,9 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 		ApplyRootSource: applyRootSource,
 		KeyPath:         keyPath,
 		KeySource:       keySource,
+		PanelAccess:     env.PanelAccess(),
+		Domain:          env.Domain(),
+		Email:           env.Email(),
 		WebBasePath:     webBasePath,
 		TLSEnabled:      tlsEnabled,
 		TLSSource:       tlsSource,

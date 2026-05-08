@@ -22,6 +22,24 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		return errors.New("stack must be panel; protocols are configured as Panel inbounds")
 	}
 	settings.Stack = stack
+	if settings.PanelAccess == "" {
+		settings.PanelAccess = current.PanelAccess
+	}
+	if settings.PanelAccess != "" {
+		switch settings.PanelAccess {
+		case "direct", "local", "caddy":
+		default:
+			return errors.New("panel access must be direct, local, or caddy")
+		}
+	}
+	if settings.WebBasePath == "" {
+		settings.WebBasePath = current.WebBasePath
+	} else {
+		settings.WebBasePath = normalizeSettingsWebBasePath(settings.WebBasePath)
+	}
+	if settings.PanelAccess == "caddy" && settings.WebBasePath == "" {
+		return errors.New("webBasePath is required for caddy Panel access")
+	}
 	if settings.Domain != "" {
 		if err := installer.ValidateDomain(settings.Domain); err != nil {
 			return errors.New("domain: " + err.Error())
@@ -51,6 +69,14 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		}
 	}
 	return nil
+}
+
+func normalizeSettingsWebBasePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || path == "/" {
+		return ""
+	}
+	return "/" + strings.Trim(path, "/") + "/"
 }
 
 func normalizeAndValidateSettings(settings *Settings, current Settings) error {

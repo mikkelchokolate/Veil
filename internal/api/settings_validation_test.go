@@ -29,6 +29,14 @@ func TestSettingsValidationNormalizesLegacyProtocolStackSelection(t *testing.T) 
 	}
 }
 
+func TestSettingsValidationRejectsCaddyPanelAccessWithoutWebBasePath(t *testing.T) {
+	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", Stack: "panel", Mode: "server"}
+	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+	if err == nil || err.Error() != "webBasePath is required for caddy Panel access" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSettingsValidationRejectsUnknownStack(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Stack: "bad", Mode: "server"}
 	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})

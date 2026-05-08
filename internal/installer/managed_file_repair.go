@@ -71,6 +71,18 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 	}
 	if profile.PanelAuthToken != "" {
 		envContent := "VEIL_API_TOKEN=" + profile.PanelAuthToken + "\n"
+		if profile.PanelListen != "" {
+			envContent += "VEIL_LISTEN=" + profile.PanelListen + "\n"
+		}
+		if profile.PanelAccess != "" {
+			envContent += "VEIL_PANEL_ACCESS=" + profile.PanelAccess + "\n"
+		}
+		if profile.Domain != "" {
+			envContent += "VEIL_DOMAIN=" + profile.Domain + "\n"
+		}
+		if profile.Email != "" {
+			envContent += "VEIL_EMAIL=" + profile.Email + "\n"
+		}
 		if profile.WebBasePath != "" && profile.WebBasePath != "/" {
 			envContent += "VEIL_WEB_BASE_PATH=" + profile.WebBasePath + "\n"
 		}

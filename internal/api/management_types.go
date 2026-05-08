@@ -9,6 +9,7 @@ import (
 type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	PanelAccess       string `json:"panelAccess,omitempty"`
+	WebBasePath       string `json:"webBasePath,omitempty"`
 	Stack             string `json:"stack"`
 	Mode              string `json:"mode"`
 	Domain            string `json:"domain,omitempty"`

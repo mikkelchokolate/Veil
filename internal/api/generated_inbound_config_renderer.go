@@ -32,7 +32,7 @@ func (r GeneratedInboundConfigRenderer) renderNaive(inbound Inbound) (string, er
 	if err != nil {
 		return "", err
 	}
-	return renderer.RenderNaiveCaddyfile(renderer.NaiveConfig{
+	naiveConfig := renderer.NaiveConfig{
 		Domain:       r.settings.Domain,
 		Email:        r.settings.Email,
 		ListenPort:   inbound.Port,
@@ -40,7 +40,14 @@ func (r GeneratedInboundConfigRenderer) renderNaive(inbound Inbound) (string, er
 		Password:     password,
 		Users:        access.NaiveUsers(),
 		FallbackRoot: r.settings.FallbackRoot,
-	})
+	}
+	if route, ok, err := NewPanelCaddyAccess().Route(r.settings); err != nil {
+		return "", err
+	} else if ok {
+		naiveConfig.PanelPort = route.Port
+		naiveConfig.WebBasePath = route.WebBasePath
+	}
+	return renderer.RenderNaiveCaddyfile(naiveConfig)
 }
 
 func (r GeneratedInboundConfigRenderer) renderHysteria2(inbound Inbound) (string, error) {
