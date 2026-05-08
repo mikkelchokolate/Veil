@@ -18,7 +18,7 @@ All notable changes to Veil will be documented in this file.
 - Veil install and repair render systemd units and install plans with the resolved Caddy binary path when Panel Caddy access is used.
 - Veil status and staged update health checks prefer local generated Panel TLS and trust loopback self-signed Panel certificates.
 - Panel Caddy access now renders, plans, validates, repairs, and exposes firewall rules end-to-end even when no NaiveProxy Inbound exists, while rejecting non-Caddy TCP/443 runtime conflicts.
-- Docker runtime directories are writable by the non-root `veil` user, Docker health checks use explicit HTTP for the default non-TLS server, and local `make release-check` now includes a build plus shell syntax checks for installer scripts.
+- Docker runtime directories are writable by the non-root `veil` user, Docker health checks use explicit HTTP for the default non-TLS server, and local/CI release gates now include a build plus installer script syntax/help checks.
 - Veil repair writes systemd units by default, reloads systemd after repairing unit files, preserves existing Panel secrets/TLS material, and repairs Panel Caddy access files from either existing env or encrypted Panel state.
 - Veil uninstall removes managed systemd unit files, honors custom install/config/systemd paths, and runs daemon-reload after uninstall; the curl uninstaller forwards those paths and allows non-root dry-run previews.
 - Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility; dead install-time protocol artifact, stack policy, shared port planning, and port availability Modules were removed from the installer.
