@@ -14,7 +14,6 @@ func TestGeneratedConfigSetRendersPanelCaddyAccessWithoutNaiveInbound(t *testing
 			PanelListen: "127.0.0.1:2096",
 			PanelAccess: "caddy",
 			WebBasePath: "/panel-secret/",
-			Stack:       "panel",
 			Mode:        "server",
 			Domain:      "panel.example.com",
 			Email:       "admin@example.com",
@@ -42,7 +41,6 @@ func TestNaiveGeneratedConfigPreservesPanelCaddyAccessRoute(t *testing.T) {
 			PanelListen:   "127.0.0.1:2096",
 			PanelAccess:   "caddy",
 			WebBasePath:   "/panel-secret/",
-			Stack:         "panel",
 			Mode:          "server",
 			Domain:        "vpn.example.com",
 			Email:         "admin@example.com",
@@ -67,7 +65,7 @@ func TestNaiveGeneratedConfigWithoutPanelCaddyDoesNotExposePanelRoute(t *testing
 	root := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: root,
-		Settings:  Settings{PanelListen: "127.0.0.1:2096", Stack: "panel", Mode: "server", Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-secret", FallbackRoot: "/var/lib/veil/www"},
+		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server", Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-secret", FallbackRoot: "/var/lib/veil/www"},
 		Inbounds:  []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 	})
 	if err != nil {

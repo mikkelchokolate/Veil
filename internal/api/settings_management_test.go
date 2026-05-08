@@ -5,7 +5,6 @@ import "testing"
 func TestSettingsManagementPreservesRedactedPasswordsAndSaves(t *testing.T) {
 	settings := Settings{
 		PanelListen:       "127.0.0.1:2096",
-		Stack:             "both",
 		Mode:              "dev",
 		NaivePassword:     "naive-secret",
 		Hysteria2Password: "hy2-secret",
@@ -18,7 +17,6 @@ func TestSettingsManagementPreservesRedactedPasswordsAndSaves(t *testing.T) {
 
 	updated, err := management.Update(Settings{
 		PanelListen:       "127.0.0.1:2096",
-		Stack:             "naive",
 		Mode:              "dev",
 		NaivePassword:     "[REDACTED]",
 		Hysteria2Password: "[REDACTED]",
@@ -38,10 +36,10 @@ func TestSettingsManagementPreservesRedactedPasswordsAndSaves(t *testing.T) {
 }
 
 func TestSettingsManagementPreservesPanelCaddyAccessFieldsWhenFormOmitsThem(t *testing.T) {
-	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server"}
+	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server"}
 	management := NewSettingsManagement(&settings, func() error { return nil })
 
-	_, err := management.Update(Settings{PanelListen: "127.0.0.1:2096", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"})
+	_, err := management.Update(Settings{PanelListen: "127.0.0.1:2096", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -51,14 +49,14 @@ func TestSettingsManagementPreservesPanelCaddyAccessFieldsWhenFormOmitsThem(t *t
 }
 
 func TestSettingsManagementRejectsInvalidSettingsWithoutSave(t *testing.T) {
-	settings := Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev"}
+	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}
 	saves := 0
 	management := NewSettingsManagement(&settings, func() error {
 		saves++
 		return nil
 	})
 
-	_, err := management.Update(Settings{PanelListen: "bad-listen", Stack: "bad", Mode: "dev"})
+	_, err := management.Update(Settings{PanelListen: "bad-listen", Mode: "dev"})
 	if err == nil {
 		t.Fatalf("expected invalid settings error")
 	}

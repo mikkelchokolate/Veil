@@ -10,7 +10,7 @@ func TestGeneratedConfigSetAggregatesMieruInboundsIntoOneServerConfig(t *testing
 	applyRoot := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: applyRoot,
-		Settings:  Settings{Stack: "both"},
+		Settings:  Settings{},
 		Inbounds: []Inbound{
 			{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "tcp-pass"},
 			{Name: "mieru-udp", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}}},

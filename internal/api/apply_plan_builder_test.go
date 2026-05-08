@@ -4,7 +4,7 @@ import "testing"
 
 func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{Stack: "both"},
+		Settings: Settings{},
 		Rules:    []RoutingRule{{Name: "non-ru", Match: "geosite:geolocation-!ru", Outbound: "warp", Enabled: true}},
 	})
 	if plan.Valid {
@@ -17,7 +17,7 @@ func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
 
 func TestBuildApplyPlanUsesRenderValidationCallbacks(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings:                Settings{Stack: "both"},
+		Settings:                Settings{},
 		RenderSettingsAvailable: true,
 		Inbounds:                []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 		ValidateInboundRender: func(inbound Inbound) error {
@@ -34,7 +34,7 @@ func TestBuildApplyPlanUsesRenderValidationCallbacks(t *testing.T) {
 
 func TestBuildApplyPlanUsesMieruRenderValidationWithoutRenderSettings(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{Stack: "mieru"},
+		Settings: Settings{},
 		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}},
 		ValidateInboundRender: func(inbound Inbound) error {
 			if inbound.Protocol == "mieru" {

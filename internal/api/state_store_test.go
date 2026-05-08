@@ -23,7 +23,7 @@ func TestStateStoreEncryptsAndDecryptsInboundPasswords(t *testing.T) {
 	store := NewStateStore(path, cipher)
 
 	snapshot := managementSnapshot{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev", Domain: "vpn.example.com"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com"},
 		Inbounds: []Inbound{{Name: "hy2-vip", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, Password: "vip-secret", Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-secret", Enabled: true}}}},
 	}
 	if err := store.Save(snapshot); err != nil {

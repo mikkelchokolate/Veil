@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestClientAccessBuildsClientLinksAndRendererUsersFromProfiles(t *testing.T) {
-	access, err := BuildClientAccess(Settings{Domain: "example.com", Stack: "both", NaiveUsername: "global", NaivePassword: "global-pass"}, Inbound{
+	access, err := BuildClientAccess(Settings{Domain: "example.com", NaiveUsername: "global", NaivePassword: "global-pass"}, Inbound{
 		Name:      "naive",
 		Protocol:  "naiveproxy",
 		Transport: "tcp",

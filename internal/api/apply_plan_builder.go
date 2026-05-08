@@ -19,8 +19,8 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		Configs: []string{},
 		Actions: []string{"validate management state"},
 	}
-	if _, ok := NormalizeSettingsStack(input.Settings.Stack); !ok {
-		plan.Errors = append(plan.Errors, "stack must be panel; protocols are configured as Panel inbounds")
+	if err := ValidateSettingsStackCompatibility(input.Settings); err != nil {
+		plan.Errors = append(plan.Errors, err.Error())
 	}
 	if input.Settings.PanelAccess == "caddy" {
 		if input.Settings.Domain == "" || input.Settings.Email == "" {

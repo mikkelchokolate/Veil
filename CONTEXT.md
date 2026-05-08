@@ -91,7 +91,7 @@ _Avoid_: logging, masking
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
 - The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
-- `stack` is a legacy Settings field. New Panel systems must treat protocols as **Inbounds** and normalize legacy protocol stack values to `panel` where compatibility is needed.
+- `stack` is a legacy Settings JSON compatibility field, not a current Settings **Interface** field. New Panel systems must treat protocols as **Inbounds** and accept legacy protocol stack values only behind compatibility **Modules** where needed.
 
 ## Example dialogue
 

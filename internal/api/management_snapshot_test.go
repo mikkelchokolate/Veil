@@ -6,7 +6,7 @@ func TestBuildManagementSnapshotCopiesMutableSlices(t *testing.T) {
 	inbounds := []Inbound{{Name: "naive"}}
 	rules := []RoutingRule{{Name: "rule"}}
 	snapshot := BuildManagementSnapshot(ManagementSnapshotInput{
-		Settings:      Settings{Stack: "both"},
+		Settings:      Settings{},
 		Inbounds:      inbounds,
 		Rules:         rules,
 		RoutingPreset: "preset",

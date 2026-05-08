@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildClientLinksAggregatesMieruTransportBindingsForClientProfile(t *testing.T) {
-	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com", Stack: "panel"}, []Inbound{
+	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{
 		{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}}},
 		{Name: "mieru-udp", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}}},
 	})

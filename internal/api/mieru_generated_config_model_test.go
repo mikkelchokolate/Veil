@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestMieruGeneratedConfigModelAggregatesEnabledMieruBindingsAndUsers(t *testing.T) {
-	config, ok, err := NewMieruGeneratedConfigModel(Settings{Stack: "both"}).Build([]Inbound{
+	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
 		{Name: "disabled", Protocol: "mieru", Transport: "tcp", Port: 80, Enabled: false, Password: "disabled"},
 		{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "tcp-pass"},
 		{Name: "mieru-udp", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}}},
@@ -24,7 +24,7 @@ func TestMieruGeneratedConfigModelAggregatesEnabledMieruBindingsAndUsers(t *test
 }
 
 func TestMieruGeneratedConfigModelReturnsNotRenderableWhenNoEnabledMieru(t *testing.T) {
-	_, ok, err := NewMieruGeneratedConfigModel(Settings{Stack: "both"}).Build([]Inbound{{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}})
+	_, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}})
 	if err != nil || ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}

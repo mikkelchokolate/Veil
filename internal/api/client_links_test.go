@@ -8,7 +8,6 @@ import (
 func TestBuildClientLinksUsesClientProfilesWhenPresent(t *testing.T) {
 	settings := Settings{
 		Domain:            "vpn.example.com",
-		Stack:             "both",
 		NaiveUsername:     "veil",
 		NaivePassword:     "global-naive",
 		Hysteria2Password: "global-hy2",
@@ -46,7 +45,6 @@ func TestBuildClientLinksUsesClientProfilesWhenPresent(t *testing.T) {
 func TestBuildClientLinksUsesPerInboundPasswordAndGlobalFallback(t *testing.T) {
 	settings := Settings{
 		Domain:            "vpn.example.com",
-		Stack:             "both",
 		NaiveUsername:     "veil",
 		NaivePassword:     "global-naive",
 		Hysteria2Password: "global-hy2",

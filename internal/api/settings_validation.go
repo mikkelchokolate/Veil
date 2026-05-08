@@ -17,11 +17,9 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.PanelListen == "" || settings.Mode == "" {
 		return errors.New("panelListen and mode are required")
 	}
-	stack, ok := NormalizeSettingsStack(settings.Stack)
-	if !ok {
-		return errors.New("stack must be panel; protocols are configured as Panel inbounds")
+	if err := ValidateSettingsStackCompatibility(*settings); err != nil {
+		return err
 	}
-	settings.Stack = stack
 	if settings.PanelAccess == "" {
 		settings.PanelAccess = current.PanelAccess
 	}

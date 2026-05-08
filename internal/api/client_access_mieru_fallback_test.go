@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildClientLinksIncludesMieruClientConfigForInboundPasswordFallback(t *testing.T) {
-	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com", Stack: "both"}, []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Password: "inbound-pass"}})
+	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Password: "inbound-pass"}})
 	if err != nil {
 		t.Fatalf("BuildClientLinks: %v", err)
 	}

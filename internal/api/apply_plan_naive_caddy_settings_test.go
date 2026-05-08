@@ -7,7 +7,7 @@ import (
 
 func TestBuildApplyPlanRejectsPanelCaddyAccessWithoutDomainEmail(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server"},
 	})
 	if plan.Valid || !strings.Contains(strings.Join(plan.Errors, "\n"), "--domain and --email are required for caddy Panel access") {
 		t.Fatalf("Panel Caddy apply plan should require domain/email: %+v", plan)
@@ -16,7 +16,7 @@ func TestBuildApplyPlanRejectsPanelCaddyAccessWithoutDomainEmail(t *testing.T) {
 
 func TestBuildApplyPlanRejectsPanelCaddyTCP443RuntimeConflict(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
 		Inbounds: []Inbound{{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 	if plan.Valid || !strings.Contains(strings.Join(plan.Errors, "\n"), "panel caddy access uses 443/tcp") {
@@ -26,7 +26,7 @@ func TestBuildApplyPlanRejectsPanelCaddyTCP443RuntimeConflict(t *testing.T) {
 
 func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
 	})
 	if !plan.Valid {
 		t.Fatalf("Panel Caddy access plan should be valid: %+v", plan)
@@ -38,7 +38,7 @@ func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T)
 
 func TestBuildApplyPlanRequiresCaddySettingsForNaiveProxyInbound(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 	if plan.Valid {
@@ -51,7 +51,7 @@ func TestBuildApplyPlanRequiresCaddySettingsForNaiveProxyInbound(t *testing.T) {
 
 func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev", Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 	if !plan.Valid {

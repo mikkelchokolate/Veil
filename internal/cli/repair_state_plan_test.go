@@ -33,7 +33,7 @@ func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
 	}
 	statePath := filepath.Join(varDir, "state.json")
 	snapshot := api.BuildManagementSnapshot(api.ManagementSnapshotInput{
-		Settings: api.Settings{PanelListen: "127.0.0.1:2096", Stack: "panel", Mode: "server"},
+		Settings: api.Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
 		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret-pass"}},
 		Rules:    []api.RoutingRule{},
 		Warp:     api.WarpConfig{Endpoint: "engage.cloudflareclient.com:2408"},

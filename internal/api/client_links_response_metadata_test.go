@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestClientLinksResponseMetadataBuildsStableSubscriptionFields(t *testing.T) {
-	response := NewClientLinksResponseMetadata(Settings{Domain: "example.com", Stack: "both"}).Build()
+	response := NewClientLinksResponseMetadata(Settings{Domain: "example.com"}).Build()
 	if response.SchemaVersion != "v1" || response.Domain != "example.com" {
 		t.Fatalf("response = %+v", response)
 	}

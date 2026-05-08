@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestGeneratedConfigCardinalityRejectsMultipleEnabledSameProtocol(t *testing.T) {
-	err := NewGeneratedConfigCardinality(Settings{Stack: "both"}).Validate([]Inbound{
+	err := NewGeneratedConfigCardinality(Settings{}).Validate([]Inbound{
 		{Name: "a", Protocol: "naiveproxy", Enabled: true},
 		{Name: "b", Protocol: "naiveproxy", Enabled: true},
 	})
@@ -13,7 +13,7 @@ func TestGeneratedConfigCardinalityRejectsMultipleEnabledSameProtocol(t *testing
 }
 
 func TestGeneratedConfigCardinalityIgnoresDisabledAndExcludedStackProtocols(t *testing.T) {
-	err := NewGeneratedConfigCardinality(Settings{Stack: "naive"}).Validate([]Inbound{
+	err := NewGeneratedConfigCardinality(Settings{}).Validate([]Inbound{
 		{Name: "a", Protocol: "naiveproxy", Enabled: true},
 		{Name: "b", Protocol: "hysteria2", Enabled: true},
 		{Name: "c", Protocol: "naiveproxy", Enabled: false},

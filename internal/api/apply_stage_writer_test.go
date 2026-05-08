@@ -12,7 +12,7 @@ func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 	written, validations, renderedPaths, err := WriteApplyStage(ApplyStageInput{
 		ApplyRoot: root,
 		Plan:      ApplyPlanResponse{Valid: true, Configs: []string{"caddy"}},
-		Snapshot:  managementSnapshot{Settings: Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "dev"}},
+		Snapshot:  managementSnapshot{Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}},
 		Rendered:  map[string]string{configPath: "caddy config"},
 		Validate: func(paths []string) []ConfigValidationResult {
 			if len(paths) != 1 || paths[0] != configPath {

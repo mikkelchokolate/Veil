@@ -38,8 +38,8 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 			if settings.Mode == "" {
 				errs = append(errs, "settings.mode is required")
 			}
-			if _, ok := api.NormalizeSettingsStack(settings.Stack); !ok {
-				errs = append(errs, fmt.Sprintf("settings.stack must be panel; protocols are configured as Panel inbounds, got: %s", settings.Stack))
+			if err := api.ValidateSettingsStackCompatibility(settings); err != nil {
+				errs = append(errs, fmt.Sprintf("settings.%s, got: %s", err.Error(), api.LegacySettingsStack(settings)))
 			}
 		}
 	} else {

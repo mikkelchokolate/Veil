@@ -266,8 +266,8 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	settingsRead := httptest.NewRecorder()
 	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
-	if !strings.Contains(settingsRead.Body.String(), `"stack":"panel"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
-		t.Fatalf("persisted settings missing updates: %s", settingsRead.Body.String())
+	if strings.Contains(settingsRead.Body.String(), `"stack"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
+		t.Fatalf("persisted settings should omit legacy stack and keep updates: %s", settingsRead.Body.String())
 	}
 
 	routingRead := httptest.NewRecorder()

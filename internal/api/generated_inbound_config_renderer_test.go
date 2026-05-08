@@ -7,7 +7,6 @@ import (
 
 func TestGeneratedInboundConfigRendererRendersEnabledInboundArtifact(t *testing.T) {
 	renderer := NewGeneratedInboundConfigRenderer(Settings{
-		Stack:         "naive",
 		Domain:        "example.com",
 		Email:         "admin@example.com",
 		NaiveUsername: "veil",
@@ -30,7 +29,7 @@ func TestGeneratedInboundConfigRendererRendersEnabledInboundArtifact(t *testing.
 }
 
 func TestGeneratedInboundConfigRendererSkipsDisabledAndUnsupportedProtocol(t *testing.T) {
-	renderer := NewGeneratedInboundConfigRenderer(Settings{Stack: "panel"}, NewGeneratedConfigPaths("/apply"))
+	renderer := NewGeneratedInboundConfigRenderer(Settings{}, NewGeneratedConfigPaths("/apply"))
 	for _, inbound := range []Inbound{
 		{Name: "disabled", Protocol: "naiveproxy", Enabled: false},
 		{Name: "unsupported", Protocol: "unknown", Enabled: true},

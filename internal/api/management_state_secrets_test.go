@@ -345,9 +345,9 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 		t.Fatalf("new cipher: %v", err)
 	}
 
-	// Write initial state: stack=both, domain=old.example.com
+	// Write initial state: domain=old.example.com
 	state := &managementState{statePath: statePath, keyPath: keyPath, applyRoot: stateDir, cipher: cipher}
-	state.settings = Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Domain: "old.example.com"}
+	state.settings = Settings{PanelListen: "127.0.0.1:2096", Domain: "old.example.com"}
 	if err := state.saveLocked(); err != nil {
 		t.Fatalf("save initial state: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 
 	// Write new state to disk (simulating SIGHUP / external modification)
 	state2 := &managementState{statePath: statePath, keyPath: keyPath, applyRoot: stateDir,
-		settings: Settings{PanelListen: "0.0.0.0:2096", Stack: "hysteria2", Domain: "new.example.com"}, cipher: cipher}
+		settings: Settings{PanelListen: "0.0.0.0:2096", Domain: "new.example.com"}, cipher: cipher}
 	if err := state2.saveLocked(); err != nil {
 		t.Fatalf("save new state: %v", err)
 	}
@@ -371,8 +371,8 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 	if state.settings.Domain != "new.example.com" {
 		t.Errorf("after reload domain = %q, want new.example.com", state.settings.Domain)
 	}
-	if state.settings.Stack != "panel" {
-		t.Errorf("after reload stack = %q, want panel", state.settings.Stack)
+	if LegacySettingsStack(state.settings) != "" {
+		t.Errorf("after reload retained legacy stack = %q", LegacySettingsStack(state.settings))
 	}
 }
 

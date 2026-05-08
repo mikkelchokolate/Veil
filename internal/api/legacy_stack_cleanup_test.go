@@ -10,6 +10,12 @@ import (
 	"testing"
 )
 
+func TestSettingsInterfaceDoesNotExposeLegacyStack(t *testing.T) {
+	if _, ok := reflect.TypeOf(Settings{}).FieldByName("Stack"); ok {
+		t.Fatalf("Settings should not expose legacy stack; compatibility belongs behind Settings JSON decoding and validation")
+	}
+}
+
 func TestClientLinksResponseDoesNotExposeLegacyStack(t *testing.T) {
 	if _, ok := reflect.TypeOf(ClientLinksResponse{}).FieldByName("Stack"); ok {
 		t.Fatalf("ClientLinksResponse should not expose legacy stack metadata; protocols are represented by Client links")

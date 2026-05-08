@@ -12,7 +12,6 @@ func TestGeneratedConfigSetRejectsMultipleEnabledInboundsPerProtocol(t *testing.
 		Settings: Settings{
 			Domain:            "vpn.example.com",
 			Email:             "admin@example.com",
-			Stack:             "both",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -36,7 +35,6 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 		Settings: Settings{
 			Domain:            "vpn.example.com",
 			Email:             "admin@example.com",
-			Stack:             "both",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -78,7 +76,6 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 		Settings: Settings{
 			Domain:            "vpn.example.com",
 			Email:             "admin@example.com",
-			Stack:             "both",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",

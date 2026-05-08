@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildClientLinksIncludesMieruClientConfigForClientProfile(t *testing.T) {
-	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com", Stack: "both"}, []Inbound{{
+	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{{
 		Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true,
 		Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}},
 	}})

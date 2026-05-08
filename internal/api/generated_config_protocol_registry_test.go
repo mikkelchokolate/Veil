@@ -8,7 +8,7 @@ import (
 
 func TestGeneratedConfigProtocolRegistryOwnsSingleVsAggregateCardinality(t *testing.T) {
 	registry := NewGeneratedConfigProtocolRegistry()
-	settings := Settings{Stack: "both"}
+	settings := Settings{}
 
 	err := registry.Validate(settings, []Inbound{
 		{Name: "naive-a", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
@@ -34,7 +34,6 @@ func TestGeneratedConfigProtocolRegistryRendersProtocolArtifacts(t *testing.T) {
 		Settings: Settings{
 			Domain:            "vpn.example.com",
 			Email:             "admin@example.com",
-			Stack:             "both",
 			NaiveUsername:     "veil",
 			NaivePassword:     "naive-secret",
 			Hysteria2Password: "hy2-secret",
@@ -63,7 +62,7 @@ func TestGeneratedConfigProtocolRegistryRendersProtocolArtifacts(t *testing.T) {
 
 func TestGeneratedConfigProtocolRegistryRendersSingleInboundForPlanValidation(t *testing.T) {
 	artifact, ok, err := NewGeneratedConfigProtocolRegistry().RenderInbound(
-		Settings{Stack: "mieru"},
+		Settings{},
 		NewGeneratedConfigPaths(t.TempDir()),
 		Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret"},
 	)
@@ -79,7 +78,7 @@ func TestGeneratedConfigProtocolRegistryRendersMieruWithoutSharedRenderSettings(
 	root := t.TempDir()
 	configs, err := NewGeneratedConfigProtocolRegistry().Render(GeneratedConfigInput{
 		ApplyRoot: root,
-		Settings:  Settings{Stack: "mieru"},
+		Settings:  Settings{},
 		Inbounds:  []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 9443, Enabled: true, Password: "secret"}},
 	})
 	if err != nil {
