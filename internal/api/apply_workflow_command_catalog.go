@@ -35,13 +35,36 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 	b.Write(encoded)
 	b.WriteString(`;
 
+    function applyRuntimesFromResponse(data) {
+      if (!data) {
+        return [];
+      }
+      if (Array.isArray(data.runtimes)) {
+        return data.runtimes;
+      }
+      if (data.plan && Array.isArray(data.plan.runtimes)) {
+        return data.plan.runtimes;
+      }
+      return [];
+    }
+
+    function renderApplyRuntimes(data) {
+      const output = document.getElementById('apply-runtime-output');
+      if (!output) {
+        return;
+      }
+      const runtimes = applyRuntimesFromResponse(data);
+      output.textContent = runtimes.length === 0 ? 'Runtime units: none required' : 'Runtime units: ' + runtimes.join(', ');
+    }
+
     async function runApplyWorkflowCommand(command) {
       const options = { method: 'POST' };
       if (command.request && Object.keys(command.request).length > 0) {
         options.headers = { 'Content-Type': 'application/json' };
         options.body = JSON.stringify(command.request);
       }
-      await loadJSON(command.path, 'apply-plan-output', options);
+      const result = await loadJSON(command.path, 'apply-plan-output', options);
+      renderApplyRuntimes(result);
     }
 
 `)

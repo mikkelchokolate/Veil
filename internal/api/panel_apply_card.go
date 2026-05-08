@@ -37,6 +37,7 @@ func panelApplyCardHTML() string {
         </div>
       </div>
       <button id="load-apply-history" type="button">Load apply history</button>
+      <p id="apply-runtime-output">Runtime units: not planned</p>
       <pre id="apply-plan-output">Not planned</pre>
     </div>`
 }

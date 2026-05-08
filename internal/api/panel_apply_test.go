@@ -16,6 +16,9 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`reload-services`,
 		`load-apply-history`,
 		`"applyServices":true`,
+		`function renderApplyRuntimes(data)`,
+		`data.plan && Array.isArray(data.plan.runtimes)`,
+		`Runtime units: none required`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)
@@ -32,6 +35,8 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 		`id="apply-live-configs"`,
 		`id="reload-services"`,
 		`id="load-apply-history"`,
+		`id="apply-runtime-output"`,
+		`Runtime units: not planned`,
 		`id="apply-plan-output"`,
 	} {
 		if !strings.Contains(card, want) {
