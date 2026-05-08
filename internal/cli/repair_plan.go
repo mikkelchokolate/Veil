@@ -102,6 +102,7 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 		if err == nil {
 			profile.Caddyfile = caddyfile
 		}
+		return
 	}
 	certPath := values["VEIL_TLS_CERT"]
 	if certPath == "" {

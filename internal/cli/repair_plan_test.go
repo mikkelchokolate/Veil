@@ -53,6 +53,36 @@ func TestBuildRepairPlanFromOptionsPreservesExistingPanelSecrets(t *testing.T) {
 	}
 }
 
+func TestBuildRepairPlanFromOptionsDoesNotReenablePanelTLSForCaddyAccess(t *testing.T) {
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	systemdDir := t.TempDir()
+	directProfile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{PanelPort: 2096, Secret: func(label string) string { return "direct-" + label }})
+	if err != nil {
+		t.Fatalf("Build direct profile: %v", err)
+	}
+	if _, err := installer.ApplyRURecommendedProfile(directProfile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
+		t.Fatalf("Apply direct profile: %v", err)
+	}
+	caddyProfile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 2096, Secret: func(label string) string { return "caddy-" + label }})
+	if err != nil {
+		t.Fatalf("Build caddy profile: %v", err)
+	}
+	if _, err := installer.ApplyRURecommendedProfile(caddyProfile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
+		t.Fatalf("Apply caddy profile: %v", err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	for _, action := range plan.Actions {
+		if strings.HasSuffix(action.Path, "veil.env") && strings.Contains(action.Content, "VEIL_TLS_CERT") {
+			t.Fatalf("repair should not re-enable direct Panel TLS for caddy Panel access:\n%s", action.Content)
+		}
+	}
+}
+
 func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T) {
 	etcDir := t.TempDir()
 	varDir := t.TempDir()
