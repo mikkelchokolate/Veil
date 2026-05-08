@@ -18,7 +18,11 @@ func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPla
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
-	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir})
+	veilBinary, executableErr := installExecutableFunc()
+	if executableErr != nil {
+		veilBinary = ""
+	}
+	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
