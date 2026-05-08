@@ -16,7 +16,7 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 		`STACK="panel"`,
 		`PANEL_ACCESS="local"`,
 		`--panel-access`,
-		`Deprecated; only panel is accepted`,
+		`configure protocols from the Panel`,
 		`Veil install only installs Panel; configure protocols as Panel Inbounds.`,
 	} {
 		if !strings.Contains(script, want) {

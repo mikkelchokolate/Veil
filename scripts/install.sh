@@ -7,7 +7,6 @@ INSTALL_DIR="${VEIL_INSTALL_DIR:-/usr/local/bin}"
 PROFILE="${VEIL_PROFILE:-ru-recommended}"
 DOMAIN=""
 EMAIL=""
-PORT=""
 STACK="panel"
 PANEL_ACCESS="local"
 PANEL_PORT=""
@@ -24,13 +23,12 @@ Usage:
   curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | bash -s -- --profile ru-recommended --panel-access caddy --domain example.com --email admin@example.com
 
 Options:
+  Install is Panel-only; configure protocols from the Panel after login.
   --version VERSION    Release tag to install, default latest
   --install-dir DIR    Directory for the veil binary, default /usr/local/bin
   --profile NAME       default or ru-recommended, default ru-recommended
   --domain DOMAIN      Domain used for Panel Caddy access
   --email EMAIL        ACME email for Panel Caddy access
-  --port PORT          Deprecated; protocols are configured inside the Panel
-  --stack STACK        Deprecated; only panel is accepted
   --panel-access MODE  local, direct, or caddy, default local
   --panel-port PORT    Panel TCP port; 0 means random high port in veil install
   --yes                Pass --yes to veil install for non-interactive apply
@@ -59,7 +57,7 @@ while [[ $# -gt 0 ]]; do
     --profile) PROFILE="$2"; shift 2 ;;
     --domain) DOMAIN="$2"; shift 2 ;;
     --email) EMAIL="$2"; shift 2 ;;
-    --port) PORT="$2"; shift 2 ;;
+    --port) shift 2 ;;
     --stack) STACK="$2"; shift 2 ;;
     --panel-access) PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) PANEL_PORT="$2"; shift 2 ;;
@@ -86,7 +84,7 @@ fi
 if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
   echo "Veil is already installed at ${INSTALL_DIR}/veil"
   echo "Use --force to re-install"
-  args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
+  args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
@@ -157,7 +155,7 @@ install -m 0755 "${tmpdir}/veil" "${INSTALL_DIR}/veil"
 
 echo "Installed ${INSTALL_DIR}/veil"
 
-args=(--profile "${PROFILE}" --stack "${STACK}" --panel-access "${PANEL_ACCESS}")
+args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
