@@ -20,16 +20,7 @@ func (r GeneratedInboundConfigRenderer) Render(inbound Inbound) (GeneratedConfig
 	if !inbound.Enabled || !stackIncludesProtocol(r.settings.Stack, inbound.Protocol) {
 		return GeneratedConfigArtifact{}, false, nil
 	}
-	switch inbound.Protocol {
-	case "naiveproxy":
-		body, err := r.renderNaive(inbound)
-		return GeneratedConfigArtifact{Path: r.paths.Caddyfile(), Body: body}, true, err
-	case "hysteria2":
-		body, err := r.renderHysteria2(inbound)
-		return GeneratedConfigArtifact{Path: r.paths.Hysteria2(), Body: body}, true, err
-	default:
-		return GeneratedConfigArtifact{}, false, nil
-	}
+	return NewGeneratedConfigProtocolRegistry().RenderInbound(r.settings, r.paths, inbound)
 }
 
 func (r GeneratedInboundConfigRenderer) renderNaive(inbound Inbound) (string, error) {
