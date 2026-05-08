@@ -53,13 +53,16 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 func TestUninstallYesExecutesUninstall(t *testing.T) {
 	origStop := uninstallServiceStopper
 	origRemove := uninstallFileRemover
+	origReload := uninstallSystemdReloader
 	t.Cleanup(func() {
 		uninstallServiceStopper = origStop
 		uninstallFileRemover = origRemove
+		uninstallSystemdReloader = origReload
 	})
 
 	stopped := []string{}
 	removed := []string{}
+	reloaded := false
 
 	uninstallServiceStopper = func(service string) error {
 		stopped = append(stopped, service)
@@ -67,6 +70,10 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 	uninstallFileRemover = func(path string) error {
 		removed = append(removed, path)
+		return nil
+	}
+	uninstallSystemdReloader = func() error {
+		reloaded = true
 		return nil
 	}
 
@@ -106,6 +113,10 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		if !found {
 			t.Errorf("path %s was not removed", path)
 		}
+	}
+
+	if !reloaded {
+		t.Fatal("systemd daemon-reload was not run after removing unit files")
 	}
 
 	// Verify output

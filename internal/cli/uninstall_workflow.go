@@ -11,20 +11,22 @@ type uninstallWorkflowOptions struct {
 }
 
 type UninstallWorkflow struct {
-	opts           uninstallWorkflowOptions
-	out            io.Writer
-	errOut         io.Writer
-	serviceStopper func(string) error
-	fileRemover    func(string) error
+	opts            uninstallWorkflowOptions
+	out             io.Writer
+	errOut          io.Writer
+	serviceStopper  func(string) error
+	fileRemover     func(string) error
+	systemdReloader func() error
 }
 
 func NewUninstallWorkflow(opts uninstallWorkflowOptions, out io.Writer, errOut io.Writer) UninstallWorkflow {
 	return UninstallWorkflow{
-		opts:           opts,
-		out:            out,
-		errOut:         errOut,
-		serviceStopper: uninstallServiceStopper,
-		fileRemover:    uninstallFileRemover,
+		opts:            opts,
+		out:             out,
+		errOut:          errOut,
+		serviceStopper:  uninstallServiceStopper,
+		fileRemover:     uninstallFileRemover,
+		systemdReloader: uninstallSystemdReloader,
 	}
 }
 
@@ -47,6 +49,9 @@ func (w UninstallWorkflow) Run() error {
 		if err := w.fileRemover(path); err != nil {
 			fmt.Fprintf(w.errOut, "warning: remove %s: %v\n", path, err)
 		}
+	}
+	if err := w.systemdReloader(); err != nil {
+		fmt.Fprintf(w.errOut, "warning: systemd daemon-reload: %v\n", err)
 	}
 	fmt.Fprintln(w.out, "Uninstalled Veil")
 	return nil

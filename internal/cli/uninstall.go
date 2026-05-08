@@ -11,6 +11,7 @@ import (
 
 var uninstallServiceStopper = stopAndDisableService
 var uninstallFileRemover = removePath
+var uninstallSystemdReloader = reloadSystemdDaemon
 
 func newUninstallCommand() *cobra.Command {
 	var dryRun bool
@@ -65,4 +66,11 @@ func stopAndDisableService(service string) error {
 
 func removePath(path string) error {
 	return os.RemoveAll(path)
+}
+
+func reloadSystemdDaemon() error {
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		return fmt.Errorf("daemon-reload: %w", err)
+	}
+	return nil
 }
