@@ -57,6 +57,19 @@ func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{"run_veil_install()", "< /dev/tty", "run_veil_install"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh should run interactive veil install from /dev/tty when launched through curl pipe; missing %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
@@ -72,6 +85,20 @@ func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
 		if idx := strings.Index(script, sideEffect); idx >= 0 && msgIndex > idx {
 			t.Fatalf("legacy stack rejection should appear before %q:\n%s", sideEffect, script)
 		}
+	}
+}
+
+func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if strings.Contains(script, `else args+=(--interactive); fi`) {
+		t.Fatalf("install.sh should not pass --interactive when --dry-run is set:\n%s", script)
+	}
+	if !strings.Contains(script, `elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi`) {
+		t.Fatalf("install.sh should guard --interactive behind non-dry-run mode:\n%s", script)
 	}
 }
 

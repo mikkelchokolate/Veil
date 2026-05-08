@@ -50,6 +50,13 @@ require_cmd() {
   fi
 }
 
+run_veil_install() {
+  if [[ -z "${YES}" && -z "${DRY_RUN}" && -r /dev/tty ]]; then
+    exec "${INSTALL_DIR}/veil" install "${args[@]}" < /dev/tty
+  fi
+  exec "${INSTALL_DIR}/veil" install "${args[@]}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
@@ -93,9 +100,9 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-  if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
+  if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
-  exec "${INSTALL_DIR}/veil" install "${args[@]}"
+  run_veil_install
 fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -160,7 +167,7 @@ args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-if [[ -n "${YES}" ]]; then args+=(--yes); else args+=(--interactive); fi
+if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
 if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
 
-exec "${INSTALL_DIR}/veil" install "${args[@]}"
+run_veil_install
