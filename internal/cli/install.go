@@ -16,7 +16,7 @@ var installApplyFunc = installer.ApplyRURecommendedProfile
 
 func newInstallCommand() *cobra.Command {
 	var profile string
-	var stack string
+	var legacyStack string
 	var domain string
 	var email string
 	var dryRun bool
@@ -36,7 +36,7 @@ func newInstallCommand() *cobra.Command {
 		Use:   "install",
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := rejectLegacyCLIStackSelection(stack, "Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
+			if err := rejectLegacyCLIStackSelection(legacyStack, "Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
 				return err
 			}
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
@@ -60,7 +60,7 @@ func newInstallCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "install profile: ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "", "deprecated; Veil install only installs Panel, protocols are configured as Panel Inbounds")
+	cmd.Flags().StringVar(&legacyStack, "stack", "", "deprecated; Veil install only installs Panel, protocols are configured as Panel Inbounds")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")

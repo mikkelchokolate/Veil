@@ -7,7 +7,7 @@ import (
 
 func newRepairCommand() *cobra.Command {
 	var profile string
-	var stack string
+	var legacyStack string
 	var deprecatedDomain string
 	var deprecatedEmail string
 	var deprecatedPort int
@@ -23,7 +23,7 @@ func newRepairCommand() *cobra.Command {
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := rejectLegacyCLIStackSelection(stack, "Veil repair only repairs Panel install; protocol configs come from Panel Inbounds"); err != nil {
+			if err := rejectLegacyCLIStackSelection(legacyStack, "Veil repair only repairs Panel install; protocol configs come from Panel Inbounds"); err != nil {
 				return err
 			}
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
@@ -40,7 +40,7 @@ func newRepairCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "repair profile: ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "panel", "deprecated; repair uses Panel install and Panel state")
+	cmd.Flags().StringVar(&legacyStack, "stack", "panel", "deprecated; repair uses Panel install and Panel state")
 	cmd.Flags().StringVar(&deprecatedDomain, "domain", "", "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().StringVar(&deprecatedEmail, "email", "", "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; protocol ports come from Panel Inbounds")

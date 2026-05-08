@@ -9,7 +9,7 @@ type settingsWire struct {
 	PanelListen       string  `json:"panelListen"`
 	PanelAccess       string  `json:"panelAccess,omitempty"`
 	WebBasePath       string  `json:"webBasePath,omitempty"`
-	Stack             *string `json:"stack,omitempty"`
+	LegacyStack       *string `json:"stack,omitempty"`
 	Mode              string  `json:"mode"`
 	Domain            string  `json:"domain,omitempty"`
 	Email             string  `json:"email,omitempty"`
@@ -28,8 +28,8 @@ func (s *Settings) UnmarshalJSON(body []byte) error {
 		return err
 	}
 	legacyStack := ""
-	if wire.Stack != nil {
-		legacyStack = *wire.Stack
+	if wire.LegacyStack != nil {
+		legacyStack = *wire.LegacyStack
 	}
 	*s = Settings{
 		PanelListen:       wire.PanelListen,

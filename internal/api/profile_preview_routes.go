@@ -14,7 +14,7 @@ type RURecommendedPreviewRequest struct {
 
 type ruRecommendedPreviewWireRequest struct {
 	RURecommendedPreviewRequest
-	Stack string `json:"stack,omitempty"`
+	LegacyStack string `json:"stack,omitempty"`
 }
 
 type RURecommendedPreviewResponse struct {
@@ -44,7 +44,7 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 	if !decodeJSONRequest(w, r, &wireReq) {
 		return
 	}
-	if wireReq.Stack != "" && wireReq.Stack != "panel" {
+	if wireReq.LegacyStack != "" && wireReq.LegacyStack != "panel" {
 		writeError(w, "profile preview only supports Panel install; configure protocols as Panel Inbounds", http.StatusBadRequest)
 		return
 	}

@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-func rejectLegacyCLIStackSelection(stack string, message string) error {
-	stack = strings.TrimSpace(stack)
-	if stack == "" || stack == "panel" {
+func rejectLegacyCLIStackSelection(legacyStack string, message string) error {
+	legacyStack = strings.TrimSpace(legacyStack)
+	if legacyStack == "" || legacyStack == "panel" {
 		return nil
 	}
 	return fmt.Errorf(message)
