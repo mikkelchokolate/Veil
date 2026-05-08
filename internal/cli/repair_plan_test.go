@@ -14,7 +14,7 @@ func TestBuildRepairPlanFromOptionsUsesCurrentExecutableForPanelUnit(t *testing.
 	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
 	t.Cleanup(func() { installExecutableFunc = oldExecutable })
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestBuildRepairPlanFromOptionsPreservesExistingPanelSecrets(t *testing.T) {
 	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
 	t.Cleanup(func() { installExecutableFunc = oldExecutable })
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestBuildRepairPlanFromOptionsDoesNotReenablePanelTLSForCaddyAccess(t *test
 		t.Fatalf("Apply caddy profile: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 		t.Fatalf("remove veil-naive.service: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -116,7 +116,6 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 func TestBuildRepairPlanFromOptionsBuildsPanelInstallPlan(t *testing.T) {
 	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
 		Profile:    "ru-recommended",
-		Stack:      "panel",
 		EtcDir:     t.TempDir(),
 		VarDir:     t.TempDir(),
 		SystemdDir: t.TempDir(),

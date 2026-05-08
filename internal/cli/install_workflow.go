@@ -14,7 +14,6 @@ const defaultSystemdDir = "/etc/systemd/system"
 
 type ruRecommendedInstallOptions struct {
 	Profile      string
-	Stack        string
 	Domain       string
 	Email        string
 	DryRun       bool
@@ -41,13 +40,6 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		if err := promptInstallOptions(cmd, opts.PanelAccess, &opts.Domain, &opts.Email, &opts.PanelPort); err != nil {
 			return err
 		}
-	}
-	opts.Stack = strings.TrimSpace(opts.Stack)
-	if opts.Stack == "" {
-		opts.Stack = "panel"
-	}
-	if opts.Stack != "panel" {
-		return fmt.Errorf("Veil install only installs Panel; configure protocols as Panel Inbounds")
 	}
 	if err := NewRURecommendedInstallRequirements().Validate(opts); err != nil {
 		return err

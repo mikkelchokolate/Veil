@@ -14,7 +14,6 @@ func TestRunRepairWorkflowDryRunPrintsPlanWithoutApply(t *testing.T) {
 
 	err := runRepairWorkflow(cmd, repairWorkflowOptions{
 		Profile: "ru-recommended",
-		Stack:   "panel",
 		DryRun:  true,
 		EtcDir:  t.TempDir(),
 		VarDir:  t.TempDir(),

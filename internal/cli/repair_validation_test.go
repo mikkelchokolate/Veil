@@ -15,7 +15,7 @@ var _repair_validation_deps = []any{
 
 func TestRepairWorkflowOptionsDoNotExposeDeprecatedProtocolInstallInputs(t *testing.T) {
 	optionsType := reflect.TypeOf(repairWorkflowOptions{})
-	for _, field := range []string{"Domain", "Email", "SharedPort"} {
+	for _, field := range []string{"Stack", "Domain", "Email", "SharedPort"} {
 		if _, ok := optionsType.FieldByName(field); ok {
 			t.Fatalf("repairWorkflowOptions should not expose deprecated protocol install field %s", field)
 		}

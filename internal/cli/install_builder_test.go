@@ -4,7 +4,6 @@ import "testing"
 
 func TestBuildRURecommendedInstallFromOptionsHonorsExplicitPanelPort(t *testing.T) {
 	install, err := buildRURecommendedInstallFromOptions(ruRecommendedInstallOptions{
-		Stack:     "both",
 		Domain:    "example.com",
 		Email:     "admin@example.com",
 		PanelPort: 2096,

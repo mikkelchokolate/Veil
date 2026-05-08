@@ -32,7 +32,6 @@ func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing
 
 	err := runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
 		Profile:     "ru-recommended",
-		Stack:       "panel",
 		PanelAccess: "caddy",
 		Domain:      "example.com",
 		Email:       "admin@example.com",

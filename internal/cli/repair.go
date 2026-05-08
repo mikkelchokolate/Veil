@@ -23,9 +23,11 @@ func newRepairCommand() *cobra.Command {
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectLegacyCLIStackSelection(stack, "Veil repair only repairs Panel install; protocol configs come from Panel Inbounds"); err != nil {
+				return err
+			}
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:      profile,
-				Stack:        stack,
 				DryRun:       dryRun,
 				Yes:          yes,
 				EtcDir:       etcDir,

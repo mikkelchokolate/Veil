@@ -36,9 +36,11 @@ func newInstallCommand() *cobra.Command {
 		Use:   "install",
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectLegacyCLIStackSelection(stack, "Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
+				return err
+			}
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
 				Profile:      profile,
-				Stack:        stack,
 				Domain:       domain,
 				Email:        email,
 				DryRun:       dryRun,

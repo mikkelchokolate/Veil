@@ -42,7 +42,7 @@ func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 		t.Fatalf("write state: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateMieruInbounds(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}

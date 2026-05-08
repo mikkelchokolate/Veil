@@ -8,7 +8,6 @@ import (
 
 type repairWorkflowOptions struct {
 	Profile      string
-	Stack        string
 	DryRun       bool
 	Yes          bool
 	EtcDir       string
@@ -22,12 +21,6 @@ type repairWorkflowOptions struct {
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 	if opts.Profile != "ru-recommended" {
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
-	}
-	if opts.Stack == "" {
-		opts.Stack = "panel"
-	}
-	if opts.Stack != "panel" {
-		return fmt.Errorf("Veil repair only repairs Panel install; protocol configs come from Panel Inbounds")
 	}
 	plan, err := buildRepairPlanFromOptions(opts)
 	if err != nil {
