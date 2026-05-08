@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/veil-panel/veil/internal/api"
 	"github.com/veil-panel/veil/internal/installer"
@@ -18,6 +19,7 @@ func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPla
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
+	preserveExistingPanelRepairMaterial(&built, opts.EtcDir)
 	veilBinary, executableErr := installExecutableFunc()
 	if executableErr != nil {
 		veilBinary = ""
@@ -65,6 +67,66 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 		}
 	}
 	return plan, nil
+}
+
+func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, etcDir string) {
+	if profile == nil || etcDir == "" {
+		return
+	}
+	values := readRepairEnv(filepath.Join(etcDir, "veil.env"))
+	if token := values["VEIL_API_TOKEN"]; token != "" {
+		profile.PanelAuthToken = token
+	}
+	if listen := values["VEIL_LISTEN"]; listen != "" {
+		profile.PanelListen = listen
+	}
+	if panelAccess := values["VEIL_PANEL_ACCESS"]; panelAccess != "" {
+		profile.PanelAccess = panelAccess
+	}
+	if domain := values["VEIL_DOMAIN"]; domain != "" {
+		profile.Domain = domain
+	}
+	if email := values["VEIL_EMAIL"]; email != "" {
+		profile.Email = email
+	}
+	if webBasePath := values["VEIL_WEB_BASE_PATH"]; webBasePath != "" {
+		profile.WebBasePath = webBasePath
+	}
+	certPath := values["VEIL_TLS_CERT"]
+	if certPath == "" {
+		certPath = filepath.Join(etcDir, "panel", "tls.crt")
+	}
+	keyPath := values["VEIL_TLS_KEY"]
+	if keyPath == "" {
+		keyPath = filepath.Join(etcDir, "panel", "tls.key")
+	}
+	cert, certErr := os.ReadFile(certPath)
+	key, keyErr := os.ReadFile(keyPath)
+	if certErr == nil && keyErr == nil {
+		profile.PanelTLSEnabled = true
+		profile.PanelTLSCertPEM = string(cert)
+		profile.PanelTLSKeyPEM = string(key)
+	}
+}
+
+func readRepairEnv(path string) map[string]string {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]string{}
+	}
+	values := map[string]string{}
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		values[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return values
 }
 
 func resolvedRepairBinaryPath(name string) string {

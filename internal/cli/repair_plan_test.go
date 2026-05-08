@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/installer"
 )
 
 func TestBuildRepairPlanFromOptionsUsesCurrentExecutableForPanelUnit(t *testing.T) {
@@ -20,6 +22,33 @@ func TestBuildRepairPlanFromOptionsUsesCurrentExecutableForPanelUnit(t *testing.
 		}
 	}
 	t.Fatalf("repair plan did not render veil.service with selected binary: %+v", plan.Actions)
+}
+
+func TestBuildRepairPlanFromOptionsPreservesExistingPanelSecrets(t *testing.T) {
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	systemdDir := t.TempDir()
+	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{Secret: func(label string) string { return "original-" + label }})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile: %v", err)
+	}
+	if _, err := installer.ApplyRURecommendedProfile(profile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
+		t.Fatalf("ApplyRURecommendedProfile: %v", err)
+	}
+	oldExecutable := installExecutableFunc
+	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
+	t.Cleanup(func() { installExecutableFunc = oldExecutable })
+
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	summary := plan.Summary()
+	for _, unwanted := range []string{"veil.env", "panel/tls.crt", "panel/tls.key"} {
+		if strings.Contains(summary, unwanted) {
+			t.Fatalf("repair should preserve existing panel secret material, but planned %q:\n%s", unwanted, summary)
+		}
+	}
 }
 
 func TestBuildRepairPlanFromOptionsBuildsPanelInstallPlan(t *testing.T) {
