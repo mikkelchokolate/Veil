@@ -51,7 +51,11 @@ require_cmd() {
 }
 
 run_veil_install() {
-  if [[ -z "${YES}" && -z "${DRY_RUN}" && -r /dev/tty ]]; then
+  if [[ -n "${DRY_RUN}" ]]; then
+    "${RUN_BIN}" install "${args[@]}"
+    return $?
+  fi
+  if [[ -z "${YES}" && -r /dev/tty ]]; then
     exec "${RUN_BIN}" install "${args[@]}" < /dev/tty
   fi
   exec "${RUN_BIN}" install "${args[@]}"
@@ -105,6 +109,7 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
   if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
   run_veil_install
+  exit $?
 fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"

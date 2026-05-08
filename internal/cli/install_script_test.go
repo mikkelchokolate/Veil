@@ -114,6 +114,19 @@ func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{`if [[ -n "${DRY_RUN}" ]]; then`, `"${RUN_BIN}" install "${args[@]}"`, `return $?`} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh dry-run should run temp binary without exec so cleanup trap can run; missing %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
