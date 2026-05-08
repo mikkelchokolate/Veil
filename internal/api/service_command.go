@@ -10,13 +10,7 @@ import (
 type ServiceCommandPolicy struct{}
 
 func (p ServiceCommandPolicy) AllowsAction(command []string) bool {
-	if len(command) != 3 || command[0] != "systemctl" {
-		return false
-	}
-	if command[1] == "reload" {
-		return p.AllowsHealth(command[2])
-	}
-	return command[1] == "restart" && command[2] == "veil-mieru.service"
+	return NewManagedRuntimeCatalog().AllowsPromotedAction(command)
 }
 
 func (p ServiceCommandPolicy) AllowsReload(command []string) bool {
@@ -24,7 +18,7 @@ func (p ServiceCommandPolicy) AllowsReload(command []string) bool {
 }
 
 func (ServiceCommandPolicy) AllowsHealth(service string) bool {
-	return service == "veil-naive.service" || service == "veil-hysteria2.service" || service == "veil-warp.service" || service == "veil-mieru.service"
+	return NewManagedRuntimeCatalog().AllowsHealthUnit(service)
 }
 
 func runFixedServiceAction(command []string) ServiceActionResult {
