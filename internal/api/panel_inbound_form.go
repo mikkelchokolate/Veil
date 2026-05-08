@@ -23,9 +23,7 @@ func panelInboundFormHTML() string {
             <div>
               <label for="inbound-transport">Transport</label>
               <select id="inbound-transport">
-                <option value="tcp">tcp</option>
-                <option value="udp">udp</option>
-              </select>
+` + panelInboundTransportOptionsHTML() + `              </select>
             </div>
             <div>
               <label for="inbound-port">Port</label>

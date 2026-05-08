@@ -3,7 +3,7 @@ package api
 const panelInboundActionsPlaceholder = "__VEIL_PANEL_INBOUND_ACTIONS__"
 
 func panelInboundActionsJS() string {
-	return `    async function loadInboundsIntoOutput() {
+	return panelInboundProtocolTransportRulesJS() + `    async function loadInboundsIntoOutput() {
       await loadJSON('/api/inbounds', 'inbounds-output');
     }
 

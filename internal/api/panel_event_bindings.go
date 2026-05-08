@@ -16,6 +16,8 @@ func panelEventBindingsJS() string {
     document.getElementById('download-client-subscription-raw').addEventListener('click', () => downloadClientSubscriptionPath('/api/client-links/subscription?format=raw', 'veil-subscription-raw.txt'));
     document.getElementById('download-mieru-configs').addEventListener('click', downloadMieruConfigs);
     document.getElementById('copy-client-links').addEventListener('click', copyClientLinksOutput);
+    document.getElementById('inbound-protocol').addEventListener('change', syncInboundTransportOptions);
+    syncInboundTransportOptions();
     document.getElementById('inbound-form').addEventListener('submit', saveInbound);
     document.getElementById('delete-inbound').addEventListener('click', deleteInbound);
     document.getElementById('load-inbounds').addEventListener('click', loadInboundsIntoOutput);
