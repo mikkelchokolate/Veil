@@ -17,6 +17,7 @@ tidy:
 release-check:
 	go vet ./...
 	go test ./... -count=1
+	make build
 	git diff --check
 	@test -z "$$(git status --short)" || (git status --short && exit 1)
 
