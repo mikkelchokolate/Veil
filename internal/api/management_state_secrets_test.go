@@ -371,8 +371,8 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 	if state.settings.Domain != "new.example.com" {
 		t.Errorf("after reload domain = %q, want new.example.com", state.settings.Domain)
 	}
-	if state.settings.Stack != "hysteria2" {
-		t.Errorf("after reload stack = %q, want hysteria2", state.settings.Stack)
+	if state.settings.Stack != "panel" {
+		t.Errorf("after reload stack = %q, want panel", state.settings.Stack)
 	}
 }
 

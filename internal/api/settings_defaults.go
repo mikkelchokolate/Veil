@@ -2,6 +2,9 @@ package api
 
 func mergeSettingsDefaults(settings Settings, defaults Settings) Settings {
 	merged := settings
+	if stack, ok := NormalizeSettingsStack(merged.Stack); ok {
+		merged.Stack = stack
+	}
 	if merged.PanelListen == "" {
 		merged.PanelListen = defaults.PanelListen
 	}
