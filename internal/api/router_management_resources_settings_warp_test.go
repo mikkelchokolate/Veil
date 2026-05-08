@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/secrets"
 )
 
 var _router_management_resources_settings_warp_deps = []any{
@@ -102,8 +104,10 @@ func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
 }
 
 func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
-	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"licenseKey":"warp-license","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
@@ -117,14 +121,9 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 		t.Fatalf("redacted warp update expected 200, got %d: %s", update.Code, update.Body.String())
 	}
 
-	stateBody, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`"licenseKey": "warp-license"`, `"privateKey": "warp-private-key"`, `"socksPort": 40001`, `"endpoint": "162.159.193.10:2408"`} {
-		if !strings.Contains(string(stateBody), want) {
-			t.Fatalf("persisted WARP state missing %q after redacted update: %s", want, string(stateBody))
-		}
+	snapshot := loadStateSnapshotForTest(t, statePath, keyPath)
+	if snapshot.Warp.LicenseKey != "warp-license" || snapshot.Warp.PrivateKey != "warp-private-key" || snapshot.Warp.SocksPort != 40001 || snapshot.Warp.Endpoint != "162.159.193.10:2408" {
+		t.Fatalf("persisted WARP state after redacted update: %+v", snapshot.Warp)
 	}
 }
 
@@ -165,8 +164,10 @@ func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
 }
 
 func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
-	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
@@ -180,14 +181,9 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 		t.Fatalf("redacted settings update expected 200, got %d: %s", update.Code, update.Body.String())
 	}
 
-	stateBody, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`"naivePassword": "naive-secret"`, `"hysteria2Password": "hy2-secret"`, `"panelListen": "127.0.0.1:3096"`, `"domain": "vpn2.example.com"`} {
-		if !strings.Contains(string(stateBody), want) {
-			t.Fatalf("persisted settings state missing %q after redacted update: %s", want, string(stateBody))
-		}
+	snapshot := loadStateSnapshotForTest(t, statePath, keyPath)
+	if snapshot.Settings.NaivePassword != "naive-secret" || snapshot.Settings.Hysteria2Password != "hy2-secret" || snapshot.Settings.PanelListen != "127.0.0.1:3096" || snapshot.Settings.Domain != "vpn2.example.com" {
+		t.Fatalf("persisted settings state after redacted update: %+v", snapshot.Settings)
 	}
 }
 
@@ -279,4 +275,24 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	if !strings.Contains(routingRead.Body.String(), "ru-sites") {
 		t.Fatalf("persisted routing rules missing ru-sites: %s", routingRead.Body.String())
 	}
+}
+
+func loadStateSnapshotForTest(t *testing.T, statePath, keyPath string) managementSnapshot {
+	t.Helper()
+	key, err := secrets.LoadOrCreateKey(keyPath)
+	if err != nil {
+		t.Fatalf("load key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	snapshot, ok, err := NewStateStore(statePath, cipher).Load()
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if !ok {
+		t.Fatalf("state not found at %s", statePath)
+	}
+	return snapshot
 }

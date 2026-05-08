@@ -14,7 +14,7 @@ type ManagementSnapshotInput struct {
 func BuildManagementSnapshot(input ManagementSnapshotInput) managementSnapshot {
 	return managementSnapshot{
 		Settings:      input.Settings,
-		Inbounds:      append([]Inbound(nil), input.Inbounds...),
+		Inbounds:      cloneInbounds(input.Inbounds),
 		Rules:         append([]RoutingRule(nil), input.Rules...),
 		RoutingPreset: input.RoutingPreset,
 		RoutingSource: input.RoutingSource,

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,28 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("panel Caddy install should not include %q:\n%s", unwanted, got)
 		}
+	}
+}
+
+func TestInstallPanelCaddyAccessRequiresCaddyBinaryForApply(t *testing.T) {
+	oldLookPath := commandLookPath
+	commandLookPath = func(name string) (string, error) {
+		if name == "caddy" {
+			return "", errors.New("missing caddy")
+		}
+		return "/usr/bin/" + name, nil
+	}
+	t.Cleanup(func() { commandLookPath = oldLookPath })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--panel-access", "caddy", "--domain", "panel.example.com", "--email", "admin@example.com", "--panel-port", "2096", "--yes"})
+
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "caddy is required for caddy Panel access") {
+		t.Fatalf("expected caddy prerequisite error, got %v\n%s", err, out.String())
 	}
 }
 

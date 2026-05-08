@@ -100,10 +100,22 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	if opts.DryRun {
 		return nil
 	}
+	if err := validateInstallRuntimePrerequisites(built); err != nil {
+		return err
+	}
 	if !opts.Yes {
 		if err := confirmInstallPlan(cmd, opts.Interactive); err != nil {
 			return err
 		}
 	}
 	return applyRURecommendedInstall(cmd, built, opts)
+}
+
+func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) error {
+	if profile.InstallPanelCaddy || profile.InstallNaive {
+		if _, err := commandLookPath("caddy"); err != nil {
+			return fmt.Errorf("caddy is required for caddy Panel access; install Caddy or use --panel-access local/direct")
+		}
+	}
+	return nil
 }
