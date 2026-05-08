@@ -20,7 +20,6 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 		Domain:      "example.com",
 		Email:       "admin@example.com",
 		Secret:      func(label string) string { return "secret-" + label },
-		RandomPort:  func() int { return 31874 },
 		PanelPort:   2096,
 	})
 	if err != nil {
@@ -73,11 +72,9 @@ func TestApplyWithoutBackupDirDoesNotBackup(t *testing.T) {
 	dir := t.TempDir()
 
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		Domain: "example.com",
+		Email:  "admin@example.com",
+		Secret: func(label string) string { return "secret-" + label },
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
@@ -106,7 +103,6 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 		Domain:      "example.com",
 		Email:       "admin@example.com",
 		Secret:      func(label string) string { return "secret-" + label },
-		RandomPort:  func() int { return 31874 },
 		PanelPort:   2096,
 	})
 	if err != nil {
@@ -201,11 +197,9 @@ func TestApplyBackupSkipsNewFilesThatDidNotExist(t *testing.T) {
 	backupDir := filepath.Join(dir, "backups")
 
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		Domain: "example.com",
+		Email:  "admin@example.com",
+		Secret: func(label string) string { return "secret-" + label },
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)

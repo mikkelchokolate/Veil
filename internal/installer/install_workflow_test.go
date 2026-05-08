@@ -7,15 +7,12 @@ import (
 
 func TestBuildRURecommendedInstallSelectsPanelPortBeforeProfile(t *testing.T) {
 	result, err := BuildRURecommendedInstall(RURecommendedInstallInput{
-		Domain:       "example.com",
-		Email:        "admin@example.com",
-		Stack:        StackPanel,
-		PanelAccess:  "caddy",
-		Port:         443,
-		PanelPort:    0,
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		RandomPort:   func() int { return 31874 },
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		Stack:       StackPanel,
+		PanelAccess: "caddy",
+		PanelPort:   0,
+		Secret:      func(label string) string { return "secret-" + label },
 		RandomPanelPort: func() (int, error) {
 			return 2096, nil
 		},

@@ -7,7 +7,7 @@ import (
 )
 
 func TestLegacyMieruInstallStackNormalizesToPanelOnly(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackMieru, Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackMieru, Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}

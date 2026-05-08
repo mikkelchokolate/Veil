@@ -58,12 +58,7 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		Stack:       installer.StackPanel,
 		PanelAccess: req.PanelAccess,
 		PanelPort:   2096,
-		Availability: installer.PortAvailability{
-			TCPBusy: map[int]bool{},
-			UDPBusy: map[int]bool{},
-		},
-		Secret:     func(label string) string { return "preview-" + label },
-		RandomPort: func() int { return 31874 },
+		Secret:      func(label string) string { return "preview-" + label },
 	})
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)

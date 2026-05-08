@@ -15,7 +15,6 @@ func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 		Email:       "admin@example.com",
 		PanelPort:   2096,
 		Secret:      func(label string) string { return "secret-" + label },
-		RandomPort:  func() int { return 31874 },
 	})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)

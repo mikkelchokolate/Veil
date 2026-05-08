@@ -4,13 +4,11 @@ import "testing"
 
 func TestRURecommendedProfileModuleBuildsPanelInstallPolicy(t *testing.T) {
 	profile, err := NewRURecommendedProfileModule(RURecommendedInput{
-		Domain:       "vpn.example.com",
-		Email:        "admin@example.com",
-		Stack:        StackBoth,
-		Port:         443,
-		Availability: PortAvailability{TCPBusy: map[int]bool{}, UDPBusy: map[int]bool{}},
-		Secret:       func(label string) string { return "secret-" + label },
-		PanelPort:    2096,
+		Domain:    "vpn.example.com",
+		Email:     "admin@example.com",
+		Stack:     StackBoth,
+		Secret:    func(label string) string { return "secret-" + label },
+		PanelPort: 2096,
 	}).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)

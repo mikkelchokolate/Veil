@@ -8,8 +8,5 @@ func (RURecommendedInputDefaults) Apply(input RURecommendedInput) RURecommendedI
 	if input.Secret == nil {
 		input.Secret = func(label string) string { return label }
 	}
-	if input.RandomPort == nil {
-		input.RandomPort = func() int { return 443 }
-	}
 	return input
 }

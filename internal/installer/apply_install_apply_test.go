@@ -14,8 +14,7 @@ var _apply_install_apply_deps = []any{
 func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	dir := t.TempDir()
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Secret:     func(label string) string { return "secret-" + label },
-		RandomPort: func() int { return 31874 },
+		Secret: func(label string) string { return "secret-" + label },
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
@@ -48,7 +47,6 @@ func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
 		Domain:      "example.com",
 		Email:       "admin@example.com",
 		Secret:      func(label string) string { return "secret-" + label },
-		RandomPort:  func() int { return 31874 },
 		PanelPort:   2096,
 	})
 	if err != nil {

@@ -19,15 +19,12 @@ const (
 )
 
 type RURecommendedInput struct {
-	Domain       string
-	Email        string
-	Stack        Stack
-	PanelAccess  string
-	Port         int
-	Availability PortAvailability
-	Secret       SecretFunc
-	RandomPort   func() int
-	PanelPort    int
+	Domain      string
+	Email       string
+	Stack       Stack
+	PanelAccess string
+	Secret      SecretFunc
+	PanelPort   int
 }
 
 type RURecommendedProfile struct {

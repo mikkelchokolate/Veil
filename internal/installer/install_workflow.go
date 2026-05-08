@@ -7,11 +7,8 @@ type RURecommendedInstallInput struct {
 	Email           string
 	Stack           Stack
 	PanelAccess     string
-	Port            int
 	PanelPort       int
-	Availability    PortAvailability
 	Secret          SecretFunc
-	RandomPort      func() int
 	RandomPanelPort func() (int, error)
 }
 
@@ -34,15 +31,12 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 		return RURecommendedInstall{}, err
 	}
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:       input.Domain,
-		Email:        input.Email,
-		Stack:        input.Stack,
-		PanelAccess:  input.PanelAccess,
-		Port:         input.Port,
-		Availability: input.Availability,
-		Secret:       input.Secret,
-		RandomPort:   input.RandomPort,
-		PanelPort:    panelPort,
+		Domain:      input.Domain,
+		Email:       input.Email,
+		Stack:       input.Stack,
+		PanelAccess: input.PanelAccess,
+		Secret:      input.Secret,
+		PanelPort:   panelPort,
 	})
 	if err != nil {
 		return RURecommendedInstall{}, err

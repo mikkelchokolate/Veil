@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 }
 
 func TestBuildRURecommendedProfileDoesNotPlanSharedProxyPortForLegacyStacks(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackBoth, Port: 443, Availability: PortAvailability{TCPBusy: map[int]bool{443: true}, UDPBusy: map[int]bool{443: true}}, Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackBoth, Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("legacy stack should not check shared proxy port availability: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestBuildRURecommendedProfileDoesNotPlanSharedProxyPortForLegacyStacks(t *t
 
 func TestBuildRURecommendedProfileNormalizesLegacyProtocolStacksToPanelOnly(t *testing.T) {
 	for _, stack := range []Stack{"", StackBoth, StackNaive, StackHysteria2, StackMieru} {
-		profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: stack, Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+		profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: stack, Secret: func(label string) string { return "secret-" + label }})
 		if err != nil {
 			t.Fatalf("BuildRURecommendedProfile(%q): %v", stack, err)
 		}
@@ -77,14 +77,14 @@ func TestNormalizeStackTrimsWhitespaceAndNormalizesLegacyStacksToPanel(t *testin
 }
 
 func TestBuildRURecommendedProfileRejectsMissingDomainForPanelCaddyAccess(t *testing.T) {
-	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Email: "admin@example.com", Secret: func(label string) string { return "secret" }, RandomPort: func() int { return 31874 }})
+	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Email: "admin@example.com", Secret: func(label string) string { return "secret" }})
 	if err == nil {
 		t.Fatalf("expected missing domain error")
 	}
 }
 
 func TestBuildRURecommendedProfileGeneratesWebBasePathForPanelCaddyAccess(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }, PanelPort: 2096})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestBuildRURecommendedProfileGeneratesWebBasePathForPanelCaddyAccess(t *tes
 }
 
 func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyfile(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }, PanelPort: 2096})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyfile(t *testin
 }
 
 func TestBuildRURecommendedProfileRejectsPanelCaddyWhenPanelPortZero(t *testing.T) {
-	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }, PanelPort: 0})
+	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 0})
 	if err == nil {
 		t.Fatalf("expected Panel Caddy access to require selected Panel port")
 	}

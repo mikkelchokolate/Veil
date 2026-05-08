@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildInstallPlanSummaryIncludesPanelSystemdAndFirewall(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestBuildInstallPlanSummaryIncludesPanelSystemdAndFirewall(t *testing.T) {
 }
 
 func TestBuildInstallPlanSummaryIncludesPanelCaddyAccess(t *testing.T) {
-	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }, PanelPort: 2096})
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
