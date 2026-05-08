@@ -52,6 +52,9 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", "", "optional systemd unit output directory, e.g. /etc/systemd/system")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
+	for _, name := range []string{"stack", "domain", "email", "port"} {
+		_ = cmd.Flags().MarkHidden(name)
+	}
 	return cmd
 }
 

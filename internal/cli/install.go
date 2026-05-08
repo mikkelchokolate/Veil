@@ -76,6 +76,8 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
+	_ = cmd.Flags().MarkHidden("stack")
+	_ = cmd.Flags().MarkHidden("port")
 	return cmd
 }
 

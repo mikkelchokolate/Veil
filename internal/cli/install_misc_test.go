@@ -17,6 +17,22 @@ var _installTestDeps_misc = []any{
 	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
 }
 
+func TestInstallHelpHidesLegacyStackAndPortFlags(t *testing.T) {
+	cmd := newInstallCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, unwanted := range []string{"--stack", "--port"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Fatalf("install help should hide legacy flag %q:\n%s", unwanted, out.String())
+		}
+	}
+}
+
 func TestRandomSecretGeneratesBase64String(t *testing.T) {
 	// Test that randomSecret produces consistent-length base64 output.
 	s := randomSecret("test-label")

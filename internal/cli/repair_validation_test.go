@@ -12,6 +12,22 @@ var _repair_validation_deps = []any{
 	bytes.Buffer{}, os.ReadFile, filepath.Join, strings.Contains, testing.T{},
 }
 
+func TestRepairHelpHidesLegacyStackDomainEmailAndPortFlags(t *testing.T) {
+	cmd := newRepairCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, unwanted := range []string{"--stack", "--domain", "--email", "--port"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Fatalf("repair help should hide legacy flag %q:\n%s", unwanted, out.String())
+		}
+	}
+}
+
 func TestRepairCommandRejectsInvalidProfile(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
