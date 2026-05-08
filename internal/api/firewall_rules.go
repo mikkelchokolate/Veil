@@ -13,17 +13,13 @@ type firewallRuleResponse struct {
 
 func BuildFirewallRuleResponses(settings Settings, inbounds []Inbound) []firewallRuleResponse {
 	builder := NewFirewallRuleResponseBuilder()
+	protocols := NewInboundProtocolCatalog()
 	for _, inbound := range inbounds {
-		if !inbound.Enabled {
+		if !inbound.Enabled || !protocols.SupportsTransport(inbound.Protocol, inbound.Transport) {
 			continue
 		}
-		switch inbound.Protocol {
-		case "naiveproxy":
-			builder.Add(inbound.Port, "tcp", "Veil NaiveProxy")
-		case "hysteria2":
-			builder.Add(inbound.Port, "udp", "Veil Hysteria2")
-		case "mieru":
-			builder.Add(inbound.Port, inbound.Transport, "Veil Mieru")
+		if service, ok := protocols.FirewallService(inbound.Protocol); ok {
+			builder.Add(inbound.Port, inbound.Transport, service)
 		}
 	}
 	if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {

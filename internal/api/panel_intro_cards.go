@@ -5,7 +5,7 @@ const panelIntroCardsPlaceholder = "__VEIL_PANEL_INTRO_CARDS__"
 func panelIntroCardsHTML() string {
 	return `    <h1>Veil Panel</h1>
     <div class="card">
-      <p>Web panel for NaiveProxy, Hysteria2, and Mieru management. Use the sections below to configure and apply settings.</p>
+      <p>Web panel for ` + NewInboundProtocolCatalog().DisplayNameList() + ` management. Use the sections below to configure and apply settings.</p>
       <p>Status API: <code>/api/status</code> &middot; Version: <code>/api/version</code> &middot; Firewall: <code>/api/firewall</code> &middot; Health: <code>/healthz</code> &middot; Metrics: <code>/metrics</code> &middot; System: <code>/api/system</code> &middot; Network: <code>/api/network</code> &middot; DNS: <code>/api/tools/dns-lookup</code> &middot; Ping: <code>/api/tools/ping</code> &middot; Profile preview: <code>/api/profiles/ru-recommended/preview</code></p>
     </div>
     <div class="card">

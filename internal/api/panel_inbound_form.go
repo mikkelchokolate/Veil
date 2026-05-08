@@ -8,7 +8,7 @@ const panelInboundFormPlaceholder = "__VEIL_PANEL_INBOUND_FORM__"
 func panelInboundFormHTML() string {
 	return `      <div class="card">
         <h2>Inbounds</h2>
-        <p>Create, update, or delete NaiveProxy, Hysteria2, and Mieru inbound definitions through <code>/api/inbounds</code>.</p>
+        <p>Create, update, or delete ` + NewInboundProtocolCatalog().DisplayNameList() + ` inbound definitions through <code>/api/inbounds</code>.</p>
         <form id="inbound-form">
           <div class="form-grid">
             <div>

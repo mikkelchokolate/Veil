@@ -23,6 +23,23 @@ func TestInboundProtocolCatalogKnowsSupportedProtocolsAndTransports(t *testing.T
 	}
 }
 
+func TestInboundProtocolCatalogOwnsDisplayNamesAndFirewallServices(t *testing.T) {
+	catalog := NewInboundProtocolCatalog()
+	if got := catalog.DisplayNameList(); got != "NaiveProxy, Hysteria2, and Mieru" {
+		t.Fatalf("DisplayNameList = %q", got)
+	}
+	for _, tc := range []struct{ protocol, service string }{
+		{"naiveproxy", "Veil NaiveProxy"},
+		{"hysteria2", "Veil Hysteria2"},
+		{"mieru", "Veil Mieru"},
+	} {
+		service, ok := catalog.FirewallService(tc.protocol)
+		if !ok || service != tc.service {
+			t.Fatalf("FirewallService(%q) = %q,%v want %q,true", tc.protocol, service, ok, tc.service)
+		}
+	}
+}
+
 func TestInboundProtocolCatalogListsPanelChoices(t *testing.T) {
 	choices := NewInboundProtocolCatalog().Choices()
 	want := []InboundProtocolChoice{
