@@ -51,6 +51,43 @@ func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
 	}
 }
 
+func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
+	dir := t.TempDir()
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	statePath := filepath.Join(varDir, "state.json")
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	state := `{
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","stack":"panel","mode":"server","domain":"panel.example.com","email":"admin@example.com"},
+  "inbounds": [],
+  "routingRules": [],
+  "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", Stack: "panel", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	summary := plan.Summary()
+	for _, want := range []string{"generated/caddy/Caddyfile", "veil-naive.service"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("Panel state Caddy access repair missing %q:\n%s", want, summary)
+		}
+	}
+	caddyfile := repairActionContent(plan, "Caddyfile")
+	if !strings.Contains(caddyfile, "handle_path /panel-secret/*") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") {
+		t.Fatalf("Panel state Caddyfile not repaired from settings:\n%s", caddyfile)
+	}
+	env := repairActionContent(plan, "veil.env")
+	if !strings.Contains(env, "VEIL_PANEL_ACCESS=caddy") || strings.Contains(env, "VEIL_TLS_CERT") {
+		t.Fatalf("Panel state veil.env should preserve caddy access without direct TLS:\n%s", env)
+	}
+}
+
 func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *testing.T) {
 	oldLookPath := commandLookPath
 	commandLookPath = func(name string) (string, error) {

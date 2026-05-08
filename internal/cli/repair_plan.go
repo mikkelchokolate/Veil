@@ -48,6 +48,9 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 	if !ok {
 		return plan, nil
 	}
+	if err := applyPanelSettingsRepairActions(&plan, opts, snapshot.Settings); err != nil {
+		return installer.RepairPlan{}, err
+	}
 	configs, err := api.BuildGeneratedConfigSet(api.GeneratedConfigInput{ApplyRoot: opts.EtcDir, Settings: snapshot.Settings, Inbounds: snapshot.Inbounds, Rules: snapshot.Rules, Warp: snapshot.Warp})
 	if err != nil {
 		return installer.RepairPlan{}, err
@@ -57,8 +60,21 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 			return installer.RepairPlan{}, err
 		}
 	}
+	if snapshot.Settings.PanelAccess == "caddy" {
+		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: snapshot.Settings.Domain, Email: snapshot.Settings.Email, PanelPort: panelPortFromListen(snapshot.Settings.PanelListen), WebBasePath: snapshot.Settings.WebBasePath})
+		if err != nil {
+			return installer.RepairPlan{}, err
+		}
+		if err := addRepairFileAction(&plan, filepath.Join(opts.EtcDir, "generated", "caddy", "Caddyfile"), caddyfile, 0o600); err != nil {
+			return installer.RepairPlan{}, err
+		}
+	}
 	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: opts.EtcDir, CaddyBinary: resolvedRepairBinaryPath("caddy")})
-	for _, unitName := range runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp) {
+	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
+	if snapshot.Settings.PanelAccess == "caddy" {
+		unitNames = appendRepairUnit(unitNames, "veil-naive.service")
+	}
+	for _, unitName := range unitNames {
 		body := units[unitName]
 		if body == "" || opts.SystemdDir == "" {
 			continue
@@ -68,6 +84,44 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 		}
 	}
 	return plan, nil
+}
+
+func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWorkflowOptions, settings api.Settings) error {
+	if settings.PanelAccess == "" {
+		return nil
+	}
+	if settings.PanelAccess == "caddy" {
+		removeRepairActions(plan, filepath.Join(opts.EtcDir, "panel", "tls.crt"), filepath.Join(opts.EtcDir, "panel", "tls.key"))
+	}
+	token := repairPlanEnvValue(*plan, "VEIL_API_TOKEN")
+	if token == "" {
+		token = readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))["VEIL_API_TOKEN"]
+	}
+	if token == "" {
+		token = randomSecret("panel")
+	}
+	listen := settings.PanelListen
+	if listen == "" {
+		listen = "127.0.0.1:2096"
+	}
+	var env strings.Builder
+	env.WriteString("VEIL_API_TOKEN=" + token + "\n")
+	env.WriteString("VEIL_LISTEN=" + listen + "\n")
+	env.WriteString("VEIL_PANEL_ACCESS=" + settings.PanelAccess + "\n")
+	if settings.Domain != "" {
+		env.WriteString("VEIL_DOMAIN=" + settings.Domain + "\n")
+	}
+	if settings.Email != "" {
+		env.WriteString("VEIL_EMAIL=" + settings.Email + "\n")
+	}
+	if settings.PanelAccess != "caddy" {
+		env.WriteString("VEIL_TLS_CERT=" + filepath.Join(opts.EtcDir, "panel", "tls.crt") + "\n")
+		env.WriteString("VEIL_TLS_KEY=" + filepath.Join(opts.EtcDir, "panel", "tls.key") + "\n")
+	}
+	if settings.WebBasePath != "" && settings.WebBasePath != "/" {
+		env.WriteString("VEIL_WEB_BASE_PATH=" + settings.WebBasePath + "\n")
+	}
+	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), env.String(), 0o600)
 }
 
 func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, etcDir string) {
@@ -181,6 +235,55 @@ func repairStateCipher(keyPath string) *secrets.Cipher {
 
 func runtimeUnitNamesForState(inbounds []api.Inbound, warp api.WarpConfig) []string {
 	return api.NewProtocolRuntimeProvisioning().Plan(inbounds, warp).SystemdUnits()
+}
+
+func appendRepairUnit(units []string, unit string) []string {
+	for _, existing := range units {
+		if existing == unit {
+			return units
+		}
+	}
+	return append(units, unit)
+}
+
+func repairPlanEnvValue(plan installer.RepairPlan, name string) string {
+	prefix := name + "="
+	for _, action := range plan.Actions {
+		if filepath.Base(action.Path) != "veil.env" {
+			continue
+		}
+		for _, line := range strings.Split(action.Content, "\n") {
+			if strings.HasPrefix(line, prefix) {
+				return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			}
+		}
+	}
+	return ""
+}
+
+func removeRepairActions(plan *installer.RepairPlan, paths ...string) {
+	remove := map[string]bool{}
+	for _, path := range paths {
+		remove[path] = true
+	}
+	kept := plan.Actions[:0]
+	for _, action := range plan.Actions {
+		if !remove[action.Path] {
+			kept = append(kept, action)
+		}
+	}
+	plan.Actions = kept
+}
+
+func setRepairFileAction(plan *installer.RepairPlan, path string, content string, mode os.FileMode) error {
+	for idx, action := range plan.Actions {
+		if action.Path == path {
+			plan.Actions[idx].Content = content
+			plan.Actions[idx].Mode = mode
+			return nil
+		}
+	}
+	return addRepairFileAction(plan, path, content, mode)
 }
 
 func addRepairFileAction(plan *installer.RepairPlan, path string, content string, mode os.FileMode) error {
