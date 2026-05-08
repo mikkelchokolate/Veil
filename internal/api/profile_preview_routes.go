@@ -14,18 +14,11 @@ type RURecommendedPreviewRequest struct {
 }
 
 type RURecommendedPreviewResponse struct {
-	Domain             string `json:"domain"`
-	Email              string `json:"email"`
-	Stack              string `json:"stack"`
-	InstallNaive       bool   `json:"installNaive"`
-	InstallHysteria2   bool   `json:"installHysteria2"`
-	InstallMieru       bool   `json:"installMieru"`
-	PanelAccess        string `json:"panelAccess"`
-	PanelURL           string `json:"panelUrl,omitempty"`
-	NaiveClientURL     string `json:"naiveClientURL"`
-	Hysteria2ClientURI string `json:"hysteria2ClientURI"`
-	Caddyfile          string `json:"caddyfile"`
-	Hysteria2YAML      string `json:"hysteria2YAML"`
+	Domain      string `json:"domain"`
+	Email       string `json:"email"`
+	PanelAccess string `json:"panelAccess"`
+	PanelURL    string `json:"panelUrl,omitempty"`
+	Caddyfile   string `json:"caddyfile,omitempty"`
 }
 
 type ProfilePreviewRoutes struct{}
@@ -67,18 +60,11 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		panelURL = "https://" + profile.Domain + profile.WebBasePath
 	}
 	writeJSON(w, RURecommendedPreviewResponse{
-		Domain:             profile.Domain,
-		Email:              profile.Email,
-		Stack:              string(profile.Stack),
-		InstallNaive:       profile.InstallNaive,
-		InstallHysteria2:   profile.InstallHysteria2,
-		InstallMieru:       profile.InstallMieru,
-		PanelAccess:        req.PanelAccess,
-		PanelURL:           panelURL,
-		NaiveClientURL:     redactProfileSecrets(profile, profile.NaiveClientURL),
-		Hysteria2ClientURI: redactProfileSecrets(profile, profile.Hysteria2ClientURI),
-		Caddyfile:          redactProfileSecrets(profile, profile.Caddyfile),
-		Hysteria2YAML:      redactProfileSecrets(profile, profile.Hysteria2YAML),
+		Domain:      profile.Domain,
+		Email:       profile.Email,
+		PanelAccess: req.PanelAccess,
+		PanelURL:    panelURL,
+		Caddyfile:   redactProfileSecrets(profile, profile.Caddyfile),
 	})
 }
 

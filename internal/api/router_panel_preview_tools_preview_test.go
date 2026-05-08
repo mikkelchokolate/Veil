@@ -35,6 +35,23 @@ func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
 	}
 }
 
+func TestRURecommendedPreviewResponseOmitsLegacyStackFields(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	for _, unwanted := range []string{`"stack"`, `"installNaive"`, `"installHysteria2"`, `"installMieru"`, `"naiveClientURL"`, `"hysteria2ClientURI"`, `"hysteria2YAML"`} {
+		if strings.Contains(w.Body.String(), unwanted) {
+			t.Fatalf("profile preview response should not expose legacy stack/protocol install field %s: %s", unwanted, w.Body.String())
+		}
+	}
+}
+
 func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
@@ -50,7 +67,7 @@ func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Stack != "panel" || response.InstallNaive || response.InstallHysteria2 || response.InstallMieru || response.Caddyfile != "" || response.Hysteria2YAML != "" {
+	if response.Domain != "example.com" || response.Email != "admin@example.com" || response.Caddyfile != "" {
 		t.Fatalf("preview should default to Panel-only: %+v", response)
 	}
 }
@@ -70,11 +87,8 @@ func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Stack != "panel" || response.PanelAccess != "caddy" || response.PanelURL == "" || response.Caddyfile == "" {
+	if response.PanelAccess != "caddy" || response.PanelURL == "" || response.Caddyfile == "" {
 		t.Fatalf("expected Panel Caddy preview: %+v", response)
-	}
-	if response.InstallNaive || response.InstallHysteria2 || response.InstallMieru || response.Hysteria2YAML != "" || response.NaiveClientURL != "" || response.Hysteria2ClientURI != "" {
-		t.Fatalf("Panel Caddy preview should not render protocol artifacts: %+v", response)
 	}
 	if strings.Contains(response.Caddyfile, "forward_proxy") || !strings.Contains(response.Caddyfile, "reverse_proxy 127.0.0.1:") {
 		t.Fatalf("unexpected Panel Caddyfile:\n%s", response.Caddyfile)
