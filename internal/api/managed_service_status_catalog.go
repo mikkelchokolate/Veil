@@ -14,12 +14,10 @@ func NewManagedServiceStatusCatalog(read ServiceRuntimeStatusReader) ManagedServ
 }
 
 func (c ManagedServiceStatusCatalog) List() []ServiceStatus {
-	services := []ServiceStatus{
-		{Name: "veil", Managed: true, Unit: "veil.service"},
-		{Name: "naive", Managed: true, Transport: "tcp", Unit: "caddy.service"},
-		{Name: "hysteria2", Managed: true, Transport: "udp", Unit: "hysteria2.service"},
-		{Name: "sing-box", Managed: true, Unit: "sing-box.service"},
-		{Name: "mieru", Managed: true, Unit: "veil-mieru.service"},
+	runtimes := NewManagedRuntimeCatalog().Runtimes()
+	services := make([]ServiceStatus, 0, len(runtimes))
+	for _, runtime := range runtimes {
+		services = append(services, ServiceStatus{Name: runtime.Name, Managed: true, Transport: runtime.Transport, Unit: runtime.Unit})
 	}
 	for i := range services {
 		runtime := c.read(services[i].Unit)

@@ -176,7 +176,7 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 		switch unit {
 		case "veil.service":
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running"}
-		case "caddy.service":
+		case "veil-naive.service":
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "inactive", SubState: "dead"}
 		default:
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "not-found", ActiveState: "unknown", SubState: "unknown", Error: "unit not found"}
@@ -216,10 +216,10 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if services["veil"].Unit != "veil.service" || services["veil"].ActiveState != "active" || services["veil"].SubState != "running" {
 		t.Fatalf("veil runtime status not included: %+v", services["veil"])
 	}
-	if services["naive"].Unit != "caddy.service" || services["naive"].ActiveState != "inactive" || services["naive"].SubState != "dead" {
+	if services["naive"].Unit != "veil-naive.service" || services["naive"].ActiveState != "inactive" || services["naive"].SubState != "dead" {
 		t.Fatalf("naive/caddy runtime status not included: %+v", services["naive"])
 	}
-	if services["hysteria2"].Unit != "hysteria2.service" || services["hysteria2"].ActiveState != "unknown" || services["hysteria2"].Error == "" {
+	if services["hysteria2"].Unit != "veil-hysteria2.service" || services["hysteria2"].ActiveState != "unknown" || services["hysteria2"].Error == "" {
 		t.Fatalf("hysteria2 runtime status error not included: %+v", services["hysteria2"])
 	}
 }

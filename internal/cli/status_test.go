@@ -45,8 +45,8 @@ func TestFetchStatusJSON(t *testing.T) {
 			Mode:          "server",
 			Services: []serviceStatus{
 				{Name: "veil", Managed: true, Unit: "veil.service", ActiveState: "active", SubState: "running"},
-				{Name: "naive", Managed: true, Transport: "tcp", Unit: "caddy.service", ActiveState: "active", SubState: "running"},
-				{Name: "hysteria2", Managed: true, Transport: "udp", Unit: "hysteria2.service", ActiveState: "active", SubState: "running"},
+				{Name: "naive", Managed: true, Transport: "tcp", Unit: "veil-naive.service", ActiveState: "active", SubState: "running"},
+				{Name: "hysteria2", Managed: true, Transport: "udp", Unit: "veil-hysteria2.service", ActiveState: "active", SubState: "running"},
 			},
 		})
 	})
