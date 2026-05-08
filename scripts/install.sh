@@ -13,6 +13,7 @@ PANEL_PORT=""
 YES=""
 DRY_RUN=""
 FORCE=""
+RUN_BIN="${INSTALL_DIR}/veil"
 
 usage() {
   cat <<USAGE
@@ -52,9 +53,9 @@ require_cmd() {
 
 run_veil_install() {
   if [[ -z "${YES}" && -z "${DRY_RUN}" && -r /dev/tty ]]; then
-    exec "${INSTALL_DIR}/veil" install "${args[@]}" < /dev/tty
+    exec "${RUN_BIN}" install "${args[@]}" < /dev/tty
   fi
-  exec "${INSTALL_DIR}/veil" install "${args[@]}"
+  exec "${RUN_BIN}" install "${args[@]}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -81,7 +82,7 @@ require_cmd tar
 require_cmd sha256sum
 require_cmd uname
 
-if [[ "${EUID}" -ne 0 ]]; then
+if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
   echo "Veil installer must run as root because Panel install writes systemd units and starts services." >&2
   echo "Run with sudo." >&2
   exit 1
@@ -158,10 +159,15 @@ if [[ ! -x "${tmpdir}/veil" ]]; then
   chmod +x "${tmpdir}/veil"
 fi
 
-mkdir -p "${INSTALL_DIR}"
-install -m 0755 "${tmpdir}/veil" "${INSTALL_DIR}/veil"
-
-echo "Installed ${INSTALL_DIR}/veil"
+if [[ -n "${DRY_RUN}" ]]; then
+  RUN_BIN="${tmpdir}/veil"
+  echo "Dry run: using downloaded Veil binary without installing it."
+else
+  mkdir -p "${INSTALL_DIR}"
+  install -m 0755 "${tmpdir}/veil" "${INSTALL_DIR}/veil"
+  RUN_BIN="${INSTALL_DIR}/veil"
+  echo "Installed ${INSTALL_DIR}/veil"
+fi
 
 args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi

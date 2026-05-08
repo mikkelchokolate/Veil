@@ -19,7 +19,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 		"sha256sum -c",
 		"tar -xzf",
 		"/usr/local/bin",
-		"exec \"${INSTALL_DIR}/veil\" install",
+		"exec \"${RUN_BIN}\" install",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q:\n%s", want, script)
@@ -99,6 +99,25 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 	}
 	if !strings.Contains(script, `elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi`) {
 		t.Fatalf("install.sh should guard --interactive behind non-dry-run mode:\n%s", script)
+	}
+}
+
+func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `exec "${RUN_BIN}" install`} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh dry-run should execute downloaded temp binary without installing; missing %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, `if [[ "${EUID}" -ne 0 ]]; then`) {
+		t.Fatalf("install.sh should not require root for --dry-run:\n%s", script)
+	}
+	if !strings.Contains(script, `if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then`) {
+		t.Fatalf("install.sh root check should be skipped for dry-run:\n%s", script)
 	}
 }
 
