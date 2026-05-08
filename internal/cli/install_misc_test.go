@@ -39,9 +39,9 @@ func TestStackName(t *testing.T) {
 			want:    "hysteria2",
 		},
 		{
-			name:    "neither",
+			name:    "panel only",
 			profile: installer.RURecommendedProfile{InstallNaive: false, InstallHysteria2: false},
-			want:    "none",
+			want:    "panel",
 		},
 	}
 

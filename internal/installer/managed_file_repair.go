@@ -62,7 +62,7 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 		return nil, fmt.Errorf("var dir is required")
 	}
 	files := []managedFile{}
-	if profile.InstallNaive {
+	if profile.InstallNaive || profile.InstallPanelCaddy {
 		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"), Content: profile.Caddyfile, Mode: 0o600})
 		files = append(files, managedFile{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(profile.Domain), Mode: 0o644})
 	}
@@ -79,7 +79,7 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir})
 		unitNames := []string{"veil.service"}
-		if profile.InstallNaive {
+		if profile.InstallNaive || profile.InstallPanelCaddy {
 			unitNames = append(unitNames, "veil-naive.service")
 		}
 		if profile.InstallHysteria2 {

@@ -3,10 +3,11 @@ package firewall
 import "fmt"
 
 type Config struct {
-	SharedPort int
-	PanelPort  int
-	EnableTCP  bool
-	EnableUDP  bool
+	SharedPort     int
+	PanelPort      int
+	PanelHTTPSPort int
+	EnableTCP      bool
+	EnableUDP      bool
 }
 
 type Rule struct {
@@ -15,7 +16,7 @@ type Rule struct {
 }
 
 func UFWPlan(config Config) []Rule {
-	if config.SharedPort <= 0 && config.PanelPort <= 0 {
+	if config.SharedPort <= 0 && config.PanelPort <= 0 && config.PanelHTTPSPort <= 0 {
 		return nil
 	}
 	if config.SharedPort > 0 {
@@ -33,6 +34,9 @@ func UFWPlan(config Config) []Rule {
 	}
 	if config.PanelPort > 0 {
 		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.PanelPort), "comment", "Veil panel"}})
+	}
+	if config.PanelHTTPSPort > 0 {
+		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.PanelHTTPSPort), "comment", "Veil panel HTTPS"}})
 	}
 	return rules
 }

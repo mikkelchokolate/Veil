@@ -39,7 +39,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com", "--panel-access", "caddy",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",
@@ -51,9 +51,14 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Written files:", "Caddyfile", "server.yaml", "index.html", "veil.service", "veil-naive.service", "veil-hysteria2.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
+	for _, want := range []string{"Written files:", "Caddyfile", "index.html", "veil.service", "veil-naive.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"server.yaml", "veil-hysteria2.service"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("Panel Caddy install should not write %q:\n%s", unwanted, got)
 		}
 	}
 	// Caddyfile must include reverse_proxy to panel port

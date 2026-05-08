@@ -1,5 +1,7 @@
 package installer
 
+import "github.com/veil-panel/veil/internal/renderer"
+
 type SecretFunc func(label string) string
 
 type Stack string
@@ -16,6 +18,7 @@ type RURecommendedInput struct {
 	Domain       string
 	Email        string
 	Stack        Stack
+	PanelAccess  string
 	Port         int
 	Availability PortAvailability
 	Secret       SecretFunc
@@ -35,6 +38,7 @@ type RURecommendedProfile struct {
 	InstallNaive       bool
 	InstallHysteria2   bool
 	InstallMieru       bool
+	InstallPanelCaddy  bool
 	PortPlan           SharedPortPlan
 	Caddyfile          string
 	Hysteria2YAML      string
@@ -75,7 +79,8 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
-	if stack.RequiresDomain() {
+	panelCaddy := input.PanelAccess == "caddy"
+	if stack.RequiresDomain() || panelCaddy {
 		if err := ValidateDomain(input.Domain); err != nil {
 			return RURecommendedProfile{}, err
 		}
@@ -93,7 +98,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	masqueradeURL := defaults.MasqueradeURL
 	fallbackRoot := defaults.FallbackRoot
 	webBasePath := ""
-	if stack.InstallNaive {
+	if stack.InstallNaive || panelCaddy {
 		webBasePath = generateWebBasePath()
 	}
 	panelAuthToken := input.Secret("panel")
@@ -102,6 +107,11 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 
 	if stack.InstallNaive {
 		naive, err = m.naiveArtifacts(input, plan, username, fallbackRoot, webBasePath)
+		if err != nil {
+			return RURecommendedProfile{}, err
+		}
+	} else if panelCaddy {
+		naive.Caddyfile, err = renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: webBasePath})
 		if err != nil {
 			return RURecommendedProfile{}, err
 		}
@@ -125,6 +135,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		InstallNaive:       stack.InstallNaive,
 		InstallHysteria2:   stack.InstallHysteria2,
 		InstallMieru:       stack.InstallMieru,
+		InstallPanelCaddy:  panelCaddy,
 		PortPlan:           plan,
 		Caddyfile:          naive.Caddyfile,
 		Hysteria2YAML:      hysteria.ServerYAML,

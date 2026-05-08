@@ -64,10 +64,18 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	var caddyBuild BuildHint
 	if profile.InstallNaive {
 		caddyBuild = CaddyNaiveBuildHint("/usr/local/bin/caddy")
+	} else if profile.InstallPanelCaddy {
+		caddyBuild = CaddyPanelBuildHint("/usr/local/bin/caddy")
 	}
 	sharedProxyPort := 0
 	if profile.InstallNaive || profile.InstallHysteria2 {
 		sharedProxyPort = profile.PortPlan.Port
+	}
+	panelPort := input.PanelPort
+	panelHTTPSPort := 0
+	if profile.InstallPanelCaddy {
+		panelPort = 0
+		panelHTTPSPort = 443
 	}
 	return InstallPlan{
 		Profile:        profile,
@@ -78,10 +86,11 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		CaddyBuild:     caddyBuild,
 		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
 		FirewallActions: firewall.UFWPlan(firewall.Config{
-			SharedPort: sharedProxyPort,
-			PanelPort:  input.PanelPort,
-			EnableTCP:  profile.InstallNaive,
-			EnableUDP:  profile.InstallHysteria2,
+			SharedPort:     sharedProxyPort,
+			PanelPort:      panelPort,
+			PanelHTTPSPort: panelHTTPSPort,
+			EnableTCP:      profile.InstallNaive,
+			EnableUDP:      profile.InstallHysteria2,
 		}),
 		PanelTools: []string{"speedtest-cli or speedtest"},
 	}, nil

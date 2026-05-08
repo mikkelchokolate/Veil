@@ -18,6 +18,7 @@ func buildRURecommendedInstallFromOptions(opts ruRecommendedInstallOptions) (ins
 		Domain:          opts.Domain,
 		Email:           opts.Email,
 		Stack:           installer.Stack(opts.Stack),
+		PanelAccess:     opts.PanelAccess,
 		Port:            opts.SharedPort,
 		PanelPort:       opts.PanelPort,
 		Availability:    availability,

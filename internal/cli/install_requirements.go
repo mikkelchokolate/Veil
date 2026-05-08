@@ -19,6 +19,9 @@ func (r RURecommendedInstallRequirements) Validate(opts ruRecommendedInstallOpti
 	if err != nil {
 		return err
 	}
+	if opts.PanelAccess == "caddy" && (opts.Domain == "" || opts.Email == "") {
+		return fmt.Errorf("--domain and --email are required for caddy Panel access")
+	}
 	if policy.RequiresDomain() {
 		if opts.Domain == "" {
 			return fmt.Errorf("--domain is required for ru-recommended profile")

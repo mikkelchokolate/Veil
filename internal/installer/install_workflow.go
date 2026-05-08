@@ -6,6 +6,7 @@ type RURecommendedInstallInput struct {
 	Domain          string
 	Email           string
 	Stack           Stack
+	PanelAccess     string
 	Port            int
 	PanelPort       int
 	Availability    PortAvailability
@@ -36,6 +37,7 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 		Domain:       input.Domain,
 		Email:        input.Email,
 		Stack:        input.Stack,
+		PanelAccess:  input.PanelAccess,
 		Port:         input.Port,
 		Availability: input.Availability,
 		Secret:       input.Secret,

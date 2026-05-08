@@ -59,7 +59,7 @@ func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedP
 		fmt.Fprintf(p.out, "Hysteria2 client URI: %s\n", p.RedactProfileSecrets(profile, profile.Hysteria2ClientURI))
 	}
 	fmt.Fprintln(p.out, "")
-	if profile.InstallNaive {
+	if profile.InstallNaive || profile.InstallPanelCaddy {
 		fmt.Fprintln(p.out, "Generated Caddyfile")
 		fmt.Fprintln(p.out, strings.Repeat("-", 24))
 		fmt.Fprintln(p.out, p.RedactProfileSecrets(profile, profile.Caddyfile))
@@ -92,7 +92,7 @@ func (InstallPresentation) StackName(profile installer.RURecommendedProfile) str
 	case profile.InstallMieru:
 		return string(installer.StackMieru)
 	default:
-		return "none"
+		return string(installer.StackPanel)
 	}
 }
 

@@ -55,7 +55,7 @@ func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing
 	}
 }
 
-func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
+func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -68,12 +68,7 @@ func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Veil ru-recommended dry run",
-		"NaiveProxy TCP port:",
-		"Hysteria2 UDP port:",
-		"NaiveProxy client URL:",
-		"Hysteria2 client URI:",
-		"Generated Caddyfile",
-		"Generated Hysteria2 server.yaml",
+		"Stack: panel",
 		"Panel port:",
 		"(random)",
 		"ufw allow ",
@@ -81,6 +76,11 @@ func TestInstallDryRunRURecommendedPrintsConfigsAndLinks(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"NaiveProxy TCP port:", "Hysteria2 UDP port:", "NaiveProxy client URL:", "Hysteria2 client URI:", "Generated Hysteria2 server.yaml", "Shared port:"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("Panel install should not contain %q:\n%s", unwanted, got)
 		}
 	}
 }
@@ -215,27 +215,27 @@ func TestInstallRURecommendedRejectsInvalidPublicIP(t *testing.T) {
 	}
 }
 
-func TestInstallRURecommendedRequiresDomain(t *testing.T) {
+func TestInstallRURecommendedDoesNotRequireDomainForLocalPanel(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--email", "admin@example.com", "--port", "31874", "--dry-run"})
 
-	if err := cmd.Execute(); err == nil {
-		t.Fatalf("expected error without domain")
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("local Panel install should not require domain: %v\n%s", err, out.String())
 	}
 }
 
-func TestInstallRURecommendedRequiresPort(t *testing.T) {
+func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--dry-run"})
 
-	if err := cmd.Execute(); err == nil {
-		t.Fatalf("expected error without explicit shared proxy port")
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Panel install should not require shared proxy port: %v\n%s", err, out.String())
 	}
 }
 
@@ -248,7 +248,7 @@ func TestInstallDryRunUsesHysteriaChecksumInBinaryPlan(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com", "--port", "31874", "--stack", "hysteria2",
 		"--hysteria-sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"--dry-run",
 	})

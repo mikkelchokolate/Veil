@@ -41,8 +41,12 @@ func (s InstallPlanSummary) String() string {
 			fmt.Fprintf(&b, "Mieru sha256: %s\n", p.MieruBinary.SHA256)
 		}
 	}
-	if p.Profile.InstallNaive {
-		fmt.Fprintf(&b, "Caddy/NaiveProxy build: %s\n", p.CaddyBuild.BinaryPath)
+	if p.Profile.InstallNaive || p.Profile.InstallPanelCaddy {
+		label := "Caddy/NaiveProxy build"
+		if p.Profile.InstallPanelCaddy && !p.Profile.InstallNaive {
+			label = "Caddy/Panel reverse proxy"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", label, p.CaddyBuild.BinaryPath)
 		for _, command := range p.CaddyBuild.Commands {
 			fmt.Fprintf(&b, "- %s\n", command)
 		}

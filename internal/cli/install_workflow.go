@@ -36,15 +36,12 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
 	if opts.Interactive {
-		if err := promptInstallOptions(cmd, &opts.Domain, &opts.Email, &opts.SharedPort, &opts.PanelPort); err != nil {
+		if err := promptInstallOptions(cmd, opts.PanelAccess, &opts.Domain, &opts.Email, &opts.SharedPort, &opts.PanelPort); err != nil {
 			return err
 		}
 	}
 	if strings.TrimSpace(opts.Stack) == "" {
 		opts.Stack = "panel"
-		if opts.Domain != "" || opts.Email != "" || opts.SharedPort != 0 {
-			opts.Stack = "both"
-		}
 	}
 	if err := NewRURecommendedInstallRequirements(opts.Stack).Validate(opts); err != nil {
 		return err

@@ -17,10 +17,10 @@ var _installTestDeps_interactive = []any{
 	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.StackBoth,
 }
 
-func TestInstallInteractivePromptsForDomainEmailPortAndRandomPanelPort(t *testing.T) {
+func TestInstallInteractivePromptsOnlyForPanelPortByDefault(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n31874\nn\n"))
+	cmd.SetIn(strings.NewReader("n\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -30,12 +30,8 @@ func TestInstallInteractivePromptsForDomainEmailPortAndRandomPanelPort(t *testin
 	}
 	got := out.String()
 	for _, want := range []string{
-		"Domain for Veil/ACME:",
-		"ACME email:",
-		"Shared proxy port:",
 		"Customize panel port?",
-		"Domain: example.com",
-		"Email: admin@example.com",
+		"Stack: panel",
 		"Panel port:",
 		"(random)",
 	} {
@@ -43,12 +39,17 @@ func TestInstallInteractivePromptsForDomainEmailPortAndRandomPanelPort(t *testin
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
+	for _, unwanted := range []string{"Domain for Veil/ACME:", "ACME email:", "Shared proxy port:"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("default interactive install should not prompt %q:\n%s", unwanted, got)
+		}
+	}
 }
 
 func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n31874\ny\n2096\n"))
+	cmd.SetIn(strings.NewReader("y\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -62,35 +63,30 @@ func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	}
 }
 
-func TestInstallInteractiveRejectsInvalidDomainAndReprompts(t *testing.T) {
-	// Pass an invalid domain (no dot), then a valid one. Verify the command succeeds.
+func TestInstallInteractiveRejectsInvalidDomainAndRepromptsForPanelCaddy(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	// Sequence: invalid-domain-without-dot, valid-domain, email, port, n (no custom panel port)
-	cmd.SetIn(strings.NewReader("not-a-domain\nvalid.example.com\nadmin@example.com\n31874\nn\n"))
+	cmd.SetIn(strings.NewReader("not-a-domain\nvalid.example.com\nadmin@example.com\nn\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-access", "caddy", "--interactive", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	// Should have reprompted and eventually used the valid domain.
 	if !strings.Contains(got, "Domain: valid.example.com") {
 		t.Fatalf("expected valid domain in output:\n%s", got)
 	}
-	// The invalid domain should NOT appear as the final domain.
 	if strings.Contains(got, "Domain: not-a-domain") {
 		t.Fatalf("expected invalid domain to be rejected, got:\n%s", got)
 	}
 }
 
-func TestInstallInteractiveRejectsInvalidSharedPortAndReprompts(t *testing.T) {
-	// Pass invalid ports (0, out-of-range, non-numeric), then a valid one.
+func TestInstallInteractiveDoesNotPromptForSharedProxyPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n0\n99999\nabc\n31874\nn\n"))
+	cmd.SetIn(strings.NewReader("n\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -98,18 +94,15 @@ func TestInstallInteractiveRejectsInvalidSharedPortAndReprompts(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
-	got := out.String()
-	// Should succeed with the valid port (31874 appears in output as NaiveProxy TCP port etc.)
-	if !strings.Contains(got, "NaiveProxy TCP port: 31874") {
-		t.Fatalf("expected valid shared port 31874 in output:\n%s", got)
+	if strings.Contains(out.String(), "Shared proxy port:") || strings.Contains(out.String(), "NaiveProxy TCP port:") {
+		t.Fatalf("interactive Panel install must not configure proxy port:\n%s", out.String())
 	}
 }
 
 func TestInstallInteractiveRejectsInvalidPanelPortAndReprompts(t *testing.T) {
-	// User chooses to customize panel port but enters invalid values, then valid.
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("example.com\nadmin@example.com\n31874\ny\n0\n99999\nxyz\n2096\n"))
+	cmd.SetIn(strings.NewReader("y\n0\n99999\nxyz\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
