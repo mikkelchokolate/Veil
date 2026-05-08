@@ -2,10 +2,13 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -68,7 +71,7 @@ func fetchStatus(ctx context.Context, url string, token string) (*statusResponse
 	if token != "" {
 		req.Header.Set("X-Veil-Token", token)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := statusHTTPClient(url).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -82,4 +85,23 @@ func fetchStatus(ctx context.Context, url string, token string) (*statusResponse
 		return nil, err
 	}
 	return &status, nil
+}
+
+func statusHTTPClient(rawURL string) *http.Client {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme != "https" || !isLocalStatusHost(parsed.Hostname()) {
+		return http.DefaultClient
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // generated local Panel TLS is self-signed
+	return &http.Client{Transport: transport}
+}
+
+func isLocalStatusHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
