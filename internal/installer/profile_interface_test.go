@@ -33,7 +33,7 @@ func TestRURecommendedInstallInputDoesNotExposeProtocolStackSelection(t *testing
 	}
 }
 
-func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T) {
+func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) {
 	forbiddenTypes := map[string]bool{
 		"RURecommendedNaiveArtifacts":    true,
 		"RURecommendedHysteriaArtifacts": true,
@@ -42,6 +42,7 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T)
 		"RURecommendedPortPolicy":        true,
 		"RURecommendedStackPolicy":       true,
 		"SharedPortPlan":                 true,
+		"PortAvailability":               true,
 	}
 	forbiddenFuncs := map[string]bool{
 		"NewRURecommendedPortPolicy":  true,
@@ -50,6 +51,9 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T)
 		"PlanSharedPort":              true,
 		"PlanStackPort":               true,
 		"PlanExplicitStackPort":       true,
+		"DetectPortAvailability":      true,
+		"isTCPBusy":                   true,
+		"isUDPBusy":                   true,
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {
