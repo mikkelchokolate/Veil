@@ -65,6 +65,10 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	if profile.InstallNaive {
 		caddyBuild = CaddyNaiveBuildHint("/usr/local/bin/caddy")
 	}
+	sharedProxyPort := 0
+	if profile.InstallNaive || profile.InstallHysteria2 {
+		sharedProxyPort = profile.PortPlan.Port
+	}
 	return InstallPlan{
 		Profile:        profile,
 		Platform:       Platform{OS: input.Platform.OS, Arch: arch},
@@ -74,7 +78,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		CaddyBuild:     caddyBuild,
 		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
 		FirewallActions: firewall.UFWPlan(firewall.Config{
-			SharedPort: profile.PortPlan.Port,
+			SharedPort: sharedProxyPort,
 			PanelPort:  input.PanelPort,
 			EnableTCP:  profile.InstallNaive,
 			EnableUDP:  profile.InstallHysteria2,

@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackPanel, Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096, RandomPort: func() int { return 31874 }})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
+	}
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("BuildInstallPlan: %v", err)
+	}
+	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") || hasFirewallAction(plan, "31874/tcp") || hasFirewallAction(plan, "31874/udp") {
+		t.Fatalf("panel-only install must not open proxy ports: %+v", plan.FirewallActions)
+	}
+	if !hasFirewallAction(plan, "2096/tcp") {
+		t.Fatalf("expected panel firewall rule: %+v", plan.FirewallActions)
+	}
+}
+
 func TestPanelOnlyInstallDoesNotRequireDomainAndWritesNoProxyConfigs(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		Stack:      StackPanel,
