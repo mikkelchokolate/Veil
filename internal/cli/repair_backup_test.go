@@ -204,6 +204,7 @@ func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")
 	varDir := filepath.Join(dir, "var", "lib", "veil")
+	systemdDir := filepath.Join(dir, "etc", "systemd", "system")
 	backupDir := filepath.Join(dir, "backups")
 
 	cmd := NewRootCommand("test")
@@ -220,6 +221,7 @@ func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
 		"--backup-dir", backupDir,
 		"--etc-dir", etcDir,
 		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
 	})
 
 	err := cmd.Execute()
