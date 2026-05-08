@@ -85,33 +85,7 @@ func repairStateCipher(keyPath string) *secrets.Cipher {
 }
 
 func runtimeUnitNamesForState(inbounds []api.Inbound, warp api.WarpConfig) []string {
-	seen := map[string]bool{}
-	units := []string{}
-	add := func(unit string) {
-		if unit == "" || seen[unit] {
-			return
-		}
-		seen[unit] = true
-		units = append(units, unit)
-	}
-	for _, inbound := range inbounds {
-		if !inbound.Enabled {
-			continue
-		}
-		for _, runtime := range api.NewManagedRuntimeCatalog().Runtimes() {
-			if runtime.Protocol == inbound.Protocol {
-				add(runtime.Unit)
-			}
-		}
-	}
-	if warp.Enabled {
-		for _, runtime := range api.NewManagedRuntimeCatalog().Runtimes() {
-			if runtime.Name == "sing-box" {
-				add(runtime.Unit)
-			}
-		}
-	}
-	return units
+	return api.NewProtocolRuntimeProvisioning().Plan(inbounds, warp).SystemdUnits()
 }
 
 func addRepairFileAction(plan *installer.RepairPlan, path string, content string, mode os.FileMode) error {
