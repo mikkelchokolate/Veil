@@ -48,6 +48,7 @@ func newInstallCommand() *cobra.Command {
 				VarDir:         varDir,
 				SystemdDir:     systemdDir,
 				PanelPort:      panelPort,
+				PanelPortSet:   cmd.Flags().Changed("panel-port"),
 				PanelAccess:    panelAccess,
 				PublicIP:       publicIP,
 				Interactive:    interactive,

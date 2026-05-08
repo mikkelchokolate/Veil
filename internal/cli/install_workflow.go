@@ -23,6 +23,7 @@ type ruRecommendedInstallOptions struct {
 	VarDir         string
 	SystemdDir     string
 	PanelPort      int
+	PanelPortSet   bool
 	PanelAccess    string
 	PublicIP       string
 	Interactive    bool
@@ -76,8 +77,10 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	}
 	if panelRandom {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (random)\n", panelListenPort)
-	} else {
+	} else if opts.PanelPortSet {
 		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (default)\n", panelListenPort)
 	}
 	panelAccess, err := NewPanelAccessMode(opts.PanelAccess).Resolve(panelListenPort)
 	if err != nil {
