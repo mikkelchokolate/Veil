@@ -5,6 +5,7 @@ type InboundProtocolChoice struct {
 	DisplayName     string   `json:"displayName"`
 	Transports      []string `json:"transports"`
 	FirewallService string   `json:"firewallService"`
+	RequiresCaddy   bool     `json:"requiresCaddy"`
 }
 
 type InboundProtocolCatalog struct {
@@ -13,7 +14,7 @@ type InboundProtocolCatalog struct {
 
 func NewInboundProtocolCatalog() InboundProtocolCatalog {
 	return InboundProtocolCatalog{choices: []InboundProtocolChoice{
-		{Protocol: "naiveproxy", DisplayName: "NaiveProxy", Transports: []string{"tcp"}, FirewallService: "Veil NaiveProxy"},
+		{Protocol: "naiveproxy", DisplayName: "NaiveProxy", Transports: []string{"tcp"}, FirewallService: "Veil NaiveProxy", RequiresCaddy: true},
 		{Protocol: "hysteria2", DisplayName: "Hysteria2", Transports: []string{"udp"}, FirewallService: "Veil Hysteria2"},
 		{Protocol: "mieru", DisplayName: "Mieru", Transports: []string{"tcp", "udp"}, FirewallService: "Veil Mieru"},
 	}}
@@ -22,7 +23,7 @@ func NewInboundProtocolCatalog() InboundProtocolCatalog {
 func (c InboundProtocolCatalog) Choices() []InboundProtocolChoice {
 	choices := make([]InboundProtocolChoice, len(c.choices))
 	for i, choice := range c.choices {
-		choices[i] = InboundProtocolChoice{Protocol: choice.Protocol, DisplayName: choice.DisplayName, Transports: append([]string(nil), choice.Transports...), FirewallService: choice.FirewallService}
+		choices[i] = InboundProtocolChoice{Protocol: choice.Protocol, DisplayName: choice.DisplayName, Transports: append([]string(nil), choice.Transports...), FirewallService: choice.FirewallService, RequiresCaddy: choice.RequiresCaddy}
 	}
 	return choices
 }
@@ -41,6 +42,11 @@ func (c InboundProtocolCatalog) FirewallService(protocol string) (string, bool) 
 		return "", false
 	}
 	return choice.FirewallService, true
+}
+
+func (c InboundProtocolCatalog) RequiresCaddy(protocol string) bool {
+	choice, ok := c.choice(protocol)
+	return ok && choice.RequiresCaddy
 }
 
 func (c InboundProtocolCatalog) Supports(protocol string) bool {

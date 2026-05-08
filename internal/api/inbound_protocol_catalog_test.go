@@ -31,6 +31,18 @@ func TestInboundProtocolCatalogKnowsSupportedProtocolsAndTransports(t *testing.T
 	}
 }
 
+func TestInboundProtocolCatalogOwnsRuntimeRequirements(t *testing.T) {
+	catalog := NewInboundProtocolCatalog()
+	if !catalog.RequiresCaddy("naiveproxy") {
+		t.Fatal("NaiveProxy should require Caddy")
+	}
+	for _, protocol := range []string{"hysteria2", "mieru", "unknown"} {
+		if catalog.RequiresCaddy(protocol) {
+			t.Fatalf("%s should not require Caddy", protocol)
+		}
+	}
+}
+
 func TestInboundProtocolCatalogOwnsDisplayNamesAndFirewallServices(t *testing.T) {
 	catalog := NewInboundProtocolCatalog()
 	if got := catalog.DisplayNameList(); got != "NaiveProxy, Hysteria2, and Mieru" {
