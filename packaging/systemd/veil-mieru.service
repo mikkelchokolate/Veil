@@ -1,12 +1,11 @@
 [Unit]
-Description=Veil panel
+Description=Veil managed Mieru
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/veil/veil.env
-ExecStart=/usr/local/bin/veil serve
+ExecStart=/usr/local/bin/mieru run -c /etc/veil/generated/mieru/server_config.json
 Restart=on-failure
 RestartSec=3
 

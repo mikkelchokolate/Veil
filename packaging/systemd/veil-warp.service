@@ -1,0 +1,14 @@
+[Unit]
+Description=Veil managed WARP/sing-box outbound
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /etc/veil/generated/sing-box/warp.json
+ExecReload=/usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

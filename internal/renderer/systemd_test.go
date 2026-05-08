@@ -1,9 +1,24 @@
 package renderer
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestPackagingSystemdUnitsMatchDefaultRenderer(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{})
+	for _, name := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service", "veil-mieru.service"} {
+		body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "systemd", name))
+		if err != nil {
+			t.Fatalf("read packaging unit %s: %v", name, err)
+		}
+		if string(body) != units[name] {
+			t.Fatalf("packaging unit %s drifted from default renderer\n--- packaging ---\n%s\n--- renderer ---\n%s", name, string(body), units[name])
+		}
+	}
+}
 
 func TestRenderSystemdUnits(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{
