@@ -69,5 +69,5 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 }
 
 func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
-	return NewCredentialDisclosure().RedactText(text, []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken})
+	return NewCredentialDisclosure().RedactText(text, []string{profile.PanelAuthToken})
 }

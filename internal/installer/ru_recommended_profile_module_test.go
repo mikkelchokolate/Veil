@@ -12,8 +12,8 @@ func TestRURecommendedProfileModuleBuildsPanelInstallPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if profile.InstallNaive || profile.InstallHysteria2 || profile.InstallMieru || profile.Stack != StackPanel {
-		t.Fatalf("stack policy should normalize to panel-only: %+v", profile)
+	if profile.InstallPanelCaddy {
+		t.Fatalf("Veil install should default to direct/local Panel-only: %+v", profile)
 	}
 	if profile.PanelAuthToken != "secret-panel" || !profile.PanelTLSEnabled {
 		t.Fatalf("panel credential/TLS policy = %+v", profile)

@@ -14,7 +14,7 @@ import (
 )
 
 var _installTestDeps_dryrun = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.Stack("both"),
+	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.RURecommendedProfile{},
 }
 
 func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing.T) {

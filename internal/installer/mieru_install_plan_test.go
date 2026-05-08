@@ -11,21 +11,21 @@ func TestLegacyMieruInstallStackNormalizesToPanelOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
-	if profile.Stack != StackPanel || profile.InstallMieru {
-		t.Fatalf("Mieru stack should normalize to Panel install; configure Mieru as Panel Inbounds: %+v", profile)
+	if profile.InstallPanelCaddy {
+		t.Fatalf("Mieru legacy install should still produce Panel-only install; configure Mieru as Panel Inbounds: %+v", profile)
 	}
 	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096, MieruVersion: "v3.12.0"})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}
-	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") || plan.MieruBinary.Name != "" {
+	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") {
 		t.Fatalf("Panel install should not plan Mieru runtime from legacy stack: %+v", plan)
 	}
 }
 
 func TestPanelInstallDoesNotWriteMieruUnitOrProxyConfig(t *testing.T) {
 	dir := t.TempDir()
-	profile := RURecommendedProfile{Stack: StackPanel, PanelAuthToken: "secret-panel", PanelTLSEnabled: true, PanelTLSCertPEM: "cert", PanelTLSKeyPEM: "key"}
+	profile := RURecommendedProfile{PanelAuthToken: "secret-panel", PanelTLSEnabled: true, PanelTLSCertPEM: "cert", PanelTLSKeyPEM: "key"}
 	result, err := ApplyRURecommendedProfile(profile, ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "etc", "systemd", "system")})
 	if err != nil {
 		t.Fatalf("ApplyRURecommendedProfile: %v", err)

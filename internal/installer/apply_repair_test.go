@@ -11,9 +11,9 @@ var _apply_repair_deps = []any{
 	os.ReadFile, filepath.Join, strings.Contains, testing.T{},
 }
 
-func TestBuildRepairPlanDetectsMissingAndDriftedFiles(t *testing.T) {
+func TestBuildRepairPlanDetectsPanelCaddyDrift(t *testing.T) {
 	dir := t.TempDir()
-	profile := mustRUProfile(t, Stack("both"))
+	profile := mustPanelCaddyProfile(t)
 	paths := ApplyPaths{
 		EtcDir:     filepath.Join(dir, "etc", "veil"),
 		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
@@ -26,31 +26,27 @@ func TestBuildRepairPlanDetectsMissingAndDriftedFiles(t *testing.T) {
 	if err := os.WriteFile(result.CaddyfilePath, []byte("drifted"), 0o600); err != nil {
 		t.Fatalf("drift caddyfile: %v", err)
 	}
-	if err := os.Remove(result.Hysteria2Path); err != nil {
-		t.Fatalf("remove hysteria config: %v", err)
-	}
 
 	plan, err := BuildRepairPlan(profile, paths)
 
 	if err != nil {
 		t.Fatalf("build repair plan: %v", err)
 	}
-	if len(plan.Actions) != 2 {
-		t.Fatalf("expected 2 repair actions, got %+v", plan.Actions)
+	if len(plan.Actions) != 1 {
+		t.Fatalf("expected 1 repair action, got %+v", plan.Actions)
 	}
 	assertRepairAction(t, plan, result.CaddyfilePath, RepairReasonDrifted)
-	assertRepairAction(t, plan, result.Hysteria2Path, RepairReasonMissing)
 	if plan.HasChanges() != true {
 		t.Fatalf("expected plan to report changes")
 	}
-	if !strings.Contains(plan.Summary(), "repair drifted") || !strings.Contains(plan.Summary(), "repair missing") {
-		t.Fatalf("summary missing repair reasons:\n%s", plan.Summary())
+	if !strings.Contains(plan.Summary(), "repair drifted") {
+		t.Fatalf("summary missing repair reason:\n%s", plan.Summary())
 	}
 }
 
 func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
 	dir := t.TempDir()
-	profile := mustRUProfile(t, Stack("both"))
+	profile := mustPanelCaddyProfile(t)
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd")}
 	result, err := ApplyRURecommendedProfile(profile, paths)
 	if err != nil {
@@ -72,7 +68,7 @@ func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
 	if len(repairResult.WrittenFiles) != 1 || repairResult.WrittenFiles[0] != result.CaddyfilePath {
 		t.Fatalf("unexpected repaired files: %+v", repairResult.WrittenFiles)
 	}
-	assertFileContains(t, result.CaddyfilePath, "forward_proxy")
+	assertFileContains(t, result.CaddyfilePath, "reverse_proxy 127.0.0.1:2096")
 }
 
 func TestBuildBinaryRepairPlanRequiresChecksumAndDetectsMissingBinary(t *testing.T) {

@@ -6,15 +6,14 @@ import (
 	"testing"
 )
 
-func mustRUProfile(t *testing.T, stack Stack) RURecommendedProfile {
+func mustPanelCaddyProfile(t *testing.T) RURecommendedProfile {
 	t.Helper()
-	if stack == Stack("both") {
-		return RURecommendedProfile{Domain: "example.com", Stack: StackPanel, InstallNaive: true, InstallHysteria2: true, Caddyfile: "forward_proxy", Hysteria2YAML: "listen: :443", PanelAuthToken: "secret-panel"}
-	}
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain: "example.com",
-		Email:  "admin@example.com",
-		Secret: func(label string) string { return "secret-" + label },
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		PanelPort:   2096,
+		Secret:      func(label string) string { return "secret-" + label },
 	})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)

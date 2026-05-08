@@ -18,8 +18,8 @@ func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
-	if !profile.InstallPanelCaddy || profile.InstallNaive || profile.InstallHysteria2 || profile.InstallMieru {
-		t.Fatalf("panel Caddy install must not install proxy runtimes: %+v", profile)
+	if !profile.InstallPanelCaddy {
+		t.Fatalf("panel Caddy install should enable Panel Caddy access: %+v", profile)
 	}
 	for _, want := range []string{"panel.example.com", "handle_path ", "reverse_proxy 127.0.0.1:2096"} {
 		if !strings.Contains(profile.Caddyfile, want) {

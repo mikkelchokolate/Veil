@@ -62,12 +62,9 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 		return nil, fmt.Errorf("var dir is required")
 	}
 	files := []managedFile{}
-	if profile.InstallNaive || profile.InstallPanelCaddy {
+	if profile.InstallPanelCaddy {
 		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"), Content: profile.Caddyfile, Mode: 0o600})
 		files = append(files, managedFile{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(profile.Domain), Mode: 0o644})
-	}
-	if profile.InstallHysteria2 {
-		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "hysteria2", "server.yaml"), Content: profile.Hysteria2YAML, Mode: 0o600})
 	}
 	panelTLSCertPath := filepath.Join(paths.EtcDir, "panel", "tls.crt")
 	panelTLSKeyPath := filepath.Join(paths.EtcDir, "panel", "tls.key")
@@ -103,14 +100,8 @@ func (r ManagedFileRepair) desiredFiles() ([]managedFile, error) {
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
 		unitNames := []string{"veil.service"}
-		if profile.InstallNaive || profile.InstallPanelCaddy {
+		if profile.InstallPanelCaddy {
 			unitNames = append(unitNames, "veil-naive.service")
-		}
-		if profile.InstallHysteria2 {
-			unitNames = append(unitNames, "veil-hysteria2.service")
-		}
-		if profile.InstallMieru {
-			unitNames = append(unitNames, "veil-mieru.service")
 		}
 		for _, name := range unitNames {
 			files = append(files, managedFile{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})

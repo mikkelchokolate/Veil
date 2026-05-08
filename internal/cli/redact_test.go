@@ -7,32 +7,16 @@ import (
 	"github.com/veil-panel/veil/internal/installer"
 )
 
-func TestRedactProfileSecretsHidesGeneratedCredentials(t *testing.T) {
-	profile := installer.RURecommendedProfile{
-		NaivePassword:      "naive-secret",
-		Hysteria2Password:  "hy2-secret",
-		PanelAuthToken:     "panel-secret",
-		NaiveClientURL:     "naive+https://veil:naive-secret@example.com:443",
-		Hysteria2ClientURI: "hysteria2://hy2-secret@example.com:443?insecure=0",
-		Caddyfile:          "basicauth veil naive-secret",
-		Hysteria2YAML:      "password: hy2-secret",
-	}
-	input := strings.Join([]string{
-		profile.NaiveClientURL,
-		profile.Hysteria2ClientURI,
-		profile.Caddyfile,
-		profile.Hysteria2YAML,
-		profile.PanelAuthToken,
-	}, "\n")
+func TestRedactProfileSecretsHidesPanelCredential(t *testing.T) {
+	profile := installer.RURecommendedProfile{PanelAuthToken: "panel-secret"}
+	input := "Panel token: panel-secret"
 
 	got := redactProfileSecrets(profile, input)
 
-	for _, secret := range []string{"naive-secret", "hy2-secret", "panel-secret"} {
-		if strings.Contains(got, secret) {
-			t.Fatalf("redacted output still contains %q:\n%s", secret, got)
-		}
+	if strings.Contains(got, "panel-secret") {
+		t.Fatalf("redacted output still contains panel token:\n%s", got)
 	}
-	if strings.Count(got, "[REDACTED]") < 3 {
-		t.Fatalf("expected redaction markers, got:\n%s", got)
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("expected redaction marker, got:\n%s", got)
 	}
 }

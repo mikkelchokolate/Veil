@@ -8,10 +8,6 @@ import (
 
 type SecretFunc func(label string) string
 
-type Stack string
-
-const StackPanel Stack = "panel"
-
 type RURecommendedInput struct {
 	Domain      string
 	Email       string
@@ -21,29 +17,20 @@ type RURecommendedInput struct {
 }
 
 type RURecommendedProfile struct {
-	Domain             string
-	Email              string
-	Username           string
-	NaivePassword      string
-	Hysteria2Password  string
-	PanelAuthToken     string
-	PanelListen        string
-	PanelAccess        string
-	PanelTLSEnabled    bool
-	PanelTLSCertPEM    string
-	PanelTLSKeyPEM     string
-	WebBasePath        string
-	Stack              Stack
-	InstallNaive       bool
-	InstallHysteria2   bool
-	InstallMieru       bool
-	InstallPanelCaddy  bool
-	Caddyfile          string
-	Hysteria2YAML      string
-	NaiveClientURL     string
-	Hysteria2ClientURI string
-	MasqueradeURL      string
-	FallbackRoot       string
+	Domain            string
+	Email             string
+	Username          string
+	PanelAuthToken    string
+	PanelListen       string
+	PanelAccess       string
+	PanelTLSEnabled   bool
+	PanelTLSCertPEM   string
+	PanelTLSKeyPEM    string
+	WebBasePath       string
+	InstallPanelCaddy bool
+	Caddyfile         string
+	MasqueradeURL     string
+	FallbackRoot      string
 }
 
 type RURecommendedProfileModule struct {
@@ -97,29 +84,20 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	}
 
 	return RURecommendedProfile{
-		Domain:             input.Domain,
-		Email:              input.Email,
-		Username:           username,
-		NaivePassword:      "",
-		Hysteria2Password:  "",
-		PanelAuthToken:     panelAuthToken,
-		PanelListen:        panelListen,
-		PanelAccess:        input.PanelAccess,
-		PanelTLSEnabled:    panelTLSEnabled,
-		PanelTLSCertPEM:    panelTLS.CertPEM,
-		PanelTLSKeyPEM:     panelTLS.KeyPEM,
-		WebBasePath:        webBasePath,
-		Stack:              StackPanel,
-		InstallNaive:       false,
-		InstallHysteria2:   false,
-		InstallMieru:       false,
-		InstallPanelCaddy:  panelCaddy,
-		Caddyfile:          caddyfile,
-		Hysteria2YAML:      "",
-		NaiveClientURL:     "",
-		Hysteria2ClientURI: "",
-		MasqueradeURL:      masqueradeURL,
-		FallbackRoot:       fallbackRoot,
+		Domain:            input.Domain,
+		Email:             input.Email,
+		Username:          username,
+		PanelAuthToken:    panelAuthToken,
+		PanelListen:       panelListen,
+		PanelAccess:       input.PanelAccess,
+		PanelTLSEnabled:   panelTLSEnabled,
+		PanelTLSCertPEM:   panelTLS.CertPEM,
+		PanelTLSKeyPEM:    panelTLS.KeyPEM,
+		WebBasePath:       webBasePath,
+		InstallPanelCaddy: panelCaddy,
+		Caddyfile:         caddyfile,
+		MasqueradeURL:     masqueradeURL,
+		FallbackRoot:      fallbackRoot,
 	}, nil
 }
 

@@ -18,7 +18,7 @@ func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile
 }
 
 func installPlanCaddyBinary(profile installer.RURecommendedProfile) string {
-	if !profile.InstallPanelCaddy && !profile.InstallNaive {
+	if !profile.InstallPanelCaddy {
 		return ""
 	}
 	path, err := commandLookPath("caddy")
@@ -30,14 +30,8 @@ func installPlanCaddyBinary(profile installer.RURecommendedProfile) string {
 
 func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
 	units := []string{"veil.service"}
-	if profile.InstallNaive || profile.InstallPanelCaddy {
+	if profile.InstallPanelCaddy {
 		units = append(units, "veil-naive.service")
-	}
-	if profile.InstallHysteria2 {
-		units = append(units, "veil-hysteria2.service")
-	}
-	if profile.InstallMieru {
-		units = append(units, "veil-mieru.service")
 	}
 	return units
 }

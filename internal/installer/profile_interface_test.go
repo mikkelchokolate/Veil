@@ -19,10 +19,12 @@ func TestRURecommendedProfileInputDoesNotExposeProtocolInstallPlanning(t *testin
 	}
 }
 
-func TestRURecommendedProfileDoesNotExposeSharedProxyPortPlan(t *testing.T) {
+func TestRURecommendedProfileDoesNotExposeProtocolInstallPlanning(t *testing.T) {
 	profileType := reflect.TypeOf(RURecommendedProfile{})
-	if _, ok := profileType.FieldByName("PortPlan"); ok {
-		t.Fatal("RURecommendedProfile should not expose install-time shared proxy port plan")
+	for _, field := range []string{"Stack", "InstallNaive", "InstallHysteria2", "InstallMieru", "PortPlan", "NaivePassword", "Hysteria2Password", "Hysteria2YAML", "NaiveClientURL", "Hysteria2ClientURI"} {
+		if _, ok := profileType.FieldByName(field); ok {
+			t.Fatalf("RURecommendedProfile should not expose install-time protocol planning field %s", field)
+		}
 	}
 }
 
@@ -43,17 +45,24 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 		"RURecommendedStackPolicy":       true,
 		"SharedPortPlan":                 true,
 		"PortAvailability":               true,
+		"HysteriaBinaryAcquisition":      true,
+		"MieruBinaryAcquisition":         true,
 	}
 	forbiddenFuncs := map[string]bool{
-		"NewRURecommendedPortPolicy":  true,
-		"NewRURecommendedStackPolicy": true,
-		"normalizeStack":              true,
-		"PlanSharedPort":              true,
-		"PlanStackPort":               true,
-		"PlanExplicitStackPort":       true,
-		"DetectPortAvailability":      true,
-		"isTCPBusy":                   true,
-		"isUDPBusy":                   true,
+		"NewRURecommendedPortPolicy":   true,
+		"NewRURecommendedStackPolicy":  true,
+		"normalizeStack":               true,
+		"PlanSharedPort":               true,
+		"PlanStackPort":                true,
+		"PlanExplicitStackPort":        true,
+		"DetectPortAvailability":       true,
+		"isTCPBusy":                    true,
+		"isUDPBusy":                    true,
+		"Hysteria2ReleaseAssetURL":     true,
+		"hysteriaArch":                 true,
+		"CaddyNaiveBuildHint":          true,
+		"NewHysteriaBinaryAcquisition": true,
+		"NewMieruBinaryAcquisition":    true,
 	}
 	forbiddenConsts := map[string]bool{
 		"StackBoth":      true,

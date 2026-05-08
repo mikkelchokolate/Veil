@@ -19,9 +19,6 @@ type InstallPlanInput struct {
 type InstallPlan struct {
 	Profile         RURecommendedProfile
 	Platform        Platform
-	HysteriaURL     string
-	HysteriaBinary  BinaryAcquisition
-	MieruBinary     BinaryAcquisition
 	CaddyBuild      BuildHint
 	SystemdActions  []service.SystemdAction
 	FirewallActions []firewall.Rule
@@ -44,32 +41,12 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	if err != nil {
 		return InstallPlan{}, err
 	}
-	var hysteriaURL string
-	var hysteriaBinary BinaryAcquisition
-	if profile.InstallHysteria2 {
-		artifact, err := NewHysteriaBinaryAcquisition().Build(input.HysteriaVersion, input.Platform.OS, arch, input.HysteriaSHA256)
-		if err != nil {
-			return InstallPlan{}, err
-		}
-		hysteriaURL = artifact.URL
-		hysteriaBinary = artifact.Binary
-	}
-	var mieruBinary BinaryAcquisition
-	if profile.InstallMieru {
-		artifact, err := NewMieruBinaryAcquisition().Build(input.MieruVersion, input.Platform.OS, arch, input.MieruSHA256)
-		if err != nil {
-			return InstallPlan{}, err
-		}
-		mieruBinary = artifact.Binary
-	}
 	caddyBinary := input.CaddyBinary
 	if caddyBinary == "" {
 		caddyBinary = "/usr/local/bin/caddy"
 	}
 	var caddyBuild BuildHint
-	if profile.InstallNaive {
-		caddyBuild = CaddyNaiveBuildHint(caddyBinary)
-	} else if profile.InstallPanelCaddy {
+	if profile.InstallPanelCaddy {
 		caddyBuild = CaddyPanelBuildHint(caddyBinary)
 	}
 	panelPort := input.PanelPort
@@ -81,9 +58,6 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	return InstallPlan{
 		Profile:        profile,
 		Platform:       Platform{OS: input.Platform.OS, Arch: arch},
-		HysteriaURL:    hysteriaURL,
-		HysteriaBinary: hysteriaBinary,
-		MieruBinary:    mieruBinary,
 		CaddyBuild:     caddyBuild,
 		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
 		FirewallActions: firewall.UFWPlan(firewall.Config{

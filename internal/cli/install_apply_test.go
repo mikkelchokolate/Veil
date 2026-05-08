@@ -9,7 +9,7 @@ import (
 	"github.com/veil-panel/veil/internal/service"
 )
 
-func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *testing.T) {
+func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(t *testing.T) {
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -35,13 +35,9 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *te
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	profile := installer.RURecommendedProfile{
-		Domain:            "example.com",
-		Username:          "veil",
-		WebBasePath:       "/panel/",
-		InstallNaive:      true,
-		NaivePassword:     "naive-secret",
-		InstallHysteria2:  true,
-		Hysteria2Password: "hy2-secret",
+		Domain:      "example.com",
+		Username:    "veil",
+		WebBasePath: "/panel/",
 	}
 
 	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: "/etc/veil", VarDir: "/var/lib/veil"}); err != nil {
@@ -59,9 +55,14 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *te
 	if len(gotActions) == 0 || gotActions[0].Command != "systemctl" || gotActions[0].Args[0] != "daemon-reload" {
 		t.Fatalf("systemd actions not run: %+v", gotActions)
 	}
-	for _, want := range []string{"Written files:", "/etc/veil/veil.env", "Panel: https://example.com/panel/", "NaiveProxy password: naive-secret", "Hysteria2 password: hy2-secret"} {
+	for _, want := range []string{"Written files:", "/etc/veil/veil.env", "Panel: https://example.com/panel/"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+	for _, unwanted := range []string{"NaiveProxy password:", "Hysteria2 password:"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Fatalf("output should not include protocol credential %q:\n%s", unwanted, out.String())
 		}
 	}
 }

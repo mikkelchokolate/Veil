@@ -20,10 +20,10 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if profile.Stack != StackPanel || profile.InstallNaive || profile.InstallHysteria2 || profile.InstallMieru {
-		t.Fatalf("expected panel-only profile, got %+v", profile)
+	if profile.InstallPanelCaddy {
+		t.Fatalf("expected direct/local panel-only profile, got %+v", profile)
 	}
-	if profile.Caddyfile != "" || profile.Hysteria2YAML != "" || profile.NaiveClientURL != "" || profile.Hysteria2ClientURI != "" {
+	if profile.Caddyfile != "" {
 		t.Fatalf("panel-only profile should not include protocol artifacts: %+v", profile)
 	}
 	if profile.PanelAuthToken != "secret-panel" || !profile.PanelTLSEnabled {

@@ -43,27 +43,16 @@ func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedP
 	fmt.Fprintf(p.out, "Domain: %s\n", profile.Domain)
 	fmt.Fprintf(p.out, "Email: %s\n", profile.Email)
 	fmt.Fprintln(p.out, "Install scope: Panel")
-	if profile.InstallNaive {
-		fmt.Fprintf(p.out, "NaiveProxy client URL: %s\n", p.RedactProfileSecrets(profile, profile.NaiveClientURL))
-	}
-	if profile.InstallHysteria2 {
-		fmt.Fprintf(p.out, "Hysteria2 client URI: %s\n", p.RedactProfileSecrets(profile, profile.Hysteria2ClientURI))
-	}
 	fmt.Fprintln(p.out, "")
-	if profile.InstallNaive || profile.InstallPanelCaddy {
+	if profile.InstallPanelCaddy {
 		fmt.Fprintln(p.out, "Generated Caddyfile")
 		fmt.Fprintln(p.out, strings.Repeat("-", 24))
 		fmt.Fprintln(p.out, p.RedactProfileSecrets(profile, profile.Caddyfile))
 	}
-	if profile.InstallHysteria2 {
-		fmt.Fprintln(p.out, "Generated Hysteria2 server.yaml")
-		fmt.Fprintln(p.out, strings.Repeat("-", 32))
-		fmt.Fprintln(p.out, p.RedactProfileSecrets(profile, profile.Hysteria2YAML))
-	}
 }
 
 func (InstallPresentation) RedactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
-	for _, secret := range []string{profile.NaivePassword, profile.Hysteria2Password, profile.PanelAuthToken} {
+	for _, secret := range []string{profile.PanelAuthToken} {
 		if secret == "" {
 			continue
 		}

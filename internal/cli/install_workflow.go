@@ -118,7 +118,7 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 }
 
 func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) (string, error) {
-	if profile.InstallPanelCaddy || profile.InstallNaive {
+	if profile.InstallPanelCaddy {
 		path, err := commandLookPath("caddy")
 		if err != nil {
 			return "", fmt.Errorf("caddy is required for caddy Panel access; install Caddy or use --panel-access local/direct")

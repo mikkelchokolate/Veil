@@ -10,13 +10,11 @@ import (
 
 func TestInstallPresentationPrintsRedactedRURecommendedProfile(t *testing.T) {
 	profile := installer.RURecommendedProfile{
-		Domain:         "example.com",
-		Email:          "admin@example.com",
-		InstallNaive:   true,
-		NaivePassword:  "naive-secret",
-		NaiveClientURL: "naive+https://veil:naive-secret@example.com:443",
-		Caddyfile:      "basicauth veil naive-secret",
-		PanelAuthToken: "panel-secret",
+		Domain:            "example.com",
+		Email:             "admin@example.com",
+		InstallPanelCaddy: true,
+		Caddyfile:         "reverse_proxy 127.0.0.1:2096 # panel-secret",
+		PanelAuthToken:    "panel-secret",
 	}
 	var out bytes.Buffer
 
@@ -31,7 +29,7 @@ func TestInstallPresentationPrintsRedactedRURecommendedProfile(t *testing.T) {
 	if strings.Contains(got, "Stack:") {
 		t.Fatalf("install output should not expose protocol stack language:\n%s", got)
 	}
-	for _, secret := range []string{"naive-secret", "panel-secret"} {
+	for _, secret := range []string{"panel-secret"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("output leaked %q:\n%s", secret, got)
 		}

@@ -9,7 +9,7 @@ import (
 func TestInstallApplyModuleWritesManagedFiles(t *testing.T) {
 	dir := t.TempDir()
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc"), VarDir: filepath.Join(dir, "var")}
-	profile := RURecommendedProfile{Domain: "vpn.example.com", InstallNaive: true, Caddyfile: "caddy", Stack: Stack("naive")}
+	profile := RURecommendedProfile{Domain: "vpn.example.com", InstallPanelCaddy: true, Caddyfile: "caddy"}
 
 	result, err := NewInstallApply(profile, paths).Apply()
 	if err != nil {

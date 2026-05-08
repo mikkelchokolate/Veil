@@ -11,12 +11,6 @@ func installCredentialSummary(profile installer.RURecommendedProfile) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Panel: %s\n", installPanelURL(profile))
 	fmt.Fprintf(&b, "Username: %s\n", profile.Username)
-	if profile.InstallNaive && profile.NaivePassword != "" {
-		fmt.Fprintf(&b, "NaiveProxy password: %s\n", profile.NaivePassword)
-	}
-	if profile.InstallHysteria2 && profile.Hysteria2Password != "" {
-		fmt.Fprintf(&b, "Hysteria2 password: %s\n", profile.Hysteria2Password)
-	}
 	return b.String()
 }
 

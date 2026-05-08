@@ -7,7 +7,7 @@ import (
 
 func TestManagedFileRepairPlansMissingManagedFiles(t *testing.T) {
 	paths := ApplyPaths{EtcDir: filepath.Join(t.TempDir(), "etc"), VarDir: filepath.Join(t.TempDir(), "var")}
-	profile := RURecommendedProfile{Domain: "vpn.example.com", InstallNaive: true, Caddyfile: "caddy", Stack: Stack("naive")}
+	profile := RURecommendedProfile{Domain: "vpn.example.com", InstallPanelCaddy: true, Caddyfile: "caddy"}
 	plan, err := NewManagedFileRepair(profile, paths).Plan()
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
