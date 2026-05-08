@@ -12,6 +12,11 @@ const (
 	RandomPortMax = 50000
 )
 
+type PortAvailability struct {
+	TCPBusy map[int]bool
+	UDPBusy map[int]bool
+}
+
 func DetectPortAvailability(ports []int) (PortAvailability, error) {
 	availability := PortAvailability{
 		TCPBusy: map[int]bool{},

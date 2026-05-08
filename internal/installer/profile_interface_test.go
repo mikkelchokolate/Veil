@@ -39,6 +39,14 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T)
 		"RURecommendedHysteriaArtifacts": true,
 		"ruRecommendedNaiveArtifacts":    true,
 		"ruRecommendedHysteriaArtifacts": true,
+		"RURecommendedPortPolicy":        true,
+		"SharedPortPlan":                 true,
+	}
+	forbiddenFuncs := map[string]bool{
+		"NewRURecommendedPortPolicy": true,
+		"PlanSharedPort":             true,
+		"PlanStackPort":              true,
+		"PlanExplicitStackPort":      true,
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -54,14 +62,20 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolArtifactBuilders(t *testing.T)
 			t.Fatalf("parse %s: %v", name, err)
 		}
 		for _, decl := range file.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range genDecl.Specs {
-				typeSpec := spec.(*ast.TypeSpec)
-				if forbiddenTypes[typeSpec.Name.Name] {
-					t.Fatalf("legacy install-time protocol artifact builder type %s remains in %s", typeSpec.Name.Name, name)
+			switch typedDecl := decl.(type) {
+			case *ast.GenDecl:
+				if typedDecl.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range typedDecl.Specs {
+					typeSpec := spec.(*ast.TypeSpec)
+					if forbiddenTypes[typeSpec.Name.Name] {
+						t.Fatalf("legacy install-time protocol planning type %s remains in %s", typeSpec.Name.Name, name)
+					}
+				}
+			case *ast.FuncDecl:
+				if forbiddenFuncs[typedDecl.Name.Name] {
+					t.Fatalf("legacy install-time protocol planning function %s remains in %s", typedDecl.Name.Name, name)
 				}
 			}
 		}
