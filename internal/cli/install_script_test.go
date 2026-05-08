@@ -43,6 +43,22 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if strings.Contains(script, `&& "${INSTALL_DIR}" == "/usr/local/bin"`) {
+		t.Fatalf("install.sh should require root for systemd Panel install even with custom install-dir:\n%s", script)
+	}
+	for _, want := range []string{"Veil installer must run as root", "systemd"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh missing root/systemd guidance %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {

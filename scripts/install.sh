@@ -74,9 +74,9 @@ require_cmd tar
 require_cmd sha256sum
 require_cmd uname
 
-if [[ "${EUID}" -ne 0 && "${INSTALL_DIR}" == "/usr/local/bin" ]]; then
-  echo "Veil installer must run as root when installing into /usr/local/bin." >&2
-  echo "Run with sudo, or pass --install-dir to a writable directory." >&2
+if [[ "${EUID}" -ne 0 ]]; then
+  echo "Veil installer must run as root because Panel install writes systemd units and starts services." >&2
+  echo "Run with sudo." >&2
   exit 1
 fi
 
