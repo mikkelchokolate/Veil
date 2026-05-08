@@ -59,7 +59,7 @@ func NewClientAccessProtocolRegistry() ClientAccessProtocolRegistry {
 				return mieruClientConfigLink(input)
 			},
 			FallbackLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-				input.Credential = NewClientAccessFallbackCredential().Build(input.Settings, input.Inbound)
+				input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
 				return mieruClientConfigLink(input)
 			},
 		},
