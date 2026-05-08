@@ -45,8 +45,12 @@ A proxy protocol/runtime that Veil can manage as Inbounds with TCP or UDP transp
 _Avoid_: mieru stack, mizaru
 
 **Inbound protocol catalog**:
-The protocol capability source for Inbound protocol IDs, display names, allowed transports, stack inclusion, Caddy requirement, firewall labels, Generated config set rendering, Apply workflow actions, and Client link delivery.
+The protocol capability source for Inbound protocol IDs, display names, allowed transports, Caddy requirement, firewall labels, Generated config set rendering, Apply workflow actions, runtime metadata, and Client link delivery.
 _Avoid_: protocol switch list, UI enum, scattered protocol constants
+
+**Protocol runtime provisioning**:
+The plan that maps enabled Inbounds and WARP state to required managed systemd units such as `veil-mieru.service`. It is driven by Panel state, not Veil install stack selection.
+_Avoid_: install-time protocol stack, shared runtime bundle
 
 **Client profile**:
 A named user credential attached to an Inbound.
@@ -84,6 +88,7 @@ _Avoid_: logging, masking
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
 - The **Generated config set** is promoted by the **Apply workflow**.
+- **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
 - The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a legacy Settings field. New Panel systems must treat protocols as **Inbounds** and normalize legacy protocol stack values to `panel` where compatibility is needed.
