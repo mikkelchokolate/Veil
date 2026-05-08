@@ -56,19 +56,6 @@ type RURecommendedProfileModule struct {
 	input RURecommendedInput
 }
 
-type ruRecommendedStackPolicy = RURecommendedStackPolicy
-type ruRecommendedNaiveArtifacts struct {
-	Password  string
-	Caddyfile string
-	ClientURL string
-}
-
-type ruRecommendedHysteriaArtifacts struct {
-	Password   string
-	ServerYAML string
-	ClientURI  string
-}
-
 func NewRURecommendedProfileModule(input RURecommendedInput) RURecommendedProfileModule {
 	return RURecommendedProfileModule{input: input}
 }
