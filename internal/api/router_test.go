@@ -94,3 +94,12 @@ func writeRenderableManagementState(path string, stack string) error {
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
 	}`), 0o600)
 }
+
+func writeRenderableMieruManagementState(path string) error {
+	return os.WriteFile(path, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","stack":"mieru","mode":"dev"},
+		"inbounds":[{"name":"mieru","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"password":"mieru-secret"}],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600)
+}

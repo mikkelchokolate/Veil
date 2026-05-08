@@ -233,6 +233,69 @@ func TestManagementApplyServicesRequiresLiveApply(t *testing.T) {
 	}
 }
 
+func TestManagementApplyServicesRestartsMieruAfterLivePromotion(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableMieruManagementState(statePath); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		if len(paths) != 1 || !strings.Contains(paths[0], filepath.Join("generated", "mieru", "server_config.json")) {
+			t.Fatalf("expected only staged Mieru config, got %+v", paths)
+		}
+		return []ConfigValidationResult{{Name: "mieru", Config: paths[0], Valid: true}}
+	}
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	healthCalls := []string{}
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		healthCalls = append(healthCalls, service)
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	liveMieru := filepath.Join(applyRoot, "live", "mieru", "server_config.json")
+	if !response.LiveApplied || !response.ServicesApplied || !containsString(response.LiveFiles, liveMieru) {
+		t.Fatalf("expected live Mieru services apply: %+v", response)
+	}
+	if len(serviceCalls) != 1 || !stringSlicesEqual(serviceCalls[0], []string{"systemctl", "restart", "veil-mieru.service"}) {
+		t.Fatalf("unexpected Mieru service calls: %+v", serviceCalls)
+	}
+	if len(healthCalls) != 1 || healthCalls[0] != "veil-mieru.service" {
+		t.Fatalf("unexpected Mieru health checks: %+v", healthCalls)
+	}
+	body, err := os.ReadFile(liveMieru)
+	if err != nil {
+		t.Fatalf("read live Mieru config: %v", err)
+	}
+	for _, want := range []string{`"protocol": "TCP"`, `"password": "mieru-secret"`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("live Mieru config missing %q:\n%s", want, string(body))
+		}
+	}
+}
+
 func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := writeRenderableManagementState(statePath, "both"); err != nil {
