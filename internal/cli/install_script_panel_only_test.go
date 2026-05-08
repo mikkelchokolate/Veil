@@ -13,7 +13,6 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 	}
 	script := string(body)
 	for _, want := range []string{
-		`STACK="panel"`,
 		`PANEL_ACCESS="local"`,
 		`--panel-access`,
 		`configure protocols from the Panel`,
@@ -22,5 +21,8 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q", want)
 		}
+	}
+	if strings.Contains(script, `STACK=`) {
+		t.Fatalf("install.sh should not carry legacy stack state:\n%s", script)
 	}
 }

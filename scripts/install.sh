@@ -7,7 +7,6 @@ INSTALL_DIR="${VEIL_INSTALL_DIR:-/usr/local/bin}"
 PROFILE="${VEIL_PROFILE:-ru-recommended}"
 DOMAIN=""
 EMAIL=""
-STACK="panel"
 PANEL_ACCESS="local"
 PANEL_PORT=""
 YES=""
@@ -78,7 +77,7 @@ while [[ $# -gt 0 ]]; do
     --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
     --port) require_value "$1" "${2:-}"; shift 2 ;;
-    --stack) require_value "$1" "${2:-}"; STACK="$2"; shift 2 ;;
+    --stack) require_value "$1" "${2:-}"; if [[ "$2" != "panel" ]]; then echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2; exit 1; fi; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
@@ -99,11 +98,6 @@ require_cmd uname
 if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
   echo "Veil installer must run as root because Panel install writes systemd units and starts services." >&2
   echo "Run with sudo." >&2
-  exit 1
-fi
-
-if [[ "${STACK}" != "panel" ]]; then
-  echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
   exit 1
 fi
 

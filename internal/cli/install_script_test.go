@@ -58,7 +58,7 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := string(body)
-	for _, unwanted := range []string{`PORT="443"`, "default 443", "preferred shared TCP/UDP port", "Shared proxy port passed to veil install", "--port PORT", "--stack STACK", `--stack "${STACK}"`} {
+	for _, unwanted := range []string{`PORT="443"`, `STACK=`, "default 443", "preferred shared TCP/UDP port", "Shared proxy port passed to veil install", "--port PORT", "--stack STACK", `--stack "${STACK}"`} {
 		if strings.Contains(script, unwanted) {
 			t.Fatalf("install.sh should not expose legacy stack/port option %q:\n%s", unwanted, script)
 		}
