@@ -40,7 +40,7 @@ func newRepairCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&profile, "profile", "default", "repair profile: default or ru-recommended")
+	cmd.Flags().StringVar(&profile, "profile", "ru-recommended", "repair profile: ru-recommended")
 	cmd.Flags().StringVar(&stack, "stack", "panel", "deprecated; repair uses Panel install and Panel state")
 	cmd.Flags().StringVar(&domain, "domain", "", "deprecated; protocols are configured as Panel Inbounds")
 	cmd.Flags().StringVar(&email, "email", "", "deprecated; protocols are configured as Panel Inbounds")

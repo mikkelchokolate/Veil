@@ -28,6 +28,22 @@ func TestRepairCommandRejectsInvalidProfile(t *testing.T) {
 	}
 }
 
+func TestRepairCommandDefaultsToRURecommendedPanelRepair(t *testing.T) {
+	dir := t.TempDir()
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"repair", "--etc-dir", filepath.Join(dir, "etc", "veil"), "--var-dir", filepath.Join(dir, "var", "lib", "veil"), "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("default repair should work: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Veil repair plan") {
+		t.Fatalf("repair output missing plan:\n%s", out.String())
+	}
+}
+
 func TestRepairCommandRejectsProtocolStackSelection(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
