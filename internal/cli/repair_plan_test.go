@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestBuildRepairPlanFromOptionsBuildsMieruPlanWithoutDomainOrPort(t *testing.T) {
+	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
+		Profile:    "ru-recommended",
+		Stack:      "mieru",
+		EtcDir:     t.TempDir(),
+		VarDir:     t.TempDir(),
+		SystemdDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions Mieru: %v", err)
+	}
+	summary := plan.Summary()
+	if !strings.Contains(summary, "veil-mieru.service") || strings.Contains(summary, "generated/caddy/Caddyfile") || strings.Contains(summary, "hysteria2") {
+		t.Fatalf("unexpected Mieru repair summary:\n%s", summary)
+	}
+}
+
 func TestBuildRepairPlanFromOptionsBuildsRURecommendedPlan(t *testing.T) {
 	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
 		Profile:    "ru-recommended",

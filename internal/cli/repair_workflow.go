@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/installer"
 )
 
 type repairWorkflowOptions struct {
@@ -26,13 +27,19 @@ func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 	if opts.Profile != "ru-recommended" {
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
-	if opts.Domain == "" {
-		return fmt.Errorf("--domain is required for ru-recommended profile")
+	policy, err := installer.NewRURecommendedStackPolicy(installer.Stack(opts.Stack))
+	if err != nil {
+		return err
 	}
-	if opts.Email == "" {
-		return fmt.Errorf("--email is required for ru-recommended profile")
+	if policy.RequiresDomain() {
+		if opts.Domain == "" {
+			return fmt.Errorf("--domain is required for ru-recommended profile")
+		}
+		if opts.Email == "" {
+			return fmt.Errorf("--email is required for ru-recommended profile")
+		}
 	}
-	if opts.SharedPort <= 0 || opts.SharedPort > 65535 {
+	if policy.RequiresSharedProxyPort() && (opts.SharedPort <= 0 || opts.SharedPort > 65535) {
 		return fmt.Errorf("--port is required and must be between 1 and 65535")
 	}
 	plan, err := buildRepairPlanFromOptions(opts)

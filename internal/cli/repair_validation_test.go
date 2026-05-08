@@ -28,6 +28,22 @@ func TestRepairCommandRejectsInvalidProfile(t *testing.T) {
 	}
 }
 
+func TestRepairCommandAllowsMieruWithoutDomainEmailOrPort(t *testing.T) {
+	dir := t.TempDir()
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--stack", "mieru", "--etc-dir", filepath.Join(dir, "etc", "veil"), "--var-dir", filepath.Join(dir, "var", "lib", "veil"), "--systemd-dir", filepath.Join(dir, "systemd"), "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Mieru repair should not require domain/email/port: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "veil-mieru.service") {
+		t.Fatalf("Mieru repair plan should mention veil-mieru.service:\n%s", out.String())
+	}
+}
+
 func TestRepairCommandRejectsMissingDomain(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer

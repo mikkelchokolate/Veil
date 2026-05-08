@@ -41,7 +41,7 @@ func newRepairCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "default", "repair profile: default or ru-recommended")
-	cmd.Flags().StringVar(&stack, "stack", "both", "proxy stack to repair: both, naive, or hysteria2")
+	cmd.Flags().StringVar(&stack, "stack", "both", "proxy stack to repair: panel, mieru, both, naive, or hysteria2")
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for regenerated managed files")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().IntVar(&sharedPort, "port", 0, "required shared proxy port for NaiveProxy TCP and/or Hysteria2 UDP")
