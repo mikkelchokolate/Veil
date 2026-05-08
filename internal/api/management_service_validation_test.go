@@ -20,30 +20,6 @@ var _managementTestDeps_service_validation = []any{
 	bytes.Buffer{}, rand.Reader, fmt.Sprintf, log.Printf, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, time.Second, secrets.IsEncrypted,
 }
 
-func TestStackAllowsProtocolDoesNotSelectPanelProtocols(t *testing.T) {
-	tests := []struct {
-		stack    string
-		protocol string
-		want     bool
-	}{
-		{"panel", "naiveproxy", true},
-		{"panel", "hysteria2", true},
-		{"panel", "mieru", true},
-		{"naive", "hysteria2", true},
-		{"both", "mieru", true},
-		{"unknown", "naiveproxy", true},
-		{"panel", "unknown", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.stack+"/"+tt.protocol, func(t *testing.T) {
-			got := stackAllowsProtocol(tt.stack, tt.protocol)
-			if got != tt.want {
-				t.Fatalf("stackAllowsProtocol(%q, %q) = %v, want %v", tt.stack, tt.protocol, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestRunFixedServiceActionRejectsDisallowedCommands(t *testing.T) {
 	tests := []struct {
 		name    string

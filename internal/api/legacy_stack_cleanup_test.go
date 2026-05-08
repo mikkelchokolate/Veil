@@ -1,0 +1,62 @@
+package api
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestLegacyStackCompatibilityHasSingleModule(t *testing.T) {
+	forbiddenTypes := map[string]bool{
+		"StackSelection":           true,
+		"StackSelectionCatalog":    true,
+		"StackSelectionValidation": true,
+		"StackProtocolPolicy":      true,
+		"ClientLinkStackPolicy":    true,
+	}
+	forbiddenFuncs := map[string]bool{
+		"NewStackSelectionCatalog":      true,
+		"NewStackSelectionValidation":   true,
+		"NewStackProtocolPolicy":        true,
+		"NewClientLinkStackPolicy":      true,
+		"stackIncludesProtocol":         true,
+		"stackAllowsProtocol":           true,
+		"panelStackOptionsHTML":         true,
+		"panelSettingsStackOptionsHTML": true,
+	}
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), name, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		for _, decl := range file.Decls {
+			switch typedDecl := decl.(type) {
+			case *ast.GenDecl:
+				if typedDecl.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range typedDecl.Specs {
+					typeSpec := spec.(*ast.TypeSpec)
+					if forbiddenTypes[typeSpec.Name.Name] {
+						t.Fatalf("legacy stack compatibility must stay in settings_stack_compat.go; shallow type %s remains in %s", typeSpec.Name.Name, name)
+					}
+				}
+			case *ast.FuncDecl:
+				if forbiddenFuncs[typedDecl.Name.Name] {
+					t.Fatalf("legacy stack compatibility must stay in settings_stack_compat.go; shallow function %s remains in %s", typedDecl.Name.Name, name)
+				}
+			}
+		}
+	}
+}

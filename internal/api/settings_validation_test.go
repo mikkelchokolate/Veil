@@ -20,12 +20,16 @@ func TestSettingsValidationPreservesRedactedSecretsAndNormalizesFallbackRoot(t *
 }
 
 func TestSettingsValidationNormalizesLegacyProtocolStackSelection(t *testing.T) {
-	settings := Settings{PanelListen: "127.0.0.1:2096", Stack: "both", Mode: "server"}
-	if err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{}); err != nil {
-		t.Fatalf("legacy protocol stack should migrate to panel: %v", err)
-	}
-	if settings.Stack != "panel" {
-		t.Fatalf("legacy protocol stack should not persist as both, got %q", settings.Stack)
+	for _, legacyStack := range []string{"both", "naive", "hysteria2", "mieru"} {
+		t.Run(legacyStack, func(t *testing.T) {
+			settings := Settings{PanelListen: "127.0.0.1:2096", Stack: legacyStack, Mode: "server"}
+			if err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{}); err != nil {
+				t.Fatalf("legacy protocol stack should migrate to panel: %v", err)
+			}
+			if settings.Stack != "panel" {
+				t.Fatalf("legacy protocol stack should not persist as %s, got %q", legacyStack, settings.Stack)
+			}
+		})
 	}
 }
 
