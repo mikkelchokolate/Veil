@@ -13,6 +13,7 @@ type InstallPlanInput struct {
 	MieruSHA256     string
 	SystemdUnits    []string
 	PanelPort       int
+	CaddyBinary     string
 }
 
 type InstallPlan struct {
@@ -61,11 +62,15 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		}
 		mieruBinary = artifact.Binary
 	}
+	caddyBinary := input.CaddyBinary
+	if caddyBinary == "" {
+		caddyBinary = "/usr/local/bin/caddy"
+	}
 	var caddyBuild BuildHint
 	if profile.InstallNaive {
-		caddyBuild = CaddyNaiveBuildHint("/usr/local/bin/caddy")
+		caddyBuild = CaddyNaiveBuildHint(caddyBinary)
 	} else if profile.InstallPanelCaddy {
-		caddyBuild = CaddyPanelBuildHint("/usr/local/bin/caddy")
+		caddyBuild = CaddyPanelBuildHint(caddyBinary)
 	}
 	panelPort := input.PanelPort
 	panelHTTPSPort := 0

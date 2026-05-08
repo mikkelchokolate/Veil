@@ -33,6 +33,30 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 	}
 }
 
+func TestInstallPanelCaddyAccessDryRunShowsResolvedCaddyBinary(t *testing.T) {
+	oldLookPath := commandLookPath
+	commandLookPath = func(name string) (string, error) {
+		if name == "caddy" {
+			return "/usr/sbin/caddy", nil
+		}
+		return "/usr/bin/" + name, nil
+	}
+	t.Cleanup(func() { commandLookPath = oldLookPath })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--panel-access", "caddy", "--domain", "panel.example.com", "--email", "admin@example.com", "--panel-port", "2096", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("install dry-run: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Caddy/Panel reverse proxy: /usr/sbin/caddy") {
+		t.Fatalf("dry-run should show resolved Caddy binary path:\n%s", out.String())
+	}
+}
+
 func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.T) {
 	oldApply := installApplyFunc
 	oldLookPath := commandLookPath
