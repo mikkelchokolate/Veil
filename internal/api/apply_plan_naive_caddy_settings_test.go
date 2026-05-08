@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestBuildApplyPlanRejectsPanelCaddyAccessWithoutDomainEmail(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server"},
+	})
+	if plan.Valid || !strings.Contains(strings.Join(plan.Errors, "\n"), "--domain and --email are required for caddy Panel access") {
+		t.Fatalf("Panel Caddy apply plan should require domain/email: %+v", plan)
+	}
+}
+
 func TestBuildApplyPlanRejectsPanelCaddyTCP443RuntimeConflict(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Stack: "panel", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},

@@ -23,7 +23,9 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		plan.Errors = append(plan.Errors, "stack must be panel; protocols are configured as Panel inbounds")
 	}
 	if input.Settings.PanelAccess == "caddy" {
-		if _, _, err := NewPanelCaddyAccess().Route(input.Settings); err != nil {
+		if input.Settings.Domain == "" || input.Settings.Email == "" {
+			plan.Errors = append(plan.Errors, "--domain and --email are required for caddy Panel access")
+		} else if _, _, err := NewPanelCaddyAccess().Route(input.Settings); err != nil {
 			plan.Errors = append(plan.Errors, err.Error())
 		} else {
 			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
