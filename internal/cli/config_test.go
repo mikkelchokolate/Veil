@@ -43,6 +43,35 @@ func TestConfigValidateValidState(t *testing.T) {
 	}
 }
 
+func TestConfigValidateMieruState(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	state := `{
+  "settings": {"panelListen": "127.0.0.1:2096", "stack": "mieru", "mode": "server"},
+  "inbounds": [
+    {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true},
+    {"name": "mieru-udp", "protocol": "mieru", "transport": "udp", "port": 443, "enabled": true}
+  ],
+  "routingRules": [],
+  "warp": {"enabled": false}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"config", "validate", "--state", statePath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error for Mieru state: %v\noutput: %s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Valid.") {
+		t.Fatalf("expected Valid., got: %s", out.String())
+	}
+}
+
 func TestConfigValidateMissingSettings(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "state.json")

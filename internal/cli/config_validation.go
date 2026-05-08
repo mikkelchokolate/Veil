@@ -41,8 +41,8 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 			if settings.Mode == "" {
 				errs = append(errs, "settings.mode is required")
 			}
-			if settings.Stack != "naive" && settings.Stack != "hysteria2" && settings.Stack != "both" {
-				errs = append(errs, fmt.Sprintf("settings.stack must be naive, hysteria2, or both, got: %s", settings.Stack))
+			if err := api.NewStackSelectionValidation().Validate(settings.Stack); err != nil {
+				errs = append(errs, fmt.Sprintf("settings.stack must be panel, mieru, naive, hysteria2, or both, got: %s", settings.Stack))
 			}
 		}
 	} else {
