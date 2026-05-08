@@ -20,6 +20,8 @@ jobs:
       - run: make build
       - run: go test ./... -count=1
       - run: bash -n scripts/install.sh scripts/uninstall.sh
+      - run: bash scripts/install.sh --help >/dev/null
+      - run: bash scripts/uninstall.sh --help >/dev/null
       - run: git diff --check
 
   release:
