@@ -65,7 +65,7 @@ func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string,
 	}
 	rel := strings.TrimPrefix(slashPath, prefix)
 	switch rel {
-	case "caddy/Caddyfile", "hysteria2/server.yaml", "sing-box/warp.json":
+	case "caddy/Caddyfile", "hysteria2/server.yaml", "sing-box/warp.json", "mieru/server_config.json":
 		return filepath.Join(p.applyRoot, "live", filepath.FromSlash(rel)), true
 	default:
 		return "", false

@@ -6,6 +6,25 @@ import (
 	"testing"
 )
 
+func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
+	root := t.TempDir()
+	staged := filepath.Join(root, "generated", "mieru", "server_config.json")
+	live := filepath.Join(root, "live", "mieru", "server_config.json")
+	if err := writeAtomicFile(staged, []byte(`{"portBindings":[],"users":[]}`), 0o600); err != nil {
+		t.Fatalf("write staged: %v", err)
+	}
+	promotion := NewLiveConfigPromotion(root, nil)
+
+	liveFiles, _, records, err := promotion.Promote([]string{staged})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(liveFiles) != 1 || liveFiles[0] != live || len(records) != 1 || records[0].LivePath != live {
+		t.Fatalf("Mieru promotion result: live=%+v records=%+v", liveFiles, records)
+	}
+	assertFileBody(t, live, `{"portBindings":[],"users":[]}`)
+}
+
 func TestLiveConfigPromotionPromotesBacksUpAndRollsBack(t *testing.T) {
 	root := t.TempDir()
 	staged := filepath.Join(root, "generated", "caddy", "Caddyfile")
