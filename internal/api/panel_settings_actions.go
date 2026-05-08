@@ -30,7 +30,6 @@ func panelSettingsActionsJS() string {
           panelListen: document.getElementById('settings-panel-listen').value,
           panelAccess: document.getElementById('settings-panel-access').value,
           webBasePath: document.getElementById('settings-web-base-path').value,
-          stack: 'panel',
           mode: document.getElementById('settings-mode').value,
           domain: document.getElementById('settings-domain').value,
           email: document.getElementById('settings-email').value,

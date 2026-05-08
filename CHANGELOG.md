@@ -22,7 +22,7 @@ All notable changes to Veil will be documented in this file.
 - Veil repair writes systemd units by default, reloads systemd after repairing unit files, preserves existing Panel secrets/TLS material, and repairs Panel Caddy access files from either existing env or encrypted Panel state.
 - Veil uninstall removes managed systemd unit files, honors custom install/config/systemd paths, and runs daemon-reload after uninstall; the curl uninstaller forwards those paths, validates missing option values before side effects, and allows non-root dry-run previews.
 - Legacy protocol stack and shared proxy port install inputs are hidden or ignored for compatibility; dead install-time protocol artifact, install client link, stack policy, shared port planning, port availability, protocol binary acquisition, binary download/repair, protocol checksum input, and Naive Caddy build Modules were removed from the installer.
-- RURecommendedProfile and profile preview no longer expose legacy protocol stack/install fields; the only remaining stack compatibility Module is Settings normalization.
+- RURecommendedProfile, profile preview, Panel settings actions, and Client link responses no longer expose legacy protocol stack/install fields; the only remaining stack compatibility Module is Settings normalization.
 - NaiveProxy client links use the `naive+https://` scheme.
 - Protocol capabilities now drive Inbound options, Generated config set rendering, Client link delivery, Apply actions, managed runtimes, and repair planning.
 

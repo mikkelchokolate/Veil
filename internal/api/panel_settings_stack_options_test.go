@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestPanelSettingsActionsDoNotWriteLegacyStack(t *testing.T) {
+	actions := panelSettingsActionsJS()
+	for _, unwanted := range []string{"stack:", "stack"} {
+		if strings.Contains(actions, unwanted) {
+			t.Fatalf("Settings actions should not write legacy stack field %q:\n%s", unwanted, actions)
+		}
+	}
+}
+
 func TestPanelSettingsCardHidesStackSelection(t *testing.T) {
 	card := panelSettingsCardHTML()
 	for _, unwanted := range []string{`id="settings-stack"`, `>Stack</label>`, `<option value="both">both</option>`, `<option value="mieru">mieru</option>`} {

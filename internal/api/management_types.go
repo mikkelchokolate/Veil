@@ -86,7 +86,6 @@ type WarpConfig struct {
 type ClientLinksResponse struct {
 	SchemaVersion              string           `json:"schemaVersion"`
 	Domain                     string           `json:"domain"`
-	Stack                      string           `json:"stack"`
 	SubscriptionURL            string           `json:"subscriptionUrl"`
 	Base64SubscriptionURL      string           `json:"base64SubscriptionUrl"`
 	RawSubscriptionURL         string           `json:"rawSubscriptionUrl"`

@@ -5,9 +5,16 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestClientLinksResponseDoesNotExposeLegacyStack(t *testing.T) {
+	if _, ok := reflect.TypeOf(ClientLinksResponse{}).FieldByName("Stack"); ok {
+		t.Fatalf("ClientLinksResponse should not expose legacy stack metadata; protocols are represented by Client links")
+	}
+}
 
 func TestLegacyStackCompatibilityHasSingleModule(t *testing.T) {
 	forbiddenTypes := map[string]bool{
