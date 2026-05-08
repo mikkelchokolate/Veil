@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestBuildRURecommendedProfileDefaultsPanelAccessLocal(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret" }})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile: %v", err)
+	}
+	if profile.PanelAccess != "local" || profile.PanelListen != "127.0.0.1:2096" {
+		t.Fatalf("default Panel access = %q listen=%q, want local 127.0.0.1:2096", profile.PanelAccess, profile.PanelListen)
+	}
+}
+
 func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
