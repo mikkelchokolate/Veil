@@ -15,7 +15,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`apply-live-configs`,
 		`reload-services`,
 		`load-apply-history`,
-		`applyServices: true`,
+		`"applyServices":true`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)

@@ -25,33 +25,7 @@ func panelApplyActionsJS() string {
       await loadJSON(applyHistoryPath(), 'apply-plan-output');
     }
 
-    document.getElementById('build-apply-plan').addEventListener('click', async () => {
-      await loadJSON('/api/apply/plan', 'apply-plan-output', { method: 'POST' });
-    });
-
-    document.getElementById('apply-staged-files').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true })
-      });
-    });
-
-    document.getElementById('apply-live-configs').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, applyLive: true })
-      });
-    });
-
-    document.getElementById('reload-services').addEventListener('click', async () => {
-      await loadJSON('/api/apply', 'apply-plan-output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, applyLive: true, applyServices: true })
-      });
-    });
+` + NewApplyWorkflowCommandCatalog().PanelActionsJS() + `
 
     document.getElementById('load-apply-history').addEventListener('click', loadApplyHistory);`
 }
