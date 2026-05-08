@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,8 @@ var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 	return service.RunSystemdActions(service.ExecRunner{}, actions)
 }
 
+var installExecutableFunc = os.Executable
+
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
 	actualBackupDir := opts.BackupDir
 	if !opts.BackupDirSet {
@@ -22,7 +25,11 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if systemdDir == "" {
 		systemdDir = defaultSystemdDir
 	}
-	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: systemdDir, BackupDir: actualBackupDir})
+	veilBinary, err := installExecutableFunc()
+	if err != nil {
+		veilBinary = ""
+	}
+	result, err := installApplyFunc(profile, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: systemdDir, BackupDir: actualBackupDir, VeilBinary: veilBinary})
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err

@@ -10,6 +10,7 @@ type ApplyPaths struct {
 	VarDir     string
 	SystemdDir string
 	BackupDir  string
+	VeilBinary string
 }
 
 type ApplyResult struct {

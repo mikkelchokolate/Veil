@@ -12,6 +12,7 @@ import (
 func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *testing.T) {
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
 	var gotPaths installer.ApplyPaths
 	var gotActions []service.SystemdAction
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
@@ -22,9 +23,11 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *te
 		gotActions = actions
 		return nil
 	}
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
 	t.Cleanup(func() {
 		installApplyFunc = oldApply
 		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
 	})
 
 	cmd := NewRootCommand("test")
@@ -49,6 +52,9 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsCredentials(t *te
 	}
 	if gotPaths.SystemdDir != "/etc/systemd/system" {
 		t.Fatalf("SystemdDir = %q", gotPaths.SystemdDir)
+	}
+	if gotPaths.VeilBinary != "/opt/veil/bin/veil" {
+		t.Fatalf("VeilBinary = %q", gotPaths.VeilBinary)
 	}
 	if len(gotActions) == 0 || gotActions[0].Command != "systemctl" || gotActions[0].Args[0] != "daemon-reload" {
 		t.Fatalf("systemd actions not run: %+v", gotActions)
