@@ -12,10 +12,6 @@ func panelServiceStatusCardHTML() string {
       </div>
       <pre id="service-status-output">Not loaded</pre>
       <div class="actions">
-        <button id="restart-veil" class="danger" type="button">Restart veil</button>
-        <button id="restart-caddy" class="danger" type="button">Restart caddy</button>
-        <button id="restart-hysteria2" class="danger" type="button">Restart hysteria2</button>
-        <button id="restart-mieru" class="danger" type="button">Restart mieru</button>
-      </div>
+` + panelServiceRestartControlsHTML() + `      </div>
     </div>`
 }
