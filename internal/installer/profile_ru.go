@@ -89,7 +89,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		return RURecommendedProfile{}, err
 	}
 	panelCaddy := input.PanelAccess == "caddy"
-	if stack.RequiresDomain() || panelCaddy {
+	if panelCaddy {
 		if err := ValidateDomain(input.Domain); err != nil {
 			return RURecommendedProfile{}, err
 		}
@@ -97,17 +97,14 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 			return RURecommendedProfile{}, err
 		}
 	}
-	plan, err := m.portPlan(input, stack)
-	if err != nil {
-		return RURecommendedProfile{}, err
-	}
+	plan := SharedPortPlan{}
 
 	defaults := NewRURecommendedDefaults()
 	username := defaults.Username
 	masqueradeURL := defaults.MasqueradeURL
 	fallbackRoot := defaults.FallbackRoot
 	webBasePath := ""
-	if stack.InstallNaive || panelCaddy {
+	if panelCaddy {
 		webBasePath = generateWebBasePath()
 	}
 	panelAuthToken := input.Secret("panel")
@@ -120,22 +117,9 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 			return RURecommendedProfile{}, err
 		}
 	}
-	naive := ruRecommendedNaiveArtifacts{}
-	hysteria := ruRecommendedHysteriaArtifacts{}
-
-	if stack.InstallNaive {
-		naive, err = m.naiveArtifacts(input, plan, username, fallbackRoot, webBasePath)
-		if err != nil {
-			return RURecommendedProfile{}, err
-		}
-	} else if panelCaddy {
-		naive.Caddyfile, err = renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: webBasePath})
-		if err != nil {
-			return RURecommendedProfile{}, err
-		}
-	}
-	if stack.InstallHysteria2 {
-		hysteria, err = m.hysteriaArtifacts(input, plan, masqueradeURL)
+	caddyfile := ""
+	if panelCaddy {
+		caddyfile, err = renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: webBasePath})
 		if err != nil {
 			return RURecommendedProfile{}, err
 		}
@@ -145,8 +129,8 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		Domain:             input.Domain,
 		Email:              input.Email,
 		Username:           username,
-		NaivePassword:      naive.Password,
-		Hysteria2Password:  hysteria.Password,
+		NaivePassword:      "",
+		Hysteria2Password:  "",
 		PanelAuthToken:     panelAuthToken,
 		PanelListen:        panelListen,
 		PanelAccess:        input.PanelAccess,
@@ -155,15 +139,15 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelTLSKeyPEM:     panelTLS.KeyPEM,
 		WebBasePath:        webBasePath,
 		Stack:              stack.Stack,
-		InstallNaive:       stack.InstallNaive,
-		InstallHysteria2:   stack.InstallHysteria2,
-		InstallMieru:       stack.InstallMieru,
+		InstallNaive:       false,
+		InstallHysteria2:   false,
+		InstallMieru:       false,
 		InstallPanelCaddy:  panelCaddy,
 		PortPlan:           plan,
-		Caddyfile:          naive.Caddyfile,
-		Hysteria2YAML:      hysteria.ServerYAML,
-		NaiveClientURL:     naive.ClientURL,
-		Hysteria2ClientURI: hysteria.ClientURI,
+		Caddyfile:          caddyfile,
+		Hysteria2YAML:      "",
+		NaiveClientURL:     "",
+		Hysteria2ClientURI: "",
 		MasqueradeURL:      masqueradeURL,
 		FallbackRoot:       fallbackRoot,
 	}, nil
@@ -175,18 +159,6 @@ func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 
 func (RURecommendedProfileModule) stackPolicy(stack Stack) (ruRecommendedStackPolicy, error) {
 	return NewRURecommendedStackPolicy(stack)
-}
-
-func (RURecommendedProfileModule) portPlan(input RURecommendedInput, stack ruRecommendedStackPolicy) (SharedPortPlan, error) {
-	return NewRURecommendedPortPolicy(input.Availability, input.RandomPort).Plan(input.Port, stack)
-}
-
-func (RURecommendedProfileModule) naiveArtifacts(input RURecommendedInput, plan SharedPortPlan, username, fallbackRoot, webBasePath string) (ruRecommendedNaiveArtifacts, error) {
-	return NewRURecommendedNaiveArtifacts().Build(input, plan, RURecommendedDefaults{Username: username, FallbackRoot: fallbackRoot}, webBasePath)
-}
-
-func (RURecommendedProfileModule) hysteriaArtifacts(input RURecommendedInput, plan SharedPortPlan, masqueradeURL string) (ruRecommendedHysteriaArtifacts, error) {
-	return NewRURecommendedHysteriaArtifacts().Build(input, plan, RURecommendedDefaults{MasqueradeURL: masqueradeURL})
 }
 
 func recommendedPanelListen(panelAccess string, panelPort int) string {

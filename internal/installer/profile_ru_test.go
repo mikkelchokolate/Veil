@@ -21,6 +21,16 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	}
 }
 
+func TestBuildRURecommendedProfileDoesNotPlanSharedProxyPortForLegacyStacks(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: StackBoth, Port: 443, Availability: PortAvailability{TCPBusy: map[int]bool{443: true}, UDPBusy: map[int]bool{443: true}}, Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
+	if err != nil {
+		t.Fatalf("legacy stack should not check shared proxy port availability: %v", err)
+	}
+	if profile.PortPlan.Port != 0 || profile.PortPlan.Reason != "" {
+		t.Fatalf("legacy stack should not create shared proxy port plan: %+v", profile.PortPlan)
+	}
+}
+
 func TestBuildRURecommendedProfileNormalizesLegacyProtocolStacksToPanelOnly(t *testing.T) {
 	for _, stack := range []Stack{"", StackBoth, StackNaive, StackHysteria2, StackMieru} {
 		profile, err := BuildRURecommendedProfile(RURecommendedInput{Stack: stack, Secret: func(label string) string { return "secret-" + label }, RandomPort: func() int { return 31874 }})
