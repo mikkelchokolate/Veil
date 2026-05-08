@@ -6,7 +6,6 @@ func buildRURecommendedInstallFromOptions(opts ruRecommendedInstallOptions) (ins
 	return installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
 		Domain:          opts.Domain,
 		Email:           opts.Email,
-		Stack:           installer.Stack(opts.Stack),
 		PanelAccess:     opts.PanelAccess,
 		PanelPort:       opts.PanelPort,
 		Secret:          randomSecret,

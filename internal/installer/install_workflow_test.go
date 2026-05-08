@@ -9,7 +9,6 @@ func TestBuildRURecommendedInstallSelectsPanelPortBeforeProfile(t *testing.T) {
 	result, err := BuildRURecommendedInstall(RURecommendedInstallInput{
 		Domain:      "example.com",
 		Email:       "admin@example.com",
-		Stack:       StackPanel,
 		PanelAccess: "caddy",
 		PanelPort:   0,
 		Secret:      func(label string) string { return "secret-" + label },

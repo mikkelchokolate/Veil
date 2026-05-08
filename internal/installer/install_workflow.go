@@ -5,7 +5,6 @@ package installer
 type RURecommendedInstallInput struct {
 	Domain          string
 	Email           string
-	Stack           Stack
 	PanelAccess     string
 	PanelPort       int
 	Secret          SecretFunc
@@ -33,7 +32,7 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		Domain:      input.Domain,
 		Email:       input.Email,
-		Stack:       input.Stack,
+		Stack:       StackPanel,
 		PanelAccess: input.PanelAccess,
 		Secret:      input.Secret,
 		PanelPort:   panelPort,

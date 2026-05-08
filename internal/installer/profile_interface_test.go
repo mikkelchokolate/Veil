@@ -13,3 +13,10 @@ func TestRURecommendedProfileInputDoesNotExposeSharedProxyPortPlanning(t *testin
 		}
 	}
 }
+
+func TestRURecommendedInstallInputDoesNotExposeProtocolStackSelection(t *testing.T) {
+	inputType := reflect.TypeOf(RURecommendedInstallInput{})
+	if _, ok := inputType.FieldByName("Stack"); ok {
+		t.Fatalf("RURecommendedInstallInput should not expose protocol stack selection")
+	}
+}
