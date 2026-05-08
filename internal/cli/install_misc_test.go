@@ -26,7 +26,7 @@ func TestInstallHelpHidesLegacyStackAndPortFlags(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	for _, unwanted := range []string{"--stack", "--port"} {
+	for _, unwanted := range []string{"--stack", "--port", "--hysteria-sha256"} {
 		if strings.Contains(out.String(), unwanted) {
 			t.Fatalf("install help should hide legacy flag %q:\n%s", unwanted, out.String())
 		}

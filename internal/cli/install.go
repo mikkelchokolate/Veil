@@ -78,6 +78,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	_ = cmd.Flags().MarkHidden("stack")
 	_ = cmd.Flags().MarkHidden("port")
+	_ = cmd.Flags().MarkHidden("hysteria-sha256")
 	return cmd
 }
 
