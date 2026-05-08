@@ -1,9 +1,6 @@
 package api
 
-import (
-	"encoding/json"
-	"strings"
-)
+import "strings"
 
 type StackSelection struct {
 	Name           string
@@ -67,15 +64,4 @@ func panelStackOptionsHTML() string {
 
 func panelSettingsStackOptionsHTML() string {
 	return panelStackOptionsHTML()
-}
-
-func panelProfilePreviewDomainRequirementsJS() string {
-	requirements := map[string]bool{}
-	for _, selection := range NewStackSelectionCatalog().Selections() {
-		requirements[selection.Name] = selection.RequiresDomain
-	}
-	encoded, _ := json.Marshal(requirements)
-	return `    const profilePreviewDomainRequired = ` + string(encoded) + `;
-
-`
 }
