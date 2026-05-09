@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+
+	"github.com/veil-panel/veil/internal/applyflow"
 )
 
 const maxApplyHistoryEntries = 100
@@ -54,14 +56,5 @@ func firstQueryValue(values map[string][]string, key string) string {
 }
 
 func applyHistoryStage(response ApplyResponse) string {
-	switch {
-	case response.RolledBack:
-		return "rollback"
-	case response.ServicesApplied:
-		return "services"
-	case response.LiveApplied:
-		return "live"
-	default:
-		return "staged"
-	}
+	return applyflow.HistoryStage(response)
 }

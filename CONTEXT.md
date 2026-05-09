@@ -109,7 +109,7 @@ The route-dat files fetched, checksum-verified, and staged from a Routing source
 _Avoid_: downloaded routing files, rule data side effects
 
 **Apply workflow**:
-The staged-to-live flow that validates, promotes, reloads services, checks health, rolls back when needed, and records Apply history.
+The staged-to-live package flow that validates, promotes, reloads services, checks health, rolls back when needed, and records Apply history. HTTP routes and Management state contexts are Adapters over this workflow.
 _Avoid_: deploy, publish
 
 **Apply history**:
@@ -161,6 +161,7 @@ _Avoid_: logging, masking
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol outside HTTP Adapters.
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
 - **Apply history** records retained **Apply workflow** outcomes and serves Panel history queries.
+- **Apply workflow** orchestration lives outside HTTP routes; Management contexts adapt it to staged files and runtime commands.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.

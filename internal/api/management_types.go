@@ -3,6 +3,7 @@ package api
 import (
 	"sync"
 
+	"github.com/veil-panel/veil/internal/applyflow"
 	"github.com/veil-panel/veil/internal/model"
 	"github.com/veil-panel/veil/internal/secrets"
 )
@@ -27,11 +28,7 @@ type ConfigValidationResult = model.ConfigValidationResult
 type ServiceActionResult = model.ServiceActionResult
 type ServiceHealthResult = model.ServiceHealthResult
 
-type livePromotionRecord struct {
-	LivePath    string
-	BackupPath  string
-	HadPrevious bool
-}
+type livePromotionRecord = applyflow.PromotionRecord
 
 type managementSnapshot = model.ManagementSnapshot
 
