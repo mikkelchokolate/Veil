@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
-var updateHealthChecker = waitForHealthy
+var updateHealthChecker = updateflow.WaitForHealthy
 
 func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateWorkflowOptions) error {
 	out := cmd.OutOrStdout()
