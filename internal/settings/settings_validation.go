@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/hostenv"
 )
 
 type SettingsValidation struct{}
@@ -39,12 +39,12 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		return errors.New("--domain and --email are required for caddy Panel access")
 	}
 	if settings.Domain != "" {
-		if err := installer.ValidateDomain(settings.Domain); err != nil {
+		if err := hostenv.ValidateDomain(settings.Domain); err != nil {
 			return errors.New("domain: " + err.Error())
 		}
 	}
 	if settings.Email != "" {
-		if err := installer.ValidateEmail(settings.Email); err != nil {
+		if err := hostenv.ValidateEmail(settings.Email); err != nil {
 			return errors.New("email: " + err.Error())
 		}
 	}
