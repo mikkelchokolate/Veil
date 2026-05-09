@@ -48,42 +48,12 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 	if !ok {
 		return plan, nil
 	}
-	if err := applyPanelSettingsRepairActions(&plan, opts, snapshot.Settings); err != nil {
-		return installer.RepairPlan{}, err
-	}
-	configs, err := api.BuildGeneratedConfigSet(api.GeneratedConfigInput{ApplyRoot: opts.EtcDir, Settings: snapshot.Settings, Inbounds: snapshot.Inbounds, Rules: snapshot.Rules, Warp: snapshot.Warp})
-	if err != nil {
-		return installer.RepairPlan{}, err
-	}
-	for path, body := range configs {
-		if err := addRepairFileAction(&plan, path, body, 0o600); err != nil {
-			return installer.RepairPlan{}, err
-		}
-	}
-	if snapshot.Settings.PanelAccess == "caddy" {
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: snapshot.Settings.Domain, Email: snapshot.Settings.Email, PanelPort: panelPortFromListen(snapshot.Settings.PanelListen), WebBasePath: snapshot.Settings.WebBasePath})
-		if err != nil {
-			return installer.RepairPlan{}, err
-		}
-		if err := addRepairFileAction(&plan, filepath.Join(opts.EtcDir, "generated", "caddy", "Caddyfile"), caddyfile, 0o600); err != nil {
-			return installer.RepairPlan{}, err
-		}
-	}
-	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: opts.EtcDir, CaddyBinary: resolvedRepairBinaryPath("caddy")})
-	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
-	if snapshot.Settings.PanelAccess == "caddy" {
-		unitNames = appendRepairUnit(unitNames, renderer.UnitNaive)
-	}
-	for _, unitName := range unitNames {
-		body := units[unitName]
-		if body == "" || opts.SystemdDir == "" {
-			continue
-		}
-		if err := addRepairFileAction(&plan, filepath.Join(opts.SystemdDir, unitName), body, 0o644); err != nil {
-			return installer.RepairPlan{}, err
-		}
-	}
-	return plan, nil
+	return newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
+		Settings: snapshot.Settings,
+		Inbounds: snapshot.Inbounds,
+		Rules:    snapshot.Rules,
+		Warp:     snapshot.Warp,
+	}).Apply(plan)
 }
 
 func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWorkflowOptions, settings api.Settings) error {

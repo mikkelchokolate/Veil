@@ -36,6 +36,10 @@ _Avoid_: protocol TLS, Naive TLS, Caddy replacement
 The files and systemd units that make Panel access work: `veil.env`, optional Panel TLS files, optional Panel Caddy access files, and Panel runtime units.
 _Avoid_: install output bundle, repair file list
 
+**Panel state repair material**:
+The desired repair actions derived from persisted Management state: Panel managed material, Generated config artifacts, and Managed systemd units needed by enabled Inbounds and WARP.
+_Avoid_: repair script steps, state replay
+
 **Inbound**:
 A named proxy entry that defines protocol, transport, port, enabled state, and optional password.
 _Avoid_: profile, listener, account
@@ -103,6 +107,7 @@ _Avoid_: logging, masking
 - **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
 - **Panel managed material** is derived from **Panel access** and is used by both Veil install and repair.
+- **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.
 - The **Panel** manages zero or more **Inbounds**.
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
