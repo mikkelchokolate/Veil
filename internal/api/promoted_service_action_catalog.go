@@ -1,13 +1,15 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type PromotedServiceActionCatalog struct {
-	applyRoot string
+	inner service.PromotedServiceActionCatalog
 }
 
 func NewPromotedServiceActionCatalog(applyRoot string) PromotedServiceActionCatalog {
-	return PromotedServiceActionCatalog{applyRoot: applyRoot}
+	return PromotedServiceActionCatalog{inner: service.NewPromotedServiceActionCatalog(applyRoot, NewManagedRuntimeCatalog())}
 }
 
 func (c PromotedServiceActionCatalog) Commands(liveFiles []string) [][]string {
-	return NewManagedRuntimeCatalog().PromotedCommands(c.applyRoot, liveFiles)
+	return c.inner.Commands(liveFiles)
 }

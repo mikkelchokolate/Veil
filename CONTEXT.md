@@ -202,7 +202,7 @@ _Avoid_: logging, masking
 - The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, systemd status, and health-check behavior share one command seam.
-- The Managed systemd unit catalog maps promoted Generated config artifacts to service actions and health checks outside HTTP Adapters.
+- The Managed systemd unit catalog maps promoted Generated config artifacts to service reload/restart actions and health checks outside HTTP Adapters.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.
 - **HTTP observability** concentrates metrics exposition, request accounting, status recording, and rate-limit decisions outside HTTP Adapters.
 - **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.

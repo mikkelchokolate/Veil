@@ -1,25 +1,22 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type ServiceHealthCollection struct {
-	check func(name string) ServiceHealthResult
+	inner service.ServiceHealthCollection
 }
 
 func NewServiceHealthCollection(check func(name string) ServiceHealthResult) ServiceHealthCollection {
 	if check == nil {
 		check = serviceHealthChecker
 	}
-	return ServiceHealthCollection{check: check}
+	return ServiceHealthCollection{inner: service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
+		return check(name)
+	})}
 }
 
 func (c ServiceHealthCollection) Check(actions []ServiceActionResult) []ServiceHealthResult {
-	checks := []ServiceHealthResult{}
-	for _, action := range actions {
-		if !action.Success || action.Name == "" {
-			continue
-		}
-		checks = append(checks, c.check(action.Name))
-	}
-	return checks
+	return c.inner.Check(actions)
 }
 
 func checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {

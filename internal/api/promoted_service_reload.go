@@ -1,34 +1,22 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type PromotedServiceReloader struct {
-	applyRoot string
-	run       func([]string) ServiceActionResult
+	inner service.PromotedServiceReloader
 }
 
 func NewPromotedServiceReloader(applyRoot string, run func([]string) ServiceActionResult) PromotedServiceReloader {
 	if run == nil {
 		run = serviceActionRunner
 	}
-	return PromotedServiceReloader{applyRoot: applyRoot, run: run}
+	return PromotedServiceReloader{inner: service.NewPromotedServiceReloader(applyRoot, NewManagedRuntimeCatalog(), func(command []string) ServiceActionResult {
+		return run(command)
+	})}
 }
 
 func (r PromotedServiceReloader) Reload(liveFiles []string) []ServiceActionResult {
-	commands := NewPromotedServiceActionCatalog(r.applyRoot).Commands(liveFiles)
-	results := make([]ServiceActionResult, 0, len(commands))
-	for _, command := range commands {
-		result := r.run(command)
-		if result.Name == "" && len(command) > 0 {
-			result.Name = command[len(command)-1]
-		}
-		if result.Command == nil {
-			result.Command = append([]string(nil), command...)
-		}
-		results = append(results, result)
-		if !result.Success {
-			break
-		}
-	}
-	return results
+	return r.inner.Reload(liveFiles)
 }
 
 func containsPath(paths []string, want string) bool {
