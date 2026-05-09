@@ -1,6 +1,6 @@
 package api
 
-import "fmt"
+import "github.com/veil-panel/veil/internal/applyplan"
 
 type ApplyPlanInput struct {
 	Settings                Settings
@@ -14,104 +14,44 @@ type ApplyPlanInput struct {
 }
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
-	plan := ApplyPlanResponse{
-		Valid:   true,
-		Configs: []string{},
-		Actions: []string{"validate management state"},
-	}
 	panelAccessIntent := NewPanelAccess(input.Settings).ApplyIntent(input.Inbounds)
-	for _, config := range panelAccessIntent.Configs {
-		plan.Configs = appendUnique(plan.Configs, config)
+	capabilities := []applyplan.ProtocolCapability{}
+	catalog := NewApplyProtocolCapabilityCatalog()
+	for _, protocolCapability := range catalog.All() {
+		capability := protocolCapability
+		capabilities = append(capabilities, applyplan.ProtocolCapability{
+			Protocol:               capability.Protocol,
+			Config:                 capability.Config,
+			Action:                 capability.Action,
+			ValidateSettings:       capability.ValidateSettings,
+			ValidateInboundRender:  capability.ValidateInboundRender,
+			RequiresRenderSettings: capability.RequiresRenderSettings,
+		})
 	}
-	for _, action := range panelAccessIntent.Actions {
-		plan.Actions = appendUnique(plan.Actions, action)
+	runtimeUnits := NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits()
+	validateInboundRender := input.ValidateInboundRender
+	warpAction := ""
+	if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
+		warpAction = action
 	}
-	for _, runtime := range panelAccessIntent.Runtimes {
-		plan.Runtimes = appendUnique(plan.Runtimes, runtime)
-	}
-	plan.Errors = append(plan.Errors, panelAccessIntent.Errors...)
-	seen := map[string]bool{}
-	capabilities := NewApplyProtocolCapabilityCatalog()
-	for _, inbound := range input.Inbounds {
-		if !inbound.Enabled {
-			continue
-		}
-		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" {
-			plan.Errors = append(plan.Errors, "enabled inbounds require name, protocol, and transport")
-		}
-		if inbound.Port <= 0 {
-			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
-		}
-		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
-		if seen[key] {
-			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
-		}
-		seen[key] = true
-		capability, ok := capabilities.ForProtocol(inbound.Protocol)
-		if !ok {
-			if inbound.Protocol != "" {
-				plan.Errors = append(plan.Errors, "unsupported inbound protocol: "+inbound.Protocol)
-			}
-			continue
-		}
-		if err := capability.ValidateSettings(input.Settings); err != nil {
-			plan.Errors = append(plan.Errors, err.Error())
-		}
-		plan.Configs = appendUnique(plan.Configs, capability.Config)
-		plan.Actions = appendUnique(plan.Actions, capability.Action)
-		if capability.ShouldValidateRender(input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
-			if err := input.ValidateInboundRender(inbound); err != nil {
-				plan.Errors = append(plan.Errors, err.Error())
-			}
-		}
-	}
-	if err := validateGeneratedConfigInboundCardinality(input.Settings, input.Inbounds); err != nil {
-		plan.Errors = append(plan.Errors, err.Error())
-	}
-	for _, unit := range NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits() {
-		plan.Runtimes = appendUnique(plan.Runtimes, unit)
-	}
-	if input.Warp.Enabled {
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
-		if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
-			plan.Actions = appendUnique(plan.Actions, action)
-		}
-		if input.ValidateWarpRender != nil {
-			if err := input.ValidateWarpRender(); err != nil {
-				plan.Errors = append(plan.Errors, err.Error())
-			}
-		}
-	}
-	for _, rule := range input.Rules {
-		if !rule.Enabled {
-			continue
-		}
-		if rule.Name == "" || rule.Match == "" || rule.Outbound == "" {
-			plan.Errors = append(plan.Errors, "enabled routing rules require name, match, and outbound")
-			continue
-		}
-		switch rule.Outbound {
-		case "direct":
-		case "warp":
-			if !input.Warp.Enabled {
-				plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" requires WARP to be enabled")
-			}
-		default:
-			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)
-		}
-	}
-	for _, file := range input.RoutingSource.Files {
-		if file.Name == "" || file.URL == "" {
-			plan.Errors = append(plan.Errors, "routing source files require name and URL")
-			continue
-		}
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/rules/"+file.Name)
-	}
-	if len(plan.Configs) > 0 {
-		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
-	}
-	if len(plan.Errors) > 0 {
-		plan.Valid = false
-	}
-	return plan
+	return applyplan.Build(applyplan.Input{
+		Settings:                input.Settings,
+		Inbounds:                input.Inbounds,
+		Rules:                   input.Rules,
+		RoutingSource:           input.RoutingSource,
+		Warp:                    input.Warp,
+		RenderSettingsAvailable: input.RenderSettingsAvailable,
+		PanelAccess: applyplan.Material{
+			Configs:  panelAccessIntent.Configs,
+			Actions:  panelAccessIntent.Actions,
+			Runtimes: panelAccessIntent.Runtimes,
+			Errors:   panelAccessIntent.Errors,
+		},
+		Capabilities:          capabilities,
+		ValidateCardinality:   validateGeneratedConfigInboundCardinality,
+		RuntimeUnits:          runtimeUnits,
+		WarpAction:            warpAction,
+		ValidateInboundRender: validateInboundRender,
+		ValidateWarpRender:    input.ValidateWarpRender,
+	})
 }

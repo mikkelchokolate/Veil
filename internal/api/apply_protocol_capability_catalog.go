@@ -33,6 +33,14 @@ func (c ApplyProtocolCapabilityCatalog) ForProtocol(protocol string) (ApplyProto
 	return capability, ok
 }
 
+func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
+	capabilities := make([]ApplyProtocolCapability, 0, len(c.byProtocol))
+	for _, capability := range c.byProtocol {
+		capabilities = append(capabilities, capability)
+	}
+	return capabilities
+}
+
 func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
 	if c.RequiresCaddySettings {
 		return NewNaiveCaddySettingsRequirement().Validate(settings)

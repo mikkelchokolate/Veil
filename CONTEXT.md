@@ -149,7 +149,7 @@ The retained, queryable record of Apply workflow outcomes, including stage, succ
 _Avoid_: log list, audit dump
 
 **Management apply intent**:
-The plan-level interpretation of Management state before staging: validation errors, Generated config artifacts, Apply workflow actions, and Managed systemd units.
+The plan-level interpretation of Management state before staging: validation errors, Generated config artifacts, Apply workflow actions, and Managed systemd units. The apply plan package owns the plan-building rules; HTTP and Management state contexts are Adapters.
 _Avoid_: dry-run result, deployment intent
 
 **Management state**:
@@ -205,7 +205,7 @@ _Avoid_: logging, masking
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol outside HTTP Adapters.
-- **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
+- **Management apply intent** is derived from **Management state** by the apply plan package before the **Apply workflow** writes staged files.
 - **Apply history** records retained **Apply workflow** outcomes, retention, filtering, and persistence outside HTTP Adapters.
 - **Apply workflow** orchestration lives outside HTTP routes; Management contexts adapt it to staged files and runtime commands.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
