@@ -1,12 +1,10 @@
 package api
 
 import (
-	"context"
 	"net/http"
-	"os/exec"
 	"strconv"
-	"strings"
-	"time"
+
+	"github.com/veil-panel/veil/internal/service"
 )
 
 type LogRoutes struct{}
@@ -41,31 +39,14 @@ func (LogRoutes) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		lines = n
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx,
-		"journalctl", "-u", unit+".service", "--no-pager", "-n", strconv.Itoa(lines), "-o", "short-iso",
-	).CombinedOutput()
+	result, err := service.NewLogReader(nil).Read(unit, lines)
 	if err != nil {
-		writeError(w, "failed to read logs: "+strings.TrimSpace(string(out)), http.StatusServiceUnavailable)
+		writeError(w, err.Error(), http.StatusServiceUnavailable)
 		return
-	}
-	result := map[string]string{
-		"unit":   unit,
-		"output": string(out),
 	}
 	writeJSON(w, result)
 }
 
-// validLogUnit checks that a systemd unit name contains only safe characters.
 func validLogUnit(unit string) bool {
-	if unit == "" {
-		return false
-	}
-	for _, r := range unit {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '@' || r == '.') {
-			return false
-		}
-	}
-	return true
+	return service.ValidLogUnit(unit)
 }

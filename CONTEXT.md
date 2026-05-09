@@ -129,7 +129,7 @@ A fixed external command Veil runs to validate configs, control Managed systemd 
 _Avoid_: shell snippet, exec call
 
 **Service status**:
-The Panel-facing status snapshot for Managed systemd units, including runtime catalog entries and systemd load/active/sub-state fields. The service package owns status response shaping; HTTP routes are Adapters.
+The Panel-facing status snapshot and log access for Managed systemd units, including runtime catalog entries, systemd load/active/sub-state fields, and bounded journald reads. The service package owns status response and log command shaping; HTTP routes are Adapters.
 _Avoid_: status endpoint payload, daemon list
 
 **Runtime observation**:
