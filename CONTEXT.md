@@ -64,6 +64,10 @@ _Avoid_: share link, subscription item
 The staged Caddy, Hysteria2, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state.
 _Avoid_: rendered files, output bundle
 
+**Generated config artifact**:
+One file inside a Generated config set, identified by a stable generated subpath that also determines validation and live promotion paths.
+_Avoid_: ad-hoc config path, output filename
+
 **Apply workflow**:
 The staged-to-live flow that validates, promotes, reloads services, checks health, and rolls back when needed.
 _Avoid_: deploy, publish
@@ -87,7 +91,7 @@ _Avoid_: logging, masking
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
-- The **Generated config set** is promoted by the **Apply workflow**.
+- A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
 - The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.

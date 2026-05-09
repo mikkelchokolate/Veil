@@ -42,7 +42,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 				Protocol:         capability.Protocol,
 				Transport:        capability.RuntimeTransport,
 				Unit:             capability.RuntimeUnit,
-				PromotedSubpath:  capability.PromotedSubpath,
+				PromotedSubpath:  capability.GeneratedConfig.Subpath,
 				PromotedVerb:     capability.PromotedVerb,
 				ManualRestart:    true,
 				HealthCheckAfter: true,
@@ -52,7 +52,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	ordered = append(ordered, struct {
 		Order   int
 		Runtime ManagedRuntime
-	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
+	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: generatedWarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Order < ordered[j].Order })
 	for _, item := range ordered {
 		runtimes = append(runtimes, item.Runtime)

@@ -10,18 +10,22 @@ func NewGeneratedConfigPaths(applyRoot string) GeneratedConfigPaths {
 	return GeneratedConfigPaths{ApplyRoot: applyRoot}
 }
 
+func (p GeneratedConfigPaths) Generated(subpath string) string {
+	return filepath.Join(p.ApplyRoot, "generated", filepath.FromSlash(subpath))
+}
+
 func (p GeneratedConfigPaths) Caddyfile() string {
-	return filepath.Join(p.ApplyRoot, "generated", "caddy", "Caddyfile")
+	return p.Generated(generatedCaddyfileSubpath)
 }
 
 func (p GeneratedConfigPaths) Hysteria2() string {
-	return filepath.Join(p.ApplyRoot, "generated", "hysteria2", "server.yaml")
+	return p.Generated(generatedHysteria2ConfigSubpath)
 }
 
 func (p GeneratedConfigPaths) Mieru() string {
-	return filepath.Join(p.ApplyRoot, "generated", "mieru", "server_config.json")
+	return p.Generated(generatedMieruConfigSubpath)
 }
 
 func (p GeneratedConfigPaths) Warp() string {
-	return filepath.Join(p.ApplyRoot, "generated", "sing-box", "warp.json")
+	return p.Generated(generatedWarpConfigSubpath)
 }

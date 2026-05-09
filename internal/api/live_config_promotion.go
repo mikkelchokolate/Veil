@@ -57,19 +57,7 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {
-	slashPath := filepath.ToSlash(stagedPath)
-	slashRoot := filepath.ToSlash(p.applyRoot)
-	prefix := strings.TrimRight(slashRoot, "/") + "/generated/"
-	if !strings.HasPrefix(slashPath, prefix) {
-		return "", false
-	}
-	rel := strings.TrimPrefix(slashPath, prefix)
-	switch rel {
-	case "caddy/Caddyfile", "hysteria2/server.yaml", "sing-box/warp.json", "mieru/server_config.json":
-		return filepath.Join(p.applyRoot, "live", filepath.FromSlash(rel)), true
-	default:
-		return "", false
-	}
+	return NewGeneratedConfigArtifactCatalog().LivePathForStagedConfig(p.applyRoot, stagedPath)
 }
 
 func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {

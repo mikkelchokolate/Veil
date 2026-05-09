@@ -18,7 +18,7 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 	for _, capability := range NewProtocolCapabilityCatalog().All() {
 		byProtocol[capability.Protocol] = ApplyProtocolCapability{
 			Protocol:               capability.Protocol,
-			Config:                 capability.GeneratedConfigPath,
+			Config:                 capability.GeneratedConfig.PlanPath(),
 			Action:                 capability.ApplyAction,
 			ValidateInboundRender:  capability.ValidateInboundRender,
 			RequiresRenderSettings: capability.RequiresRenderSettings,
