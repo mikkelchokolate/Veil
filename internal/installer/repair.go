@@ -1,61 +1,27 @@
 package installer
 
-import (
-	"fmt"
-	"os"
-	"strings"
-)
+import "github.com/veil-panel/veil/internal/managedfiles"
 
-type RepairReason string
+type RepairReason = managedfiles.RepairReason
 
 const (
-	RepairReasonMissing RepairReason = "missing"
-	RepairReasonDrifted RepairReason = "drifted"
+	RepairReasonMissing RepairReason = managedfiles.RepairReasonMissing
+	RepairReasonDrifted RepairReason = managedfiles.RepairReasonDrifted
 )
 
-type RepairAction struct {
-	Path    string
-	Reason  RepairReason
-	Content string
-	Mode    os.FileMode
-}
-
-type RepairPlan struct {
-	Actions []RepairAction
-}
-
-type RepairResult struct {
-	WrittenFiles []string
-}
+type RepairAction = managedfiles.RepairAction
+type RepairPlan = managedfiles.RepairPlan
+type RepairResult = managedfiles.RepairResult
 
 func BuildRepairPlan(profile RURecommendedProfile, paths ApplyPaths) (RepairPlan, error) {
 	return NewManagedFileRepair(profile, paths).Plan()
 }
 
-func (p RepairPlan) HasChanges() bool {
-	return len(p.Actions) > 0
-}
-
-func (p RepairPlan) Summary() string {
-	if len(p.Actions) == 0 {
-		return "No repair actions required\n"
-	}
-	var b strings.Builder
-	for _, action := range p.Actions {
-		fmt.Fprintf(&b, "repair %s %s\n", action.Reason, action.Path)
-	}
-	return b.String()
-}
-
 func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
-	return ManagedFileRepair{}.Apply(plan)
+	return managedfiles.Apply(plan)
 }
 
-type managedFile struct {
-	Path    string
-	Content string
-	Mode    os.FileMode
-}
+type managedFile = managedfiles.File
 
 func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]managedFile, error) {
 	return NewManagedFileRepair(profile, paths).desiredFiles()

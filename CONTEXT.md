@@ -80,6 +80,10 @@ _Avoid_: protocol TLS, Naive TLS, Caddy replacement
 The files and systemd units that make Panel access work: `veil.env`, optional Panel TLS files, optional Panel Caddy access files, and Panel runtime units. The panel material package owns file derivation; installer and repair code are Adapters.
 _Avoid_: install output bundle, repair file list
 
+**Managed file set**:
+The generic file set Module that plans missing/drifted managed file repairs and writes planned files atomically. Installer apply and repair flows use it through thin Adapters.
+_Avoid_: os.WriteFile helper, repair loop
+
 **Backup lifecycle**:
 The install, repair, and rollback material safety flow that backs up managed files, stores manifests, restores originals, creates safety backups, lists backups, and cleans old backup directories.
 _Avoid_: copy helper, rollback files
@@ -228,7 +232,7 @@ _Avoid_: logging, masking
 - A **Panel URL** contains exactly one **Web base path**.
 - **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access package owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
-- **Panel managed material** is derived from **Panel access** in the panel material package and is used by both Veil install and repair.
+- **Panel managed material** is derived from **Panel access** in the panel material package and is applied through a **Managed file set** by both Veil install and repair.
 - **Backup lifecycle** protects managed file changes during install, repair, apply, and rollback.
 - **Audit log** records install, repair, rollback, and backup lifecycle outcomes outside CLI Adapters.
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.

@@ -2,7 +2,8 @@ package installer
 
 import (
 	"os"
-	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/managedfiles"
 )
 
 type ApplyPaths struct {
@@ -23,14 +24,7 @@ type ApplyResult struct {
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(content), mode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return managedfiles.WriteFile(path, content, mode)
 }
 
 func fallbackIndexHTML(domain string) string {
