@@ -101,7 +101,7 @@ The protocol package source for Inbound protocol IDs, display names, allowed tra
 _Avoid_: protocol switch list, UI enum, scattered protocol constants
 
 **Protocol runtime provisioning**:
-The plan that maps enabled Inbounds and WARP state to required Managed systemd units such as `veil-mieru.service`. It is driven by Panel state, not Veil install stack selection.
+The service package plan that maps enabled Inbounds and WARP state to required Managed systemd units such as `veil-mieru.service`. It is driven by Panel state, not Veil install stack selection; HTTP and repair code are Adapters.
 _Avoid_: install-time protocol stack, shared runtime bundle
 
 **Managed systemd unit**:
