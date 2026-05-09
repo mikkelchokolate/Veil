@@ -1,13 +1,11 @@
-package api
+package generatedconfig
 
-import "github.com/veil-panel/veil/internal/generatedconfig"
-
-type ConfigValidationSpec = generatedconfig.ValidationSpec
+type ConfigValidationSpec = ValidationSpec
 
 type ConfigValidationCatalog struct{}
 
 func NewConfigValidationCatalog() ConfigValidationCatalog { return ConfigValidationCatalog{} }
 
 func (ConfigValidationCatalog) Match(path string) (ConfigValidationSpec, bool) {
-	return NewGeneratedConfigArtifactCatalog().ValidationSpec(path)
+	return NewArtifactCatalog().ValidationSpec(path)
 }

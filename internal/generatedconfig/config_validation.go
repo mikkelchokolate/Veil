@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 type ConfigValidationRunner func(name string, config string, command []string) ConfigValidationResult
 
@@ -8,7 +8,7 @@ type StagedConfigValidator struct {
 
 func NewStagedConfigValidator(run ConfigValidationRunner) StagedConfigValidator {
 	if run == nil {
-		run = runFixedConfigValidation
+		run = RunFixedConfigValidation
 	}
 	return StagedConfigValidator{run: run}
 }
@@ -26,10 +26,10 @@ func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult
 }
 
 func runStagedConfigValidators(paths []string) []ConfigValidationResult {
-	return NewStagedConfigValidator(runFixedConfigValidation).Validate(paths)
+	return NewStagedConfigValidator(RunFixedConfigValidation).Validate(paths)
 }
 
-func runFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
+func RunFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
 	result := ConfigValidationResult{Name: name, Config: config, Command: append([]string(nil), command...)}
 	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})
 	result.Output = output.Output
