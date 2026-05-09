@@ -12,7 +12,3 @@ func ValidateSettingsStackCompatibility(settings Settings) error {
 	}
 	return nil
 }
-
-func LegacySettingsStack(settings Settings) string {
-	return settings.legacyStack
-}

@@ -40,6 +40,7 @@ func TestLegacyStackCompatibilityHasSingleModule(t *testing.T) {
 		"panelStackOptionsHTML":         true,
 		"panelSettingsStackOptionsHTML": true,
 		"normalizedSettingsStack":       true,
+		"LegacySettingsStack":           true,
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {

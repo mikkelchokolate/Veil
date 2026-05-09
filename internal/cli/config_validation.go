@@ -39,7 +39,7 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 				errs = append(errs, "settings.mode is required")
 			}
 			if err := api.ValidateSettingsStackCompatibility(settings); err != nil {
-				errs = append(errs, fmt.Sprintf("settings.%s, got: %s", err.Error(), api.LegacySettingsStack(settings)))
+				errs = append(errs, "settings."+err.Error())
 			}
 		}
 	} else {

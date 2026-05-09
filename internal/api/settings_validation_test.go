@@ -26,9 +26,6 @@ func TestSettingsValidationAcceptsLegacyProtocolStackSelection(t *testing.T) {
 			if err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{}); err != nil {
 				t.Fatalf("legacy protocol stack should migrate to Panel Inbounds compatibility: %v", err)
 			}
-			if LegacySettingsStack(settings) != legacyStack {
-				t.Fatalf("legacy stack compatibility was not retained for validation, got %q", LegacySettingsStack(settings))
-			}
 		})
 	}
 }

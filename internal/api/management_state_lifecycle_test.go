@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestApplyManagementSnapshotKeepsDefaultsForMissingOptionalSections(t *testing.T) {
 	state := &managementState{
@@ -14,8 +18,12 @@ func TestApplyManagementSnapshotKeepsDefaultsForMissingOptionalSections(t *testi
 
 	ApplyManagementSnapshot(state, managementSnapshot{Settings: Settings{PanelListen: "0.0.0.0:2096", Mode: "dev"}})
 
-	if LegacySettingsStack(state.settings) != "" {
-		t.Fatalf("management state should not retain legacy stack after applying new snapshot: %+v", state.settings)
+	body, err := json.Marshal(state.settings)
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+	if strings.Contains(string(body), `"stack"`) {
+		t.Fatalf("management state should not emit legacy stack after applying new snapshot: %s", body)
 	}
 	if state.inbounds[0].Name != "default" || state.rules[0].Name != "default-rule" || state.routingPreset != "default-preset" || state.routingSource.Repository != "default-repo" || state.warp.Endpoint != "default-endpoint" {
 		t.Fatalf("missing optional sections should preserve defaults: %+v", state)

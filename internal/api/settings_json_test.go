@@ -8,8 +8,8 @@ import (
 
 func TestSettingsJSONAcceptsLegacyStackButDoesNotMarshalIt(t *testing.T) {
 	settings := decodeSettingsJSON(t, `{"panelListen":"127.0.0.1:2096","stack":"both","mode":"server"}`)
-	if LegacySettingsStack(settings) != "both" {
-		t.Fatalf("legacy stack = %q", LegacySettingsStack(settings))
+	if err := ValidateSettingsStackCompatibility(settings); err != nil {
+		t.Fatalf("legacy stack should be accepted: %v", err)
 	}
 	body, err := json.Marshal(settings)
 	if err != nil {

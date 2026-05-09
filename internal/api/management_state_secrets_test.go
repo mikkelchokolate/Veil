@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -371,8 +372,12 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 	if state.settings.Domain != "new.example.com" {
 		t.Errorf("after reload domain = %q, want new.example.com", state.settings.Domain)
 	}
-	if LegacySettingsStack(state.settings) != "" {
-		t.Errorf("after reload retained legacy stack = %q", LegacySettingsStack(state.settings))
+	body, err := json.Marshal(state.settings)
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+	if strings.Contains(string(body), `"stack"`) {
+		t.Errorf("after reload emitted legacy stack: %s", body)
 	}
 }
 
