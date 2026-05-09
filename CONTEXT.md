@@ -93,7 +93,7 @@ A user-facing connection URI generated from Settings, enabled Inbounds, and enab
 _Avoid_: share link, subscription item
 
 **Client access aggregation**:
-The rule that turns one or more enabled Inbounds into Client links, including protocols such as Mieru where multiple Transport bindings can produce one client config.
+The client access package rule that turns one or more enabled Inbounds into Client links, including protocols such as Mieru where multiple Transport bindings can produce one client config. HTTP routes are Adapters over this package.
 _Avoid_: link special case, subscription merge
 
 **Generated config set**:
@@ -158,7 +158,7 @@ _Avoid_: logging, masking
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
-- Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol.
+- Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol outside HTTP Adapters.
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
 - **Apply history** records retained **Apply workflow** outcomes and serves Panel history queries.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
