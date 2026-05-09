@@ -8,6 +8,10 @@ Veil is a control plane for installing, configuring, and operating NaiveProxy, H
 An interactive or scripted setup flow and orchestration Module that installs the Panel, chooses Panel access, generates Panel credentials, optionally renders Panel Caddy access, prints the Panel access summary through a CLI workflow package, validates prerequisites, and applies Panel managed material. Protocol runtimes are configured later as Panel Inbounds.
 _Avoid_: bootstrap, setup wizard, protocol stack installer
 
+**Veil update**:
+The CLI flow that fetches a GitHub release, verifies checksums, extracts the Veil binary, swaps it atomically, and can roll back during staged restart checks.
+_Avoid_: updater helpers, download command
+
 **Panel**:
 The browser UI and HTTP management surface used to operate Veil after install.
 _Avoid_: dashboard, admin site
@@ -147,6 +151,7 @@ _Avoid_: logging, masking
 ## Relationships
 
 - A **Veil install** always produces **Panel access** and credentials; its orchestration Module owns prompt, requirement, preview, prerequisite, confirmation, and apply order; it does not select or install protocol stacks.
+- **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
 - **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access Module owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.

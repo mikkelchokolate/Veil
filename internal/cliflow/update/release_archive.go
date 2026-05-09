@@ -1,4 +1,4 @@
-package cli
+package update
 
 import (
 	"archive/tar"
@@ -8,15 +8,15 @@ import (
 	"io"
 )
 
-type UpdateReleaseArchive struct {
+type ReleaseArchive struct {
 	body []byte
 }
 
-func NewUpdateReleaseArchive(body []byte) UpdateReleaseArchive {
-	return UpdateReleaseArchive{body: body}
+func NewReleaseArchive(body []byte) ReleaseArchive {
+	return ReleaseArchive{body: body}
 }
 
-func (a UpdateReleaseArchive) ExtractVeilBinary() ([]byte, error) {
+func (a ReleaseArchive) ExtractVeilBinary() ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(a.body))
 	if err != nil {
 		return nil, fmt.Errorf("gzip decompress: %w", err)
@@ -39,7 +39,7 @@ func (a UpdateReleaseArchive) ExtractVeilBinary() ([]byte, error) {
 	return nil, fmt.Errorf("veil binary not found in archive")
 }
 
-// extractVeilBinary extracts the "veil" binary from a tar.gz archive.
-func extractVeilBinary(archive []byte) ([]byte, error) {
-	return NewUpdateReleaseArchive(archive).ExtractVeilBinary()
+// ExtractVeilBinary extracts the "veil" binary from a tar.gz archive.
+func ExtractVeilBinary(archive []byte) ([]byte, error) {
+	return NewReleaseArchive(archive).ExtractVeilBinary()
 }

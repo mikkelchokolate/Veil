@@ -1,4 +1,4 @@
-package cli
+package update
 
 import (
 	"fmt"
@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 )
 
-type UpdateBinaryFiles struct{}
+type BinaryFiles struct{}
 
-func NewUpdateBinaryFiles() UpdateBinaryFiles {
-	return UpdateBinaryFiles{}
+func NewBinaryFiles() BinaryFiles {
+	return BinaryFiles{}
 }
 
-func (UpdateBinaryFiles) Copy(src, dst string) error {
+func (BinaryFiles) Copy(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func (UpdateBinaryFiles) Copy(src, dst string) error {
 	return dstFile.Sync()
 }
 
-func (UpdateBinaryFiles) ReplaceAtomic(dst string, data []byte) error {
+func (BinaryFiles) ReplaceAtomic(dst string, data []byte) error {
 	dir := filepath.Dir(dst)
 	tmp, err := os.CreateTemp(dir, ".veil-update-*")
 	if err != nil {
@@ -53,7 +53,7 @@ func (UpdateBinaryFiles) ReplaceAtomic(dst string, data []byte) error {
 	return os.Rename(tmpPath, dst)
 }
 
-func (f UpdateBinaryFiles) Rollback(backupPath, currentPath string) error {
+func (f BinaryFiles) Rollback(backupPath, currentPath string) error {
 	backupData, err := os.ReadFile(backupPath)
 	if err != nil {
 		return fmt.Errorf("read backup: %w", err)
@@ -66,16 +66,16 @@ func (f UpdateBinaryFiles) Rollback(backupPath, currentPath string) error {
 	return nil
 }
 
-func copyFileData(src, dst string) error {
-	return NewUpdateBinaryFiles().Copy(src, dst)
+func CopyFileData(src, dst string) error {
+	return NewBinaryFiles().Copy(src, dst)
 }
 
-func replaceBinaryAtomic(dst string, data []byte) error {
-	return NewUpdateBinaryFiles().ReplaceAtomic(dst, data)
+func ReplaceBinaryAtomic(dst string, data []byte) error {
+	return NewBinaryFiles().ReplaceAtomic(dst, data)
 }
 
-// rollbackBinary copies the backup file back over the current binary and
+// RollbackBinary copies the backup file back over the current binary and
 // removes the backup. Returns an error if the rollback cannot be completed.
-func rollbackBinary(backupPath, currentPath string) error {
-	return NewUpdateBinaryFiles().Rollback(backupPath, currentPath)
+func RollbackBinary(backupPath, currentPath string) error {
+	return NewBinaryFiles().Rollback(backupPath, currentPath)
 }

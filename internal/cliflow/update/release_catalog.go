@@ -1,4 +1,4 @@
-package cli
+package update
 
 import (
 	"context"
@@ -10,37 +10,37 @@ import (
 	"time"
 )
 
-// githubRelease represents a subset of the GitHub Release API response.
-type githubRelease struct {
-	TagName string        `json:"tag_name"`
-	Assets  []githubAsset `json:"assets"`
+// Release represents a subset of the GitHub Release API response.
+type Release struct {
+	TagName string  `json:"tag_name"`
+	Assets  []Asset `json:"assets"`
 }
 
-type githubAsset struct {
+type Asset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-type UpdateReleaseCatalog struct {
+type ReleaseCatalog struct {
 	Owner      string
 	Repo       string
 	BaseURL    string
 	HTTPClient *http.Client
 }
 
-func NewUpdateReleaseCatalog(owner, repo string) UpdateReleaseCatalog {
-	return UpdateReleaseCatalog{
+func NewReleaseCatalog(owner, repo string) ReleaseCatalog {
+	return ReleaseCatalog{
 		Owner:      owner,
 		Repo:       repo,
 		BaseURL:    "https://api.github.com",
-		HTTPClient: updateHTTPClient,
+		HTTPClient: HTTPClient,
 	}
 }
 
-func (c UpdateReleaseCatalog) Latest() (*githubRelease, error) {
+func (c ReleaseCatalog) Latest() (*Release, error) {
 	client := c.HTTPClient
 	if client == nil {
-		client = updateHTTPClient
+		client = HTTPClient
 	}
 	baseURL := strings.TrimRight(c.BaseURL, "/")
 	if baseURL == "" {
@@ -67,14 +67,14 @@ func (c UpdateReleaseCatalog) Latest() (*githubRelease, error) {
 	if err != nil {
 		return nil, err
 	}
-	var release githubRelease
+	var release Release
 	if err := json.Unmarshal(body, &release); err != nil {
 		return nil, fmt.Errorf("parse release JSON: %w", err)
 	}
 	return &release, nil
 }
 
-// fetchLatestRelease queries the GitHub API for the latest release.
-func fetchLatestRelease() (*githubRelease, error) {
-	return NewUpdateReleaseCatalog(updateRepoOwner, updateRepoName).Latest()
+// FetchLatestRelease queries the GitHub API for the latest release.
+func FetchLatestRelease() (*Release, error) {
+	return NewReleaseCatalog(RepoOwner, RepoName).Latest()
 }
