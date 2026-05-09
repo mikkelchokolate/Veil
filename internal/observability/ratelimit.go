@@ -1,4 +1,4 @@
-package api
+package observability
 
 import (
 	"net"
@@ -52,6 +52,10 @@ func (rl *RateLimiter) SetEndpointLimits(limits map[string]EndpointLimit) {
 // Stop shuts down the background cleanup goroutine.
 func (rl *RateLimiter) Stop() {
 	close(rl.stopCh)
+}
+
+func (rl *RateLimiter) SetOnRateLimited(callback func()) {
+	rl.onRateLimited = callback
 }
 
 // allow checks if a request identified by key is allowed under the given rate and burst.

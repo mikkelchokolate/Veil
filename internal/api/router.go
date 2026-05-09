@@ -54,7 +54,7 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 
 func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
 	limiter := DefaultRateLimitPolicy().NewLimiter()
-	limiter.onRateLimited = func() { metrics.TrackRateLimitHit() }
+	limiter.SetOnRateLimited(func() { metrics.TrackRateLimitHit() })
 	return limiter.Middleware(next)
 }
 

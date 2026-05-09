@@ -1,5 +1,5 @@
 // Package metrics provides Prometheus-compatible metrics exposition for Veil.
-package api
+package observability
 
 import (
 	"net/http"

@@ -1,4 +1,4 @@
-package api
+package observability
 
 type MetricsServiceStatus struct {
 	collector *MetricsCollector
