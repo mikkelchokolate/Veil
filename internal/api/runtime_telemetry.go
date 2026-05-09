@@ -46,3 +46,7 @@ func (t RuntimeTelemetry) Processes() (ProcessesStats, error) {
 func (t RuntimeTelemetry) Disk() DiskStats {
 	return t.readDisk()
 }
+
+func (t RuntimeTelemetry) Observation() RuntimeObservationSnapshot {
+	return NewRuntimeObservation(t).Snapshot()
+}

@@ -5,7 +5,7 @@ import "net/http"
 type RuntimeRoutes struct{}
 
 func (RuntimeRoutes) Paths() []string {
-	return []string{"/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk"}
+	return []string{"/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation"}
 }
 
 func (RuntimeRoutes) Register(mux *http.ServeMux) {
@@ -15,6 +15,7 @@ func (RuntimeRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/connections", handleConnectionsRuntime)
 	mux.HandleFunc("/api/processes", handleProcessesRuntime)
 	mux.HandleFunc("/api/disk", handleDiskRuntime)
+	mux.HandleFunc("/api/runtime/observation", handleRuntimeObservation)
 }
 
 func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
@@ -100,5 +101,16 @@ func handleDiskRuntime(w http.ResponseWriter, r *http.Request) {
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
 		writeJSON(w, NewRuntimeTelemetry().Disk())
+	}
+}
+
+func handleRuntimeObservation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet, http.MethodHead)
+		return
+	}
+	setJSONHeaders(w)
+	if r.Method == http.MethodGet {
+		writeJSON(w, NewRuntimeTelemetry().Observation())
 	}
 }

@@ -72,6 +72,10 @@ _Avoid_: service component, daemon file
 A fixed external command Veil runs to validate configs, control Managed systemd units, or check runtime health.
 _Avoid_: shell snippet, exec call
 
+**Runtime observation**:
+The user-facing snapshot of runtime facts shown by the Panel: system resources, Panel TLS, network counters, listening ports, managed processes, disk usage, and local read errors.
+_Avoid_: procfs dump, stats endpoint bundle
+
 **Client profile**:
 A named user credential attached to an Inbound.
 _Avoid_: profile, account, inbound
@@ -147,6 +151,7 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
+- **Runtime observation** concentrates procfs and diagnostic parser output into the Panel-facing observation model.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
 - The **State store** persists **Management state**.
 - **Credential policy** governs generated and preserved Inbound and Client profile credentials.

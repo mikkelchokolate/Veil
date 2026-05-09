@@ -4,7 +4,7 @@ import "testing"
 
 func TestRuntimeRoutesIncludesRuntimeStatusPaths(t *testing.T) {
 	paths := RuntimeRoutes{}.Paths()
-	for _, want := range []string{"/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk"} {
+	for _, want := range []string{"/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation"} {
 		if !containsRuntimeRoutePath(paths, want) {
 			t.Fatalf("route %s missing from %+v", want, paths)
 		}
