@@ -1,12 +1,5 @@
 package api
 
-import (
-	"context"
-	"os/exec"
-	"strings"
-	"time"
-)
-
 type ServiceCommandPolicy struct{}
 
 func (p ServiceCommandPolicy) AllowsAction(command []string) bool {
@@ -30,22 +23,18 @@ func runFixedServiceAction(command []string) ServiceActionResult {
 		result.Error = "service command is not allowed"
 		return result
 	}
-	binary, err := exec.LookPath(command[0])
-	if err != nil {
+	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})
+	result.Output = output.Output
+	if output.NotFound {
 		result.Error = command[0] + " not found"
 		return result
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, command[1:]...)
-	out, err := cmd.CombinedOutput()
-	result.Output = strings.TrimSpace(string(out))
-	if ctx.Err() == context.DeadlineExceeded {
+	if output.TimedOut {
 		result.Error = "service action timed out"
 		return result
 	}
-	if err != nil {
-		result.Error = err.Error()
+	if output.Err != nil {
+		result.Error = output.Err.Error()
 		return result
 	}
 	result.Success = true
@@ -59,22 +48,18 @@ func runFixedServiceHealthCheck(service string) ServiceHealthResult {
 		result.Error = "service health check is not allowed"
 		return result
 	}
-	binary, err := exec.LookPath(command[0])
-	if err != nil {
+	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})
+	result.Output = output.Output
+	if output.NotFound {
 		result.Error = command[0] + " not found"
 		return result
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, command[1:]...)
-	out, err := cmd.CombinedOutput()
-	result.Output = strings.TrimSpace(string(out))
-	if ctx.Err() == context.DeadlineExceeded {
+	if output.TimedOut {
 		result.Error = "service health check timed out"
 		return result
 	}
-	if err != nil {
-		result.Error = err.Error()
+	if output.Err != nil {
+		result.Error = output.Err.Error()
 		return result
 	}
 	result.Healthy = true

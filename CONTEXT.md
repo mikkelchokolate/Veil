@@ -68,6 +68,10 @@ _Avoid_: install-time protocol stack, shared runtime bundle
 A systemd unit rendered, installed, repaired, or removed by Veil for the Panel, protocol runtimes, or WARP.
 _Avoid_: service component, daemon file
 
+**Runtime command**:
+A fixed external command Veil runs to validate configs, control Managed systemd units, or check runtime health.
+_Avoid_: shell snippet, exec call
+
 **Client profile**:
 A named user credential attached to an Inbound.
 _Avoid_: profile, account, inbound
@@ -129,6 +133,7 @@ _Avoid_: logging, masking
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
+- **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
 - The **State store** persists **Management state**.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a removed Settings JSON field, not a current Settings **Interface** field; protocol choices belong to Panel **Inbounds** and unknown `stack` input is rejected at strict JSON **Interfaces**.

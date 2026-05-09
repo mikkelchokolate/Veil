@@ -1,12 +1,5 @@
 package api
 
-import (
-	"context"
-	"os/exec"
-	"strings"
-	"time"
-)
-
 type ConfigValidationRunner func(name string, config string, command []string) ConfigValidationResult
 
 type StagedConfigValidator struct {
@@ -37,29 +30,25 @@ func runStagedConfigValidators(paths []string) []ConfigValidationResult {
 }
 
 func runFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
-	result := ConfigValidationResult{Name: name, Config: config, Command: command}
-	if len(command) == 0 {
+	result := ConfigValidationResult{Name: name, Config: config, Command: append([]string(nil), command...)}
+	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})
+	result.Output = output.Output
+	if output.Empty {
 		result.Skipped = true
 		result.Error = "validator command is empty"
 		return result
 	}
-	binary, err := exec.LookPath(command[0])
-	if err != nil {
+	if output.NotFound {
 		result.Skipped = true
 		result.Error = command[0] + " not found; syntax validation skipped"
 		return result
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, command[1:]...)
-	out, err := cmd.CombinedOutput()
-	result.Output = strings.TrimSpace(string(out))
-	if ctx.Err() == context.DeadlineExceeded {
+	if output.TimedOut {
 		result.Error = "validation timed out"
 		return result
 	}
-	if err != nil {
-		result.Error = err.Error()
+	if output.Err != nil {
+		result.Error = output.Err.Error()
 		return result
 	}
 	result.Valid = true
