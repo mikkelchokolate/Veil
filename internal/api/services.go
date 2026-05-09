@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
-	"strings"
+
+	"github.com/veil-panel/veil/internal/service"
 )
 
 // ServiceActionRequest is the body for service control endpoints.
@@ -14,13 +14,7 @@ type ServiceActionRequest struct {
 }
 
 // ServiceActionResponse is the result of a service control operation.
-type ServiceActionResponse struct {
-	Service string `json:"service"`
-	Action  string `json:"action"`
-	Success bool   `json:"success"`
-	Output  string `json:"output,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
+type ServiceActionResponse = service.ManualActionResponse
 
 var serviceControlRunner = runServiceControl
 
@@ -48,21 +42,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action st
 }
 
 func runServiceControl(name, action string) ServiceActionResponse {
-	resp := ServiceActionResponse{Service: name, Action: action}
-	command, ok := NewServiceControlCommand().Build(name, action)
-	if !ok {
-		resp.Error = "unknown service: " + name
-		return resp
-	}
-	cmd := exec.Command(command[0], command[1:]...)
-	out, err := cmd.CombinedOutput()
-	resp.Output = strings.TrimSpace(string(out))
-	if err != nil {
-		resp.Error = err.Error()
-	} else {
-		resp.Success = true
-	}
-	return resp
+	return service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Run(name, action)
 }
 
 var _ = json.Marshal // keep json import

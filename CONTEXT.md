@@ -93,7 +93,7 @@ The plan that maps enabled Inbounds and WARP state to required Managed systemd u
 _Avoid_: install-time protocol stack, shared runtime bundle
 
 **Managed systemd unit**:
-A systemd unit rendered, installed, repaired, controlled, observed, or removed by Veil for the Panel, protocol runtimes, or WARP. The service package owns runtime catalog behavior; HTTP routes and protocol capability discovery are Adapters.
+A systemd unit rendered, installed, repaired, controlled, observed, or removed by Veil for the Panel, protocol runtimes, or WARP. The service package owns runtime catalog behavior and manual restart control; HTTP routes and protocol capability discovery are Adapters.
 _Avoid_: service component, daemon file
 
 **Runtime command**:
