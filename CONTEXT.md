@@ -73,7 +73,7 @@ A fixed external command Veil runs to validate configs, control Managed systemd 
 _Avoid_: shell snippet, exec call
 
 **Runtime observation**:
-The user-facing snapshot of runtime facts shown by the Panel: system resources, Panel TLS, network counters, listening ports, managed processes, disk usage, and local read errors.
+The user-facing snapshot and package for runtime facts shown by the Panel: system resources, Panel TLS, network counters, listening ports, managed processes, disk usage, and local read errors. HTTP routes are Adapters over this Module.
 _Avoid_: procfs dump, stats endpoint bundle
 
 **Client profile**:
@@ -155,7 +155,7 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
-- **Runtime observation** concentrates procfs and diagnostic parser output into the Panel-facing observation model.
+- **Runtime observation** concentrates procfs and diagnostic parser output into the Panel-facing observation model outside HTTP Adapters.
 - **Management state model** provides the import-safe value types used by Panel, CLI, protocols, generated configs, and persistence Modules.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
 - The **State store** persists **Management state**.
