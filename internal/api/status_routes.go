@@ -1,11 +1,10 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"os/exec"
-	"strings"
+
+	"github.com/veil-panel/veil/internal/service"
 )
 
 type StatusResponse struct {
@@ -27,13 +26,7 @@ type ServiceStatus struct {
 	Error       string `json:"error,omitempty"`
 }
 
-type ServiceRuntimeStatus struct {
-	Unit        string
-	LoadState   string
-	ActiveState string
-	SubState    string
-	Error       string
-}
+type ServiceRuntimeStatus = service.RuntimeStatus
 
 var serviceStatusReader = readSystemdServiceStatus
 
@@ -61,16 +54,5 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
-	command := NewSystemdServiceStatusCommand(unit)
-	ctx, cancel := context.WithTimeout(context.Background(), command.Timeout())
-	defer cancel()
-	output, err := exec.CommandContext(ctx, command.Name(), command.Args()...).CombinedOutput()
-	status := NewSystemdServiceStatusParser().Parse(unit, string(output))
-	if err != nil {
-		status.Error = strings.TrimSpace(string(output))
-		if status.Error == "" {
-			status.Error = err.Error()
-		}
-	}
-	return status
+	return service.ReadSystemdServiceStatus(unit)
 }

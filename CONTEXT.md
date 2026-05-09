@@ -81,7 +81,7 @@ A systemd unit rendered, installed, repaired, or removed by Veil for the Panel, 
 _Avoid_: service component, daemon file
 
 **Runtime command**:
-A fixed external command Veil runs to validate configs, control Managed systemd units, or check runtime health.
+A fixed external command Veil runs to validate configs, control Managed systemd units, read systemd status, or check runtime health. Runtime command execution lives outside HTTP Adapters.
 _Avoid_: shell snippet, exec call
 
 **Runtime observation**:
@@ -183,7 +183,7 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
 - The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
-- **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
+- **Runtime commands** are executed through an Adapter so validation, reload, restart, systemd status, and health-check behavior share one command seam.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.
 - **HTTP observability** concentrates metrics exposition, request accounting, status recording, and rate-limit decisions outside HTTP Adapters.
 - **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.

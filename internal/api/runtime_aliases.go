@@ -16,6 +16,9 @@ type RuntimeTelemetry = veilruntime.RuntimeTelemetry
 type RuntimeObservation = veilruntime.RuntimeObservation
 type RuntimeObservationSnapshot = veilruntime.RuntimeObservationSnapshot
 type RuntimeProcFS = veilruntime.RuntimeProcFS
+type RuntimeCommandInput = veilruntime.RuntimeCommandInput
+type RuntimeCommandOutput = veilruntime.RuntimeCommandOutput
+type RuntimeCommandExecutor = veilruntime.RuntimeCommandExecutor
 
 func NewRuntimeTelemetry() RuntimeTelemetry { return veilruntime.NewRuntimeTelemetry() }
 
@@ -24,6 +27,10 @@ func NewRuntimeObservation(telemetry RuntimeTelemetry) RuntimeObservation {
 }
 
 func NewRuntimeProcFS() RuntimeProcFS { return veilruntime.NewRuntimeProcFS() }
+
+func NewRuntimeCommandExecutor() RuntimeCommandExecutor {
+	return veilruntime.NewRuntimeCommandExecutor()
+}
 
 func readTLSCert(path string) TLSCertInfo { return veilruntime.ReadTLSCert(path) }
 
