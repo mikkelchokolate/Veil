@@ -1,26 +1,13 @@
 package api
 
-import (
-	"errors"
-	"fmt"
-)
+import "github.com/veil-panel/veil/internal/service"
 
-type ServiceActionSuccessPolicy struct{}
+type ServiceActionSuccessPolicy = service.ActionSuccessPolicy
 
-func NewServiceActionSuccessPolicy() ServiceActionSuccessPolicy { return ServiceActionSuccessPolicy{} }
-
-func (ServiceActionSuccessPolicy) RequireSuccessful(actions []ServiceActionResult) error {
-	for _, action := range actions {
-		if !action.Success {
-			if action.Error != "" {
-				return errors.New(action.Error)
-			}
-			return fmt.Errorf("%s service action failed", action.Name)
-		}
-	}
-	return nil
+func NewServiceActionSuccessPolicy() ServiceActionSuccessPolicy {
+	return service.NewActionSuccessPolicy()
 }
 
 func requireSuccessfulServiceActions(actions []ServiceActionResult) error {
-	return NewServiceActionSuccessPolicy().RequireSuccessful(actions)
+	return service.NewActionSuccessPolicy().RequireSuccessful(actions)
 }
