@@ -61,19 +61,5 @@ func downloadRouteDat(url string) ([]byte, error) {
 }
 
 func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
-	body, err := routeDatDownloader(file.URL)
-	if err != nil {
-		return nil, err
-	}
-	if file.SHA256URL == "" {
-		return body, nil
-	}
-	checksumBody, err := routeDatDownloader(file.SHA256URL)
-	if err != nil {
-		return nil, err
-	}
-	if err := verifyRouteDatChecksum(file.Name, body, string(checksumBody)); err != nil {
-		return nil, err
-	}
-	return body, nil
+	return NewRoutingSourceMaterial("", RoutingSource{}).Fetch(file)
 }

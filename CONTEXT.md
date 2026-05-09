@@ -88,6 +88,10 @@ _Avoid_: rendered files, output bundle
 One file inside a Generated config set, identified by a stable generated subpath that also determines validation and live promotion paths.
 _Avoid_: ad-hoc config path, output filename
 
+**Routing source material**:
+The route-dat files fetched, checksum-verified, and staged from a Routing source for WARP routing rules.
+_Avoid_: downloaded routing files, rule data side effects
+
 **Apply workflow**:
 The staged-to-live flow that validates, promotes, reloads services, checks health, and rolls back when needed.
 _Avoid_: deploy, publish
@@ -123,7 +127,7 @@ _Avoid_: logging, masking
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol.
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
-- A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
+- A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - The **State store** persists **Management state**.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.

@@ -44,17 +44,11 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		}
 		written = append(written, path)
 	}
-	for _, file := range input.RoutingSource.Files {
-		body, err := fetchVerifiedRouteDatFile(file)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		path := filepath.Join(input.ApplyRoot, "generated", "rules", file.Name)
-		if err := writeAtomicFile(path, body, 0o600); err != nil {
-			return nil, nil, nil, err
-		}
-		written = append(written, path)
+	routingFiles, err := NewRoutingSourceMaterial(input.ApplyRoot, input.RoutingSource).WriteGenerated()
+	if err != nil {
+		return nil, nil, nil, err
 	}
+	written = append(written, routingFiles...)
 	validate := input.Validate
 	if validate == nil {
 		validate = stagedConfigValidator
