@@ -76,6 +76,10 @@ reject_legacy_stack_selection() {
   fi
 }
 
+ignore_legacy_protocol_port() {
+  return 0
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
@@ -83,7 +87,7 @@ while [[ $# -gt 0 ]]; do
     --profile) require_value "$1" "${2:-}"; PROFILE="$2"; shift 2 ;;
     --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
-    --port) require_value "$1" "${2:-}"; shift 2 ;;
+    --port) require_value "$1" "${2:-}"; ignore_legacy_protocol_port "$2"; shift 2 ;;
     --stack) require_value "$1" "${2:-}"; reject_legacy_stack_selection "$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;

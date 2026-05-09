@@ -95,6 +95,19 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptLocalizesLegacyPortCompatibility(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{"ignore_legacy_protocol_port()", `--port) require_value "$1" "${2:-}"; ignore_legacy_protocol_port "$2"; shift 2 ;;`} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh should localize legacy port compatibility behind %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
