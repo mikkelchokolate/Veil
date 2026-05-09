@@ -28,11 +28,13 @@ func (ConfigValidation) ValidateBytes(body []byte) (ConfigValidationResult, erro
 
 func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string {
 	var errs []string
+	var settings api.Settings
+	settingsOK := false
 	if len(snapshot.Settings) > 0 {
-		var settings api.Settings
 		if err := decodeConfigSettings(snapshot.Settings, &settings); err != nil {
 			errs = append(errs, fmt.Sprintf("settings: invalid JSON: %v", err))
 		} else {
+			settingsOK = true
 			if settings.PanelListen == "" {
 				errs = append(errs, "settings.panelListen is required")
 			}
@@ -43,9 +45,11 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 	} else {
 		errs = append(errs, "settings is missing")
 	}
+	var inbounds []api.Inbound
+	inboundsOK := true
 	if len(snapshot.Inbounds) > 0 {
-		var inbounds []api.Inbound
 		if err := json.Unmarshal(snapshot.Inbounds, &inbounds); err != nil {
+			inboundsOK = false
 			errs = append(errs, fmt.Sprintf("inbounds: invalid JSON: %v", err))
 		} else {
 			seenPorts := map[string]bool{}
@@ -70,9 +74,11 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 			}
 		}
 	}
+	var rules []api.RoutingRule
+	rulesOK := true
 	if len(snapshot.RoutingRules) > 0 {
-		var rules []api.RoutingRule
 		if err := json.Unmarshal(snapshot.RoutingRules, &rules); err != nil {
+			rulesOK = false
 			errs = append(errs, fmt.Sprintf("routingRules: invalid JSON: %v", err))
 		} else {
 			for i, rule := range rules {
@@ -88,11 +94,32 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 			}
 		}
 	}
+	var warp api.WarpConfig
+	warpOK := true
 	if len(snapshot.Warp) > 0 {
-		var warp api.WarpConfig
 		if err := json.Unmarshal(snapshot.Warp, &warp); err != nil {
+			warpOK = false
 			errs = append(errs, fmt.Sprintf("warp: invalid JSON: %v", err))
 		}
+	}
+	if settingsOK && inboundsOK && rulesOK && warpOK {
+		plan := api.BuildApplyPlan(api.ApplyPlanInput{Settings: settings, Inbounds: inbounds, Rules: rules, Warp: warp, RenderSettingsAvailable: true})
+		errs = appendUniqueConfigValidationErrors(errs, plan.Errors...)
+	}
+	return errs
+}
+
+func appendUniqueConfigValidationErrors(errs []string, more ...string) []string {
+	seen := map[string]bool{}
+	for _, err := range errs {
+		seen[err] = true
+	}
+	for _, err := range more {
+		if seen[err] {
+			continue
+		}
+		errs = append(errs, err)
+		seen[err] = true
 	}
 	return errs
 }

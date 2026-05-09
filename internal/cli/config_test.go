@@ -14,7 +14,11 @@ func TestConfigValidateValidState(t *testing.T) {
 	validState := `{
   "settings": {
     "panelListen": "127.0.0.1:2096",
-        "mode": "server"
+    "mode": "server",
+    "domain": "vpn.example.com",
+    "email": "admin@example.com",
+    "naiveUsername": "veil",
+    "naivePassword": "secret"
   },
   "inbounds": [
     {"name": "naive", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true}
@@ -144,6 +148,64 @@ func TestConfigValidateFileNotFound(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestConfigValidateRejectsUnsupportedInboundProtocol(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	state := `{
+  "settings": {"panelListen": "127.0.0.1:2096", "mode": "server"},
+  "inbounds": [
+    {"name": "bad", "protocol": "bogus", "transport": "tcp", "port": 443, "enabled": true}
+  ],
+  "routingRules": [],
+  "warp": {"enabled": false}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"config", "validate", "--state", statePath})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for unsupported inbound protocol")
+	}
+	if !strings.Contains(out.String(), "unsupported inbound protocol: bogus") {
+		t.Fatalf("expected unsupported inbound protocol error, got: %s", out.String())
+	}
+}
+
+func TestConfigValidateRejectsPanelCaddyTCP443Conflict(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	state := `{
+  "settings": {"panelListen": "127.0.0.1:2096", "panelAccess":"caddy", "webBasePath":"/panel/", "mode": "server", "domain":"panel.example.com", "email":"admin@example.com"},
+  "inbounds": [
+    {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true, "password":"secret"}
+  ],
+  "routingRules": [],
+  "warp": {"enabled": false}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"config", "validate", "--state", statePath})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for Panel Caddy TCP/443 conflict")
+	}
+	if !strings.Contains(out.String(), "panel caddy access uses 443/tcp") {
+		t.Fatalf("expected Panel Caddy TCP/443 conflict error, got: %s", out.String())
 	}
 }
 
