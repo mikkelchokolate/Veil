@@ -186,7 +186,7 @@ _Avoid_: logging, masking
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol outside HTTP Adapters.
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
-- **Apply history** records retained **Apply workflow** outcomes and serves Panel history queries.
+- **Apply history** records retained **Apply workflow** outcomes, retention, filtering, and persistence outside HTTP Adapters.
 - **Apply workflow** orchestration lives outside HTTP routes; Management contexts adapt it to staged files and runtime commands.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
 - The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.

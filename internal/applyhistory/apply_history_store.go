@@ -1,4 +1,4 @@
-package api
+package applyhistory
 
 import (
 	"encoding/json"
@@ -8,7 +8,9 @@ import (
 	"github.com/veil-panel/veil/internal/applyflow"
 )
 
-const maxApplyHistoryEntries = 100
+const MaxEntries = 100
+
+const maxApplyHistoryEntries = MaxEntries
 
 type ApplyHistoryStore struct {
 	path string
@@ -55,6 +57,10 @@ func firstQueryValue(values map[string][]string, key string) string {
 	return values[key][0]
 }
 
-func applyHistoryStage(response ApplyResponse) string {
+func HistoryStage(response ApplyResponse) string {
 	return applyflow.HistoryStage(response)
+}
+
+func applyHistoryStage(response ApplyResponse) string {
+	return HistoryStage(response)
 }

@@ -1,4 +1,4 @@
-package api
+package applyhistory
 
 type ApplyHistory struct {
 	store ApplyHistoryStore

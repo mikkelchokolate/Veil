@@ -1,4 +1,4 @@
-package api
+package applyhistory
 
 type ApplyHistoryRetention struct {
 	max int
