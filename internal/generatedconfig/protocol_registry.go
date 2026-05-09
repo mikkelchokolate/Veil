@@ -1,0 +1,97 @@
+package generatedconfig
+
+import "fmt"
+
+type ConfigInput struct {
+	ApplyRoot string
+	Settings  Settings
+	Inbounds  []Inbound
+}
+
+type ProtocolRegistry struct {
+	protocols []Protocol
+}
+
+type Protocol struct {
+	Protocol               string
+	MaxEnabled             int
+	RequiresRenderSettings bool
+	Render                 func(ProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
+}
+
+type ProtocolRenderInput struct {
+	Settings Settings
+	Paths    Paths
+	Inbounds []Inbound
+}
+
+func NewProtocolRegistry(protocols []Protocol) ProtocolRegistry {
+	out := make([]Protocol, len(protocols))
+	copy(out, protocols)
+	return ProtocolRegistry{protocols: out}
+}
+
+func (r ProtocolRegistry) Validate(settings Settings, inbounds []Inbound) error {
+	for _, protocol := range r.protocols {
+		if protocol.MaxEnabled <= 0 {
+			continue
+		}
+		count := len(r.enabledInbounds(settings, inbounds, protocol.Protocol))
+		if count > protocol.MaxEnabled {
+			return fmt.Errorf("multiple enabled %s inbounds are not renderable as a single generated config yet", protocol.Protocol)
+		}
+	}
+	return nil
+}
+
+func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
+	if err := r.Validate(input.Settings, input.Inbounds); err != nil {
+		return nil, err
+	}
+	paths := NewPaths(input.ApplyRoot)
+	configs := map[string]string{}
+	for _, protocol := range r.protocols {
+		selected := r.enabledInbounds(input.Settings, input.Inbounds, protocol.Protocol)
+		if len(selected) == 0 {
+			continue
+		}
+		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicy().HasRenderSettings(input.Settings) {
+			continue
+		}
+		artifact, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected})
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			configs[artifact.Path] = artifact.Body
+		}
+	}
+	return configs, nil
+}
+
+func (r ProtocolRegistry) RenderInbound(settings Settings, paths Paths, inbound Inbound) (GeneratedConfigArtifact, bool, error) {
+	protocol, ok := r.protocol(inbound.Protocol)
+	if !ok {
+		return GeneratedConfigArtifact{}, false, nil
+	}
+	return protocol.Render(ProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}})
+}
+
+func (r ProtocolRegistry) protocol(protocol string) (Protocol, bool) {
+	for _, candidate := range r.protocols {
+		if candidate.Protocol == protocol {
+			return candidate, true
+		}
+	}
+	return Protocol{}, false
+}
+
+func (ProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, protocol string) []Inbound {
+	selected := []Inbound{}
+	for _, inbound := range inbounds {
+		if inbound.Enabled && inbound.Protocol == protocol {
+			selected = append(selected, inbound)
+		}
+	}
+	return selected
+}
