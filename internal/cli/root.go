@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	doctorflow "github.com/veil-panel/veil/internal/cliflow/doctor"
 )
 
 var (
@@ -56,20 +57,8 @@ func NewRootCommand(version string) *cobra.Command {
 	return cmd
 }
 
-type doctorSummary struct {
-	Version  string                `json:"version"`
-	Runtime  string                `json:"runtime"`
-	Ready    bool                  `json:"ready"`
-	Commands []doctorCommandStatus `json:"commands"`
-}
-
-type doctorCommandStatus struct {
-	Name     string `json:"name"`
-	Path     string `json:"path,omitempty"`
-	Error    string `json:"error,omitempty"`
-	Present  bool   `json:"present"`
-	Optional bool   `json:"optional,omitempty"`
-}
+type doctorSummary = doctorflow.Summary
+type doctorCommandStatus = doctorflow.CommandStatus
 
 func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 	_ = NewDoctorPresentation(cmd.OutOrStdout()).Render(buildDoctorSummary(version), jsonOutput)

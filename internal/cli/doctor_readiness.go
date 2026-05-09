@@ -1,48 +1,17 @@
 package cli
 
-import "runtime"
+import doctorflow "github.com/veil-panel/veil/internal/cliflow/doctor"
 
 type DoctorReadiness struct {
-	version string
+	inner doctorflow.Readiness
 }
 
 func NewDoctorReadiness(version string) DoctorReadiness {
-	return DoctorReadiness{version: version}
+	return DoctorReadiness{inner: doctorflow.NewReadiness(version, commandLookPath)}
 }
 
 func (d DoctorReadiness) Summary() doctorSummary {
-	summary := doctorSummary{
-		Version: d.version,
-		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
-		Ready:   true,
-	}
-	required := []string{"systemctl"}
-	optional := []string{"caddy", "hysteria", "mieru", "sing-box", "ufw"}
-
-	for _, name := range required {
-		status := doctorCommandStatus{Name: name}
-		path, err := commandLookPath(name)
-		if err == nil {
-			status.Path = path
-			status.Present = true
-		} else {
-			status.Error = err.Error()
-			summary.Ready = false
-		}
-		summary.Commands = append(summary.Commands, status)
-	}
-	for _, name := range optional {
-		status := doctorCommandStatus{Name: name, Optional: true}
-		path, err := commandLookPath(name)
-		if err == nil {
-			status.Path = path
-			status.Present = true
-		} else {
-			status.Error = err.Error()
-		}
-		summary.Commands = append(summary.Commands, status)
-	}
-	return summary
+	return d.inner.Summary()
 }
 
 func buildDoctorSummary(version string) doctorSummary {
