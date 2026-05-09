@@ -64,6 +64,10 @@ _Avoid_: profile, account, inbound
 A user-facing connection URI generated from Settings, enabled Inbounds, and enabled Client profiles.
 _Avoid_: share link, subscription item
 
+**Client access aggregation**:
+The rule that turns one or more enabled Inbounds into Client links, including protocols such as Mieru where multiple Transport bindings can produce one client config.
+_Avoid_: link special case, subscription merge
+
 **Generated config set**:
 The staged Caddy, Hysteria2, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state.
 _Avoid_: rendered files, output bundle
@@ -99,7 +103,7 @@ _Avoid_: logging, masking
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
-- Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
+- Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol.
 - A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
 - The **State store** persists **Management state**.

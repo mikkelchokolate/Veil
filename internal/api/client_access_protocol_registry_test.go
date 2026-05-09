@@ -25,6 +25,20 @@ func TestClientAccessProtocolRegistryBuildsProtocolSpecificLinks(t *testing.T) {
 	}
 }
 
+func TestClientAccessProtocolRegistryAggregatesMieruInbounds(t *testing.T) {
+	registry := NewClientAccessProtocolRegistry()
+	links, err := registry.BuildAllLinks(Settings{Domain: "vpn.example.com"}, []Inbound{
+		{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}}},
+		{Name: "mieru-udp", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}}},
+	})
+	if err != nil {
+		t.Fatalf("BuildAllLinks: %v", err)
+	}
+	if len(links) != 1 || links[0].Name != "mieru/alice" || !strings.Contains(links[0].Config, `"protocol": "TCP"`) || !strings.Contains(links[0].Config, `"protocol": "UDP"`) {
+		t.Fatalf("aggregated Mieru links = %+v", links)
+	}
+}
+
 func TestClientAccessProtocolRegistrySkipsUnknownProtocols(t *testing.T) {
 	links := NewClientAccessProtocolRegistry().BuildLinks(Settings{Domain: "vpn.example.com"}, Inbound{Name: "unknown", Protocol: "unknown", Transport: "tcp", Port: 443, Enabled: true}, []ClientCredential{{Name: "alice", Username: "alice", Password: "pass"}})
 	if len(links) != 0 {

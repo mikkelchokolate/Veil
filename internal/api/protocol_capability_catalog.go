@@ -21,6 +21,7 @@ type ProtocolCapability struct {
 	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
 	ProfileClientLink      func(ClientAccessLinkInput) (ClientLink, bool)
 	FallbackClientLink     func(ClientAccessLinkInput) (ClientLink, bool)
+	AggregateClientLinks   func(Settings, []Inbound) ([]ClientLink, error)
 }
 
 type ProtocolCapabilityCatalog struct {
@@ -129,6 +130,9 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
 				input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
 				return mieruClientConfigLink(input)
+			},
+			AggregateClientLinks: func(settings Settings, inbounds []Inbound) ([]ClientLink, error) {
+				return NewMieruClientAccessAggregator().Build(settings, inbounds)
 			},
 		},
 	}}

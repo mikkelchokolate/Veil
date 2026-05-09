@@ -5,9 +5,10 @@ type ClientAccessProtocolRegistry struct {
 }
 
 type ClientAccessProtocol struct {
-	Protocol     string
-	ProfileLink  func(ClientAccessLinkInput) (ClientLink, bool)
-	FallbackLink func(ClientAccessLinkInput) (ClientLink, bool)
+	Protocol       string
+	ProfileLink    func(ClientAccessLinkInput) (ClientLink, bool)
+	FallbackLink   func(ClientAccessLinkInput) (ClientLink, bool)
+	AggregateLinks func(Settings, []Inbound) ([]ClientLink, error)
 }
 
 type ClientAccessLinkInput struct {
@@ -20,12 +21,50 @@ type ClientAccessLinkInput struct {
 func NewClientAccessProtocolRegistry() ClientAccessProtocolRegistry {
 	byProtocol := map[string]ClientAccessProtocol{}
 	for _, capability := range NewProtocolCapabilityCatalog().All() {
-		if capability.ProfileClientLink == nil && capability.FallbackClientLink == nil {
+		if capability.ProfileClientLink == nil && capability.FallbackClientLink == nil && capability.AggregateClientLinks == nil {
 			continue
 		}
-		byProtocol[capability.Protocol] = ClientAccessProtocol{Protocol: capability.Protocol, ProfileLink: capability.ProfileClientLink, FallbackLink: capability.FallbackClientLink}
+		byProtocol[capability.Protocol] = ClientAccessProtocol{Protocol: capability.Protocol, ProfileLink: capability.ProfileClientLink, FallbackLink: capability.FallbackClientLink, AggregateLinks: capability.AggregateClientLinks}
 	}
 	return ClientAccessProtocolRegistry{protocols: byProtocol}
+}
+
+func (r ClientAccessProtocolRegistry) BuildAllLinks(settings Settings, inbounds []Inbound) ([]ClientLink, error) {
+	byProtocol := map[string][]Inbound{}
+	order := []string{}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled {
+			continue
+		}
+		if _, ok := r.protocols[inbound.Protocol]; !ok {
+			continue
+		}
+		if _, ok := byProtocol[inbound.Protocol]; !ok {
+			order = append(order, inbound.Protocol)
+		}
+		byProtocol[inbound.Protocol] = append(byProtocol[inbound.Protocol], inbound)
+	}
+	links := []ClientLink{}
+	for _, protocolName := range order {
+		protocol := r.protocols[protocolName]
+		selected := byProtocol[protocolName]
+		if protocol.AggregateLinks != nil {
+			aggregated, err := protocol.AggregateLinks(settings, selected)
+			if err != nil {
+				return nil, err
+			}
+			links = append(links, aggregated...)
+			continue
+		}
+		for _, inbound := range selected {
+			access, err := BuildClientAccess(settings, inbound)
+			if err != nil {
+				return nil, err
+			}
+			links = append(links, r.BuildLinks(settings, inbound, access.credentials)...)
+		}
+	}
+	return links, nil
 }
 
 func (r ClientAccessProtocolRegistry) BuildLinks(settings Settings, inbound Inbound, credentials []ClientCredential) []ClientLink {
