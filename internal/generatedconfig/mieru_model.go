@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import "github.com/veil-panel/veil/internal/renderer"
 

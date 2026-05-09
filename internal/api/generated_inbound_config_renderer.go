@@ -1,11 +1,11 @@
 package api
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
-type GeneratedConfigArtifact struct {
-	Path string
-	Body string
-}
+type GeneratedConfigArtifact = generatedconfig.GeneratedConfigArtifact
 
 type GeneratedInboundConfigRenderer struct {
 	settings Settings
