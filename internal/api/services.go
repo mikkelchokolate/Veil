@@ -1,8 +1,6 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/veil-panel/veil/internal/service"
@@ -19,7 +17,7 @@ type ServiceActionResponse = service.ManualActionResponse
 var serviceControlRunner = runServiceControl
 
 func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
-	if !NewServiceControlCommand().Allows(name) {
+	if !service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Allows(name) {
 		writeError(w, "unknown service: "+name, http.StatusBadRequest)
 		return
 	}
@@ -44,6 +42,3 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action st
 func runServiceControl(name, action string) ServiceActionResponse {
 	return service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Run(name, action)
 }
-
-var _ = json.Marshal // keep json import
-var _ = fmt.Sprintf  // keep fmt import
