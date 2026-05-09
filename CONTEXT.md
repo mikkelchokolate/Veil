@@ -133,7 +133,7 @@ The mutation path that validates, updates, redacts, and saves Settings, Inbounds
 _Avoid_: route handler update, save wrapper
 
 **State store**:
-The persistence package for Management state, including strict codec, encryption, and decryption of secrets at rest. HTTP and Panel Modules use it through thin Adapters.
+The persistence package for Management state, including strict codec, schema validation, snapshot/default handling, encryption, and decryption of secrets at rest. HTTP and Panel Modules use it through thin Adapters.
 _Avoid_: database, config file wrapper
 
 **Credential policy**:
@@ -169,7 +169,7 @@ _Avoid_: logging, masking
 - **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.
 - **Management state model** provides the import-safe value types used by Panel, CLI, protocols, generated configs, and persistence Modules.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
-- The **State store** persists **Management state** outside HTTP Adapters.
+- The **State store** persists and validates **Management state** outside HTTP Adapters.
 - **Credential policy** governs generated and preserved Inbound and Client profile credentials.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a removed Settings JSON field, not a current Settings **Interface** field; protocol choices belong to Panel **Inbounds** and unknown `stack` input is rejected at strict JSON **Interfaces**.

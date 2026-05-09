@@ -15,14 +15,14 @@ type ManagementSnapshotInput struct {
 }
 
 func BuildManagementSnapshot(input ManagementSnapshotInput) managementSnapshot {
-	return managementSnapshot{
+	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
 		Settings:      input.Settings,
-		Inbounds:      cloneInbounds(input.Inbounds),
-		Rules:         append([]RoutingRule(nil), input.Rules...),
+		Inbounds:      input.Inbounds,
+		Rules:         input.Rules,
 		RoutingPreset: input.RoutingPreset,
 		RoutingSource: input.RoutingSource,
 		Warp:          input.Warp,
-	}
+	})
 }
 
 func EncryptManagementSnapshot(snapshot *managementSnapshot, cipher *secrets.Cipher) {

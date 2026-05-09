@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
@@ -104,24 +105,14 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 	if state == nil {
 		return
 	}
-	if snapshot.Settings.PanelListen != "" {
-		state.settings = mergeSettingsDefaults(snapshot.Settings, state.settings)
-	}
-	if snapshot.Inbounds != nil {
-		state.inbounds = snapshot.Inbounds
-	}
-	if snapshot.Rules != nil {
-		state.rules = snapshot.Rules
-	}
-	if snapshot.RoutingPreset != "" {
-		state.routingPreset = snapshot.RoutingPreset
-	}
-	if snapshot.RoutingSource.Repository != "" || len(snapshot.RoutingSource.Files) > 0 {
-		state.routingSource = snapshot.RoutingSource
-	}
-	if snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "" {
-		state.warp = snapshot.Warp
-	}
+	managementstate.ApplySnapshot(managementstate.SnapshotTarget{
+		Settings:      &state.settings,
+		Inbounds:      &state.inbounds,
+		Rules:         &state.rules,
+		RoutingPreset: &state.routingPreset,
+		RoutingSource: &state.routingSource,
+		Warp:          &state.warp,
+	}, snapshot)
 }
 
 func defaultApplyRoot(root string) string {
