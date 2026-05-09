@@ -1,12 +1,6 @@
 package installer
 
-import (
-	"fmt"
-	"path/filepath"
-	"strings"
-
-	"github.com/veil-panel/veil/internal/renderer"
-)
+import "github.com/veil-panel/veil/internal/panelmaterial"
 
 type PanelManagedMaterialInput struct {
 	Paths             ApplyPaths
@@ -24,11 +18,11 @@ type PanelManagedMaterialInput struct {
 }
 
 type PanelManagedMaterial struct {
-	input PanelManagedMaterialInput
+	inner panelmaterial.ManagedMaterial
 }
 
 func NewPanelManagedMaterial(input PanelManagedMaterialInput) PanelManagedMaterial {
-	return PanelManagedMaterial{input: input}
+	return PanelManagedMaterial{inner: panelmaterial.NewManagedMaterial(panelMaterialInput(input))}
 }
 
 func NewPanelManagedMaterialFromProfile(profile RURecommendedProfile, paths ApplyPaths) PanelManagedMaterial {
@@ -49,74 +43,46 @@ func NewPanelManagedMaterialFromProfile(profile RURecommendedProfile, paths Appl
 }
 
 func (m PanelManagedMaterial) EnvContent() string {
-	input := m.input
-	if input.PanelAuthToken == "" {
-		return ""
-	}
-	var env strings.Builder
-	env.WriteString("VEIL_API_TOKEN=" + input.PanelAuthToken + "\n")
-	if input.PanelListen != "" {
-		env.WriteString("VEIL_LISTEN=" + input.PanelListen + "\n")
-	}
-	if input.PanelAccess != "" {
-		env.WriteString("VEIL_PANEL_ACCESS=" + input.PanelAccess + "\n")
-	}
-	if input.Domain != "" {
-		env.WriteString("VEIL_DOMAIN=" + input.Domain + "\n")
-	}
-	if input.Email != "" {
-		env.WriteString("VEIL_EMAIL=" + input.Email + "\n")
-	}
-	if input.PanelTLSEnabled {
-		env.WriteString("VEIL_TLS_CERT=" + m.PanelTLSCertPath() + "\n")
-		env.WriteString("VEIL_TLS_KEY=" + m.PanelTLSKeyPath() + "\n")
-	}
-	if input.WebBasePath != "" && input.WebBasePath != "/" {
-		env.WriteString("VEIL_WEB_BASE_PATH=" + input.WebBasePath + "\n")
-	}
-	return env.String()
+	return m.inner.EnvContent()
 }
 
 func (m PanelManagedMaterial) PanelTLSCertPath() string {
-	return filepath.Join(m.input.Paths.EtcDir, "panel", "tls.crt")
+	return m.inner.PanelTLSCertPath()
 }
 
 func (m PanelManagedMaterial) PanelTLSKeyPath() string {
-	return filepath.Join(m.input.Paths.EtcDir, "panel", "tls.key")
+	return m.inner.PanelTLSKeyPath()
 }
 
 func (m PanelManagedMaterial) files() ([]managedFile, error) {
-	paths := m.input.Paths
-	input := m.input
-	if paths.EtcDir == "" {
-		return nil, fmt.Errorf("etc dir is required")
+	files, err := m.inner.Files()
+	if err != nil {
+		return nil, err
 	}
-	if paths.VarDir == "" {
-		return nil, fmt.Errorf("var dir is required")
+	managed := make([]managedFile, 0, len(files))
+	for _, file := range files {
+		managed = append(managed, managedFile{Path: file.Path, Content: file.Content, Mode: file.Mode})
 	}
-	files := []managedFile{}
-	if input.InstallPanelCaddy {
-		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"), Content: input.Caddyfile, Mode: 0o600})
-		files = append(files, managedFile{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(input.Domain), Mode: 0o644})
+	return managed, nil
+}
+
+func panelMaterialInput(input PanelManagedMaterialInput) panelmaterial.Input {
+	return panelmaterial.Input{
+		Paths:             panelMaterialPaths(input.Paths),
+		PanelAuthToken:    input.PanelAuthToken,
+		PanelListen:       input.PanelListen,
+		PanelAccess:       input.PanelAccess,
+		Domain:            input.Domain,
+		Email:             input.Email,
+		WebBasePath:       input.WebBasePath,
+		PanelTLSEnabled:   input.PanelTLSEnabled,
+		PanelTLSCertPEM:   input.PanelTLSCertPEM,
+		PanelTLSKeyPEM:    input.PanelTLSKeyPEM,
+		InstallPanelCaddy: input.InstallPanelCaddy,
+		Caddyfile:         input.Caddyfile,
 	}
-	if input.PanelTLSEnabled {
-		files = append(files,
-			managedFile{Path: m.PanelTLSCertPath(), Content: input.PanelTLSCertPEM, Mode: 0o644},
-			managedFile{Path: m.PanelTLSKeyPath(), Content: input.PanelTLSKeyPEM, Mode: 0o600},
-		)
-	}
-	if envContent := m.EnvContent(); envContent != "" {
-		files = append(files, managedFile{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o600})
-	}
-	if paths.SystemdDir != "" {
-		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
-		unitNames := []string{renderer.UnitVeil}
-		if input.InstallPanelCaddy {
-			unitNames = append(unitNames, renderer.UnitNaive)
-		}
-		for _, name := range unitNames {
-			files = append(files, managedFile{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})
-		}
-	}
-	return files, nil
+}
+
+func panelMaterialPaths(paths ApplyPaths) panelmaterial.Paths {
+	return panelmaterial.Paths{EtcDir: paths.EtcDir, VarDir: paths.VarDir, SystemdDir: paths.SystemdDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary}
 }
