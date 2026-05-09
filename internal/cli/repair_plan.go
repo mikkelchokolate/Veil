@@ -90,38 +90,35 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWork
 	if settings.PanelAccess == "" {
 		return nil
 	}
-	if settings.PanelAccess == "caddy" {
-		removeRepairActions(plan, filepath.Join(opts.EtcDir, "panel", "tls.crt"), filepath.Join(opts.EtcDir, "panel", "tls.key"))
-	}
-	token := repairPlanEnvValue(*plan, "VEIL_API_TOKEN")
-	if token == "" {
-		token = readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))["VEIL_API_TOKEN"]
-	}
-	if token == "" {
-		token = randomSecret("panel")
-	}
 	listen := settings.PanelListen
 	if listen == "" {
 		listen = "127.0.0.1:2096"
 	}
-	var env strings.Builder
-	env.WriteString("VEIL_API_TOKEN=" + token + "\n")
-	env.WriteString("VEIL_LISTEN=" + listen + "\n")
-	env.WriteString("VEIL_PANEL_ACCESS=" + settings.PanelAccess + "\n")
-	if settings.Domain != "" {
-		env.WriteString("VEIL_DOMAIN=" + settings.Domain + "\n")
+	material := installer.NewPanelManagedMaterial(installer.PanelManagedMaterialInput{
+		Paths:           installer.ApplyPaths{EtcDir: opts.EtcDir},
+		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir),
+		PanelListen:     listen,
+		PanelAccess:     settings.PanelAccess,
+		Domain:          settings.Domain,
+		Email:           settings.Email,
+		WebBasePath:     settings.WebBasePath,
+		PanelTLSEnabled: settings.PanelAccess != "caddy",
+	})
+	if settings.PanelAccess == "caddy" {
+		removeRepairActions(plan, material.PanelTLSCertPath(), material.PanelTLSKeyPath())
 	}
-	if settings.Email != "" {
-		env.WriteString("VEIL_EMAIL=" + settings.Email + "\n")
+	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), material.EnvContent(), 0o600)
+}
+
+func repairPanelAuthToken(plan installer.RepairPlan, etcDir string) string {
+	token := repairPlanEnvValue(plan, "VEIL_API_TOKEN")
+	if token == "" {
+		token = readRepairEnv(filepath.Join(etcDir, "veil.env"))["VEIL_API_TOKEN"]
 	}
-	if settings.PanelAccess != "caddy" {
-		env.WriteString("VEIL_TLS_CERT=" + filepath.Join(opts.EtcDir, "panel", "tls.crt") + "\n")
-		env.WriteString("VEIL_TLS_KEY=" + filepath.Join(opts.EtcDir, "panel", "tls.key") + "\n")
+	if token == "" {
+		token = randomSecret("panel")
 	}
-	if settings.WebBasePath != "" && settings.WebBasePath != "/" {
-		env.WriteString("VEIL_WEB_BASE_PATH=" + settings.WebBasePath + "\n")
-	}
-	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), env.String(), 0o600)
+	return token
 }
 
 func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, etcDir string) {
