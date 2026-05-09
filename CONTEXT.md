@@ -100,6 +100,10 @@ _Avoid_: service component, daemon file
 A fixed external command Veil runs to validate configs, control Managed systemd units, read systemd status, or check runtime health. Runtime command execution lives outside HTTP Adapters.
 _Avoid_: shell snippet, exec call
 
+**Service status**:
+The Panel-facing status snapshot for Managed systemd units, including runtime catalog entries and systemd load/active/sub-state fields. The service package owns status response shaping; HTTP routes are Adapters.
+_Avoid_: status endpoint payload, daemon list
+
 **Runtime observation**:
 The user-facing snapshot and package for runtime facts shown by the Panel: system resources, Panel TLS, network counters, listening ports, managed processes, disk usage, and local read errors. HTTP routes are Adapters over this Module.
 _Avoid_: procfs dump, stats endpoint bundle
@@ -212,7 +216,7 @@ _Avoid_: logging, masking
 - The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, systemd status, and health-check behavior share one command seam.
-- The Managed systemd unit catalog maps promoted Generated config artifacts to service reload/restart actions and health checks outside HTTP Adapters.
+- The Managed systemd unit catalog maps promoted Generated config artifacts to service reload/restart actions, health checks, and **Service status** outside HTTP Adapters.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.
 - **HTTP observability** concentrates metrics exposition, request accounting, status recording, and rate-limit decisions outside HTTP Adapters.
 - **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.

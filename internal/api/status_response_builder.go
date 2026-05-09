@@ -1,23 +1,18 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type StatusResponseBuilder struct {
-	info     ServerInfo
-	services func() []ServiceStatus
+	inner service.StatusResponseBuilder
 }
 
 func NewStatusResponseBuilder(info ServerInfo, services func() []ServiceStatus) StatusResponseBuilder {
 	if services == nil {
 		services = buildServiceStatuses
 	}
-	return StatusResponseBuilder{info: info, services: services}
+	return StatusResponseBuilder{inner: service.NewStatusResponseBuilder(service.StatusInfo{Version: info.Version, Mode: info.Mode}, services)}
 }
 
 func (b StatusResponseBuilder) Build() StatusResponse {
-	return StatusResponse{
-		SchemaVersion: "v1",
-		Name:          "Veil",
-		Version:       b.info.Version,
-		Mode:          b.info.Mode,
-		Services:      b.services(),
-	}
+	return b.inner.Build()
 }

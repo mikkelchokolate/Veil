@@ -7,25 +7,8 @@ import (
 	"github.com/veil-panel/veil/internal/service"
 )
 
-type StatusResponse struct {
-	SchemaVersion string          `json:"schemaVersion"`
-	Name          string          `json:"name"`
-	Version       string          `json:"version"`
-	Mode          string          `json:"mode"`
-	Services      []ServiceStatus `json:"services"`
-}
-
-type ServiceStatus struct {
-	Name        string `json:"name"`
-	Managed     bool   `json:"managed"`
-	Transport   string `json:"transport,omitempty"`
-	Unit        string `json:"unit,omitempty"`
-	LoadState   string `json:"loadState,omitempty"`
-	ActiveState string `json:"activeState,omitempty"`
-	SubState    string `json:"subState,omitempty"`
-	Error       string `json:"error,omitempty"`
-}
-
+type StatusResponse = service.StatusResponse
+type ServiceStatus = service.ServiceStatus
 type ServiceRuntimeStatus = service.RuntimeStatus
 
 var serviceStatusReader = readSystemdServiceStatus

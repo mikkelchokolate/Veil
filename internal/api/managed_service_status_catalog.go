@@ -1,32 +1,22 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type ServiceRuntimeStatusReader func(unit string) ServiceRuntimeStatus
 
 type ManagedServiceStatusCatalog struct {
-	read ServiceRuntimeStatusReader
+	inner service.ManagedServiceStatusCatalog
 }
 
 func NewManagedServiceStatusCatalog(read ServiceRuntimeStatusReader) ManagedServiceStatusCatalog {
 	if read == nil {
 		read = serviceStatusReader
 	}
-	return ManagedServiceStatusCatalog{read: read}
+	return ManagedServiceStatusCatalog{inner: service.NewManagedServiceStatusCatalog(NewManagedRuntimeCatalog(), service.RuntimeStatusReader(read))}
 }
 
 func (c ManagedServiceStatusCatalog) List() []ServiceStatus {
-	runtimes := NewManagedRuntimeCatalog().Runtimes()
-	services := make([]ServiceStatus, 0, len(runtimes))
-	for _, runtime := range runtimes {
-		services = append(services, ServiceStatus{Name: runtime.Name, Managed: true, Transport: runtime.Transport, Unit: runtime.Unit})
-	}
-	for i := range services {
-		runtime := c.read(services[i].Unit)
-		services[i].LoadState = runtime.LoadState
-		services[i].ActiveState = runtime.ActiveState
-		services[i].SubState = runtime.SubState
-		services[i].Error = runtime.Error
-	}
-	return services
+	return c.inner.List()
 }
 
 func buildServiceStatuses() []ServiceStatus {
