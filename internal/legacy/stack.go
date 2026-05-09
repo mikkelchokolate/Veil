@@ -12,11 +12,11 @@ func IsTrimmedPanelOnlyStack(value string) bool {
 	return IsPanelOnlyStack(strings.TrimSpace(value))
 }
 
-func NormalizeSettingsStack(value string) (string, bool) {
+func AcceptsSettingsStackJSON(value string) bool {
 	switch value {
 	case "", panelStack, "both", "naive", "hysteria2", "mieru":
-		return panelStack, true
+		return true
 	default:
-		return "", false
+		return false
 	}
 }

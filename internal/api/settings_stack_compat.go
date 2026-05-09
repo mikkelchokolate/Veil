@@ -7,8 +7,7 @@ import (
 )
 
 func ValidateSettingsStackCompatibility(settings Settings) error {
-	_, ok := legacy.NormalizeSettingsStack(settings.legacyStack)
-	if !ok {
+	if !legacy.AcceptsSettingsStackJSON(settings.legacyStack) {
 		return errors.New("stack must be panel; protocols are configured as Panel inbounds")
 	}
 	return nil

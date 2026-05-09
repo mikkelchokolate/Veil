@@ -24,16 +24,15 @@ func TestIsTrimmedPanelOnlyStackSupportsCLIWhitespace(t *testing.T) {
 	}
 }
 
-func TestNormalizeSettingsStackAcceptsLegacySettingsValues(t *testing.T) {
+func TestAcceptsSettingsStackJSONAllowsLegacySettingsValues(t *testing.T) {
 	for _, value := range []string{"", "panel", "both", "naive", "hysteria2", "mieru"} {
-		got, ok := NormalizeSettingsStack(value)
-		if !ok || got != "panel" {
-			t.Fatalf("NormalizeSettingsStack(%q) = %q, %v", value, got, ok)
+		if !AcceptsSettingsStackJSON(value) {
+			t.Fatalf("AcceptsSettingsStackJSON(%q) = false", value)
 		}
 	}
 	for _, value := range []string{"bad", " ", "BOTH"} {
-		if got, ok := NormalizeSettingsStack(value); ok || got != "" {
-			t.Fatalf("NormalizeSettingsStack(%q) = %q, %v", value, got, ok)
+		if AcceptsSettingsStackJSON(value) {
+			t.Fatalf("AcceptsSettingsStackJSON(%q) = true", value)
 		}
 	}
 }
