@@ -1,20 +1,9 @@
 package api
 
-import (
-	"context"
-	"os/exec"
-	"strings"
-	"time"
-)
+import "github.com/veil-panel/veil/internal/firewall"
 
 var firewallStatusReader = readFirewallStatus
 
 func readFirewallStatus() (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	output, err := exec.CommandContext(ctx, "ufw", "status").CombinedOutput()
-	if err != nil {
-		return false, nil
-	}
-	return strings.Contains(string(output), "Status: active"), nil
+	return firewall.NewStatusReader(nil).Active()
 }

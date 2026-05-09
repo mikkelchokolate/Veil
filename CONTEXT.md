@@ -13,7 +13,7 @@ The install-time host facts and validators: platform, architecture, domain/email
 _Avoid_: installer utilities, network helpers
 
 **Firewall material**:
-The firewall rule plan and Panel-facing firewall rule responses derived from Panel access and enabled Inbounds.
+The firewall rule plan, firewall status probe, and Panel-facing firewall rule responses derived from Panel access and enabled Inbounds.
 _Avoid_: ufw helpers, port list
 
 **Veil update**:
@@ -220,7 +220,7 @@ _Avoid_: logging, masking
 
 - A **Veil install** always produces **Panel access** and credentials; its orchestration Module owns prompt, requirement, preview, prerequisite, confirmation, and apply order; it does not select or install protocol stacks.
 - **Host environment** owns platform, domain/email, public IP, and DNS checks outside the installer orchestration Module.
-- **Firewall material** owns firewall rule planning and Panel-facing firewall rule response shaping outside HTTP Adapters.
+- **Firewall material** owns firewall rule planning, firewall status probing, and Panel-facing firewall rule response shaping outside HTTP Adapters.
 - **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
 - **Veil version** owns latest-release fetching, version comparison, and update guidance outside the Cobra command Adapter.
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
