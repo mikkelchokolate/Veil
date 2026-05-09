@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/secrets"
+import (
+	"github.com/veil-panel/veil/internal/managementstate"
+	"github.com/veil-panel/veil/internal/secrets"
+)
 
 type ManagementSnapshotInput struct {
 	Settings      Settings
@@ -23,9 +26,9 @@ func BuildManagementSnapshot(input ManagementSnapshotInput) managementSnapshot {
 }
 
 func EncryptManagementSnapshot(snapshot *managementSnapshot, cipher *secrets.Cipher) {
-	NewStateStore("", cipher).encryptSnapshot(snapshot)
+	managementstate.EncryptSnapshot(snapshot, cipher)
 }
 
 func DecryptManagementSnapshot(snapshot *managementSnapshot, cipher *secrets.Cipher) {
-	NewStateStore("", cipher).decryptSnapshot(snapshot)
+	managementstate.DecryptSnapshot(snapshot, cipher)
 }
