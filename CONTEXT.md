@@ -153,7 +153,7 @@ The client access package rule that turns one or more enabled Inbounds into Clie
 _Avoid_: link special case, subscription merge
 
 **Generated config set**:
-The staged Caddy, Hysteria2, Mieru, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state. Set assembly, cardinality, path, artifact, validation, and routing source material logic lives in the generated config package; HTTP and protocol capability wiring are Adapters.
+The staged Caddy, Hysteria2, Mieru, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state. Set assembly, cardinality, path, artifact, validation, inbound renderer, and routing source material logic lives in the generated config package; HTTP and protocol capability wiring are Adapters.
 _Avoid_: rendered files, output bundle
 
 **Routing rule catalog**:
