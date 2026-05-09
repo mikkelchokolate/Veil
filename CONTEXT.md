@@ -12,6 +12,10 @@ _Avoid_: bootstrap, setup wizard, protocol stack installer
 The CLI flow that fetches a GitHub release, verifies checksums, extracts the Veil binary, swaps it atomically, and can roll back during staged restart checks.
 _Avoid_: updater helpers, download command
 
+**Veil serve**:
+The CLI flow that resolves listen address, auth token, state paths, TLS material, Auto TLS settings, and Panel Web base path before starting the HTTP Panel server.
+_Avoid_: serve helpers, server command setup
+
 **Panel**:
 The browser UI and HTTP management surface used to operate Veil after install.
 _Avoid_: dashboard, admin site
@@ -172,6 +176,7 @@ _Avoid_: logging, masking
 
 - A **Veil install** always produces **Panel access** and credentials; its orchestration Module owns prompt, requirement, preview, prerequisite, confirmation, and apply order; it does not select or install protocol stacks.
 - **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
+- **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
 - **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access Module owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.

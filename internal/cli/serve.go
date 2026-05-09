@@ -53,11 +53,3 @@ func newServeCommand(version string) *cobra.Command {
 
 // Package-level variables set by resolveServeAutoTLS and used by newServeHTTPServer.
 var autoTLSDomain, autoTLSEmail, autoTLSCacheDir string
-
-// stateSnapshot is a minimal struct to extract domain and email from state JSON.
-type stateSnapshot struct {
-	Settings struct {
-		Domain string `json:"domain"`
-		Email  string `json:"email"`
-	} `json:"settings"`
-}
