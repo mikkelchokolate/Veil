@@ -1,5 +1,7 @@
 package api
 
+import veilwarp "github.com/veil-panel/veil/internal/warp"
+
 type WarpManagement struct {
 	mutation ManagementStateMutation
 }
@@ -17,24 +19,9 @@ func (m WarpManagement) Update(update WarpConfig) (WarpConfig, error) {
 }
 
 func redactedWarp(warp WarpConfig) WarpConfig {
-	redacted := warp
-	disclosure := NewCredentialDisclosure()
-	redacted.PrivateKey = disclosure.Redact(redacted.PrivateKey)
-	redacted.LicenseKey = disclosure.Redact(redacted.LicenseKey)
-	return redacted
+	return veilwarp.Redact(warp)
 }
 
 func setWarpDefaults(warp *WarpConfig) {
-	if warp.Endpoint == "" {
-		warp.Endpoint = "engage.cloudflareclient.com:2408"
-	}
-	if warp.SocksListen == "" {
-		warp.SocksListen = "127.0.0.1"
-	}
-	if warp.SocksPort == 0 {
-		warp.SocksPort = 40000
-	}
-	if warp.MTU == 0 {
-		warp.MTU = 1280
-	}
+	veilwarp.SetDefaults(warp)
 }
