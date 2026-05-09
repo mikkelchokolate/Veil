@@ -24,6 +24,10 @@ _Avoid_: updater helpers, download command
 The CLI flow that resolves listen address, auth token, state paths, TLS material, Auto TLS settings, and Panel Web base path before starting the HTTP Panel server.
 _Avoid_: serve helpers, server command setup
 
+**Veil status**:
+The CLI flow that resolves a Panel listen address, fetches `/api/status`, handles generated local Panel TLS, and renders human or JSON Service status output. The status CLI workflow package owns fetch and rendering behavior; Cobra only adapts flags.
+_Avoid_: status command HTTP helper, service list printer
+
 **Veil uninstall**:
 The CLI flow that previews and removes Veil managed files, Managed systemd units, state, and binary material. The uninstall CLI workflow package owns the plan and ordering; Cobra only adapts flags and side-effect functions.
 _Avoid_: remove command script, cleanup helper
@@ -207,6 +211,7 @@ _Avoid_: logging, masking
 - **Firewall material** owns firewall rule planning and Panel-facing firewall rule response shaping outside HTTP Adapters.
 - **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
+- **Veil status** owns Panel status fetch, generated local Panel TLS trust, and human/JSON rendering outside the Cobra command Adapter.
 - **Veil uninstall** owns preview, service stop/disable ordering, file removal ordering, and daemon reload outside the Cobra command Adapter.
 - **Veil rollback** owns backup listing, restore, cleanup, and rollback audit event ordering outside the Cobra command Adapter.
 - **Veil repair** owns profile selection, repair plan preview, dry-run, and apply ordering outside the Cobra command Adapter.

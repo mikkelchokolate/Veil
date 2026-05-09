@@ -2,16 +2,10 @@ package cli
 
 import (
 	"context"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/spf13/cobra"
+	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
 )
 
 func newStatusCommand(version string) *cobra.Command {
@@ -38,70 +32,20 @@ address and --auth-token to authenticate.`,
 }
 
 func resolveStatusListen(flagValue string) string {
-	if addr := strings.TrimSpace(flagValue); addr != "" {
-		return addr
-	}
-	return "127.0.0.1:2096"
+	return statusflow.ResolveListen(flagValue)
 }
 
-type statusResponse struct {
-	SchemaVersion string          `json:"schemaVersion"`
-	Name          string          `json:"name"`
-	Version       string          `json:"version"`
-	Mode          string          `json:"mode"`
-	Services      []serviceStatus `json:"services"`
-}
-
-type serviceStatus struct {
-	Name        string `json:"name"`
-	Managed     bool   `json:"managed"`
-	Transport   string `json:"transport,omitempty"`
-	Unit        string `json:"unit,omitempty"`
-	LoadState   string `json:"loadState,omitempty"`
-	ActiveState string `json:"activeState,omitempty"`
-	SubState    string `json:"subState,omitempty"`
-	Error       string `json:"error,omitempty"`
-}
+type statusResponse = statusflow.Response
+type serviceStatus = statusflow.ServiceStatus
 
 func fetchStatus(ctx context.Context, url string, token string) (*statusResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if token != "" {
-		req.Header.Set("X-Veil-Token", token)
-	}
-	resp, err := statusHTTPClient(url).Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var status statusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		return nil, err
-	}
-	return &status, nil
+	return statusflow.Fetch(ctx, url, token)
 }
 
 func statusHTTPClient(rawURL string) *http.Client {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme != "https" || !isLocalStatusHost(parsed.Hostname()) {
-		return http.DefaultClient
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // generated local Panel TLS is self-signed
-	return &http.Client{Transport: transport}
+	return statusflow.HTTPClient(rawURL)
 }
 
 func isLocalStatusHost(host string) bool {
-	host = strings.TrimSpace(strings.ToLower(host))
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return statusflow.IsLocalHost(host)
 }
