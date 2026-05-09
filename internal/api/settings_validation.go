@@ -17,9 +17,6 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.PanelListen == "" || settings.Mode == "" {
 		return errors.New("panelListen and mode are required")
 	}
-	if err := ValidateSettingsStackCompatibility(*settings); err != nil {
-		return err
-	}
 	if settings.PanelAccess == "" {
 		settings.PanelAccess = current.PanelAccess
 	}

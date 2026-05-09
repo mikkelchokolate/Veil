@@ -45,7 +45,7 @@ func TestHandleSettingsRejectsInvalidDomain(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := fmt.Sprintf(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"%s"}`, tt.domain)
+			body := fmt.Sprintf(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"%s"}`, tt.domain)
 			req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestHandleSettingsRejectsInvalidEmail(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := fmt.Sprintf(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","email":"%s"}`, tt.email)
+			body := fmt.Sprintf(`{"panelListen":"127.0.0.1:2096","mode":"dev","email":"%s"}`, tt.email)
 			req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -115,7 +115,7 @@ func TestHandleSettingsRejectsInvalidPanelListen(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := fmt.Sprintf(`{"panelListen":"%s","stack":"both","mode":"dev"}`, tt.panelListen)
+			body := fmt.Sprintf(`{"panelListen":"%s","mode":"dev"}`, tt.panelListen)
 			req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
 	state.register(mux)
 
 	validBody := func(fallbackRoot string) []byte {
-		return []byte(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","fallbackRoot":"` + fallbackRoot + `"}`)
+		return []byte(`{"panelListen":"127.0.0.1:2096","mode":"dev","fallbackRoot":"` + fallbackRoot + `"}`)
 	}
 
 	tests := []struct {

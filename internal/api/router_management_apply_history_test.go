@@ -24,7 +24,7 @@ var _router_management_apply_history_deps = []any{
 
 func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -73,7 +73,7 @@ func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
 
 func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouters(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()

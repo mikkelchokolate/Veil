@@ -130,7 +130,6 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
-			"stack":"both",
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",
@@ -188,7 +187,6 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
-			"stack":"hysteria2",
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",
@@ -246,7 +244,6 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
-			"stack":"both",
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",
@@ -297,7 +294,6 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
-			"stack":"naive",
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",

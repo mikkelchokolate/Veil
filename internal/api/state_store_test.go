@@ -10,6 +10,23 @@ import (
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
+func TestStateStoreRejectsRemovedStackField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(path, []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","stack":"both"},
+		"inbounds":[],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	_, _, err := NewStateStore(path, nil).Load()
+	if err == nil || !strings.Contains(err.Error(), `json: unknown field "stack"`) {
+		t.Fatalf("expected removed stack field rejection, got %v", err)
+	}
+}
+
 func TestStateStoreEncryptsAndDecryptsInboundPasswords(t *testing.T) {
 	var key [secrets.KeySize]byte
 	if _, err := rand.Read(key[:]); err != nil {

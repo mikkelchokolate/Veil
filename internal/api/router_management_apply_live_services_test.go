@@ -24,7 +24,7 @@ var _router_management_apply_live_services_deps = []any{
 
 func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -62,7 +62,7 @@ func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *t
 
 func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -120,7 +120,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 
 func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -159,7 +159,7 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 
 func TestManagementApplyDoesNotRunServiceActionsWithoutExplicitFlag(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -200,7 +200,7 @@ func TestManagementApplyDoesNotRunServiceActionsWithoutExplicitFlag(t *testing.T
 
 func TestManagementApplyServicesRequiresLiveApply(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	oldValidator := stagedConfigValidator
@@ -298,7 +298,7 @@ func TestManagementApplyServicesRestartsMieruAfterLivePromotion(t *testing.T) {
 
 func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -352,7 +352,7 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 
 func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	oldValidator := stagedConfigValidator
@@ -394,7 +394,7 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 
 func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	oldValidator := stagedConfigValidator
@@ -438,7 +438,7 @@ func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 
 func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -495,7 +495,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 
 func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
@@ -550,7 +550,7 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 
 func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "naive"); err != nil {
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()

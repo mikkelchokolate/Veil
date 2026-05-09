@@ -10,7 +10,6 @@ type Settings struct {
 	PanelListen       string `json:"panelListen"`
 	PanelAccess       string `json:"panelAccess,omitempty"`
 	WebBasePath       string `json:"webBasePath,omitempty"`
-	legacyStack       string
 	Mode              string `json:"mode"`
 	Domain            string `json:"domain,omitempty"`
 	Email             string `json:"email,omitempty"`

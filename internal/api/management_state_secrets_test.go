@@ -377,7 +377,7 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 		t.Fatalf("marshal settings: %v", err)
 	}
 	if strings.Contains(string(body), `"stack"`) {
-		t.Errorf("after reload emitted legacy stack: %s", body)
+		t.Errorf("after reload emitted removed stack field: %s", body)
 	}
 }
 

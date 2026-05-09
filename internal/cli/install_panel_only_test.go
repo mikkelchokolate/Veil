@@ -11,7 +11,7 @@ func TestInstallDryRunPanelOnlyDoesNotRequireDomainEmailOrProxyPort(t *testing.T
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--stack", "panel", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("panel-only dry-run should not require domain/email/port: %v\n%s", err, out.String())

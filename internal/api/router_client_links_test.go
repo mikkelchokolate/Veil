@@ -24,7 +24,7 @@ var _routerTestDeps_router_client_links_test = []any{
 
 func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
@@ -96,7 +96,7 @@ func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
 
 func TestClientLinksUsesPerInboundPassword(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
@@ -141,7 +141,7 @@ func TestClientLinksUsesPerInboundPassword(t *testing.T) {
 
 func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
@@ -174,7 +174,7 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 
 func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
@@ -206,7 +206,7 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 
 func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})

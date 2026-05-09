@@ -15,8 +15,7 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 	for _, want := range []string{
 		`PANEL_ACCESS="local"`,
 		`--panel-access`,
-		`configure protocols from the Panel`,
-		`Veil install only installs Panel; configure protocols as Panel Inbounds.`,
+		`Veil install only installs Panel; configure protocols as Panel Inbounds`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q", want)

@@ -33,7 +33,7 @@ func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
 	applyRoot := filepath.Join(dir, "apply")
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath, ApplyRoot: applyRoot})
 
-	putJSON(t, r, "/api/settings", `{"panelListen":"127.0.0.1:2096","stack":"mieru","mode":"dev","domain":"vpn.example.com"}`, http.StatusOK)
+	putJSON(t, r, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`, http.StatusOK)
 	putJSON(t, r, "/api/inbounds", `{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}`, http.StatusCreated)
 	putJSON(t, r, "/api/inbounds", `{"name":"mieru-udp","protocol":"mieru","transport":"udp","port":443,"enabled":true,"password":"udp-pass"}`, http.StatusCreated)
 

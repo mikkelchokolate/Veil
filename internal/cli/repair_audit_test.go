@@ -35,9 +35,6 @@ func TestRepairDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--dry-run",
 		"--audit-log", auditPath,
 		"--etc-dir", etcDir,
@@ -86,9 +83,6 @@ func TestRepairApplyFailureWithAuditLog(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--audit-log", auditPath,
 		"--etc-dir", etcDir,
@@ -140,9 +134,6 @@ func TestRepairApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--etc-dir", etcDir,
 		"--var-dir", varDir,

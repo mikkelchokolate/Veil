@@ -59,7 +59,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	state := `{
-  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","stack":"panel","mode":"server","domain":"panel.example.com","email":"admin@example.com"},
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","email":"admin@example.com"},
   "inbounds": [],
   "routingRules": [],
   "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
@@ -105,7 +105,7 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	state := `{
-  "settings": {"panelListen":"127.0.0.1:2096","stack":"panel","mode":"server","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret"},
+  "settings": {"panelListen":"127.0.0.1:2096","mode":"server","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret"},
   "inbounds": [
     {"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}
   ],
@@ -134,7 +134,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateMieruInbounds(t *testing.T) {
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	state := `{
-  "settings": {"panelListen":"127.0.0.1:2096","stack":"panel","mode":"server"},
+  "settings": {"panelListen":"127.0.0.1:2096","mode":"server"},
   "inbounds": [
     {"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"password":"tcp-pass"},
     {"name":"mieru-udp","protocol":"mieru","transport":"udp","port":443,"enabled":true,"password":"udp-pass"}

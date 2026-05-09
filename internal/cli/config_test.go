@@ -14,8 +14,7 @@ func TestConfigValidateValidState(t *testing.T) {
 	validState := `{
   "settings": {
     "panelListen": "127.0.0.1:2096",
-    "stack": "both",
-    "mode": "server"
+        "mode": "server"
   },
   "inbounds": [
     {"name": "naive", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true}
@@ -47,7 +46,7 @@ func TestConfigValidateMieruState(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "state.json")
 	state := `{
-  "settings": {"panelListen": "127.0.0.1:2096", "stack": "mieru", "mode": "server"},
+  "settings": {"panelListen": "127.0.0.1:2096", "mode": "server"},
   "inbounds": [
     {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true},
     {"name": "mieru-udp", "protocol": "mieru", "transport": "udp", "port": 443, "enabled": true}
@@ -93,10 +92,10 @@ func TestConfigValidateMissingSettings(t *testing.T) {
 	}
 }
 
-func TestConfigValidateInvalidStack(t *testing.T) {
+func TestConfigValidateRejectsRemovedStackField(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "state.json")
-	badState := `{"settings":{"panelListen":"127.0.0.1:2096","stack":"invalid","mode":"server"},"inbounds":[],"routingRules":[]}`
+	badState := `{"settings":{"panelListen":"127.0.0.1:2096","mode":"server","stack":"both"},"inbounds":[],"routingRules":[]}`
 	if err := os.WriteFile(statePath, []byte(badState), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -108,10 +107,10 @@ func TestConfigValidateInvalidStack(t *testing.T) {
 	cmd.SetArgs([]string{"config", "validate", "--state", statePath})
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatal("expected error for invalid stack")
+		t.Fatal("expected error for removed stack field")
 	}
-	if !strings.Contains(err.Error(), "validation failed") {
-		t.Fatalf("expected validation failed, got: %v", err)
+	if !strings.Contains(out.String(), `json: unknown field "stack"`) {
+		t.Fatalf("expected unknown stack field error, got: %v\noutput: %s", err, out.String())
 	}
 }
 
@@ -152,7 +151,7 @@ func TestConfigValidateDuplicatePorts(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "state.json")
 	state := `{
-  "settings": {"panelListen": "127.0.0.1:2096", "stack": "both", "mode": "server"},
+  "settings": {"panelListen": "127.0.0.1:2096", "mode": "server"},
   "inbounds": [
     {"name": "a", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true},
     {"name": "b", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true}

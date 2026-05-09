@@ -72,18 +72,17 @@ func stringSlicesEqual(left []string, right []string) bool {
 	return true
 }
 
-func writeRenderableManagementState(path string, stack string) error {
+func writeRenderableManagementState(path string, inboundSet string) error {
 	inbounds := `[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
 		]`
-	if stack == "naive" {
+	if inboundSet == "naive-only" {
 		inbounds = `[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}]`
 	}
 	return os.WriteFile(path, []byte(`{
 		"settings":{
 			"panelListen":"127.0.0.1:2096",
-			"stack":"`+stack+`",
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",
@@ -101,7 +100,7 @@ func writeRenderableManagementState(path string, stack string) error {
 
 func writeRenderableMieruManagementState(path string) error {
 	return os.WriteFile(path, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"mieru","mode":"dev"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
 		"inbounds":[{"name":"mieru","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"password":"mieru-secret"}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}

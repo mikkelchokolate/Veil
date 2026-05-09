@@ -13,7 +13,7 @@ func TestInboundPasswordSavedThroughHTTPIsEncryptedAtRest(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})

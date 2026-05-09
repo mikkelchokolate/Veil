@@ -201,7 +201,7 @@ func TestFirewallEndpoint(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 
 	// Configure settings with a panel port
-	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"server"}`)
+	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"server"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", settingsBody)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

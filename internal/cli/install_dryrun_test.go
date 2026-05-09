@@ -59,7 +59,7 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
@@ -83,16 +83,16 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	}
 }
 
-func TestInstallDryRunRejectsProtocolStackSelection(t *testing.T) {
+func TestInstallDryRunRejectsStackFlag(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--stack", "hysteria2", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--stack", "hysteria2", "--dry-run"})
 
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "Veil install only installs Panel") {
-		t.Fatalf("expected protocol stack rejection, got %v\n%s", err, out.String())
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --stack") {
+		t.Fatalf("expected --stack to be removed, got %v\n%s", err, out.String())
 	}
 }
 
@@ -109,7 +109,7 @@ func TestInstallDryRunPrintsDNSWarningWhenPublicIPDoesNotMatch(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--public-ip", "93.184.216.34",
 		"--dry-run",
 	})
@@ -156,7 +156,7 @@ func TestInstallDryRunDetectsPublicIPWhenRequested(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--public-ip", "auto",
 		"--dry-run",
 	})
@@ -183,7 +183,7 @@ func TestInstallRURecommendedRejectsInvalidPublicIP(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874", "--public-ip", "not-an-ip", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--public-ip", "not-an-ip", "--dry-run"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatalf("expected error with invalid public IP")
@@ -195,7 +195,7 @@ func TestInstallRURecommendedDoesNotRequireDomainForLocalPanel(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--email", "admin@example.com", "--port", "31874", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("local Panel install should not require domain: %v\n%s", err, out.String())
@@ -207,7 +207,7 @@ func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Panel install should not require shared proxy port: %v\n%s", err, out.String())
@@ -223,8 +223,6 @@ func TestRepairDryRunReportsMissingManagedFiles(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",
@@ -254,7 +252,7 @@ func TestInstallDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--dry-run",
 		"--audit-log", auditPath,
 	})

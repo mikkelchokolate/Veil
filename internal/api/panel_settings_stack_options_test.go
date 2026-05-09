@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestPanelSettingsActionsDoNotWriteLegacyStack(t *testing.T) {
+func TestPanelSettingsActionsDoNotWriteStack(t *testing.T) {
 	actions := panelSettingsActionsJS()
 	for _, unwanted := range []string{"stack:", "stack"} {
 		if strings.Contains(actions, unwanted) {
-			t.Fatalf("Settings actions should not write legacy stack field %q:\n%s", unwanted, actions)
+			t.Fatalf("Settings actions should not write removed stack field %q:\n%s", unwanted, actions)
 		}
 	}
 }

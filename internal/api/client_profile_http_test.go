@@ -11,7 +11,7 @@ import (
 
 func TestInboundCreateThroughHTTPGeneratesClientProfilePassword(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := writeRenderableManagementState(statePath, "both"); err != nil {
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})

@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-func TestRURecommendedInstallOptionsDoNotExposeLegacyStack(t *testing.T) {
+func TestRURecommendedInstallOptionsDoNotExposeStack(t *testing.T) {
 	if _, ok := reflect.TypeOf(ruRecommendedInstallOptions{}).FieldByName("Stack"); ok {
-		t.Fatalf("ruRecommendedInstallOptions should not expose legacy stack; hidden CLI compatibility is handled before the Veil install Module")
+		t.Fatalf("ruRecommendedInstallOptions should not expose removed stack field")
 	}
 }
 
 func TestRURecommendedInstallRequirementsHasNoStackInterface(t *testing.T) {
 	if _, ok := reflect.TypeOf(RURecommendedInstallRequirements{}).FieldByName("stack"); ok {
-		t.Fatal("RURecommendedInstallRequirements should not carry legacy stack state")
+		t.Fatal("RURecommendedInstallRequirements should not carry removed stack state")
 	}
 }
 

@@ -129,7 +129,7 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 
 func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
 
@@ -142,7 +142,7 @@ func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
 
 func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
 	put := httptest.NewRecorder()
 
 	r.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/api/settings", body))
@@ -170,13 +170,13 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	create := httptest.NewRecorder()
-	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
 	if create.Code != http.StatusOK {
 		t.Fatalf("initial settings update expected 200, got %d: %s", create.Code, create.Body.String())
 	}
 
 	update := httptest.NewRecorder()
-	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3096","stack":"naive","mode":"server","domain":"vpn2.example.com","email":"ops@example.com","naiveUsername":"veil2","naivePassword":"[REDACTED]","hysteria2Password":"[REDACTED]"}`)))
+	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3096","mode":"server","domain":"vpn2.example.com","email":"ops@example.com","naiveUsername":"veil2","naivePassword":"[REDACTED]","hysteria2Password":"[REDACTED]"}`)))
 	if update.Code != http.StatusOK {
 		t.Fatalf("redacted settings update expected 200, got %d: %s", update.Code, update.Body.String())
 	}
@@ -187,21 +187,16 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 	}
 }
 
-func TestManagementAPISettingsPutRejectsInvalidStack(t *testing.T) {
+func TestManagementAPISettingsPutRejectsRemovedStackField(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	invalidStacks := []string{"invalid", "NATIVE", "BOTH", "hysteria", " ", "naiveproxy"}
-	for _, stack := range invalidStacks {
-		t.Run(stack, func(t *testing.T) {
-			body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"` + stack + `","mode":"dev"}`)
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", body))
-			if w.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400 for invalid stack %q, got %d: %s", stack, w.Code, w.Body.String())
-			}
-			if !strings.Contains(w.Body.String(), "stack must be panel; protocols are configured as Panel inbounds") {
-				t.Fatalf("expected stack validation error for %q, got: %s", stack, w.Body.String())
-			}
-		})
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","stack":"both"}`)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", body))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for removed stack field, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `json: unknown field "stack"`) {
+		t.Fatalf("expected unknown stack field error, got: %s", w.Body.String())
 	}
 }
 
@@ -249,7 +244,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
-	settingsReq := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3000","stack":"naive","mode":"server"}`))
+	settingsReq := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3000","mode":"server"}`))
 	settingsRecorder := httptest.NewRecorder()
 	r.ServeHTTP(settingsRecorder, settingsReq)
 	if settingsRecorder.Code != http.StatusOK {
@@ -267,7 +262,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	settingsRead := httptest.NewRecorder()
 	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
 	if strings.Contains(settingsRead.Body.String(), `"stack"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {
-		t.Fatalf("persisted settings should omit legacy stack and keep updates: %s", settingsRead.Body.String())
+		t.Fatalf("persisted settings should omit removed stack field and keep updates: %s", settingsRead.Body.String())
 	}
 
 	routingRead := httptest.NewRecorder()

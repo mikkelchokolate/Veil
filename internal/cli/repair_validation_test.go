@@ -73,7 +73,7 @@ func TestRepairCommandDefaultsToRURecommendedPanelRepair(t *testing.T) {
 	}
 }
 
-func TestRepairCommandRejectsProtocolStackSelection(t *testing.T) {
+func TestRepairCommandRejectsRemovedStackFlag(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -81,8 +81,8 @@ func TestRepairCommandRejectsProtocolStackSelection(t *testing.T) {
 	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--stack", "mieru", "--dry-run"})
 
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "Veil repair only repairs Panel install") {
-		t.Fatalf("expected protocol stack rejection, got %v\n%s", err, out.String())
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --stack") {
+		t.Fatalf("expected --stack to be removed, got %v\n%s", err, out.String())
 	}
 }
 

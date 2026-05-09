@@ -28,7 +28,7 @@ func TestRURecommendedProfileDoesNotExposeProtocolInstallPlanning(t *testing.T) 
 	}
 }
 
-func TestRURecommendedInstallInputDoesNotExposeProtocolStackSelection(t *testing.T) {
+func TestRURecommendedInstallInputDoesNotExposeStackSelection(t *testing.T) {
 	inputType := reflect.TypeOf(RURecommendedInstallInput{})
 	if _, ok := inputType.FieldByName("Stack"); ok {
 		t.Fatalf("RURecommendedInstallInput should not expose protocol stack selection")
@@ -127,7 +127,7 @@ func TestInstallerPackageDoesNotKeepLegacyProtocolInstallPlanning(t *testing.T) 
 						valueSpec := spec.(*ast.ValueSpec)
 						for _, constName := range valueSpec.Names {
 							if forbiddenConsts[constName.Name] {
-								t.Fatalf("legacy protocol stack constant %s remains in %s", constName.Name, name)
+								t.Fatalf("removed protocol stack constant %s remains in %s", constName.Name, name)
 							}
 						}
 					}

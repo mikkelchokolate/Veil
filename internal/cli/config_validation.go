@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -29,7 +30,7 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 	var errs []string
 	if len(snapshot.Settings) > 0 {
 		var settings api.Settings
-		if err := json.Unmarshal(snapshot.Settings, &settings); err != nil {
+		if err := decodeConfigSettings(snapshot.Settings, &settings); err != nil {
 			errs = append(errs, fmt.Sprintf("settings: invalid JSON: %v", err))
 		} else {
 			if settings.PanelListen == "" {
@@ -37,9 +38,6 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 			}
 			if settings.Mode == "" {
 				errs = append(errs, "settings.mode is required")
-			}
-			if err := api.ValidateSettingsStackCompatibility(settings); err != nil {
-				errs = append(errs, "settings."+err.Error())
 			}
 		}
 	} else {
@@ -97,4 +95,10 @@ func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string 
 		}
 	}
 	return errs
+}
+
+func decodeConfigSettings(body []byte, settings *api.Settings) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(settings)
 }

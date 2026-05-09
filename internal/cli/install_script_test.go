@@ -63,8 +63,8 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 			t.Fatalf("install.sh should not expose legacy stack/port option %q:\n%s", unwanted, script)
 		}
 	}
-	if !strings.Contains(script, "configure protocols from the Panel") {
-		t.Fatalf("install.sh should guide users to configure protocols from the Panel:\n%s", script)
+	if !strings.Contains(script, "Veil install only installs Panel; configure protocols as Panel Inbounds") {
+		t.Fatalf("install.sh should guide users to configure protocols as Panel Inbounds:\n%s", script)
 	}
 }
 
@@ -91,42 +91,6 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 	for _, want := range []string{"run_veil_install()", "< /dev/tty", "run_veil_install"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh should run interactive veil install from /dev/tty when launched through curl pipe; missing %q:\n%s", want, script)
-		}
-	}
-}
-
-func TestCurlInstallScriptLocalizesLegacyPortCompatibility(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(body)
-	for _, want := range []string{"ignore_legacy_protocol_port()", `--port) require_value "$1" "${2:-}"; ignore_legacy_protocol_port "$2"; shift 2 ;;`} {
-		if !strings.Contains(script, want) {
-			t.Fatalf("install.sh should localize legacy port compatibility behind %q:\n%s", want, script)
-		}
-	}
-}
-
-func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(body)
-	msg := "Veil install only installs Panel; configure protocols as Panel Inbounds."
-	if strings.Count(script, msg) != 1 {
-		t.Fatalf("install.sh should centralize legacy stack rejection once before side effects, count=%d:\n%s", strings.Count(script, msg), script)
-	}
-	for _, want := range []string{"reject_legacy_stack_selection()", `--stack) require_value "$1" "${2:-}"; reject_legacy_stack_selection "$2"; shift 2 ;;`} {
-		if !strings.Contains(script, want) {
-			t.Fatalf("install.sh should localize legacy stack compatibility behind %q:\n%s", want, script)
-		}
-	}
-	msgIndex := strings.Index(script, msg)
-	for _, sideEffect := range []string{"# Idempotency:", "Downloading Veil", "curl -fsSL \"${download_url}\"", "install -m 0755"} {
-		if idx := strings.Index(script, sideEffect); idx >= 0 && msgIndex > idx {
-			t.Fatalf("legacy stack rejection should appear before %q:\n%s", sideEffect, script)
 		}
 	}
 }

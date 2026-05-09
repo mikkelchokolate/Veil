@@ -35,7 +35,7 @@ func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
 	}
 }
 
-func TestRURecommendedPreviewResponseOmitsLegacyStackFields(t *testing.T) {
+func TestRURecommendedPreviewResponseOmitsRemovedStackFields(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
 	w := httptest.NewRecorder()
@@ -47,7 +47,7 @@ func TestRURecommendedPreviewResponseOmitsLegacyStackFields(t *testing.T) {
 	}
 	for _, unwanted := range []string{`"stack"`, `"installNaive"`, `"installHysteria2"`, `"installMieru"`, `"naiveClientURL"`, `"hysteria2ClientURI"`, `"hysteria2YAML"`} {
 		if strings.Contains(w.Body.String(), unwanted) {
-			t.Fatalf("profile preview response should not expose legacy stack/protocol install field %s: %s", unwanted, w.Body.String())
+			t.Fatalf("profile preview response should not expose removed stack/protocol install field %s: %s", unwanted, w.Body.String())
 		}
 	}
 }
@@ -95,16 +95,16 @@ func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
 	}
 }
 
-func TestRURecommendedPreviewEndpointRejectsProtocolStack(t *testing.T) {
+func TestRURecommendedPreviewEndpointRejectsRemovedStackField(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"naive"}`)
+	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"hysteria2"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "only supports Panel") {
-		t.Fatalf("expected protocol stack rejection, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `json: unknown field "stack"`) {
+		t.Fatalf("expected removed stack field rejection, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

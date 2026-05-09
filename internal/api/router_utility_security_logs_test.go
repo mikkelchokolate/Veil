@@ -24,7 +24,7 @@ var _routerTestDeps_router_utility_security_logs_test = []any{
 
 func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","stack":"","mode":""}`)
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":""}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
 

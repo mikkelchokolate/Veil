@@ -4,18 +4,12 @@ import (
 	"net/http"
 
 	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/legacy"
 )
 
 type RURecommendedPreviewRequest struct {
 	Domain      string `json:"domain"`
 	Email       string `json:"email"`
 	PanelAccess string `json:"panelAccess,omitempty"`
-}
-
-type ruRecommendedPreviewWireRequest struct {
-	RURecommendedPreviewRequest
-	LegacyStack string `json:"stack,omitempty"`
 }
 
 type RURecommendedPreviewResponse struct {
@@ -41,15 +35,10 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	var wireReq ruRecommendedPreviewWireRequest
-	if !decodeJSONRequest(w, r, &wireReq) {
+	var req RURecommendedPreviewRequest
+	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
-	if !legacy.IsPanelOnlyStack(wireReq.LegacyStack) {
-		writeError(w, "profile preview only supports Panel install; configure protocols as Panel Inbounds", http.StatusBadRequest)
-		return
-	}
-	req := wireReq.RURecommendedPreviewRequest
 	profile, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
 		Domain:      req.Domain,
 		Email:       req.Email,

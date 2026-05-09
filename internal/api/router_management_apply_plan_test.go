@@ -53,7 +53,7 @@ func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
 		"inbounds":[{"name":"bad","protocol":"hysteria2","transport":"udp","port":0,"enabled":true}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
@@ -81,10 +81,10 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	}
 }
 
-func TestManagementApplyPlanDoesNotUseStackToSelectProtocols(t *testing.T) {
+func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"naive","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
@@ -107,44 +107,17 @@ func TestManagementApplyPlanDoesNotUseStackToSelectProtocols(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
-		t.Fatalf("expected all enabled Inbounds in apply plan regardless of legacy stack: %+v", response.Configs)
+		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
 	}
 	if !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2.service") {
-		t.Fatalf("expected all enabled Inbound actions regardless of legacy stack: %+v", response.Actions)
-	}
-}
-
-func TestManagementApplyPlanRejectsInvalidStack(t *testing.T) {
-	statePath := filepath.Join(t.TempDir(), "state.json")
-	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"bad","mode":"dev"},
-		"inbounds":[],
-		"routingRules":[],
-		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
-	}`), 0o600); err != nil {
-		t.Fatalf("write state: %v", err)
-	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-	var response ApplyPlanResponse
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "protocols are configured as Panel inbounds") {
-		t.Fatalf("expected stack compatibility error: %+v", response.Errors)
+		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
 }
 
 func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"both","mode":"dev","domain":"vpn.example.com"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"},
 		"inbounds":[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
@@ -171,8 +144,8 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","stack":"bad","mode":"dev"},
-		"inbounds":[],
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[{"name":"bad","protocol":"hysteria2","transport":"udp","port":0,"enabled":true}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
 	}`), 0o600); err != nil {

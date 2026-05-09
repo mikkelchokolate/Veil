@@ -15,14 +15,10 @@ func newRepairCommand() *cobra.Command {
 	var backupDir string
 	var auditLog string
 
-	legacy := NewLegacyCLICompatibility()
 	cmd := &cobra.Command{
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := legacy.RejectStackSelection("Veil repair only repairs Panel install; protocol configs come from Panel Inbounds"); err != nil {
-				return err
-			}
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:      profile,
 				DryRun:       dryRun,
@@ -44,7 +40,6 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", defaultSystemdDir, "systemd unit output directory")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
-	legacy.RegisterRepairFlags(cmd)
 	return cmd
 }
 

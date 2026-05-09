@@ -3,7 +3,7 @@ package cli
 import "testing"
 
 func TestConfigValidationModuleValidatesSnapshotBytes(t *testing.T) {
-	body := []byte(`{"settings":{"panelListen":"127.0.0.1:2096","stack":"both","mode":"server"},"inbounds":[],"routingRules":[],"warp":{"enabled":false}}`)
+	body := []byte(`{"settings":{"panelListen":"127.0.0.1:2096","mode":"server"},"inbounds":[],"routingRules":[],"warp":{"enabled":false}}`)
 	result, err := NewConfigValidation().ValidateBytes(body)
 	if err != nil {
 		t.Fatalf("ValidateBytes: %v", err)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -30,7 +31,9 @@ func (s StateStore) Load() (managementSnapshot, bool, error) {
 		return managementSnapshot{}, false, err
 	}
 	var snapshot managementSnapshot
-	if err := json.Unmarshal(body, &snapshot); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&snapshot); err != nil {
 		return managementSnapshot{}, false, err
 	}
 	s.decryptSnapshot(&snapshot)

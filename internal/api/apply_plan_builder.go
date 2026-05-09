@@ -19,9 +19,6 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		Configs: []string{},
 		Actions: []string{"validate management state"},
 	}
-	if err := ValidateSettingsStackCompatibility(input.Settings); err != nil {
-		plan.Errors = append(plan.Errors, err.Error())
-	}
 	if input.Settings.PanelAccess == "caddy" {
 		if input.Settings.Domain == "" || input.Settings.Email == "" {
 			plan.Errors = append(plan.Errors, "--domain and --email are required for caddy Panel access")

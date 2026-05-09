@@ -22,7 +22,7 @@ Usage:
   curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash -s -- --profile ru-recommended --panel-access caddy --domain example.com --email admin@example.com
 
 Options:
-  Install is Panel-only; configure protocols from the Panel after login.
+  Veil install only installs Panel; configure protocols as Panel Inbounds
   --version VERSION    Release tag to install, default latest
   --install-dir DIR    Directory for the veil binary, default /usr/local/bin
   --profile NAME       default or ru-recommended, default ru-recommended
@@ -69,17 +69,6 @@ require_value() {
   fi
 }
 
-reject_legacy_stack_selection() {
-  if [[ "$1" != "panel" ]]; then
-    echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
-    exit 1
-  fi
-}
-
-ignore_legacy_protocol_port() {
-  return 0
-}
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
@@ -87,8 +76,6 @@ while [[ $# -gt 0 ]]; do
     --profile) require_value "$1" "${2:-}"; PROFILE="$2"; shift 2 ;;
     --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
-    --port) require_value "$1" "${2:-}"; ignore_legacy_protocol_port "$2"; shift 2 ;;
-    --stack) require_value "$1" "${2:-}"; reject_legacy_stack_selection "$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestInstallRejectsMieruStackBecauseProtocolsArePanelInbounds(t *testing.T) {
+func TestInstallRejectsRemovedStackFlag(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -14,7 +14,7 @@ func TestInstallRejectsMieruStackBecauseProtocolsArePanelInbounds(t *testing.T) 
 	cmd.SetArgs([]string{"install", "--stack", "mieru", "--dry-run"})
 
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "Veil install only installs Panel") {
-		t.Fatalf("expected Mieru stack rejection, got %v\n%s", err, out.String())
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --stack") {
+		t.Fatalf("expected --stack to be removed, got %v\n%s", err, out.String())
 	}
 }

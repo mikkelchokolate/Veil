@@ -11,7 +11,7 @@ func TestInstallPanelOnlyHonorsDirectPanelAccessFlag(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--stack", "panel", "--panel-access", "direct", "--panel-port", "2096", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-access", "direct", "--panel-port", "2096", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install dry-run: %v\n%s", err, out.String())
@@ -26,7 +26,7 @@ func TestInstallRejectsInvalidPanelAccessFlag(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--stack", "panel", "--panel-access", "public", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-access", "public", "--dry-run"})
 
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "panel access must be direct, local, or caddy") {

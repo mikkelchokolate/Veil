@@ -23,7 +23,7 @@ func TestApplyManagementSnapshotKeepsDefaultsForMissingOptionalSections(t *testi
 		t.Fatalf("marshal settings: %v", err)
 	}
 	if strings.Contains(string(body), `"stack"`) {
-		t.Fatalf("management state should not emit legacy stack after applying new snapshot: %s", body)
+		t.Fatalf("management state should not emit removed stack field after applying new snapshot: %s", body)
 	}
 	if state.inbounds[0].Name != "default" || state.rules[0].Name != "default-rule" || state.routingPreset != "default-preset" || state.routingSource.Repository != "default-repo" || state.warp.Endpoint != "default-endpoint" {
 		t.Fatalf("missing optional sections should preserve defaults: %+v", state)

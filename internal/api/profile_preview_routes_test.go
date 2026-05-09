@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestRURecommendedPreviewRequestDoesNotExposeLegacyStack(t *testing.T) {
+func TestRURecommendedPreviewRequestDoesNotExposeStack(t *testing.T) {
 	if _, ok := reflect.TypeOf(RURecommendedPreviewRequest{}).FieldByName("Stack"); ok {
-		t.Fatalf("RURecommendedPreviewRequest should not expose legacy stack; protocol choices are Panel Inbounds")
+		t.Fatalf("RURecommendedPreviewRequest should not expose removed stack field; protocol choices are Panel Inbounds")
 	}
 }
 

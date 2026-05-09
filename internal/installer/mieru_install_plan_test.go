@@ -6,20 +6,20 @@ import (
 	"testing"
 )
 
-func TestLegacyMieruInstallStackNormalizesToPanelOnly(t *testing.T) {
+func TestPanelInstallDoesNotPlanMieruRuntime(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
 	if profile.InstallPanelCaddy {
-		t.Fatalf("Mieru legacy install should still produce Panel-only install; configure Mieru as Panel Inbounds: %+v", profile)
+		t.Fatalf("Panel-only install should keep Mieru runtime under Panel Inbounds: %+v", profile)
 	}
 	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}
 	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") {
-		t.Fatalf("Panel install should not plan Mieru runtime from legacy stack: %+v", plan)
+		t.Fatalf("Panel install should not plan Mieru runtime before Panel Inbounds exist: %+v", plan)
 	}
 }
 

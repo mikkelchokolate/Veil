@@ -30,14 +30,10 @@ func newInstallCommand() *cobra.Command {
 	var auditLog string
 	var backupDir string
 
-	legacy := NewLegacyCLICompatibility()
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install and configure Veil managed services",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := legacy.RejectStackSelection("Veil install only installs Panel; configure protocols as Panel Inbounds"); err != nil {
-				return err
-			}
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
 				Profile:      profile,
 				Domain:       domain,
@@ -72,7 +68,6 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
-	legacy.RegisterInstallFlags(cmd)
 	return cmd
 }
 

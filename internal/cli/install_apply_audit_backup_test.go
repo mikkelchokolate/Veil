@@ -22,7 +22,7 @@ func TestRepairApplyRequiresYes(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--port", "31874"})
+	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatalf("expected repair without --dry-run or --yes to fail")
@@ -84,7 +84,7 @@ func TestInstallApplyWithAuditLogWritesSuccessEvent(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",
@@ -132,7 +132,7 @@ func TestInstallApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--etc-dir", dir + "/etc/veil",
 		"--var-dir", dir + "/var/lib/veil",
 		"--systemd-dir", dir + "/etc/systemd/system",
@@ -169,7 +169,7 @@ func TestInstallDefaultsBackupDirWhenNotSet(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--etc-dir", filepath.Join(dir, "etc", "veil"),
 		"--var-dir", varDir,
 		"--systemd-dir", filepath.Join(dir, "etc", "systemd", "system"),
@@ -208,7 +208,7 @@ func TestInstallExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
 		"install",
 		"--profile", "ru-recommended",
 		"--domain", "example.com",
-		"--email", "admin@example.com", "--port", "31874",
+		"--email", "admin@example.com",
 		"--etc-dir", filepath.Join(dir, "etc", "veil"),
 		"--var-dir", filepath.Join(dir, "var", "lib", "veil"),
 		"--systemd-dir", filepath.Join(dir, "etc", "systemd", "system"),

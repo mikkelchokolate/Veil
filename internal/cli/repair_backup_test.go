@@ -45,9 +45,6 @@ func TestRepairWithBackupDirPrintsBackupID(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--backup-dir", backupDir,
 		"--etc-dir", etcDir,
@@ -88,9 +85,6 @@ func TestRepairDryRunDoesNotCreateBackup(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--dry-run",
 		"--backup-dir", backupDir,
 		"--etc-dir", etcDir,
@@ -130,9 +124,6 @@ func TestRepairDefaultsBackupDirWhenNotSet(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--etc-dir", etcDir,
 		"--var-dir", varDir,
@@ -176,9 +167,6 @@ func TestRepairExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--backup-dir", "",
 		"--etc-dir", etcDir,
@@ -214,9 +202,6 @@ func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--backup-dir", backupDir,
 		"--etc-dir", etcDir,
@@ -271,9 +256,6 @@ func TestRepairApplyWithAuditLogWritesSuccessEventWithBackupID(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--backup-dir", backupDir,
 		"--audit-log", auditPath,
@@ -345,9 +327,6 @@ func TestRepairApplyBackupFailureWithAuditLog(t *testing.T) {
 	cmd.SetArgs([]string{
 		"repair",
 		"--profile", "ru-recommended",
-		"--domain", "example.com",
-		"--email", "admin@example.com",
-		"--port", "443",
 		"--yes",
 		"--backup-dir", backupDir,
 		"--audit-log", auditPath,
