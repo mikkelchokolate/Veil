@@ -1,15 +1,17 @@
 package api
 
+import "github.com/veil-panel/veil/internal/generatedconfig"
+
 type GeneratedConfigCardinality struct {
-	settings Settings
+	inner generatedconfig.GeneratedConfigCardinality
 }
 
 func NewGeneratedConfigCardinality(settings Settings) GeneratedConfigCardinality {
-	return GeneratedConfigCardinality{settings: settings}
+	return GeneratedConfigCardinality{inner: generatedconfig.NewGeneratedConfigCardinality(settings, NewGeneratedConfigProtocolRegistry().inner)}
 }
 
 func (c GeneratedConfigCardinality) Validate(inbounds []Inbound) error {
-	return NewGeneratedConfigProtocolRegistry().Validate(c.settings, inbounds)
+	return c.inner.Validate(inbounds)
 }
 
 func validateGeneratedConfigInboundCardinality(settings Settings, inbounds []Inbound) error {

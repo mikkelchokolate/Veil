@@ -1,5 +1,7 @@
 package api
 
+import "github.com/veil-panel/veil/internal/generatedconfig"
+
 type GeneratedConfigInput struct {
 	ApplyRoot string
 	Settings  Settings
@@ -9,26 +11,17 @@ type GeneratedConfigInput struct {
 }
 
 func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, error) {
-	configs, err := NewGeneratedConfigProtocolRegistry().Render(input)
-	if err != nil {
-		return nil, err
-	}
-	paths := NewGeneratedConfigPaths(input.ApplyRoot)
-	if _, exists := configs[paths.Caddyfile()]; !exists {
-		artifact, ok, err := NewPanelAccess(input.Settings).GeneratedConfig(paths)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			configs[artifact.Path] = artifact.Body
-		}
-	}
-	artifact, ok, err := NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		configs[artifact.Path] = artifact.Body
-	}
-	return configs, nil
+	registry := NewGeneratedConfigProtocolRegistry()
+	return generatedconfig.NewSetBuilder(generatedconfig.SetInput{
+		ApplyRoot: input.ApplyRoot,
+		Settings:  input.Settings,
+		Inbounds:  input.Inbounds,
+		Registry:  registry.inner,
+		PanelAccess: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+			return NewPanelAccess(input.Settings).GeneratedConfig(paths)
+		},
+		Warp: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+			return NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
+		},
+	}).Build()
 }
