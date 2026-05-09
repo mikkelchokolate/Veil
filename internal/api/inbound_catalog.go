@@ -52,8 +52,7 @@ func (c InboundCatalog) Create(inbound Inbound) (Inbound, InboundCatalog, error)
 	if c.hasTransportPort(inbound.Transport, inbound.Port, -1) {
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
-	NewInboundPasswordPolicy(c.passwordGenerate).ApplyCreate(&inbound)
-	c.fillMissingProfilePasswords(&inbound, nil)
+	NewInboundCredentialPolicy(c.passwordGenerate).ApplyCreate(&inbound)
 	next := NewInboundCatalogWithPasswordGenerator(append(c.List(), inbound), c.passwordGenerate)
 	return inbound, next, nil
 }
@@ -70,8 +69,7 @@ func (c InboundCatalog) Update(name string, update Inbound) (Inbound, InboundCat
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
 	update.Name = name
-	NewInboundPasswordPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx])
-	c.fillMissingProfilePasswords(&update, c.inbounds[idx].Profiles)
+	NewInboundCredentialPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx])
 	nextInbounds := c.List()
 	nextInbounds[idx] = update
 	return update, NewInboundCatalogWithPasswordGenerator(nextInbounds, c.passwordGenerate), nil
@@ -85,10 +83,6 @@ func (c InboundCatalog) Delete(name string) (InboundCatalog, error) {
 	next := c.List()
 	next = append(next[:idx], next[idx+1:]...)
 	return NewInboundCatalogWithPasswordGenerator(next, c.passwordGenerate), nil
-}
-
-func (c InboundCatalog) fillMissingProfilePasswords(inbound *Inbound, previous []ClientProfile) {
-	inbound.Profiles = NewClientProfileCatalogWithPasswordGenerator(inbound.Profiles, c.passwordGenerate).WithCompletedPasswords(previous)
 }
 
 func (c InboundCatalog) index(name string) int {

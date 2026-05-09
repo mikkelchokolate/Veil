@@ -112,6 +112,10 @@ _Avoid_: config blob, raw state JSON
 The persistence module for Management state, including encryption and decryption of secrets at rest.
 _Avoid_: database, config file wrapper
 
+**Credential policy**:
+The rules for generating, preserving, validating, redacting, encrypting, and emitting credentials for Inbounds and Client profiles.
+_Avoid_: password helpers, secret utilities
+
 **Credential disclosure**:
 The rule set deciding when generated secrets are shown, redacted, stored, or emitted in client links.
 _Avoid_: logging, masking
@@ -135,6 +139,7 @@ _Avoid_: logging, masking
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
 - The **State store** persists **Management state**.
+- **Credential policy** governs generated and preserved Inbound and Client profile credentials.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a removed Settings JSON field, not a current Settings **Interface** field; protocol choices belong to Panel **Inbounds** and unknown `stack` input is rejected at strict JSON **Interfaces**.
 
