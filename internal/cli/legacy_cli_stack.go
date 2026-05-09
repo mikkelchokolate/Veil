@@ -2,9 +2,9 @@ package cli
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/legacy"
 )
 
 type LegacyCLICompatibility struct {
@@ -33,8 +33,7 @@ func (c *LegacyCLICompatibility) RegisterRepairFlags(cmd *cobra.Command) {
 }
 
 func (c *LegacyCLICompatibility) RejectStackSelection(message string) error {
-	stack := strings.TrimSpace(c.stack)
-	if stack == "" || stack == "panel" {
+	if legacy.IsTrimmedPanelOnlyStack(c.stack) {
 		return nil
 	}
 	return errors.New(message)

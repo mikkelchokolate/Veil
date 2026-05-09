@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/legacy"
 )
 
 type RURecommendedPreviewRequest struct {
@@ -44,7 +45,7 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 	if !decodeJSONRequest(w, r, &wireReq) {
 		return
 	}
-	if wireReq.LegacyStack != "" && wireReq.LegacyStack != "panel" {
+	if !legacy.IsPanelOnlyStack(wireReq.LegacyStack) {
 		writeError(w, "profile preview only supports Panel install; configure protocols as Panel Inbounds", http.StatusBadRequest)
 		return
 	}
