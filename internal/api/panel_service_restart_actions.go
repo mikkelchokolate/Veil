@@ -1,7 +1,9 @@
 package api
 
-const panelServiceRestartActionsPlaceholder = "__VEIL_PANEL_SERVICE_RESTART_ACTIONS__"
+import panelui "github.com/veil-panel/veil/internal/panel"
+
+const panelServiceRestartActionsPlaceholder = panelui.ServiceRestartActionsPlaceholder
 
 func panelServiceRestartActionsJS() string {
-	return panelServiceRestartControlActionsJS()
+	return panelui.ServiceRestartActionsJS(NewManagedRuntimeCatalog().Runtimes())
 }
