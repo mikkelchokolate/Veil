@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import (
 	"path/filepath"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestGeneratedConfigPathsBuildsKnownGeneratedPaths(t *testing.T) {
-	paths := NewGeneratedConfigPaths("/apply")
+	paths := NewPaths("/apply")
 	cases := map[string]string{
 		paths.Caddyfile(): filepath.Join("/apply", "generated", "caddy", "Caddyfile"),
 		paths.Hysteria2(): filepath.Join("/apply", "generated", "hysteria2", "server.yaml"),

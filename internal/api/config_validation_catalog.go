@@ -1,10 +1,8 @@
 package api
 
-type ConfigValidationSpec struct {
-	Name    string
-	Config  string
-	Command []string
-}
+import "github.com/veil-panel/veil/internal/generatedconfig"
+
+type ConfigValidationSpec = generatedconfig.ValidationSpec
 
 type ConfigValidationCatalog struct{}
 

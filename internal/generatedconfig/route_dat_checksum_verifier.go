@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import (
 	"crypto/sha256"
@@ -23,6 +23,10 @@ func (RouteDatChecksumVerifier) Verify(name string, body []byte, checksumText st
 	return nil
 }
 
-func verifyRouteDatChecksum(name string, body []byte, checksumText string) error {
+func VerifyRouteDatChecksum(name string, body []byte, checksumText string) error {
 	return NewRouteDatChecksumVerifier().Verify(name, body, checksumText)
+}
+
+func verifyRouteDatChecksum(name string, body []byte, checksumText string) error {
+	return VerifyRouteDatChecksum(name, body, checksumText)
 }

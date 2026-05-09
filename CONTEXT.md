@@ -97,7 +97,7 @@ The client access package rule that turns one or more enabled Inbounds into Clie
 _Avoid_: link special case, subscription merge
 
 **Generated config set**:
-The staged Caddy, Hysteria2, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state.
+The staged Caddy, Hysteria2, Mieru, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state. Path, artifact, validation, and routing source material logic lives in the generated config package.
 _Avoid_: rendered files, output bundle
 
 **Generated config artifact**:
@@ -161,7 +161,7 @@ _Avoid_: logging, masking
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol outside HTTP Adapters.
 - **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
 - **Apply history** records retained **Apply workflow** outcomes and serves Panel history queries.
-- A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
+- A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.

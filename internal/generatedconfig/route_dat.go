@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 const maxRouteDatSize = 50 * 1024 * 1024 // 50 MB
 
 var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
-var routeDatDownloader = downloadRouteDat
+var routeDatDownloader = DownloadRouteDat
 
-func downloadRouteDat(url string) ([]byte, error) {
+func DownloadRouteDat(url string) ([]byte, error) {
 	retry := NewRouteDatRetryPolicy()
 	maxAttempts := retry.MaxAttempts()
 	var lastErr error
@@ -62,4 +62,8 @@ func downloadRouteDat(url string) ([]byte, error) {
 
 func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
 	return NewRoutingSourceMaterial("", RoutingSource{}).Fetch(file)
+}
+
+func downloadRouteDat(url string) ([]byte, error) {
+	return DownloadRouteDat(url)
 }

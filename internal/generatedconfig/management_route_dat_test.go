@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import (
 	"bytes"
@@ -79,6 +79,17 @@ type testNetworkError struct{ msg string }
 func (e *testNetworkError) Error() string   { return e.msg }
 func (e *testNetworkError) Timeout() bool   { return false }
 func (e *testNetworkError) Temporary() bool { return true }
+
+type timeoutRecordingTransport struct {
+	onRoundTrip func(*http.Request)
+}
+
+func (t *timeoutRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.onRoundTrip != nil {
+		t.onRoundTrip(req)
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
 
 func TestDownloadRouteDatRetriesOnServerError(t *testing.T) {
 	var attempts int

@@ -1,4 +1,4 @@
-package api
+package generatedconfig
 
 import (
 	"path/filepath"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestGeneratedConfigPathsIncludesMieruServerConfig(t *testing.T) {
-	paths := NewGeneratedConfigPaths("/etc/veil")
+	paths := NewPaths("/etc/veil")
 	want := filepath.Join("/etc/veil", "generated", "mieru", "server_config.json")
 	if got := paths.Mieru(); got != want {
 		t.Fatalf("Mieru path = %q, want %q", got, want)

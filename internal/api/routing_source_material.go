@@ -1,60 +1,22 @@
 package api
 
-import "path/filepath"
+import "github.com/veil-panel/veil/internal/generatedconfig"
 
-type RoutingSourceDownloader func(string) ([]byte, error)
+type RoutingSourceDownloader = generatedconfig.RoutingSourceDownloader
+type RoutingSourceMaterial = generatedconfig.RoutingSourceMaterial
 
-type RoutingSourceMaterial struct {
-	applyRoot string
-	source    RoutingSource
-	download  RoutingSourceDownloader
-}
+var routeDatDownloader = generatedconfig.DownloadRouteDat
 
 func NewRoutingSourceMaterial(applyRoot string, source RoutingSource) RoutingSourceMaterial {
-	return RoutingSourceMaterial{applyRoot: applyRoot, source: source, download: routeDatDownloader}
+	return generatedconfig.NewRoutingSourceMaterial(applyRoot, source).WithDownloader(routeDatDownloader)
 }
 
-func (m RoutingSourceMaterial) WithDownloader(download RoutingSourceDownloader) RoutingSourceMaterial {
-	if download != nil {
-		m.download = download
-	}
-	return m
+func downloadRouteDat(url string) ([]byte, error) { return generatedconfig.DownloadRouteDat(url) }
+
+func verifyRouteDatChecksum(filename string, body []byte, checksumText string) error {
+	return generatedconfig.VerifyRouteDatChecksum(filename, body, checksumText)
 }
 
-func (m RoutingSourceMaterial) WriteGenerated() ([]string, error) {
-	written := []string{}
-	for _, file := range m.source.Files {
-		body, err := m.Fetch(file)
-		if err != nil {
-			return nil, err
-		}
-		path := filepath.Join(m.applyRoot, "generated", "rules", file.Name)
-		if err := writeAtomicFile(path, body, 0o600); err != nil {
-			return nil, err
-		}
-		written = append(written, path)
-	}
-	return written, nil
-}
-
-func (m RoutingSourceMaterial) Fetch(file RoutingSourceFile) ([]byte, error) {
-	download := m.download
-	if download == nil {
-		download = routeDatDownloader
-	}
-	body, err := download(file.URL)
-	if err != nil {
-		return nil, err
-	}
-	if file.SHA256URL == "" {
-		return body, nil
-	}
-	checksumBody, err := download(file.SHA256URL)
-	if err != nil {
-		return nil, err
-	}
-	if err := verifyRouteDatChecksum(file.Name, body, string(checksumBody)); err != nil {
-		return nil, err
-	}
-	return body, nil
+func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
+	return NewRoutingSourceMaterial("", RoutingSource{}).Fetch(file)
 }

@@ -1,0 +1,118 @@
+package generatedconfig
+
+import (
+	"path/filepath"
+	"strings"
+)
+
+const (
+	CaddyfileSubpath       = "caddy/Caddyfile"
+	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
+	MieruConfigSubpath     = "mieru/server_config.json"
+	WarpConfigSubpath      = "sing-box/warp.json"
+)
+
+type ValidationSpec struct {
+	Name    string
+	Config  string
+	Command []string
+}
+
+// ArtifactSpec is the Generated config set Module that owns the path,
+// validation, and promotion identity for one generated config artifact.
+type ArtifactSpec struct {
+	Subpath           string
+	ValidationName    string
+	ValidationCommand func(string) []string
+}
+
+type GeneratedConfigArtifactSpec = ArtifactSpec
+
+func (s ArtifactSpec) PlanPath() string {
+	if s.Subpath == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join("/etc/veil", "generated", filepath.FromSlash(s.Subpath)))
+}
+
+func (s ArtifactSpec) GeneratedPath(applyRoot string) string {
+	if s.Subpath == "" {
+		return ""
+	}
+	return filepath.Join(applyRoot, "generated", filepath.FromSlash(s.Subpath))
+}
+
+func (s ArtifactSpec) LivePath(applyRoot string) string {
+	if s.Subpath == "" {
+		return ""
+	}
+	return filepath.Join(applyRoot, "live", filepath.FromSlash(s.Subpath))
+}
+
+func (s ArtifactSpec) ValidationSuffix() string {
+	if s.Subpath == "" {
+		return ""
+	}
+	return "/generated/" + filepath.ToSlash(s.Subpath)
+}
+
+func (s ArtifactSpec) MatchesGeneratedPath(path string) bool {
+	suffix := s.ValidationSuffix()
+	return suffix != "" && strings.HasSuffix(filepath.ToSlash(path), suffix)
+}
+
+func (s ArtifactSpec) ValidationSpec(path string) (ValidationSpec, bool) {
+	if s.ValidationName == "" || s.ValidationCommand == nil {
+		return ValidationSpec{}, false
+	}
+	return ValidationSpec{Name: s.ValidationName, Config: path, Command: s.ValidationCommand(path)}, true
+}
+
+type ArtifactCatalog struct {
+	artifacts []ArtifactSpec
+}
+
+type GeneratedConfigArtifactCatalog = ArtifactCatalog
+
+func NewArtifactCatalog() ArtifactCatalog {
+	return ArtifactCatalog{artifacts: []ArtifactSpec{
+		{Subpath: CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
+		{Subpath: Hysteria2ConfigSubpath, ValidationName: "hysteria2", ValidationCommand: func(path string) []string { return []string{"hysteria", "server", "--config", path, "--check"} }},
+		{Subpath: MieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
+		{Subpath: WarpConfigSubpath, ValidationName: "warp", ValidationCommand: func(path string) []string { return []string{"sing-box", "check", "-c", path} }},
+	}}
+}
+
+func NewGeneratedConfigArtifactCatalog() GeneratedConfigArtifactCatalog { return NewArtifactCatalog() }
+
+func (c ArtifactCatalog) All() []ArtifactSpec {
+	out := make([]ArtifactSpec, len(c.artifacts))
+	copy(out, c.artifacts)
+	return out
+}
+
+func (c ArtifactCatalog) ValidationSpec(path string) (ValidationSpec, bool) {
+	for _, artifact := range c.artifacts {
+		if !artifact.MatchesGeneratedPath(path) {
+			continue
+		}
+		return artifact.ValidationSpec(path)
+	}
+	return ValidationSpec{}, false
+}
+
+func (c ArtifactCatalog) LivePathForStagedConfig(applyRoot string, stagedPath string) (string, bool) {
+	slashPath := filepath.ToSlash(stagedPath)
+	slashRoot := strings.TrimRight(filepath.ToSlash(applyRoot), "/")
+	prefix := slashRoot + "/generated/"
+	if !strings.HasPrefix(slashPath, prefix) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(slashPath, prefix)
+	for _, artifact := range c.artifacts {
+		if rel == filepath.ToSlash(artifact.Subpath) {
+			return artifact.LivePath(applyRoot), true
+		}
+	}
+	return "", false
+}
