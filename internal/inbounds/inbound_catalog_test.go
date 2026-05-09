@@ -1,4 +1,4 @@
-package api
+package inbounds
 
 import "testing"
 

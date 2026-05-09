@@ -1,4 +1,4 @@
-package api
+package inbounds
 
 type InboundTransportPortIndex struct {
 	inbounds []Inbound

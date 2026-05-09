@@ -56,6 +56,10 @@ _Avoid_: repair script steps, state replay
 A named proxy entry that defines protocol, transport, port, enabled state, and optional password.
 _Avoid_: profile, listener, account
 
+**Inbound catalog**:
+The package Module that owns Inbound validation, duplicate Transport binding detection, credential generation, create/update/delete behavior, and safe cloning. HTTP routes and Management state mutation are Adapters over it.
+_Avoid_: inbound helpers, route CRUD
+
 **Transport binding**:
 The network binding selected by an Inbound, composed from transport and port. TCP and UDP bindings may share the same numeric port because they are different transports.
 _Avoid_: listener key, socket id
@@ -164,6 +168,7 @@ _Avoid_: logging, masking
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.
 - The **Panel** is assembled from **Panel slices** through the Panel rendering package; HTTP routes are thin Adapters over rendered HTML.
 - The **Panel** manages zero or more **Inbounds**.
+- The **Inbound catalog** owns Inbound validation, credential completion, duplicate **Transport binding** checks, and cloning outside HTTP Adapters.
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
