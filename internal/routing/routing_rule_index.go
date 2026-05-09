@@ -1,4 +1,4 @@
-package api
+package routing
 
 type RoutingRuleIndex struct {
 	rules []RoutingRule

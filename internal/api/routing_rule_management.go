@@ -1,13 +1,5 @@
 package api
 
-import "errors"
-
-var (
-	ErrRoutingRuleInvalid       = errors.New("routing rule invalid")
-	ErrRoutingRuleNotFound      = errors.New("routing rule not found")
-	ErrRoutingRuleDuplicateName = errors.New("routing rule name already exists")
-)
-
 type RoutingRuleManagement struct {
 	mutation ManagementStateMutation
 }

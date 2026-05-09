@@ -1,4 +1,4 @@
-package api
+package routing
 
 type RoutingPresetState struct {
 	ActivePreset string

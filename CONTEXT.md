@@ -112,6 +112,10 @@ _Avoid_: link special case, subscription merge
 The staged Caddy, Hysteria2, Mieru, WARP, and rule files derived from Settings, Inbounds, routing, and WARP state. Path, artifact, validation, and routing source material logic lives in the generated config package.
 _Avoid_: rendered files, output bundle
 
+**Routing rule catalog**:
+The package Module that owns Routing rule validation, lookup, preset profiles, preset application, and preset responses. HTTP routes and Management state mutation are Adapters over it.
+_Avoid_: routing helpers, preset switch
+
 **Generated config artifact**:
 One file inside a Generated config set, identified by a stable generated subpath that also determines validation and live promotion paths.
 _Avoid_: ad-hoc config path, output filename
@@ -177,6 +181,7 @@ _Avoid_: logging, masking
 - **Apply history** records retained **Apply workflow** outcomes and serves Panel history queries.
 - **Apply workflow** orchestration lives outside HTTP routes; Management contexts adapt it to staged files and runtime commands.
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
+- The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.

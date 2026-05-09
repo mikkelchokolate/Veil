@@ -1,4 +1,4 @@
-package api
+package routing
 
 const routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
 
