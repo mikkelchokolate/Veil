@@ -1,0 +1,118 @@
+package uninstall
+
+import (
+	"fmt"
+	"io"
+	"path/filepath"
+	"strings"
+
+	"github.com/veil-panel/veil/internal/renderer"
+)
+
+type Options struct {
+	DryRun     bool
+	Yes        bool
+	EtcDir     string
+	VarDir     string
+	SystemdDir string
+	InstallDir string
+}
+
+type Dependencies struct {
+	ServiceStopper  func(string) error
+	FileRemover     func(string) error
+	SystemdReloader func() error
+}
+
+func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error {
+	opts = opts.WithDefaults()
+	fmt.Fprintln(out, "Veil uninstall plan")
+	fmt.Fprintln(out, Plan(opts))
+	if opts.DryRun {
+		return nil
+	}
+	if !opts.Yes {
+		return fmt.Errorf("uninstall requires --yes; rerun with --dry-run to preview")
+	}
+	for _, svc := range Services() {
+		if err := deps.ServiceStopper(svc); err != nil {
+			fmt.Fprintf(errOut, "warning: service %s: %v\n", svc, err)
+		}
+	}
+	for _, path := range Paths(opts) {
+		if err := deps.FileRemover(path); err != nil {
+			fmt.Fprintf(errOut, "warning: remove %s: %v\n", path, err)
+		}
+	}
+	if err := deps.SystemdReloader(); err != nil {
+		fmt.Fprintf(errOut, "warning: systemd daemon-reload: %v\n", err)
+	}
+	fmt.Fprintln(out, "Uninstalled Veil")
+	return nil
+}
+
+func Plan(opts Options) string {
+	var b strings.Builder
+	b.WriteString("Stop services:\n")
+	for _, svc := range Services() {
+		b.WriteString(fmt.Sprintf("  - %s\n", svc))
+	}
+	b.WriteString("Disable services:\n")
+	for _, svc := range Services() {
+		b.WriteString(fmt.Sprintf("  - %s\n", svc))
+	}
+	opts = opts.WithDefaults()
+	b.WriteString("Remove files:\n")
+	for _, path := range []string{opts.EtcDir, opts.VarDir} {
+		b.WriteString(fmt.Sprintf("  - %s\n", path))
+	}
+	b.WriteString("Remove systemd units:\n")
+	for _, path := range SystemdUnitPaths(opts) {
+		b.WriteString(fmt.Sprintf("  - %s\n", path))
+	}
+	b.WriteString("Remove binary:\n")
+	b.WriteString(fmt.Sprintf("  - %s\n", BinaryPath(opts)))
+	return b.String()
+}
+
+func Services() []string {
+	return renderer.ManagedSystemdUnitNames()
+}
+
+func (opts Options) WithDefaults() Options {
+	if opts.EtcDir == "" {
+		opts.EtcDir = "/etc/veil"
+	}
+	if opts.VarDir == "" {
+		opts.VarDir = "/var/lib/veil"
+	}
+	if opts.SystemdDir == "" {
+		opts.SystemdDir = "/etc/systemd/system"
+	}
+	if opts.InstallDir == "" {
+		opts.InstallDir = "/usr/local/bin"
+	}
+	return opts
+}
+
+func Paths(opts Options) []string {
+	opts = opts.WithDefaults()
+	paths := []string{opts.EtcDir, opts.VarDir}
+	paths = append(paths, SystemdUnitPaths(opts)...)
+	paths = append(paths, BinaryPath(opts))
+	return paths
+}
+
+func SystemdUnitPaths(opts Options) []string {
+	opts = opts.WithDefaults()
+	paths := make([]string, 0, len(renderer.ManagedSystemdUnitNames()))
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		paths = append(paths, filepath.Join(opts.SystemdDir, name))
+	}
+	return paths
+}
+
+func BinaryPath(opts Options) string {
+	opts = opts.WithDefaults()
+	return filepath.Join(opts.InstallDir, "veil")
+}

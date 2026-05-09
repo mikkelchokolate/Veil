@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/spf13/cobra"
+	uninstallflow "github.com/veil-panel/veil/internal/cliflow/uninstall"
 )
 
 var uninstallServiceStopper = stopAndDisableService
@@ -40,27 +40,7 @@ func newUninstallCommand() *cobra.Command {
 }
 
 func uninstallPlan(opts uninstallWorkflowOptions) string {
-	var b strings.Builder
-	b.WriteString("Stop services:\n")
-	for _, svc := range uninstallServices() {
-		b.WriteString(fmt.Sprintf("  - %s\n", svc))
-	}
-	b.WriteString("Disable services:\n")
-	for _, svc := range uninstallServices() {
-		b.WriteString(fmt.Sprintf("  - %s\n", svc))
-	}
-	opts = opts.withDefaults()
-	b.WriteString("Remove files:\n")
-	for _, path := range []string{opts.EtcDir, opts.VarDir} {
-		b.WriteString(fmt.Sprintf("  - %s\n", path))
-	}
-	b.WriteString("Remove systemd units:\n")
-	for _, path := range uninstallSystemdUnitPaths(opts) {
-		b.WriteString(fmt.Sprintf("  - %s\n", path))
-	}
-	b.WriteString("Remove binary:\n")
-	b.WriteString(fmt.Sprintf("  - %s\n", uninstallBinaryPath(opts)))
-	return b.String()
+	return uninstallflow.Plan(toUninstallFlowOptions(opts))
 }
 
 func stopAndDisableService(service string) error {

@@ -1,11 +1,9 @@
 package cli
 
 import (
-	"fmt"
 	"io"
-	"path/filepath"
 
-	"github.com/veil-panel/veil/internal/renderer"
+	uninstallflow "github.com/veil-panel/veil/internal/cliflow/uninstall"
 )
 
 type uninstallWorkflowOptions struct {
@@ -38,71 +36,37 @@ func NewUninstallWorkflow(opts uninstallWorkflowOptions, out io.Writer, errOut i
 }
 
 func (w UninstallWorkflow) Run() error {
-	opts := w.opts.withDefaults()
-	plan := uninstallPlan(opts)
-	fmt.Fprintln(w.out, "Veil uninstall plan")
-	fmt.Fprintln(w.out, plan)
-	if opts.DryRun {
-		return nil
-	}
-	if !opts.Yes {
-		return fmt.Errorf("uninstall requires --yes; rerun with --dry-run to preview")
-	}
-	for _, svc := range uninstallServices() {
-		if err := w.serviceStopper(svc); err != nil {
-			fmt.Fprintf(w.errOut, "warning: service %s: %v\n", svc, err)
-		}
-	}
-	for _, path := range uninstallPaths(opts) {
-		if err := w.fileRemover(path); err != nil {
-			fmt.Fprintf(w.errOut, "warning: remove %s: %v\n", path, err)
-		}
-	}
-	if err := w.systemdReloader(); err != nil {
-		fmt.Fprintf(w.errOut, "warning: systemd daemon-reload: %v\n", err)
-	}
-	fmt.Fprintln(w.out, "Uninstalled Veil")
-	return nil
+	return uninstallflow.Run(toUninstallFlowOptions(w.opts), w.out, w.errOut, uninstallflow.Dependencies{
+		ServiceStopper:  w.serviceStopper,
+		FileRemover:     w.fileRemover,
+		SystemdReloader: w.systemdReloader,
+	})
 }
 
 func uninstallServices() []string {
-	return renderer.ManagedSystemdUnitNames()
+	return uninstallflow.Services()
 }
 
 func (opts uninstallWorkflowOptions) withDefaults() uninstallWorkflowOptions {
-	if opts.EtcDir == "" {
-		opts.EtcDir = "/etc/veil"
-	}
-	if opts.VarDir == "" {
-		opts.VarDir = "/var/lib/veil"
-	}
-	if opts.SystemdDir == "" {
-		opts.SystemdDir = defaultSystemdDir
-	}
-	if opts.InstallDir == "" {
-		opts.InstallDir = "/usr/local/bin"
-	}
-	return opts
+	return fromUninstallFlowOptions(toUninstallFlowOptions(opts).WithDefaults())
 }
 
 func uninstallPaths(opts uninstallWorkflowOptions) []string {
-	opts = opts.withDefaults()
-	paths := []string{opts.EtcDir, opts.VarDir}
-	paths = append(paths, uninstallSystemdUnitPaths(opts)...)
-	paths = append(paths, uninstallBinaryPath(opts))
-	return paths
+	return uninstallflow.Paths(toUninstallFlowOptions(opts))
 }
 
 func uninstallSystemdUnitPaths(opts uninstallWorkflowOptions) []string {
-	opts = opts.withDefaults()
-	paths := make([]string, 0, len(renderer.ManagedSystemdUnitNames()))
-	for _, name := range renderer.ManagedSystemdUnitNames() {
-		paths = append(paths, filepath.Join(opts.SystemdDir, name))
-	}
-	return paths
+	return uninstallflow.SystemdUnitPaths(toUninstallFlowOptions(opts))
 }
 
 func uninstallBinaryPath(opts uninstallWorkflowOptions) string {
-	opts = opts.withDefaults()
-	return filepath.Join(opts.InstallDir, "veil")
+	return uninstallflow.BinaryPath(toUninstallFlowOptions(opts))
+}
+
+func toUninstallFlowOptions(opts uninstallWorkflowOptions) uninstallflow.Options {
+	return uninstallflow.Options{DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, InstallDir: opts.InstallDir}
+}
+
+func fromUninstallFlowOptions(opts uninstallflow.Options) uninstallWorkflowOptions {
+	return uninstallWorkflowOptions{DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, InstallDir: opts.InstallDir}
 }
