@@ -1,0 +1,64 @@
+package panel
+
+const panelInboundActionsPlaceholder = "__VEIL_PANEL_INBOUND_ACTIONS__"
+
+func panelInboundActionsJS() string {
+	return panelInboundProtocolTransportRulesJS() + `    async function loadInboundsIntoOutput() {
+      await loadJSON('/api/inbounds', 'inbounds-output');
+    }
+
+    function randomPassword() {
+      const bytes = new Uint8Array(9);
+      crypto.getRandomValues(bytes);
+      return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function genInboundPassword() {
+      document.getElementById('inbound-password').value = randomPassword();
+    }
+
+    async function saveInbound(event) {
+      event.preventDefault();
+      const name = document.getElementById('inbound-name').value.trim();
+      if (!name) {
+        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        return;
+      }
+      const payload = {
+        name: name,
+        protocol: document.getElementById('inbound-protocol').value,
+        transport: document.getElementById('inbound-transport').value,
+        port: numberOrZero('inbound-port'),
+        enabled: document.getElementById('inbound-enabled').checked
+      };
+      const profilesRaw = document.getElementById('inbound-profiles').value.trim();
+      if (profilesRaw) {
+        try {
+          payload.profiles = JSON.parse(profilesRaw);
+        } catch (err) {
+          document.getElementById('inbounds-output').textContent = 'Client profiles must be valid JSON: ' + String(err);
+          return;
+        }
+      }
+      const pw = document.getElementById('inbound-password').value.trim();
+      const inbounds = await loadJSON('/api/inbounds', 'inbounds-output');
+      const exists = Array.isArray(inbounds) && inbounds.some((inbound) => inbound.name === name);
+      if (pw) {
+        payload.password = pw;
+      }
+      await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
+        method: exists ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    async function deleteInbound() {
+      const name = document.getElementById('inbound-name').value.trim();
+      if (!name) {
+        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        return;
+      }
+      await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+    }`
+}
