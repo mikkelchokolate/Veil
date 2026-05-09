@@ -72,8 +72,12 @@ _Avoid_: ad-hoc config path, output filename
 The staged-to-live flow that validates, promotes, reloads services, checks health, and rolls back when needed.
 _Avoid_: deploy, publish
 
+**Management state**:
+The Settings, Inbounds, routing, WARP state, and apply history snapshot that the Panel validates and persists.
+_Avoid_: config blob, raw state JSON
+
 **State store**:
-The persistence module for management state, including encryption and decryption of secrets at rest.
+The persistence module for Management state, including encryption and decryption of secrets at rest.
 _Avoid_: database, config file wrapper
 
 **Credential disclosure**:
@@ -93,7 +97,7 @@ _Avoid_: logging, masking
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings.
 - A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
-- The **State store** persists Settings, Inbounds, routing, WARP state, and apply history.
+- The **State store** persists **Management state**.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a removed Settings JSON field, not a current Settings **Interface** field; protocol choices belong to Panel **Inbounds** and unknown `stack` input is rejected at strict JSON **Interfaces**.
 

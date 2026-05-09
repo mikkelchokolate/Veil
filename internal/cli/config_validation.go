@@ -1,12 +1,6 @@
 package cli
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-
-	"github.com/veil-panel/veil/internal/api"
-)
+import "github.com/veil-panel/veil/internal/api"
 
 type ConfigValidation struct{}
 
@@ -18,114 +12,9 @@ type ConfigValidationResult struct {
 func NewConfigValidation() ConfigValidation { return ConfigValidation{} }
 
 func (ConfigValidation) ValidateBytes(body []byte) (ConfigValidationResult, error) {
-	var snapshot configStateSnapshot
-	if err := json.Unmarshal(body, &snapshot); err != nil {
-		return ConfigValidationResult{}, fmt.Errorf("invalid JSON: %w", err)
+	result, err := api.NewManagementStateValidation().ValidateBytes(body)
+	if err != nil {
+		return ConfigValidationResult{}, err
 	}
-	errs := NewConfigValidation().ValidateSnapshot(snapshot)
-	return ConfigValidationResult{Valid: len(errs) == 0, Errors: errs}, nil
-}
-
-func (ConfigValidation) ValidateSnapshot(snapshot configStateSnapshot) []string {
-	var errs []string
-	var settings api.Settings
-	settingsOK := false
-	if len(snapshot.Settings) > 0 {
-		if err := decodeConfigSettings(snapshot.Settings, &settings); err != nil {
-			errs = append(errs, fmt.Sprintf("settings: invalid JSON: %v", err))
-		} else {
-			settingsOK = true
-			if settings.PanelListen == "" {
-				errs = append(errs, "settings.panelListen is required")
-			}
-			if settings.Mode == "" {
-				errs = append(errs, "settings.mode is required")
-			}
-		}
-	} else {
-		errs = append(errs, "settings is missing")
-	}
-	var inbounds []api.Inbound
-	inboundsOK := true
-	if len(snapshot.Inbounds) > 0 {
-		if err := json.Unmarshal(snapshot.Inbounds, &inbounds); err != nil {
-			inboundsOK = false
-			errs = append(errs, fmt.Sprintf("inbounds: invalid JSON: %v", err))
-		} else {
-			seenPorts := map[string]bool{}
-			for i, inbound := range inbounds {
-				if inbound.Name == "" {
-					errs = append(errs, fmt.Sprintf("inbounds[%d].name is required", i))
-				}
-				if inbound.Protocol == "" {
-					errs = append(errs, fmt.Sprintf("inbounds[%d].protocol is required", i))
-				}
-				if inbound.Transport == "" {
-					errs = append(errs, fmt.Sprintf("inbounds[%d].transport is required", i))
-				}
-				if inbound.Port <= 0 || inbound.Port > 65535 {
-					errs = append(errs, fmt.Sprintf("inbounds[%d].port must be 1-65535, got: %d", i, inbound.Port))
-				}
-				key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
-				if seenPorts[key] {
-					errs = append(errs, fmt.Sprintf("inbounds[%d]: duplicate transport/port %s", i, key))
-				}
-				seenPorts[key] = true
-			}
-		}
-	}
-	var rules []api.RoutingRule
-	rulesOK := true
-	if len(snapshot.RoutingRules) > 0 {
-		if err := json.Unmarshal(snapshot.RoutingRules, &rules); err != nil {
-			rulesOK = false
-			errs = append(errs, fmt.Sprintf("routingRules: invalid JSON: %v", err))
-		} else {
-			for i, rule := range rules {
-				if rule.Name == "" {
-					errs = append(errs, fmt.Sprintf("routingRules[%d].name is required", i))
-				}
-				if rule.Match == "" {
-					errs = append(errs, fmt.Sprintf("routingRules[%d].match is required", i))
-				}
-				if rule.Outbound == "" {
-					errs = append(errs, fmt.Sprintf("routingRules[%d].outbound is required", i))
-				}
-			}
-		}
-	}
-	var warp api.WarpConfig
-	warpOK := true
-	if len(snapshot.Warp) > 0 {
-		if err := json.Unmarshal(snapshot.Warp, &warp); err != nil {
-			warpOK = false
-			errs = append(errs, fmt.Sprintf("warp: invalid JSON: %v", err))
-		}
-	}
-	if settingsOK && inboundsOK && rulesOK && warpOK {
-		plan := api.BuildApplyPlan(api.ApplyPlanInput{Settings: settings, Inbounds: inbounds, Rules: rules, Warp: warp, RenderSettingsAvailable: true})
-		errs = appendUniqueConfigValidationErrors(errs, plan.Errors...)
-	}
-	return errs
-}
-
-func appendUniqueConfigValidationErrors(errs []string, more ...string) []string {
-	seen := map[string]bool{}
-	for _, err := range errs {
-		seen[err] = true
-	}
-	for _, err := range more {
-		if seen[err] {
-			continue
-		}
-		errs = append(errs, err)
-		seen[err] = true
-	}
-	return errs
-}
-
-func decodeConfigSettings(body []byte, settings *api.Settings) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(settings)
+	return ConfigValidationResult{Valid: result.Valid, Errors: result.Errors}, nil
 }

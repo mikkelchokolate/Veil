@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -62,18 +61,4 @@ func resolveConfigPath(flagValue string) string {
 		return path
 	}
 	return "/var/lib/veil/state.json"
-}
-
-// validateStateSnapshot performs structural validation of a management state snapshot.
-// This is a best-effort offline check — it does not validate rendered configs.
-type configStateSnapshot struct {
-	Settings      json.RawMessage `json:"settings"`
-	Inbounds      json.RawMessage `json:"inbounds"`
-	RoutingRules  json.RawMessage `json:"routingRules"`
-	RoutingPreset string          `json:"routingPreset,omitempty"`
-	Warp          json.RawMessage `json:"warp"`
-}
-
-func validateStateSnapshot(snapshot configStateSnapshot) []string {
-	return NewConfigValidation().ValidateSnapshot(snapshot)
 }

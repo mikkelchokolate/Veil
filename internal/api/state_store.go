@@ -1,8 +1,6 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -30,10 +28,8 @@ func (s StateStore) Load() (managementSnapshot, bool, error) {
 		}
 		return managementSnapshot{}, false, err
 	}
-	var snapshot managementSnapshot
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&snapshot); err != nil {
+	snapshot, err := NewManagementStateCodec().Decode(body)
+	if err != nil {
 		return managementSnapshot{}, false, err
 	}
 	s.decryptSnapshot(&snapshot)
@@ -60,11 +56,7 @@ func (s StateStore) Save(snapshot managementSnapshot) error {
 
 func (s StateStore) Marshal(snapshot managementSnapshot) ([]byte, error) {
 	s.encryptSnapshot(&snapshot)
-	body, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(body, '\n'), nil
+	return NewManagementStateCodec().Encode(snapshot)
 }
 
 func (s StateStore) encryptSnapshot(snapshot *managementSnapshot) {
