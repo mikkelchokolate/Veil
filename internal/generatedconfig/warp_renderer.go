@@ -1,6 +1,9 @@
-package api
+package generatedconfig
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"github.com/veil-panel/veil/internal/renderer"
+	veilwarp "github.com/veil-panel/veil/internal/warp"
+)
 
 type GeneratedWarpConfigRenderer struct {
 	paths GeneratedConfigPaths
@@ -14,7 +17,7 @@ func (r GeneratedWarpConfigRenderer) Render(warp WarpConfig, rules []RoutingRule
 	if !warp.Enabled {
 		return GeneratedConfigArtifact{}, false, nil
 	}
-	setWarpDefaults(&warp)
+	veilwarp.SetDefaults(&warp)
 	body, err := renderer.RenderWarpSingBox(renderer.WarpSingBoxConfig{
 		Endpoint:      warp.Endpoint,
 		PrivateKey:    warp.PrivateKey,
