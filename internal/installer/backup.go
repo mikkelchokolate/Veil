@@ -1,47 +1,60 @@
 package installer
 
-import "os"
+import (
+	"os"
+	"time"
 
-// BackupDir represents a backup directory path.
-type BackupDir struct {
-	Path string
+	backup "github.com/veil-panel/veil/internal/backup"
+)
+
+type BackupDir = backup.Dir
+type BackupEntry = backup.Entry
+type backupManifest = backup.Manifest
+type BackupLifecycle = backup.Lifecycle
+type BackupIDPolicy = backup.IDPolicy
+type BackupManifestStore = backup.ManifestStore
+type BackupSafetyPolicy = backup.SafetyPolicy
+type BackupFileCopier = backup.FileCopier
+
+func NewBackupLifecycle(dir string) BackupLifecycle { return backup.NewLifecycle(dir) }
+
+func NewBackupIDPolicy(now func() time.Time, exists func(path string) (bool, error)) BackupIDPolicy {
+	return backup.NewIDPolicy(now, exists)
 }
 
-// BackupEntry describes a single backed-up file.
-type BackupEntry struct {
-	OriginalPath string `json:"original_path"`
-	BackupPath   string `json:"backup_path"`
-	Size         int64  `json:"size"`
-}
+func NewBackupManifestStore(path string) BackupManifestStore { return backup.NewManifestStore(path) }
 
-// backupManifest stores metadata about which files were backed up and their original paths.
-type backupManifest struct {
-	Entries []BackupEntry `json:"entries"`
-}
+func NewBackupSafetyPolicy() BackupSafetyPolicy { return backup.NewSafetyPolicy() }
 
-// BackupBeforeApply copies existing files to a timestamped backup directory.
-// Files that don't exist are silently skipped. Returns the backup ID.
+func NewBackupFileCopier() BackupFileCopier { return backup.NewFileCopier() }
+
 func BackupBeforeApply(paths []string, backupDir string) (backupID string, err error) {
-	return NewBackupLifecycle(backupDir).BackupExisting(paths)
+	return backup.BackupBeforeApply(paths, backupDir)
 }
 
-// RestoreFromBackup restores files from a backup directory to their original locations.
-// Returns the list of restored original paths.
 func RestoreFromBackup(backupDir string, backupID string) ([]string, error) {
-	return NewBackupLifecycle(backupDir).Restore(backupID)
+	return backup.RestoreFromBackup(backupDir, backupID)
 }
 
-// CleanupBackup removes the backup directory after successful apply.
 func CleanupBackup(backupDir string, backupID string) error {
-	return NewBackupLifecycle(backupDir).Cleanup(backupID)
+	return backup.CleanupBackup(backupDir, backupID)
 }
 
-// ListBackups returns available backup IDs sorted by time (lexicographic sort matches chronological).
 func ListBackups(backupDir string) ([]string, error) {
-	return NewBackupLifecycle(backupDir).List()
+	return backup.ListBackups(backupDir)
 }
 
-// copyFile copies a file from src to dst preserving the given mode.
 func copyFile(src, dst string, mode os.FileMode) error {
-	return NewBackupFileCopier().Copy(src, dst, mode)
+	return backup.NewFileCopier().Copy(src, dst, mode)
+}
+
+func backupPathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

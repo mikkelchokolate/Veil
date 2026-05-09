@@ -1,4 +1,4 @@
-package installer
+package backup
 
 import (
 	"encoding/json"
@@ -6,15 +6,21 @@ import (
 	"os"
 )
 
-type BackupManifestStore struct {
+type ManifestStore struct {
 	Path string
 }
 
-func NewBackupManifestStore(path string) BackupManifestStore {
-	return BackupManifestStore{Path: path}
+type BackupManifestStore = ManifestStore
+
+func NewManifestStore(path string) ManifestStore {
+	return ManifestStore{Path: path}
 }
 
-func (s BackupManifestStore) Save(manifest backupManifest) error {
+func NewBackupManifestStore(path string) BackupManifestStore {
+	return NewManifestStore(path)
+}
+
+func (s ManifestStore) Save(manifest Manifest) error {
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
@@ -25,17 +31,17 @@ func (s BackupManifestStore) Save(manifest backupManifest) error {
 	return nil
 }
 
-func (s BackupManifestStore) Load() (backupManifest, error) {
+func (s ManifestStore) Load() (Manifest, error) {
 	manifestData, err := os.ReadFile(s.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return backupManifest{}, fmt.Errorf("manifest not found: %w", os.ErrNotExist)
+			return Manifest{}, fmt.Errorf("manifest not found: %w", os.ErrNotExist)
 		}
-		return backupManifest{}, fmt.Errorf("read manifest: %w", err)
+		return Manifest{}, fmt.Errorf("read manifest: %w", err)
 	}
-	var manifest backupManifest
+	var manifest Manifest
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		return backupManifest{}, fmt.Errorf("unmarshal manifest: %w", err)
+		return Manifest{}, fmt.Errorf("unmarshal manifest: %w", err)
 	}
 	return manifest, nil
 }

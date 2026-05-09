@@ -1,4 +1,4 @@
-package installer
+package backup
 
 import (
 	"fmt"
@@ -6,12 +6,16 @@ import (
 	"os"
 )
 
-type BackupFileCopier struct{}
+type FileCopier struct{}
 
-func NewBackupFileCopier() BackupFileCopier { return BackupFileCopier{} }
+type BackupFileCopier = FileCopier
+
+func NewFileCopier() FileCopier { return FileCopier{} }
+
+func NewBackupFileCopier() BackupFileCopier { return NewFileCopier() }
 
 // Copy copies a file from src to dst preserving the given mode and syncing the destination.
-func (BackupFileCopier) Copy(src, dst string, mode os.FileMode) error {
+func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)

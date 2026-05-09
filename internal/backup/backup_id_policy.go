@@ -1,4 +1,4 @@
-package installer
+package backup
 
 import (
 	"fmt"
@@ -6,16 +6,22 @@ import (
 	"time"
 )
 
-type BackupIDPolicy struct {
+type IDPolicy struct {
 	now    func() time.Time
 	exists func(path string) (bool, error)
 }
 
-func NewBackupIDPolicy(now func() time.Time, exists func(path string) (bool, error)) BackupIDPolicy {
-	return BackupIDPolicy{now: now, exists: exists}
+type BackupIDPolicy = IDPolicy
+
+func NewIDPolicy(now func() time.Time, exists func(path string) (bool, error)) IDPolicy {
+	return IDPolicy{now: now, exists: exists}
 }
 
-func (p BackupIDPolicy) Next(dir string) (string, error) {
+func NewBackupIDPolicy(now func() time.Time, exists func(path string) (bool, error)) BackupIDPolicy {
+	return NewIDPolicy(now, exists)
+}
+
+func (p IDPolicy) Next(dir string) (string, error) {
 	baseID := p.now().UTC().Format("20060102_150405")
 	backupID := baseID
 	for suffix := 1; ; suffix++ {

@@ -1,4 +1,4 @@
-package installer
+package backup
 
 import (
 	"fmt"
@@ -8,15 +8,21 @@ import (
 	"time"
 )
 
-type BackupLifecycle struct {
+type Lifecycle struct {
 	Dir string
 }
 
-func NewBackupLifecycle(dir string) BackupLifecycle {
-	return BackupLifecycle{Dir: dir}
+type BackupLifecycle = Lifecycle
+
+func NewLifecycle(dir string) Lifecycle {
+	return Lifecycle{Dir: dir}
 }
 
-func (l BackupLifecycle) BackupExisting(paths []string) (string, error) {
+func NewBackupLifecycle(dir string) BackupLifecycle {
+	return NewLifecycle(dir)
+}
+
+func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 	backupID, err := NewBackupIDPolicy(time.Now, backupPathExists).Next(l.Dir)
 	if err != nil {
 		return "", err
@@ -63,7 +69,7 @@ func (l BackupLifecycle) BackupExisting(paths []string) (string, error) {
 	return backupID, nil
 }
 
-func (l BackupLifecycle) Restore(backupID string) ([]string, error) {
+func (l Lifecycle) Restore(backupID string) ([]string, error) {
 	backupPath := filepath.Join(l.Dir, backupID)
 	info, err := os.Stat(backupPath)
 	if err != nil {
@@ -117,7 +123,7 @@ func (l BackupLifecycle) Restore(backupID string) ([]string, error) {
 	return restored, nil
 }
 
-func (l BackupLifecycle) Cleanup(backupID string) error {
+func (l Lifecycle) Cleanup(backupID string) error {
 	backupPath := filepath.Join(l.Dir, backupID)
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		return fmt.Errorf("backup %s does not exist in %s", backupID, l.Dir)
@@ -125,7 +131,7 @@ func (l BackupLifecycle) Cleanup(backupID string) error {
 	return os.RemoveAll(backupPath)
 }
 
-func (l BackupLifecycle) List() ([]string, error) {
+func (l Lifecycle) List() ([]string, error) {
 	entries, err := os.ReadDir(l.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
