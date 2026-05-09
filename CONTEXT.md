@@ -80,6 +80,10 @@ _Avoid_: shell snippet, exec call
 The user-facing snapshot and package for runtime facts shown by the Panel: system resources, Panel TLS, network counters, listening ports, managed processes, disk usage, and local read errors. HTTP routes are Adapters over this Module.
 _Avoid_: procfs dump, stats endpoint bundle
 
+**Diagnostic tool**:
+A Panel-invoked runtime utility such as DNS lookup, ping, or speedtest, implemented outside HTTP routes with route handlers acting as Adapters.
+_Avoid_: utility endpoint, shell tool glue
+
 **Client profile**:
 A named user credential attached to an Inbound.
 _Avoid_: profile, account, inbound
@@ -160,7 +164,8 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
-- **Runtime observation** concentrates procfs and diagnostic parser output into the Panel-facing observation model outside HTTP Adapters.
+- **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.
+- **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.
 - **Management state model** provides the import-safe value types used by Panel, CLI, protocols, generated configs, and persistence Modules.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
 - The **State store** persists **Management state** outside HTTP Adapters.

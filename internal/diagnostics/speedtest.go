@@ -1,4 +1,4 @@
-package api
+package diagnostics
 
 import (
 	"context"
@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-var errSpeedtestUnavailable = errors.New("speedtest unavailable")
+var ErrSpeedtestUnavailable = errors.New("speedtest unavailable")
+
+var errSpeedtestUnavailable = ErrSpeedtestUnavailable
 
 type SpeedtestResult struct {
 	Server       string  `json:"server,omitempty"`
@@ -21,9 +23,9 @@ type SpeedtestResult struct {
 	Raw          string  `json:"raw,omitempty"`
 }
 
-var speedtestRunner = runSpeedtest
+var speedtestRunner = RunSpeedtest
 
-func runSpeedtest(r *http.Request) (SpeedtestResult, error) {
+func RunSpeedtest(r *http.Request) (SpeedtestResult, error) {
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 

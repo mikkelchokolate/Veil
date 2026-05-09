@@ -1,4 +1,4 @@
-package api
+package diagnostics
 
 type DNSLookupResult struct {
 	Hostname  string

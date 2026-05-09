@@ -1,4 +1,4 @@
-package api
+package diagnostics
 
 import (
 	"fmt"
@@ -33,6 +33,10 @@ func (PingOutputParser) Parse(output string, result *PingResult) {
 	}
 }
 
-func parsePingOutput(output string, result *PingResult) {
+func ParsePingOutput(output string, result *PingResult) {
 	NewPingOutputParser().Parse(output, result)
+}
+
+func parsePingOutput(output string, result *PingResult) {
+	ParsePingOutput(output, result)
 }
