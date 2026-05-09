@@ -28,6 +28,10 @@ _Avoid_: serve helpers, server command setup
 The CLI flow that previews and removes Veil managed files, Managed systemd units, state, and binary material. The uninstall CLI workflow package owns the plan and ordering; Cobra only adapts flags and side-effect functions.
 _Avoid_: remove command script, cleanup helper
 
+**Veil rollback**:
+The CLI flow that lists backups, restores backup files, cleans up backup records, and records rollback audit events. The rollback CLI workflow package owns backup lifecycle orchestration; Cobra only adapts flags.
+_Avoid_: backup command helper, restore subcommand glue
+
 **Panel**:
 The browser UI and HTTP management surface used to operate Veil after install.
 _Avoid_: dashboard, admin site
@@ -200,6 +204,7 @@ _Avoid_: logging, masking
 - **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - **Veil uninstall** owns preview, service stop/disable ordering, file removal ordering, and daemon reload outside the Cobra command Adapter.
+- **Veil rollback** owns backup listing, restore, cleanup, and rollback audit event ordering outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
 - **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access package owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
