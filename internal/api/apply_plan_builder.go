@@ -1,10 +1,6 @@
 package api
 
-import (
-	"fmt"
-
-	"github.com/veil-panel/veil/internal/renderer"
-)
+import "fmt"
 
 type ApplyPlanInput struct {
 	Settings                Settings
@@ -23,19 +19,18 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		Configs: []string{},
 		Actions: []string{"validate management state"},
 	}
-	if input.Settings.PanelAccess == "caddy" {
-		if input.Settings.Domain == "" || input.Settings.Email == "" {
-			plan.Errors = append(plan.Errors, "--domain and --email are required for caddy Panel access")
-		} else if _, _, err := NewPanelCaddyAccess().Route(input.Settings); err != nil {
-			plan.Errors = append(plan.Errors, err.Error())
-		} else {
-			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
-			plan.Actions = appendUnique(plan.Actions, "reload "+renderer.UnitNaive)
-			plan.Runtimes = appendUnique(plan.Runtimes, renderer.UnitNaive)
-		}
+	panelAccessIntent := NewPanelAccess(input.Settings).ApplyIntent(input.Inbounds)
+	for _, config := range panelAccessIntent.Configs {
+		plan.Configs = appendUnique(plan.Configs, config)
 	}
+	for _, action := range panelAccessIntent.Actions {
+		plan.Actions = appendUnique(plan.Actions, action)
+	}
+	for _, runtime := range panelAccessIntent.Runtimes {
+		plan.Runtimes = appendUnique(plan.Runtimes, runtime)
+	}
+	plan.Errors = append(plan.Errors, panelAccessIntent.Errors...)
 	seen := map[string]bool{}
-	protocols := NewInboundProtocolCatalog()
 	capabilities := NewApplyProtocolCapabilityCatalog()
 	for _, inbound := range input.Inbounds {
 		if !inbound.Enabled {
@@ -46,9 +41,6 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		}
 		if inbound.Port <= 0 {
 			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
-		}
-		if input.Settings.PanelAccess == "caddy" && inbound.Transport == "tcp" && inbound.Port == 443 && !protocols.RequiresCaddy(inbound.Protocol) {
-			plan.Errors = append(plan.Errors, "panel caddy access uses 443/tcp; choose another TCP port for inbound "+inbound.Name)
 		}
 		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
 		if seen[key] {

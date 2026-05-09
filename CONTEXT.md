@@ -25,7 +25,7 @@ The final HTTPS URL a user opens to reach the Panel, composed from domain and We
 _Avoid_: dashboard link, admin URL
 
 **Panel access**:
-The way a user reaches the Panel: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy.
+The way a user reaches the Panel and the Module that turns that choice into validation, Panel Caddy access material, Panel TLS material, and apply intent: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy.
 _Avoid_: dashboard exposure, admin binding
 
 **Panel Caddy access**:
@@ -128,7 +128,7 @@ _Avoid_: logging, masking
 
 - A **Veil install** always produces **Panel access** and credentials; it does not select or install protocol stacks.
 - A **Panel URL** contains exactly one **Web base path**.
-- **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**.
+- **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access Module owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
 - **Panel managed material** is derived from **Panel access** and is used by both Veil install and repair.
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.

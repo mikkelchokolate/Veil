@@ -1,10 +1,6 @@
 package installer
 
-import (
-	"fmt"
-
-	"github.com/veil-panel/veil/internal/renderer"
-)
+import "fmt"
 
 type SecretFunc func(label string) string
 
@@ -47,55 +43,29 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
-	panelCaddy := input.PanelAccess == "caddy"
-	if panelCaddy {
-		if err := ValidateDomain(input.Domain); err != nil {
-			return RURecommendedProfile{}, err
-		}
-		if err := ValidateEmail(input.Email); err != nil {
-			return RURecommendedProfile{}, err
-		}
-	}
 	defaults := NewRURecommendedDefaults()
 	username := defaults.Username
 	masqueradeURL := defaults.MasqueradeURL
 	fallbackRoot := defaults.FallbackRoot
-	webBasePath := ""
-	if panelCaddy {
-		webBasePath = generateWebBasePath()
+	panelAccess, err := NewPanelAccessProfile(PanelAccessProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
+	if err != nil {
+		return RURecommendedProfile{}, err
 	}
 	panelAuthToken := input.Secret("panel")
-	panelListen := recommendedPanelListen(input.PanelAccess, input.PanelPort)
-	panelTLS := PanelTLSMaterial{}
-	var err error
-	panelTLSEnabled := !panelCaddy
-	if panelTLSEnabled {
-		panelTLS, err = NewPanelTLS().Generate(input.Domain)
-		if err != nil {
-			return RURecommendedProfile{}, err
-		}
-	}
-	caddyfile := ""
-	if panelCaddy {
-		caddyfile, err = renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: webBasePath})
-		if err != nil {
-			return RURecommendedProfile{}, err
-		}
-	}
 
 	return RURecommendedProfile{
 		Domain:            input.Domain,
 		Email:             input.Email,
 		Username:          username,
 		PanelAuthToken:    panelAuthToken,
-		PanelListen:       panelListen,
+		PanelListen:       panelAccess.PanelListen,
 		PanelAccess:       input.PanelAccess,
-		PanelTLSEnabled:   panelTLSEnabled,
-		PanelTLSCertPEM:   panelTLS.CertPEM,
-		PanelTLSKeyPEM:    panelTLS.KeyPEM,
-		WebBasePath:       webBasePath,
-		InstallPanelCaddy: panelCaddy,
-		Caddyfile:         caddyfile,
+		PanelTLSEnabled:   panelAccess.PanelTLSEnabled,
+		PanelTLSCertPEM:   panelAccess.PanelTLSCertPEM,
+		PanelTLSKeyPEM:    panelAccess.PanelTLSKeyPEM,
+		WebBasePath:       panelAccess.WebBasePath,
+		InstallPanelCaddy: panelAccess.InstallPanelCaddy,
+		Caddyfile:         panelAccess.Caddyfile,
 		MasqueradeURL:     masqueradeURL,
 		FallbackRoot:      fallbackRoot,
 	}, nil
