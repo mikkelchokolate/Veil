@@ -1,21 +1,13 @@
 package api
 
-type GeneratedRenderSettingsPolicy struct{}
+import "github.com/veil-panel/veil/internal/generatedconfig"
+
+type GeneratedRenderSettingsPolicy = generatedconfig.GeneratedRenderSettingsPolicy
 
 func NewGeneratedRenderSettingsPolicy() GeneratedRenderSettingsPolicy {
-	return GeneratedRenderSettingsPolicy{}
-}
-
-func (GeneratedRenderSettingsPolicy) HasRenderSettings(settings Settings) bool {
-	return settings.Domain != "" ||
-		settings.Email != "" ||
-		settings.NaiveUsername != "" ||
-		settings.NaivePassword != "" ||
-		settings.Hysteria2Password != "" ||
-		settings.MasqueradeURL != "" ||
-		settings.FallbackRoot != ""
+	return generatedconfig.NewGeneratedRenderSettingsPolicy()
 }
 
 func hasRenderSettings(settings Settings) bool {
-	return NewGeneratedRenderSettingsPolicy().HasRenderSettings(settings)
+	return generatedconfig.NewGeneratedRenderSettingsPolicy().HasRenderSettings(settings)
 }

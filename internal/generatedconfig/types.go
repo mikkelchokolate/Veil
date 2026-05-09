@@ -5,6 +5,7 @@ import (
 	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
+type Settings = model.Settings
 type RoutingSource = model.RoutingSource
 type RoutingSourceFile = model.RoutingSourceFile
 type ConfigValidationResult = model.ConfigValidationResult
