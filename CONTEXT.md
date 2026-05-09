@@ -53,8 +53,12 @@ The protocol capability source for Inbound protocol IDs, display names, allowed 
 _Avoid_: protocol switch list, UI enum, scattered protocol constants
 
 **Protocol runtime provisioning**:
-The plan that maps enabled Inbounds and WARP state to required managed systemd units such as `veil-mieru.service`. It is driven by Panel state, not Veil install stack selection.
+The plan that maps enabled Inbounds and WARP state to required Managed systemd units such as `veil-mieru.service`. It is driven by Panel state, not Veil install stack selection.
 _Avoid_: install-time protocol stack, shared runtime bundle
+
+**Managed systemd unit**:
+A systemd unit rendered, installed, repaired, or removed by Veil for the Panel, protocol runtimes, or WARP.
+_Avoid_: service component, daemon file
 
 **Client profile**:
 A named user credential attached to an Inbound.
@@ -105,7 +109,7 @@ _Avoid_: logging, masking
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol.
 - A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
-- **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state.
+- **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - The **State store** persists **Management state**.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
 - `stack` is a removed Settings JSON field, not a current Settings **Interface** field; protocol choices belong to Panel **Inbounds** and unknown `stack` input is rejected at strict JSON **Interfaces**.

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 type uninstallWorkflowOptions struct {
@@ -64,7 +66,7 @@ func (w UninstallWorkflow) Run() error {
 }
 
 func uninstallServices() []string {
-	return []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-warp.service", "veil-mieru.service"}
+	return renderer.ManagedSystemdUnitNames()
 }
 
 func (opts uninstallWorkflowOptions) withDefaults() uninstallWorkflowOptions {
@@ -93,13 +95,11 @@ func uninstallPaths(opts uninstallWorkflowOptions) []string {
 
 func uninstallSystemdUnitPaths(opts uninstallWorkflowOptions) []string {
 	opts = opts.withDefaults()
-	return []string{
-		filepath.Join(opts.SystemdDir, "veil.service"),
-		filepath.Join(opts.SystemdDir, "veil-naive.service"),
-		filepath.Join(opts.SystemdDir, "veil-hysteria2.service"),
-		filepath.Join(opts.SystemdDir, "veil-warp.service"),
-		filepath.Join(opts.SystemdDir, "veil-mieru.service"),
+	paths := make([]string, 0, len(renderer.ManagedSystemdUnitNames()))
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		paths = append(paths, filepath.Join(opts.SystemdDir, name))
 	}
+	return paths
 }
 
 func uninstallBinaryPath(opts uninstallWorkflowOptions) string {

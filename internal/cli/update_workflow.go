@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 var updateReleaseFetcher = fetchLatestRelease
@@ -81,7 +82,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 	fmt.Fprintf(out, "Updated to %s.\n", release.TagName)
 	if !opts.Restart && !opts.Staged {
 		fmt.Fprintln(out, "Restart the veil service to apply the update:")
-		fmt.Fprintln(out, "  systemctl restart veil.service")
+		fmt.Fprintln(out, "  systemctl restart "+renderer.UnitVeil)
 		return nil
 	}
 

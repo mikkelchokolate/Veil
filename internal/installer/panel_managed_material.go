@@ -110,9 +110,9 @@ func (m PanelManagedMaterial) files() ([]managedFile, error) {
 	}
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
-		unitNames := []string{"veil.service"}
+		unitNames := []string{renderer.UnitVeil}
 		if input.InstallPanelCaddy {
-			unitNames = append(unitNames, "veil-naive.service")
+			unitNames = append(unitNames, renderer.UnitNaive)
 		}
 		for _, name := range unitNames {
 			files = append(files, managedFile{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})

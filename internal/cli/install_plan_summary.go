@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/veil-panel/veil/internal/installer"
+import (
+	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort int) (string, error) {
 	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
@@ -27,9 +30,9 @@ func installPlanCaddyBinary(profile installer.RURecommendedProfile) string {
 }
 
 func systemdUnitsForProfile(profile installer.RURecommendedProfile) []string {
-	units := []string{"veil.service"}
+	units := []string{renderer.UnitVeil}
 	if profile.InstallPanelCaddy {
-		units = append(units, "veil-naive.service")
+		units = append(units, renderer.UnitNaive)
 	}
 	return units
 }

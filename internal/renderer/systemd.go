@@ -2,6 +2,18 @@ package renderer
 
 import "path/filepath"
 
+const (
+	UnitVeil      = "veil.service"
+	UnitNaive     = "veil-naive.service"
+	UnitHysteria2 = "veil-hysteria2.service"
+	UnitWarp      = "veil-warp.service"
+	UnitMieru     = "veil-mieru.service"
+)
+
+func ManagedSystemdUnitNames() []string {
+	return []string{UnitVeil, UnitNaive, UnitHysteria2, UnitWarp, UnitMieru}
+}
+
 type SystemdConfig struct {
 	VeilBinary     string
 	CaddyBinary    string
@@ -35,7 +47,7 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	warpConfig := filepath.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
 	mieruConfig := filepath.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
 	return map[string]string{
-		"veil.service": `[Unit]
+		UnitVeil: `[Unit]
 Description=Veil panel
 After=network-online.target
 Wants=network-online.target
@@ -50,7 +62,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 `,
-		"veil-naive.service": `[Unit]
+		UnitNaive: `[Unit]
 Description=Veil managed NaiveProxy/Caddy
 After=network-online.target
 Wants=network-online.target
@@ -65,7 +77,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 `,
-		"veil-hysteria2.service": `[Unit]
+		UnitHysteria2: `[Unit]
 Description=Veil managed Hysteria2
 After=network-online.target
 Wants=network-online.target
@@ -79,7 +91,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 `,
-		"veil-warp.service": `[Unit]
+		UnitWarp: `[Unit]
 Description=Veil managed WARP/sing-box outbound
 After=network-online.target
 Wants=network-online.target
@@ -94,7 +106,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 `,
-		"veil-mieru.service": `[Unit]
+		UnitMieru: `[Unit]
 Description=Veil managed Mieru
 After=network-online.target
 Wants=network-online.target

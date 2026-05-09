@@ -1,5 +1,7 @@
 package api
 
+import "github.com/veil-panel/veil/internal/renderer"
+
 type ProtocolCapability struct {
 	Protocol               string
 	DisplayName            string
@@ -37,10 +39,10 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			FirewallService:        "Veil NaiveProxy",
 			RequiresCaddy:          true,
 			GeneratedConfig:        GeneratedConfigArtifactSpec{Subpath: generatedCaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
-			ApplyAction:            "reload veil-naive.service",
+			ApplyAction:            "reload " + renderer.UnitNaive,
 			RuntimeName:            "naive",
 			RuntimeActionName:      "caddy",
-			RuntimeUnit:            "veil-naive.service",
+			RuntimeUnit:            renderer.UnitNaive,
 			RuntimeTransport:       "tcp",
 			RuntimeOrder:           10,
 			PromotedVerb:           "reload",
@@ -76,10 +78,10 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			Transports:             []string{"udp"},
 			FirewallService:        "Veil Hysteria2",
 			GeneratedConfig:        GeneratedConfigArtifactSpec{Subpath: generatedHysteria2ConfigSubpath, ValidationName: "hysteria2", ValidationCommand: func(path string) []string { return []string{"hysteria", "server", "--config", path, "--check"} }},
-			ApplyAction:            "reload veil-hysteria2.service",
+			ApplyAction:            "reload " + renderer.UnitHysteria2,
 			RuntimeName:            "hysteria2",
 			RuntimeActionName:      "hysteria2",
-			RuntimeUnit:            "veil-hysteria2.service",
+			RuntimeUnit:            renderer.UnitHysteria2,
 			RuntimeTransport:       "udp",
 			RuntimeOrder:           20,
 			PromotedVerb:           "reload",
@@ -114,10 +116,10 @@ func NewProtocolCapabilityCatalog() ProtocolCapabilityCatalog {
 			Transports:            []string{"tcp", "udp"},
 			FirewallService:       "Veil Mieru",
 			GeneratedConfig:       GeneratedConfigArtifactSpec{Subpath: generatedMieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
-			ApplyAction:           "restart veil-mieru.service",
+			ApplyAction:           "restart " + renderer.UnitMieru,
 			RuntimeName:           "mieru",
 			RuntimeActionName:     "mieru",
-			RuntimeUnit:           "veil-mieru.service",
+			RuntimeUnit:           renderer.UnitMieru,
 			RuntimeOrder:          40,
 			PromotedVerb:          "restart",
 			ValidateInboundRender: true,

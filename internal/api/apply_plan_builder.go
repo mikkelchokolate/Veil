@@ -1,6 +1,10 @@
 package api
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 type ApplyPlanInput struct {
 	Settings                Settings
@@ -26,8 +30,8 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			plan.Errors = append(plan.Errors, err.Error())
 		} else {
 			plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/caddy/Caddyfile")
-			plan.Actions = appendUnique(plan.Actions, "reload veil-naive.service")
-			plan.Runtimes = appendUnique(plan.Runtimes, "veil-naive.service")
+			plan.Actions = appendUnique(plan.Actions, "reload "+renderer.UnitNaive)
+			plan.Runtimes = appendUnique(plan.Runtimes, renderer.UnitNaive)
 		}
 	}
 	seen := map[string]bool{}

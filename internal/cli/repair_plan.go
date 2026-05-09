@@ -72,7 +72,7 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: opts.EtcDir, CaddyBinary: resolvedRepairBinaryPath("caddy")})
 	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
 	if snapshot.Settings.PanelAccess == "caddy" {
-		unitNames = appendRepairUnit(unitNames, "veil-naive.service")
+		unitNames = appendRepairUnit(unitNames, renderer.UnitNaive)
 	}
 	for _, unitName := range unitNames {
 		body := units[unitName]

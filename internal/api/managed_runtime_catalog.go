@@ -3,6 +3,8 @@ package api
 import (
 	"path/filepath"
 	"sort"
+
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 type ManagedRuntime struct {
@@ -22,7 +24,7 @@ type ManagedRuntimeCatalog struct {
 }
 
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: "veil.service", ManualRestart: true}}
+	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 	ordered := []struct {
 		Order   int
 		Runtime ManagedRuntime
@@ -52,7 +54,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	ordered = append(ordered, struct {
 		Order   int
 		Runtime ManagedRuntime
-	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: "veil-warp.service", PromotedSubpath: generatedWarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
+	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: renderer.UnitWarp, PromotedSubpath: generatedWarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Order < ordered[j].Order })
 	for _, item := range ordered {
 		runtimes = append(runtimes, item.Runtime)

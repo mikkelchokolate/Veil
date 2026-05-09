@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/renderer"
 )
 
 var updateHealthChecker = waitForHealthy
@@ -14,8 +15,8 @@ func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath strin
 	addr := resolveStatusListen(opts.Listen)
 	token, _ := resolveServeAuthToken(opts.AuthToken)
 
-	fmt.Fprintln(out, "Restarting veil.service...")
-	if err := runSystemctlRestart("veil.service"); err != nil {
+	fmt.Fprintln(out, "Restarting "+renderer.UnitVeil+"...")
+	if err := runSystemctlRestart(renderer.UnitVeil); err != nil {
 		if opts.Staged {
 			fmt.Fprintf(out, "Restart failed, rolling back to previous binary...\n")
 			if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
@@ -35,7 +36,7 @@ func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath strin
 				return fmt.Errorf("health check failed and rollback also failed: health: %w; rollback: %v", err, rollbackErr)
 			}
 			// Restart again after rollback to get the old binary running
-			if restartErr := runSystemctlRestart("veil.service"); restartErr != nil {
+			if restartErr := runSystemctlRestart(renderer.UnitVeil); restartErr != nil {
 				fmt.Fprintf(out, "Warning: rollback binary installed but restart failed: %v\n", restartErr)
 			}
 			fmt.Fprintln(out, "Rolled back to previous binary.")
