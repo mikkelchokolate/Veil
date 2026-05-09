@@ -1,17 +1,13 @@
 package cli
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-
 	"github.com/spf13/cobra"
 	uninstallflow "github.com/veil-panel/veil/internal/cliflow/uninstall"
 )
 
-var uninstallServiceStopper = stopAndDisableService
-var uninstallFileRemover = removePath
-var uninstallSystemdReloader = reloadSystemdDaemon
+var uninstallServiceStopper = uninstallflow.StopAndDisableService
+var uninstallFileRemover = uninstallflow.RemovePath
+var uninstallSystemdReloader = uninstallflow.ReloadSystemdDaemon
 
 func newUninstallCommand() *cobra.Command {
 	var dryRun bool
@@ -41,25 +37,4 @@ func newUninstallCommand() *cobra.Command {
 
 func uninstallPlan(opts uninstallWorkflowOptions) string {
 	return uninstallflow.Plan(toUninstallFlowOptions(opts))
-}
-
-func stopAndDisableService(service string) error {
-	if err := exec.Command("systemctl", "stop", service).Run(); err != nil {
-		return fmt.Errorf("stop: %w", err)
-	}
-	if err := exec.Command("systemctl", "disable", service).Run(); err != nil {
-		return fmt.Errorf("disable: %w", err)
-	}
-	return nil
-}
-
-func removePath(path string) error {
-	return os.RemoveAll(path)
-}
-
-func reloadSystemdDaemon() error {
-	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
-		return fmt.Errorf("daemon-reload: %w", err)
-	}
-	return nil
 }

@@ -37,7 +37,7 @@ The CLI readiness flow that checks required and optional host commands and rende
 _Avoid_: doctor print helper, dependency checklist glue
 
 **Veil uninstall**:
-The CLI flow that previews and removes Veil managed files, Managed systemd units, state, and binary material. The uninstall CLI workflow package owns the plan and ordering; Cobra only adapts flags and side-effect functions.
+The CLI flow that previews and removes Veil managed files, Managed systemd units, state, and binary material. The uninstall CLI workflow package owns the plan, ordering, and concrete side-effect actions; Cobra only adapts flags and writers.
 _Avoid_: remove command script, cleanup helper
 
 **Veil rollback**:
@@ -226,7 +226,7 @@ _Avoid_: logging, masking
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - **Veil status** owns Panel status fetch, generated local Panel TLS trust, and human/JSON rendering outside the Cobra command Adapter.
 - **Veil doctor** owns command readiness checks and human/JSON readiness rendering outside the Cobra command Adapter.
-- **Veil uninstall** owns preview, service stop/disable ordering, file removal ordering, and daemon reload outside the Cobra command Adapter.
+- **Veil uninstall** owns preview, service stop/disable actions, file removal actions, and daemon reload outside the Cobra command Adapter.
 - **Veil rollback** owns backup listing, restore, cleanup, and rollback audit event ordering outside the Cobra command Adapter.
 - **Veil repair** owns profile selection, repair plan preview, dry-run, and apply ordering outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
