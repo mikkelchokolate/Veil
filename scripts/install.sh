@@ -69,6 +69,13 @@ require_value() {
   fi
 }
 
+reject_legacy_stack_selection() {
+  if [[ "$1" != "panel" ]]; then
+    echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
@@ -77,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
     --port) require_value "$1" "${2:-}"; shift 2 ;;
-    --stack) require_value "$1" "${2:-}"; if [[ "$2" != "panel" ]]; then echo "Veil install only installs Panel; configure protocols as Panel Inbounds." >&2; exit 1; fi; shift 2 ;;
+    --stack) require_value "$1" "${2:-}"; reject_legacy_stack_selection "$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;

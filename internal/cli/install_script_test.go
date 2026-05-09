@@ -105,6 +105,11 @@ func TestCurlInstallScriptRejectsLegacyStackBeforeSideEffects(t *testing.T) {
 	if strings.Count(script, msg) != 1 {
 		t.Fatalf("install.sh should centralize legacy stack rejection once before side effects, count=%d:\n%s", strings.Count(script, msg), script)
 	}
+	for _, want := range []string{"reject_legacy_stack_selection()", `--stack) require_value "$1" "${2:-}"; reject_legacy_stack_selection "$2"; shift 2 ;;`} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh should localize legacy stack compatibility behind %q:\n%s", want, script)
+		}
+	}
 	msgIndex := strings.Index(script, msg)
 	for _, sideEffect := range []string{"# Idempotency:", "Downloading Veil", "curl -fsSL \"${download_url}\"", "install -m 0755"} {
 		if idx := strings.Index(script, sideEffect); idx >= 0 && msgIndex > idx {
