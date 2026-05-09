@@ -116,6 +116,10 @@ _Avoid_: dry-run result, deployment intent
 The Settings, Inbounds, routing, WARP state, and apply history snapshot that the Panel validates and persists.
 _Avoid_: config blob, raw state JSON
 
+**Management state model**:
+The shared value types for Settings, Inbounds, routing, WARP, Client links, Apply workflow responses, and snapshots that other Modules use without importing HTTP Adapters.
+_Avoid_: dto pile, shared structs
+
 **Management state mutation**:
 The mutation path that validates, updates, redacts, and saves Settings, Inbounds, routing rules, and WARP inside Management state.
 _Avoid_: route handler update, save wrapper
@@ -152,6 +156,7 @@ _Avoid_: logging, masking
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
 - **Runtime observation** concentrates procfs and diagnostic parser output into the Panel-facing observation model.
+- **Management state model** provides the import-safe value types used by Panel, CLI, protocols, generated configs, and persistence Modules.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
 - The **State store** persists **Management state**.
 - **Credential policy** governs generated and preserved Inbound and Client profile credentials.
