@@ -108,6 +108,10 @@ _Avoid_: dry-run result, deployment intent
 The Settings, Inbounds, routing, WARP state, and apply history snapshot that the Panel validates and persists.
 _Avoid_: config blob, raw state JSON
 
+**Management state mutation**:
+The mutation path that validates, updates, redacts, and saves Settings, Inbounds, routing rules, and WARP inside Management state.
+_Avoid_: route handler update, save wrapper
+
 **State store**:
 The persistence module for Management state, including encryption and decryption of secrets at rest.
 _Avoid_: database, config file wrapper
@@ -138,6 +142,7 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - **Runtime commands** are executed through an Adapter so validation, reload, restart, and health-check behavior share one command seam.
+- **Management state mutation** changes **Management state** before the **State store** persists it.
 - The **State store** persists **Management state**.
 - **Credential policy** governs generated and preserved Inbound and Client profile credentials.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.

@@ -9,83 +9,29 @@ var (
 )
 
 type RoutingRuleManagement struct {
-	rules *[]RoutingRule
-	save  func() error
+	mutation ManagementStateMutation
 }
 
 func NewRoutingRuleManagement(rules *[]RoutingRule, save func() error) RoutingRuleManagement {
-	if save == nil {
-		save = func() error { return nil }
-	}
-	return RoutingRuleManagement{rules: rules, save: save}
+	return RoutingRuleManagement{mutation: NewManagementStateMutation(ManagementStateMutationTarget{Rules: rules}, save)}
 }
 
 func (m RoutingRuleManagement) List() []RoutingRule {
-	if m.rules == nil {
-		return nil
-	}
-	return append([]RoutingRule(nil), (*m.rules)...)
+	return m.mutation.RoutingRules()
 }
 
 func (m RoutingRuleManagement) Get(name string) (RoutingRule, bool) {
-	idx := m.index(name)
-	if idx < 0 || m.rules == nil {
-		return RoutingRule{}, false
-	}
-	return (*m.rules)[idx], true
+	return m.mutation.RoutingRule(name)
 }
 
 func (m RoutingRuleManagement) Create(rule RoutingRule) (RoutingRule, error) {
-	if err := NewRoutingRuleValidation().ValidateCreate(rule); err != nil {
-		return RoutingRule{}, err
-	}
-	if m.index(rule.Name) >= 0 {
-		return RoutingRule{}, ErrRoutingRuleDuplicateName
-	}
-	next := append(m.List(), rule)
-	if err := m.replaceAndSave(next); err != nil {
-		return RoutingRule{}, err
-	}
-	return rule, nil
+	return m.mutation.CreateRoutingRule(rule)
 }
 
 func (m RoutingRuleManagement) Update(name string, update RoutingRule) (RoutingRule, error) {
-	idx := m.index(name)
-	if idx < 0 {
-		return RoutingRule{}, ErrRoutingRuleNotFound
-	}
-	if err := NewRoutingRuleValidation().ValidateUpdate(update); err != nil {
-		return RoutingRule{}, err
-	}
-	update.Name = name
-	next := m.List()
-	next[idx] = update
-	if err := m.replaceAndSave(next); err != nil {
-		return RoutingRule{}, err
-	}
-	return update, nil
+	return m.mutation.UpdateRoutingRule(name, update)
 }
 
 func (m RoutingRuleManagement) Delete(name string) error {
-	idx := m.index(name)
-	if idx < 0 {
-		return ErrRoutingRuleNotFound
-	}
-	next := m.List()
-	next = append(next[:idx], next[idx+1:]...)
-	return m.replaceAndSave(next)
-}
-
-func (m RoutingRuleManagement) index(name string) int {
-	if m.rules == nil {
-		return -1
-	}
-	return NewRoutingRuleIndex(*m.rules).Index(name)
-}
-
-func (m RoutingRuleManagement) replaceAndSave(next []RoutingRule) error {
-	if m.rules != nil {
-		*m.rules = next
-	}
-	return m.save()
+	return m.mutation.DeleteRoutingRule(name)
 }

@@ -5,37 +5,17 @@ import "errors"
 var ErrSettingsInvalid = errors.New("settings invalid")
 
 type SettingsManagement struct {
-	settings *Settings
-	save     func() error
+	mutation ManagementStateMutation
 }
 
 func NewSettingsManagement(settings *Settings, save func() error) SettingsManagement {
-	if save == nil {
-		save = func() error { return nil }
-	}
-	return SettingsManagement{settings: settings, save: save}
+	return SettingsManagement{mutation: NewManagementStateMutation(ManagementStateMutationTarget{Settings: settings}, save)}
 }
 
 func (m SettingsManagement) Get() Settings {
-	if m.settings == nil {
-		return Settings{}
-	}
-	return redactedSettings(*m.settings)
+	return m.mutation.Settings()
 }
 
 func (m SettingsManagement) Update(update Settings) (Settings, error) {
-	current := Settings{}
-	if m.settings != nil {
-		current = *m.settings
-	}
-	if err := normalizeAndValidateSettings(&update, current); err != nil {
-		return Settings{}, err
-	}
-	if m.settings != nil {
-		*m.settings = update
-	}
-	if err := m.save(); err != nil {
-		return Settings{}, err
-	}
-	return redactedSettings(update), nil
+	return m.mutation.UpdateSettings(update)
 }

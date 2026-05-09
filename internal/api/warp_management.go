@@ -1,40 +1,19 @@
 package api
 
 type WarpManagement struct {
-	warp *WarpConfig
-	save func() error
+	mutation ManagementStateMutation
 }
 
 func NewWarpManagement(warp *WarpConfig, save func() error) WarpManagement {
-	if save == nil {
-		save = func() error { return nil }
-	}
-	return WarpManagement{warp: warp, save: save}
+	return WarpManagement{mutation: NewManagementStateMutation(ManagementStateMutationTarget{Warp: warp}, save)}
 }
 
 func (m WarpManagement) Get() WarpConfig {
-	if m.warp == nil {
-		return WarpConfig{}
-	}
-	return redactedWarp(*m.warp)
+	return m.mutation.Warp()
 }
 
 func (m WarpManagement) Update(update WarpConfig) (WarpConfig, error) {
-	current := WarpConfig{}
-	if m.warp != nil {
-		current = *m.warp
-	}
-	disclosure := NewCredentialDisclosure()
-	update.LicenseKey = disclosure.PreserveRedacted(update.LicenseKey, current.LicenseKey)
-	update.PrivateKey = disclosure.PreserveRedacted(update.PrivateKey, current.PrivateKey)
-	setWarpDefaults(&update)
-	if m.warp != nil {
-		*m.warp = update
-	}
-	if err := m.save(); err != nil {
-		return WarpConfig{}, err
-	}
-	return redactedWarp(update), nil
+	return m.mutation.UpdateWarp(update)
 }
 
 func redactedWarp(warp WarpConfig) WarpConfig {

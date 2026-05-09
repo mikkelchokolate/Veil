@@ -10,18 +10,22 @@ func (s *managementState) withTransaction(fn func(*managementTransaction) error)
 	return fn(&managementTransaction{state: s})
 }
 
+func (tx *managementTransaction) Mutation() ManagementStateMutation {
+	return NewManagementStateMutationFromState(tx.state)
+}
+
 func (tx *managementTransaction) Settings() SettingsManagement {
-	return NewSettingsManagement(&tx.state.settings, tx.state.saveLocked)
+	return SettingsManagement{mutation: tx.Mutation()}
 }
 
 func (tx *managementTransaction) Inbounds() InboundManagement {
-	return NewInboundManagement(&tx.state.inbounds, tx.state.saveLocked)
+	return InboundManagement{mutation: tx.Mutation()}
 }
 
 func (tx *managementTransaction) RoutingRules() RoutingRuleManagement {
-	return NewRoutingRuleManagement(&tx.state.rules, tx.state.saveLocked)
+	return RoutingRuleManagement{mutation: tx.Mutation()}
 }
 
 func (tx *managementTransaction) Warp() WarpManagement {
-	return NewWarpManagement(&tx.state.warp, tx.state.saveLocked)
+	return WarpManagement{mutation: tx.Mutation()}
 }

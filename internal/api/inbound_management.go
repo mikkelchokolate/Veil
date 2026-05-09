@@ -1,67 +1,29 @@
 package api
 
 type InboundManagement struct {
-	inbounds *[]Inbound
-	save     func() error
+	mutation ManagementStateMutation
 }
 
 func NewInboundManagement(inbounds *[]Inbound, save func() error) InboundManagement {
-	if save == nil {
-		save = func() error { return nil }
-	}
-	return InboundManagement{inbounds: inbounds, save: save}
+	return InboundManagement{mutation: NewManagementStateMutation(ManagementStateMutationTarget{Inbounds: inbounds}, save)}
 }
 
 func (m InboundManagement) List() []Inbound {
-	if m.inbounds == nil {
-		return nil
-	}
-	return NewInboundCatalog(*m.inbounds).List()
+	return m.mutation.Inbounds()
 }
 
 func (m InboundManagement) Get(name string) (Inbound, bool) {
-	if m.inbounds == nil {
-		return Inbound{}, false
-	}
-	return NewInboundCatalog(*m.inbounds).Get(name)
+	return m.mutation.Inbound(name)
 }
 
 func (m InboundManagement) Create(inbound Inbound) (Inbound, error) {
-	catalog := NewInboundCatalog(m.List())
-	created, next, err := catalog.Create(inbound)
-	if err != nil {
-		return Inbound{}, err
-	}
-	if err := m.replaceAndSave(next.List()); err != nil {
-		return Inbound{}, err
-	}
-	return created, nil
+	return m.mutation.CreateInbound(inbound)
 }
 
 func (m InboundManagement) Update(name string, update Inbound) (Inbound, error) {
-	catalog := NewInboundCatalog(m.List())
-	updated, next, err := catalog.Update(name, update)
-	if err != nil {
-		return Inbound{}, err
-	}
-	if err := m.replaceAndSave(next.List()); err != nil {
-		return Inbound{}, err
-	}
-	return updated, nil
+	return m.mutation.UpdateInbound(name, update)
 }
 
 func (m InboundManagement) Delete(name string) error {
-	catalog := NewInboundCatalog(m.List())
-	next, err := catalog.Delete(name)
-	if err != nil {
-		return err
-	}
-	return m.replaceAndSave(next.List())
-}
-
-func (m InboundManagement) replaceAndSave(next []Inbound) error {
-	if m.inbounds != nil {
-		*m.inbounds = next
-	}
-	return m.save()
+	return m.mutation.DeleteInbound(name)
 }
