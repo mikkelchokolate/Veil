@@ -17,7 +17,7 @@ The firewall rule plan, firewall status probe, and Panel-facing firewall rule re
 _Avoid_: ufw helpers, port list
 
 **Veil update**:
-The CLI flow that fetches a GitHub release, verifies checksums, extracts the Veil binary, swaps it atomically, and can roll back during staged restart checks.
+The CLI flow that fetches a GitHub release, verifies checksums, extracts the Veil binary, swaps it atomically, restarts the Managed systemd unit, and can roll back during staged restart checks.
 _Avoid_: updater helpers, download command
 
 **Veil version**:
@@ -221,7 +221,7 @@ _Avoid_: logging, masking
 - A **Veil install** always produces **Panel access** and credentials; its orchestration Module owns prompt, requirement, preview, prerequisite, confirmation, and apply order; it does not select or install protocol stacks.
 - **Host environment** owns platform, domain/email, public IP, and DNS checks outside the installer orchestration Module.
 - **Firewall material** owns firewall rule planning, firewall status probing, and Panel-facing firewall rule response shaping outside HTTP Adapters.
-- **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
+- **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, systemd restart, and rollback material outside the Cobra command Adapter.
 - **Veil version** owns latest-release fetching, version comparison, and update guidance outside the Cobra command Adapter.
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - **Veil status** owns Panel status fetch, generated local Panel TLS trust, and human/JSON rendering outside the Cobra command Adapter.

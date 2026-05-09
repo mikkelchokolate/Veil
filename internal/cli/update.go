@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"time"
 
 	"github.com/spf13/cobra"
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 const (
@@ -63,20 +63,7 @@ rollback to the previous binary if the health check fails.`,
 }
 
 // runSystemctlRestart runs systemctl restart for the given unit.
-var runSystemctlRestart = func(unit string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return execCommand(ctx, "systemctl", "restart", unit)
-}
-
-var execCommand = func(ctx context.Context, name string, args ...string) error {
-	cmd := execCmd(ctx, name, args...)
-	return cmd.Run()
-}
-
-var execCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, name, args...)
-}
+var runSystemctlRestart = updateflow.RunSystemctlRestart
 
 // waitForHealthy polls the /healthz endpoint until it returns 200 or times out.
 func waitForHealthy(addr string, token string, timeout time.Duration) error {
