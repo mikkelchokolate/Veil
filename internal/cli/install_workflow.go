@@ -32,7 +32,22 @@ type ruRecommendedInstallOptions struct {
 	CaddyBinary  string
 }
 
+type RURecommendedInstallWorkflow struct {
+	cmd  *cobra.Command
+	opts ruRecommendedInstallOptions
+}
+
+func NewRURecommendedInstallWorkflow(cmd *cobra.Command, opts ruRecommendedInstallOptions) RURecommendedInstallWorkflow {
+	return RURecommendedInstallWorkflow{cmd: cmd, opts: opts}
+}
+
 func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
+	return NewRURecommendedInstallWorkflow(cmd, opts).Run()
+}
+
+func (w RURecommendedInstallWorkflow) Run() error {
+	cmd := w.cmd
+	opts := w.opts
 	if opts.Profile != "ru-recommended" {
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
