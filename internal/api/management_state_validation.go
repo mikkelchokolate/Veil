@@ -79,7 +79,7 @@ func (ManagementStateValidation) ValidateSnapshot(snapshot managementSnapshot, f
 		}
 	}
 	if _, ok := fields["settings"]; ok {
-		plan := BuildApplyPlan(ApplyPlanInput{Settings: snapshot.Settings, Inbounds: snapshot.Inbounds, Rules: snapshot.Rules, Warp: snapshot.Warp, RenderSettingsAvailable: true})
+		plan := NewManagementApplyIntent(ManagementApplyIntentInput{Settings: snapshot.Settings, Inbounds: snapshot.Inbounds, Rules: snapshot.Rules, Warp: snapshot.Warp, SkipRenderCheck: true}).BuildPlan()
 		for _, err := range plan.Errors {
 			errs = appendUnique(errs, err)
 		}

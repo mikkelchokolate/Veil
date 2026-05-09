@@ -88,6 +88,10 @@ _Avoid_: ad-hoc config path, output filename
 The staged-to-live flow that validates, promotes, reloads services, checks health, and rolls back when needed.
 _Avoid_: deploy, publish
 
+**Management apply intent**:
+The plan-level interpretation of Management state before staging: validation errors, Generated config artifacts, Apply workflow actions, and Managed systemd units.
+_Avoid_: dry-run result, deployment intent
+
 **Management state**:
 The Settings, Inbounds, routing, WARP state, and apply history snapshot that the Panel validates and persists.
 _Avoid_: config blob, raw state JSON
@@ -113,6 +117,7 @@ _Avoid_: logging, masking
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.
 - Each **Inbound** can contain zero or more **Client profiles**.
 - Each enabled **Client profile** can produce one **Client link** when its **Inbound** is enabled and allowed by Settings; **Client access aggregation** may combine multiple Transport bindings for a protocol.
+- **Management apply intent** is derived from **Management state** before the **Apply workflow** writes staged files.
 - A **Generated config set** contains **Generated config artifacts** that are promoted by the **Apply workflow**.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
 - The **State store** persists **Management state**.

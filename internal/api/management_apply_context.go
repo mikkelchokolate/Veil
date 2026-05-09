@@ -10,22 +10,14 @@ func NewManagementApplyContext(state *managementState) ManagementApplyContext {
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 	s := ctx.state
-	return BuildApplyPlan(ApplyPlanInput{
-		Settings:                s.settings,
-		Inbounds:                s.inbounds,
-		Rules:                   s.rules,
-		RoutingSource:           s.routingSource,
-		Warp:                    s.warp,
-		RenderSettingsAvailable: s.hasRenderSettingsLocked(),
-		ValidateInboundRender: func(inbound Inbound) error {
-			_, err := s.managementConfigRendererLocked().RenderInbound(inbound)
-			return err
-		},
-		ValidateWarpRender: func() error {
-			_, err := s.renderWarpConfigLocked()
-			return err
-		},
-	})
+	return NewManagementApplyIntent(ManagementApplyIntentInput{
+		ApplyRoot:     s.applyRoot,
+		Settings:      s.settings,
+		Inbounds:      s.inbounds,
+		Rules:         s.rules,
+		RoutingSource: s.routingSource,
+		Warp:          s.warp,
+	}).BuildPlan()
 }
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
