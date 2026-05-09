@@ -1,4 +1,4 @@
-package installer
+package audit
 
 import (
 	"encoding/json"

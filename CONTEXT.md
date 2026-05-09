@@ -60,6 +60,10 @@ _Avoid_: install output bundle, repair file list
 The install, repair, and rollback material safety flow that backs up managed files, stores manifests, restores originals, creates safety backups, lists backups, and cleans old backup directories.
 _Avoid_: copy helper, rollback files
 
+**Audit log**:
+The append-only JSONL record of install, repair, rollback, and backup lifecycle outcomes.
+_Avoid_: logging helper, event dump
+
 **Panel state repair material**:
 The desired repair actions derived from persisted Management state: Panel managed material, Generated config artifacts, and Managed systemd units needed by enabled Inbounds and WARP.
 _Avoid_: repair script steps, state replay
@@ -192,6 +196,7 @@ _Avoid_: logging, masking
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
 - **Panel managed material** is derived from **Panel access** and is used by both Veil install and repair.
 - **Backup lifecycle** protects managed file changes during install, repair, apply, and rollback.
+- **Audit log** records install, repair, rollback, and backup lifecycle outcomes outside CLI Adapters.
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.
 - The **Panel** is assembled from **Panel slices** through the Panel rendering package; HTTP routes are thin Adapters over rendered HTML.
 - The **Panel** manages zero or more **Inbounds**.
