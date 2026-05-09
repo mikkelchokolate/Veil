@@ -1,7 +1,5 @@
 package installer
 
-import "fmt"
-
 type SecretFunc func(label string) string
 
 type RURecommendedInput struct {
@@ -73,14 +71,4 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 
 func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 	return NewRURecommendedInputDefaults().Apply(m.input)
-}
-
-func recommendedPanelListen(panelAccess string, panelPort int) string {
-	if panelPort <= 0 {
-		panelPort = 2096
-	}
-	if panelAccess == "direct" {
-		return fmt.Sprintf("0.0.0.0:%d", panelPort)
-	}
-	return fmt.Sprintf("127.0.0.1:%d", panelPort)
 }
