@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	installflow "github.com/veil-panel/veil/internal/cliflow/install"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
@@ -81,26 +82,10 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		}
 		printDNSCheck(cmd, dnsCheck)
 	}
-	if panelRandom {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (random)\n", panelListenPort)
-	} else if opts.PanelPortSet {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (user selected)\n", panelListenPort)
-	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel port: %d (default)\n", panelListenPort)
-	}
-	panelAccess, err := NewPanelAccessMode(opts.PanelAccess).Resolve(panelListenPort)
-	if err != nil {
+	if _, err := NewPanelAccessMode(opts.PanelAccess).Resolve(panelListenPort); err != nil {
 		return err
 	}
-	if built.WebBasePath != "" && built.WebBasePath != "/" {
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel URL: https://%s%s\n", built.Domain, built.WebBasePath)
-	} else {
-		scheme := "http"
-		if built.PanelTLSEnabled {
-			scheme = "https"
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Panel access: %s://%s/\n", scheme, panelAccess.PanelListen)
-	}
+	fmt.Fprint(cmd.OutOrStdout(), installflow.NewPanelSummary(installflow.PanelSummaryInput{Profile: built, PanelPort: panelListenPort, PanelRandom: panelRandom, PanelPortSet: opts.PanelPortSet}).String())
 	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort)
 	if planErr == nil {
 		fmt.Fprintln(cmd.OutOrStdout(), "Install plan")

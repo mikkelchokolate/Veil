@@ -5,7 +5,7 @@ Veil is a control plane for installing, configuring, and operating NaiveProxy, H
 ## Language
 
 **Veil install**:
-An interactive or scripted setup flow and orchestration Module that installs the Panel, chooses Panel access, generates Panel credentials, optionally renders Panel Caddy access, prints the Panel access summary, validates prerequisites, and applies Panel managed material. Protocol runtimes are configured later as Panel Inbounds.
+An interactive or scripted setup flow and orchestration Module that installs the Panel, chooses Panel access, generates Panel credentials, optionally renders Panel Caddy access, prints the Panel access summary through a CLI workflow package, validates prerequisites, and applies Panel managed material. Protocol runtimes are configured later as Panel Inbounds.
 _Avoid_: bootstrap, setup wizard, protocol stack installer
 
 **Panel**:
