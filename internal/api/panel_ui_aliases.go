@@ -2,6 +2,8 @@ package api
 
 import panelui "github.com/veil-panel/veil/internal/panel"
 
+const panelApplyCardPlaceholder = panelui.ApplyCardPlaceholder
+const panelApplyActionsPlaceholder = panelui.ApplyActionsPlaceholder
 const panelClientLinksCardPlaceholder = panelui.ClientLinksCardPlaceholder
 const panelClientProfileControlsPlaceholder = panelui.ClientProfileControlsPlaceholder
 const panelClientProfileActionsPlaceholder = panelui.ClientProfileActionsPlaceholder
@@ -20,6 +22,8 @@ const panelSettingsActionsPlaceholder = panelui.SettingsActionsPlaceholder
 const panelUtilityActionsPlaceholder = panelui.UtilityActionsPlaceholder
 const panelWarpActionsPlaceholder = panelui.WarpActionsPlaceholder
 
+func panelApplyCardHTML() string                   { return panelui.ApplyCardHTML() }
+func panelApplyActionsJS() string                  { return panelui.ApplyActionsJS() }
 func panelClientLinksCardHTML() string             { return panelui.ClientLinksCardHTML() }
 func panelClientLinksActionsJS() string            { return panelui.ClientLinksActionsJS() }
 func panelClientProfileControlsHTML() string       { return panelui.ClientProfileControlsHTML() }

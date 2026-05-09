@@ -1,5 +1,7 @@
 package panel
 
+const ApplyCardPlaceholder = panelApplyCardPlaceholder
+const ApplyActionsPlaceholder = panelApplyActionsPlaceholder
 const ClientLinksCardPlaceholder = panelClientLinksCardPlaceholder
 const ClientProfileControlsPlaceholder = panelClientProfileControlsPlaceholder
 const ClientProfileActionsPlaceholder = panelClientProfileActionsPlaceholder
@@ -18,6 +20,8 @@ const SettingsActionsPlaceholder = panelSettingsActionsPlaceholder
 const UtilityActionsPlaceholder = panelUtilityActionsPlaceholder
 const WarpActionsPlaceholder = panelWarpActionsPlaceholder
 
+func ApplyCardHTML() string                   { return panelApplyCardHTML() }
+func ApplyActionsJS() string                  { return panelApplyActionsJS() }
 func ClientLinksCardHTML() string             { return panelClientLinksCardHTML() }
 func ClientLinksActionsJS() string            { return panelClientLinksActionsJS() }
 func ClientProfileControlsHTML() string       { return panelClientProfileControlsHTML() }

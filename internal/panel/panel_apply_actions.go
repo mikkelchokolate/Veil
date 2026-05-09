@@ -1,4 +1,4 @@
-package api
+package panel
 
 const panelApplyActionsPlaceholder = "__VEIL_PANEL_APPLY_ACTIONS__"
 

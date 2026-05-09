@@ -1,4 +1,4 @@
-package api
+package panel
 
 const panelApplyCardPlaceholder = "__VEIL_PANEL_APPLY_CARD__"
 
