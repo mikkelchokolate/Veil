@@ -1,9 +1,8 @@
 package api
 
-type PanelRenderSlot struct {
-	Placeholder string
-	Render      func() string
-}
+import "github.com/veil-panel/veil/internal/panel"
+
+type PanelRenderSlot = panel.RenderSlot
 
 type PanelRenderSlotCatalog struct{}
 

@@ -1,12 +1,8 @@
 package api
 
-import "strings"
+import "github.com/veil-panel/veil/internal/panel"
 
-type PanelEventBinding struct {
-	ElementID string
-	Handler   string
-	Event     string
-}
+type PanelEventBinding = panel.EventBinding
 
 type PanelEventBindingCatalog struct{}
 
@@ -17,15 +13,5 @@ func (PanelEventBindingCatalog) Bindings() []PanelEventBinding {
 }
 
 func panelEventBindingCatalogJS() string {
-	var b strings.Builder
-	for _, binding := range NewPanelEventBindingCatalog().Bindings() {
-		b.WriteString("    document.getElementById('")
-		b.WriteString(binding.ElementID)
-		b.WriteString("').addEventListener('")
-		b.WriteString(binding.Event)
-		b.WriteString("', ")
-		b.WriteString(binding.Handler)
-		b.WriteString(");\n")
-	}
-	return b.String()
+	return panel.RenderEventBindings(NewPanelEventBindingCatalog().Bindings())
 }

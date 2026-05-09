@@ -13,7 +13,7 @@ The browser UI and HTTP management surface used to operate Veil after install.
 _Avoid_: dashboard, admin site
 
 **Panel slice**:
-A cohesive Panel feature area that owns its HTML slots, JavaScript actions, and event bindings together.
+A cohesive Panel feature area that owns its HTML slots, JavaScript actions, and event bindings together. Panel slices render through the Panel rendering Module instead of each HTTP Adapter assembling HTML directly.
 _Avoid_: UI component, widget
 
 **Web base path**:
@@ -144,7 +144,7 @@ _Avoid_: logging, masking
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
 - **Panel managed material** is derived from **Panel access** and is used by both Veil install and repair.
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.
-- The **Panel** is assembled from **Panel slices**.
+- The **Panel** is assembled from **Panel slices** through the Panel rendering Module; HTTP routes are thin Adapters over rendered HTML.
 - The **Panel** manages zero or more **Inbounds**.
 - Each **Inbound** has exactly one **Transport binding**.
 - **Transport bindings** are selected per **Inbound** and are independent of Veil install shared proxy port planning.

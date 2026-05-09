@@ -1,11 +1,7 @@
 package api
 
-import "strings"
+import "github.com/veil-panel/veil/internal/panel"
 
 func renderPanelHTMLBase() string {
-	html := panelHTMLBase
-	for _, slot := range NewPanelRenderSlotCatalog().Slots() {
-		html = strings.ReplaceAll(html, slot.Placeholder, slot.Render())
-	}
-	return html
+	return panel.NewRenderer(NewPanelRenderSlotCatalog().Slots()).BaseHTML()
 }
