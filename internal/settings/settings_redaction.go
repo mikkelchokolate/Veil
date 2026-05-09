@@ -1,4 +1,4 @@
-package api
+package settings
 
 type SettingsRedaction struct{}
 

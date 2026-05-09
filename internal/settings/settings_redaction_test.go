@@ -1,4 +1,4 @@
-package api
+package settings
 
 import "testing"
 

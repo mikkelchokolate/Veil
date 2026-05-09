@@ -1,4 +1,4 @@
-package api
+package settings
 
 import (
 	"errors"
@@ -30,7 +30,7 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.WebBasePath == "" {
 		settings.WebBasePath = current.WebBasePath
 	} else {
-		settings.WebBasePath = normalizeSettingsWebBasePath(settings.WebBasePath)
+		settings.WebBasePath = NormalizeWebBasePath(settings.WebBasePath)
 	}
 	if settings.PanelAccess == "caddy" && settings.WebBasePath == "" {
 		return errors.New("webBasePath is required for caddy Panel access")
@@ -69,7 +69,7 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	return nil
 }
 
-func normalizeSettingsWebBasePath(path string) string {
+func NormalizeWebBasePath(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" || path == "/" {
 		return ""

@@ -140,6 +140,10 @@ _Avoid_: dry-run result, deployment intent
 The Settings, Inbounds, routing, WARP state, and apply history snapshot that the Panel validates and persists.
 _Avoid_: config blob, raw state JSON
 
+**Settings policy**:
+The package Module that owns Settings validation, Web base path normalization, fallback root safety, and credential redaction/preservation.
+_Avoid_: settings helpers, form cleanup
+
 **Management state model**:
 The shared value types for Settings, Inbounds, routing, WARP, Client links, Apply workflow responses, and snapshots that other Modules use without importing HTTP Adapters.
 _Avoid_: dto pile, shared structs
@@ -189,6 +193,7 @@ _Avoid_: logging, masking
 - **Diagnostic tools** concentrate DNS lookup, ping, and speedtest behavior outside HTTP Adapters.
 - **Management state model** provides the import-safe value types used by Panel, CLI, protocols, generated configs, and persistence Modules.
 - **Management state mutation** changes **Management state** before the **State store** persists it.
+- **Settings policy** owns Settings validation, normalization, and redaction outside HTTP Adapters.
 - The **State store** persists and validates **Management state** outside HTTP Adapters.
 - **Credential policy** governs generated and preserved Inbound and Client profile credentials.
 - **Credential disclosure** governs install summaries, previews, client links, and state persistence.
