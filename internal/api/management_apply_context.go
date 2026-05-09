@@ -50,5 +50,5 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 }
 
 func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
-	return NewApplyHistoryStore(ctx.state.applyHistoryPathLocked(), maxApplyHistoryEntries).Append(stage, success, response)
+	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }

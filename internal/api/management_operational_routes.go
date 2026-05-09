@@ -82,12 +82,7 @@ func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Requ
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	history, err := s.loadApplyHistoryLocked()
-	if err != nil {
-		writeError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	history, err = filterApplyHistory(history, r.URL.Query())
+	history, err := s.applyHistoryLocked().Query(r.URL.Query())
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return

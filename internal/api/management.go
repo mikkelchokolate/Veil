@@ -22,8 +22,12 @@ func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
 }
 
+func (s *managementState) applyHistoryLocked() ApplyHistory {
+	return NewApplyHistory(s.applyHistoryPathLocked(), maxApplyHistoryEntries)
+}
+
 func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) {
-	return NewApplyHistoryStore(s.applyHistoryPathLocked(), maxApplyHistoryEntries).Load()
+	return s.applyHistoryLocked().Load()
 }
 
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
