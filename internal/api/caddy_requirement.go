@@ -1,18 +1,15 @@
 package api
 
-type CaddyRequirement struct{}
+import "github.com/veil-panel/veil/internal/panelaccess"
 
-func NewCaddyRequirement() CaddyRequirement { return CaddyRequirement{} }
+type CaddyRequirement struct {
+	inner panelaccess.CaddyRequirement
+}
 
-func (CaddyRequirement) Required(settings Settings, inbounds []Inbound) bool {
-	if settings.PanelAccess == "caddy" {
-		return true
-	}
-	protocols := NewInboundProtocolCatalog()
-	for _, inbound := range inbounds {
-		if inbound.Enabled && protocols.RequiresCaddy(inbound.Protocol) {
-			return true
-		}
-	}
-	return false
+func NewCaddyRequirement() CaddyRequirement {
+	return CaddyRequirement{inner: panelaccess.NewCaddyRequirement(NewInboundProtocolCatalog().RequiresCaddy)}
+}
+
+func (r CaddyRequirement) Required(settings Settings, inbounds []Inbound) bool {
+	return r.inner.Required(settings, inbounds)
 }

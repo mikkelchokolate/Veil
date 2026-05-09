@@ -1,11 +1,10 @@
 package api
 
+import "github.com/veil-panel/veil/internal/panelaccess"
+
 type PanelCaddyAccess struct{}
 
-type PanelCaddyRoute struct {
-	Port        int
-	WebBasePath string
-}
+type PanelCaddyRoute = panelaccess.CaddyRoute
 
 func NewPanelCaddyAccess() PanelCaddyAccess { return PanelCaddyAccess{} }
 

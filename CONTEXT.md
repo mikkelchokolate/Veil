@@ -41,7 +41,7 @@ The final HTTPS URL a user opens to reach the Panel, composed from domain and We
 _Avoid_: dashboard link, admin URL
 
 **Panel access**:
-The way a user reaches the Panel and the Module that turns that choice into validation, Panel Caddy access material, Panel TLS material, and apply intent: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy.
+The way a user reaches the Panel and the package Module that turns that choice into validation, Panel Caddy access material, Panel TLS material, and apply intent: direct HTTP listen address, local-only listen address for SSH tunneling, or HTTPS through Caddy. HTTP and installer code are Adapters over the package rules.
 _Avoid_: dashboard exposure, admin binding
 
 **Panel Caddy access**:
@@ -192,7 +192,7 @@ _Avoid_: logging, masking
 - **Veil update** owns release catalog, asset verification, archive extraction, binary replacement, and rollback material outside the Cobra command Adapter.
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
-- **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access Module owns the decision-to-material rules.
+- **Panel access** may be direct/local without a **Panel URL**, or **Panel Caddy access** with a **Panel URL**; the Panel access package owns the decision-to-material rules.
 - Direct/local **Panel access** uses **Panel TLS** by default; **Panel Caddy access** uses Caddy TLS instead.
 - **Panel managed material** is derived from **Panel access** and is used by both Veil install and repair.
 - **Backup lifecycle** protects managed file changes during install, repair, apply, and rollback.
