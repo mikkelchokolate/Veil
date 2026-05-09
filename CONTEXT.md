@@ -198,7 +198,7 @@ _Avoid_: logging, masking
 - **Backup lifecycle** protects managed file changes during install, repair, apply, and rollback.
 - **Audit log** records install, repair, rollback, and backup lifecycle outcomes outside CLI Adapters.
 - **Panel state repair material** extends persisted **Management state** into repair actions for generated files and runtime units.
-- The **Panel** is assembled from **Panel slices** through the Panel rendering package; HTTP routes are thin Adapters over rendered HTML.
+- The **Panel** is assembled from **Panel slices** and apply workflow command bindings through the Panel rendering package; HTTP routes are thin Adapters over rendered HTML.
 - The **Panel** manages zero or more **Inbounds**.
 - The **Inbound catalog** owns Inbound validation, credential completion, duplicate **Transport binding** checks, and cloning outside HTTP Adapters.
 - Each **Inbound** has exactly one **Transport binding**.
