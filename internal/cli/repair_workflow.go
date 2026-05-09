@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+	repairflow "github.com/veil-panel/veil/internal/cliflow/repair"
+	"github.com/veil-panel/veil/internal/installer"
 )
 
 type repairWorkflowOptions struct {
@@ -19,17 +19,20 @@ type repairWorkflowOptions struct {
 }
 
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
-	if opts.Profile != "ru-recommended" {
-		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
-	}
-	plan, err := buildRepairPlanFromOptions(opts)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Veil repair plan")
-	fmt.Fprintln(cmd.OutOrStdout(), plan.Summary())
-	if opts.DryRun {
-		return nil
-	}
-	return applyRepairPlan(cmd, plan, opts)
+	return repairflow.Run(toRepairFlowOptions(opts), cmd.OutOrStdout(), repairflow.Dependencies{
+		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
+			return buildRepairPlanFromOptions(fromRepairFlowOptions(flowOpts))
+		},
+		ApplyPlan: func(plan installer.RepairPlan, flowOpts repairflow.Options) error {
+			return applyRepairPlan(cmd, plan, fromRepairFlowOptions(flowOpts))
+		},
+	})
+}
+
+func toRepairFlowOptions(opts repairWorkflowOptions) repairflow.Options {
+	return repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog}
+}
+
+func fromRepairFlowOptions(opts repairflow.Options) repairWorkflowOptions {
+	return repairWorkflowOptions{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog}
 }
