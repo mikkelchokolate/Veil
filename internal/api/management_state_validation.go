@@ -29,9 +29,9 @@ func (v ManagementStateValidation) ValidateSnapshot(snapshot managementSnapshot,
 }
 
 func (v ManagementStateValidation) validate(body []byte) (ManagementStateValidationResult, managementSnapshot, map[string]json.RawMessage, error) {
-	snapshot, err := NewManagementStateCodec().Decode(body)
+	snapshot, err := managementstate.NewManagementStateCodec().Decode(body)
 	if err != nil {
-		if syntaxErr := managementStateDecodeError(err); syntaxErr != nil {
+		if syntaxErr := managementstate.DecodeError(err); syntaxErr != nil {
 			return ManagementStateValidationResult{}, managementSnapshot{}, nil, syntaxErr
 		}
 		return ManagementStateValidationResult{Valid: false, Errors: []string{"state: invalid JSON: " + err.Error()}}, managementSnapshot{}, nil, nil
