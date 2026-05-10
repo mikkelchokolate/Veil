@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 type ManagementConfigInput struct {
 	ApplyRoot string
@@ -29,7 +32,7 @@ func (r ManagementConfigRenderer) Render() (map[string]string, error) {
 }
 
 func (r ManagementConfigRenderer) HasRenderSettings() bool {
-	return hasRenderSettings(r.input.Settings)
+	return generatedconfig.NewGeneratedRenderSettingsPolicy().HasRenderSettings(r.input.Settings)
 }
 
 func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error) {
@@ -49,6 +52,6 @@ func (r ManagementConfigRenderer) RenderWarp() (string, error) {
 		SocksListen:   warp.SocksListen,
 		SocksPort:     warp.SocksPort,
 		MTU:           warp.MTU,
-		RoutingRules:  RenderWarpRoutingRules(r.input.Rules),
+		RoutingRules:  generatedconfig.RenderWarpRoutingRules(r.input.Rules),
 	})
 }

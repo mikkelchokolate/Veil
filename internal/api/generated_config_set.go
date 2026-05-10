@@ -21,7 +21,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 			return NewPanelAccess(input.Settings).GeneratedConfig(paths)
 		},
 		Warp: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
-			return NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
+			return generatedconfig.NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
 		},
 	}).Build()
 }

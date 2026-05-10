@@ -28,3 +28,13 @@ func TestGeneratedWarpConfigRendererSkipsDisabledWarp(t *testing.T) {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 }
+
+func TestRenderWarpRoutingRulesUsesEnabledRulesOnly(t *testing.T) {
+	rules := RenderWarpRoutingRules([]RoutingRule{
+		{Match: "geoip:ru", Outbound: "direct", Enabled: true},
+		{Match: "all", Outbound: "warp", Enabled: false},
+	})
+	if len(rules) != 1 || rules[0].Match != "geoip:ru" {
+		t.Fatalf("rules = %+v", rules)
+	}
+}
