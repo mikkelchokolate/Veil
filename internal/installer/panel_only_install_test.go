@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/hostenv"
 )
 
 func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
@@ -13,7 +15,7 @@ func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}

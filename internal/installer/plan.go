@@ -2,11 +2,12 @@ package installer
 
 import (
 	"github.com/veil-panel/veil/internal/firewall"
+	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/service"
 )
 
 type InstallPlanInput struct {
-	Platform     Platform
+	Platform     hostenv.Platform
 	SystemdUnits []string
 	PanelPort    int
 	CaddyBinary  string
@@ -14,7 +15,7 @@ type InstallPlanInput struct {
 
 type InstallPlan struct {
 	Profile         RURecommendedProfile
-	Platform        Platform
+	Platform        hostenv.Platform
 	CaddyBuild      BuildHint
 	SystemdActions  []service.SystemdAction
 	FirewallActions []firewall.Rule
@@ -23,10 +24,10 @@ type InstallPlan struct {
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {
 	input = NewInstallPlanDefaults(nil).Apply(input)
-	if err := ValidateLinuxPlatform(input.Platform); err != nil {
+	if err := hostenv.ValidateLinuxPlatform(input.Platform); err != nil {
 		return InstallPlan{}, err
 	}
-	arch, err := NormalizeArch(input.Platform.Arch)
+	arch, err := hostenv.NormalizeArch(input.Platform.Arch)
 	if err != nil {
 		return InstallPlan{}, err
 	}
@@ -46,7 +47,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	}
 	return InstallPlan{
 		Profile:        profile,
-		Platform:       Platform{OS: input.Platform.OS, Arch: arch},
+		Platform:       hostenv.Platform{OS: input.Platform.OS, Arch: arch},
 		CaddyBuild:     caddyBuild,
 		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
 		FirewallActions: firewall.UFWPlan(firewall.Config{

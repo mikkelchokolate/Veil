@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/hostenv"
 )
 
 func resolveInstallPublicIP(ctx context.Context, value string) (net.IP, error) {
@@ -16,7 +16,7 @@ func resolveInstallPublicIP(ctx context.Context, value string) (net.IP, error) {
 	if value == "auto" {
 		detectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		return installer.DetectPublicIP(detectCtx, installPublicIPClient, installPublicIPEndpoints)
+		return hostenv.DetectPublicIP(detectCtx, installPublicIPClient, installPublicIPEndpoints)
 	}
 	parsed := net.ParseIP(value)
 	if parsed == nil {

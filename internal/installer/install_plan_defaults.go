@@ -1,12 +1,14 @@
 package installer
 
+import "github.com/veil-panel/veil/internal/hostenv"
+
 type InstallPlanDefaults struct {
-	currentPlatform func() Platform
+	currentPlatform func() hostenv.Platform
 }
 
-func NewInstallPlanDefaults(currentPlatform func() Platform) InstallPlanDefaults {
+func NewInstallPlanDefaults(currentPlatform func() hostenv.Platform) InstallPlanDefaults {
 	if currentPlatform == nil {
-		currentPlatform = CurrentPlatform
+		currentPlatform = hostenv.CurrentPlatform
 	}
 	return InstallPlanDefaults{currentPlatform: currentPlatform}
 }

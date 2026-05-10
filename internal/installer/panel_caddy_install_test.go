@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/hostenv"
 )
 
 func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
@@ -38,7 +40,7 @@ func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}

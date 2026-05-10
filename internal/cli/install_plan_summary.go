@@ -1,13 +1,14 @@
 package cli
 
 import (
+	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
 func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort int) (string, error) {
 	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
-		Platform:     installer.CurrentPlatform(),
+		Platform:     hostenv.CurrentPlatform(),
 		SystemdUnits: systemdUnitsForProfile(profile),
 		PanelPort:    panelPort,
 		CaddyBinary:  installPlanCaddyBinary(profile),

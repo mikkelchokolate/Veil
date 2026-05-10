@@ -7,10 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/audit"
+	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
-var installDNSResolver installer.DNSResolver = installer.NetResolver{}
+var installDNSResolver hostenv.DNSResolver = hostenv.NetResolver{}
 var installPublicIPClient *http.Client
 var installPublicIPEndpoints []string
 var installApplyFunc = installer.ApplyRURecommendedProfile

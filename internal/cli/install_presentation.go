@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
@@ -17,7 +18,7 @@ func NewInstallPresentation(out io.Writer) InstallPresentation {
 	return InstallPresentation{out: out}
 }
 
-func (p InstallPresentation) PrintDNSCheck(check installer.DNSCheck) {
+func (p InstallPresentation) PrintDNSCheck(check hostenv.DNSCheck) {
 	fmt.Fprintln(p.out, "DNS check")
 	fmt.Fprintln(p.out, strings.Repeat("-", 9))
 	fmt.Fprintf(p.out, "Domain: %s\n", check.Domain)
@@ -61,7 +62,7 @@ func (InstallPresentation) RedactProfileSecrets(profile installer.RURecommendedP
 	return text
 }
 
-func printDNSCheck(cmd *cobra.Command, check installer.DNSCheck) {
+func printDNSCheck(cmd *cobra.Command, check hostenv.DNSCheck) {
 	NewInstallPresentation(cmd.OutOrStdout()).PrintDNSCheck(check)
 }
 

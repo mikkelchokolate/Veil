@@ -3,6 +3,8 @@ package installer
 import (
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/hostenv"
 )
 
 func TestBuildInstallPlanSummaryIncludesPanelSystemdAndFirewall(t *testing.T) {
@@ -10,7 +12,7 @@ func TestBuildInstallPlanSummaryIncludesPanelSystemdAndFirewall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
 	}
@@ -32,7 +34,7 @@ func TestBuildInstallPlanSummaryIncludesPanelCaddyAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
 	}

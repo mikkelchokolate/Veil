@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	installflow "github.com/veil-panel/veil/internal/cliflow/install"
+	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
@@ -76,7 +77,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	if parsedPublicIP != nil {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
-		dnsCheck, err := installer.CheckDomainDNS(ctx, installDNSResolver, opts.Domain, parsedPublicIP)
+		dnsCheck, err := hostenv.CheckDomainDNS(ctx, installDNSResolver, opts.Domain, parsedPublicIP)
 		if err != nil {
 			return err
 		}
