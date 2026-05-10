@@ -20,10 +20,10 @@ func (c PanelSliceCatalog) Slice(name string) (PanelSlice, bool) {
 	return c.inner.Slice(name)
 }
 
-func (c PanelSliceCatalog) RenderSlots() []PanelRenderSlot {
+func (c PanelSliceCatalog) RenderSlots() []panelui.RenderSlot {
 	return c.inner.RenderSlots()
 }
 
-func (c PanelSliceCatalog) EventBindings() []PanelEventBinding {
+func (c PanelSliceCatalog) EventBindings() []panelui.EventBinding {
 	return c.inner.EventBindings()
 }
