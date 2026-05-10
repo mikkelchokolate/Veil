@@ -205,7 +205,7 @@ The mutation path that validates, updates, redacts, and saves Settings, Inbounds
 _Avoid_: route handler update, save wrapper
 
 **State store**:
-The persistence package for Management state, including strict codec, schema validation, default state, snapshot/default handling, encryption, and decryption of secrets at rest. HTTP and Panel Modules use it through thin Adapters.
+The persistence package for Management state, including strict codec, schema validation, default state, resource name parsing, snapshot/default handling, encryption, and decryption of secrets at rest. HTTP and Panel Modules use it through thin Adapters.
 _Avoid_: database, config file wrapper
 
 **Credential policy**:

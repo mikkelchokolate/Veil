@@ -1,22 +1,9 @@
 package api
 
-import "strings"
+import "github.com/veil-panel/veil/internal/managementstate"
 
-type ManagementResourceName struct {
-	prefix string
-}
+type ManagementResourceName = managementstate.ResourceNameParser
 
 func NewManagementResourceName(prefix string) ManagementResourceName {
-	return ManagementResourceName{prefix: prefix}
-}
-
-func (n ManagementResourceName) Parse(path string) (string, bool) {
-	if !strings.HasPrefix(path, n.prefix) {
-		return "", false
-	}
-	name := strings.TrimPrefix(path, n.prefix)
-	if name == "" || strings.Contains(name, "/") {
-		return "", false
-	}
-	return name, true
+	return managementstate.NewResourceNameParser(prefix)
 }
