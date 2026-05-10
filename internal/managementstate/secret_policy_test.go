@@ -1,22 +1,26 @@
-package api
+package managementstate
 
-import "testing"
+import (
+	"testing"
 
-func TestStateSecretPolicyTransformsAllKnownSecretFields(t *testing.T) {
-	snapshot := managementSnapshot{
-		Settings: Settings{NaivePassword: "naive-secret", Hysteria2Password: "hy2-secret"},
-		Inbounds: []Inbound{{
+	"github.com/veil-panel/veil/internal/model"
+)
+
+func TestSecretPolicyTransformsAllKnownSecretFields(t *testing.T) {
+	snapshot := model.ManagementSnapshot{
+		Settings: model.Settings{NaivePassword: "naive-secret", Hysteria2Password: "hy2-secret"},
+		Inbounds: []model.Inbound{{
 			Name:     "naive",
 			Password: "inbound-secret",
-			Profiles: []ClientProfile{{
+			Profiles: []model.ClientProfile{{
 				Name:     "alice",
 				Password: "profile-secret",
 			}},
 		}},
-		Warp: WarpConfig{LicenseKey: "warp-license", PrivateKey: "warp-private"},
+		Warp: model.WarpConfig{LicenseKey: "warp-license", PrivateKey: "warp-private"},
 	}
 
-	stateSecretPolicy{}.Transform(&snapshot, func(value string) string { return "secret:" + value })
+	SecretPolicy{}.Transform(&snapshot, func(value string) string { return "secret:" + value })
 
 	assertSecretTransformed(t, snapshot.Settings.NaivePassword, "naive-secret")
 	assertSecretTransformed(t, snapshot.Settings.Hysteria2Password, "hy2-secret")
