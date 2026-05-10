@@ -15,7 +15,7 @@ func NewPanelAccess(settings Settings) PanelAccess {
 	return PanelAccess{inner: panelaccess.New(settings, NewInboundProtocolCatalog().RequiresCaddy)}
 }
 
-func (p PanelAccess) CaddyRoute() (PanelCaddyRoute, bool, error) {
+func (p PanelAccess) CaddyRoute() (panelaccess.CaddyRoute, bool, error) {
 	return p.inner.CaddyRoute()
 }
 

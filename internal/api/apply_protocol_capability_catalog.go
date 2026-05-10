@@ -1,5 +1,7 @@
 package api
 
+import "github.com/veil-panel/veil/internal/panelaccess"
+
 type ApplyProtocolCapability struct {
 	Protocol               string
 	Config                 string
@@ -43,7 +45,7 @@ func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
 
 func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
 	if c.RequiresCaddySettings {
-		return NewNaiveCaddySettingsRequirement().Validate(settings)
+		return panelaccess.NewNaiveCaddySettingsRequirement().Validate(settings)
 	}
 	return nil
 }
