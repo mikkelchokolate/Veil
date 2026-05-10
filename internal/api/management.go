@@ -6,13 +6,18 @@ import (
 
 	"github.com/veil-panel/veil/internal/applyhistory"
 	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/service"
 )
 
 var stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 	return generatedconfig.NewStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
 }
-var serviceActionRunner = runFixedServiceAction
-var serviceHealthChecker = runFixedServiceHealthCheck
+var serviceActionRunner = func(command []string) ServiceActionResult {
+	return service.RunFixedServiceAction(command, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
+}
+var serviceHealthChecker = func(serviceName string) ServiceHealthResult {
+	return service.RunFixedServiceHealthCheck(serviceName, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
+}
 
 // Reloader is an optional interface for runtime state reload.
 type Reloader interface {
