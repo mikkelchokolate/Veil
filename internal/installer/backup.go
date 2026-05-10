@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"os"
 	"time"
 
 	backup "github.com/veil-panel/veil/internal/backup"
@@ -42,19 +41,4 @@ func CleanupBackup(backupDir string, backupID string) error {
 
 func ListBackups(backupDir string) ([]string, error) {
 	return backup.ListBackups(backupDir)
-}
-
-func copyFile(src, dst string, mode os.FileMode) error {
-	return backup.NewFileCopier().Copy(src, dst, mode)
-}
-
-func backupPathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
