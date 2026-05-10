@@ -1,12 +1,12 @@
-package api
+package panel
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestPanelUtilityActionsModuleRendersSharedHelpers(t *testing.T) {
-	actions := panelUtilityActionsJS()
+func TestUtilityActionsJSRendersSharedHelpers(t *testing.T) {
+	actions := UtilityActionsJS()
 	for _, want := range []string{
 		`function parseReserved(value)`,
 		`function numberOrZero(id)`,
