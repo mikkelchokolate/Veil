@@ -41,6 +41,51 @@ func TestManagementStateMutationOwnsSettingsInboundAndWarpMutations(t *testing.T
 	}
 }
 
+func TestManagementStateMutationDoesNotSaveOnInboundMutationError(t *testing.T) {
+	inbounds := []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443}}
+	saves := 0
+	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Inbounds: &inbounds}, func() error {
+		saves++
+		return nil
+	})
+
+	_, err := mutation.CreateInbound(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 9443})
+	if err == nil {
+		t.Fatalf("expected duplicate name error")
+	}
+	if saves != 0 {
+		t.Fatalf("saves = %d, want 0", saves)
+	}
+}
+
+func TestManagementStateMutationOwnsRoutingRuleMutations(t *testing.T) {
+	rules := []RoutingRule{}
+	saves := 0
+	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules}, func() error {
+		saves++
+		return nil
+	})
+
+	created, err := mutation.CreateRoutingRule(RoutingRule{Name: "non-ru", Match: "geosite:geolocation-!ru", Outbound: "warp", Enabled: true})
+	if err != nil {
+		t.Fatalf("CreateRoutingRule: %v", err)
+	}
+	if created.Name != "non-ru" || len(rules) != 1 {
+		t.Fatalf("unexpected create result: created=%+v rules=%+v", created, rules)
+	}
+	if saves != 1 {
+		t.Fatalf("saves = %d, want 1", saves)
+	}
+
+	_, err = mutation.CreateRoutingRule(RoutingRule{Name: "non-ru", Match: "geoip:ru", Outbound: "direct"})
+	if err == nil {
+		t.Fatalf("expected duplicate name error")
+	}
+	if saves != 1 {
+		t.Fatalf("saves = %d, want still 1", saves)
+	}
+}
+
 func TestManagementStateMutationPreservesPanelCaddyAccessFieldsWhenFormOmitsThem(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server"}
 	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Settings: &settings}, func() error { return nil })

@@ -31,16 +31,16 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.Inbounds()
+		mutation := tx.Mutation()
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, management.List())
+			writeJSON(w, mutation.Inbounds())
 		case http.MethodPost:
 			var inbound Inbound
 			if !decodeJSONRequest(w, r, &inbound) {
 				return nil
 			}
-			created, err := management.Create(inbound)
+			created, err := mutation.CreateInbound(inbound)
 			if err != nil {
 				writeInboundManagementError(w, err)
 				return nil
@@ -60,8 +60,8 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.Inbounds()
-		inbound, ok := management.Get(name)
+		mutation := tx.Mutation()
+		inbound, ok := mutation.Inbound(name)
 		if !ok {
 			writeNotFound(w)
 			return nil
@@ -74,14 +74,14 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 			if !decodeJSONRequest(w, r, &update) {
 				return nil
 			}
-			updated, err := management.Update(name, update)
+			updated, err := mutation.UpdateInbound(name, update)
 			if err != nil {
 				writeInboundManagementError(w, err)
 				return nil
 			}
 			writeJSON(w, updated)
 		case http.MethodDelete:
-			if err := management.Delete(name); err != nil {
+			if err := mutation.DeleteInbound(name); err != nil {
 				writeInboundManagementError(w, err)
 				return nil
 			}

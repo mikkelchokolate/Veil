@@ -1,5 +1,7 @@
 package api
 
+import "github.com/veil-panel/veil/internal/managementstate"
+
 type managementTransaction struct {
 	state *managementState
 }
@@ -10,18 +12,6 @@ func (s *managementState) withTransaction(fn func(*managementTransaction) error)
 	return fn(&managementTransaction{state: s})
 }
 
-func (tx *managementTransaction) Mutation() ManagementStateMutation {
-	return NewManagementStateMutationFromState(tx.state)
-}
-
-func (tx *managementTransaction) Inbounds() InboundManagement {
-	return InboundManagement{mutation: tx.Mutation()}
-}
-
-func (tx *managementTransaction) RoutingRules() RoutingRuleManagement {
-	return RoutingRuleManagement{mutation: tx.Mutation()}
-}
-
-func (tx *managementTransaction) Warp() WarpManagement {
-	return WarpManagement{mutation: tx.Mutation()}
+func (tx *managementTransaction) Mutation() managementstate.Mutation {
+	return newManagementStateMutationFromState(tx.state)
 }

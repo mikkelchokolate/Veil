@@ -12,7 +12,7 @@ func TestManagementTransactionPersistsInboundMutation(t *testing.T) {
 	state := newManagementState(ServerInfo{StatePath: statePath, KeyPath: keyPath})
 
 	err := state.withTransaction(func(tx *managementTransaction) error {
-		_, err := tx.Inbounds().Create(Inbound{Name: "extra", Protocol: "naiveproxy", Transport: "tcp", Port: 444, Enabled: true})
+		_, err := tx.Mutation().CreateInbound(Inbound{Name: "extra", Protocol: "naiveproxy", Transport: "tcp", Port: 444, Enabled: true})
 		return err
 	})
 	if err != nil {
@@ -22,8 +22,7 @@ func TestManagementTransactionPersistsInboundMutation(t *testing.T) {
 	reloaded := newManagementState(ServerInfo{StatePath: statePath, KeyPath: keyPath})
 	reloaded.mu.Lock()
 	defer reloaded.mu.Unlock()
-	management := NewInboundManagement(&reloaded.inbounds, reloaded.saveLocked)
-	if _, ok := management.Get("extra"); !ok {
+	if _, ok := newManagementStateMutationFromState(reloaded).Inbound("extra"); !ok {
 		t.Fatalf("created inbound was not persisted: %+v", reloaded.inbounds)
 	}
 }

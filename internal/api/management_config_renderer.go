@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/veil-panel/veil/internal/generatedconfig"
 	"github.com/veil-panel/veil/internal/renderer"
+	veilwarp "github.com/veil-panel/veil/internal/warp"
 )
 
 type ManagementConfigInput struct {
@@ -42,7 +43,7 @@ func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error)
 
 func (r ManagementConfigRenderer) RenderWarp() (string, error) {
 	warp := r.input.Warp
-	setWarpDefaults(&warp)
+	veilwarp.SetDefaults(&warp)
 	return renderer.RenderWarpSingBox(renderer.WarpSingBoxConfig{
 		Endpoint:      warp.Endpoint,
 		PrivateKey:    warp.PrivateKey,

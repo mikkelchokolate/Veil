@@ -4,16 +4,16 @@ import "net/http"
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.RoutingRules()
+		mutation := tx.Mutation()
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, management.List())
+			writeJSON(w, mutation.RoutingRules())
 		case http.MethodPost:
 			var rule RoutingRule
 			if !decodeJSONRequest(w, r, &rule) {
 				return nil
 			}
-			created, err := management.Create(rule)
+			created, err := mutation.CreateRoutingRule(rule)
 			if err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
@@ -33,8 +33,8 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		return
 	}
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.RoutingRules()
-		rule, ok := management.Get(name)
+		mutation := tx.Mutation()
+		rule, ok := mutation.RoutingRule(name)
 		if !ok {
 			writeNotFound(w)
 			return nil
@@ -47,14 +47,14 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 			if !decodeJSONRequest(w, r, &update) {
 				return nil
 			}
-			updated, err := management.Update(name, update)
+			updated, err := mutation.UpdateRoutingRule(name, update)
 			if err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
 			writeJSON(w, updated)
 		case http.MethodDelete:
-			if err := management.Delete(name); err != nil {
+			if err := mutation.DeleteRoutingRule(name); err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
@@ -107,16 +107,16 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.Warp()
+		mutation := tx.Mutation()
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, management.Get())
+			writeJSON(w, mutation.Warp())
 		case http.MethodPut:
 			var warp WarpConfig
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
 			}
-			updated, err := management.Update(warp)
+			updated, err := mutation.UpdateWarp(warp)
 			if err != nil {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil
