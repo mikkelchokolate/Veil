@@ -61,7 +61,11 @@ type doctorSummary = doctorflow.Summary
 type doctorCommandStatus = doctorflow.CommandStatus
 
 func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
-	_ = NewDoctorPresentation(cmd.OutOrStdout()).Render(buildDoctorSummary(version), jsonOutput)
+	_ = doctorflow.NewPresentation(cmd.OutOrStdout()).Render(buildDoctorSummary(version), jsonOutput)
+}
+
+func buildDoctorSummary(version string) doctorSummary {
+	return doctorflow.NewReadiness(version, commandLookPath).Summary()
 }
 
 // checkLatestVersion fetches the latest Veil release tag from GitHub and
