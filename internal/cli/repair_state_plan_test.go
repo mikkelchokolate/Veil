@@ -33,7 +33,7 @@ func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
 		t.Fatalf("cipher: %v", err)
 	}
 	statePath := filepath.Join(varDir, "state.json")
-	snapshot := api.BuildManagementSnapshot(api.ManagementSnapshotInput{
+	snapshot := managementstate.BuildSnapshot(managementstate.SnapshotInput{
 		Settings: api.Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
 		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret-pass"}},
 		Rules:    []api.RoutingRule{},

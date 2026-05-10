@@ -6,6 +6,7 @@ import (
 
 	"github.com/veil-panel/veil/internal/applyhistory"
 	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/service"
 )
 
@@ -72,11 +73,11 @@ func (s *managementState) snapshotLocked() managementSnapshot {
 }
 
 func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
-	EncryptManagementSnapshot(snapshot, s.cipher)
+	managementstate.EncryptSnapshot(snapshot, s.cipher)
 }
 
 func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
-	DecryptManagementSnapshot(snapshot, s.cipher)
+	managementstate.DecryptSnapshot(snapshot, s.cipher)
 }
 
 func (s *managementState) load() error {

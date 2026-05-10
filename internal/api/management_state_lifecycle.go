@@ -62,7 +62,7 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 }
 
 func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
-	return BuildManagementSnapshot(ManagementSnapshotInput{
+	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
 		Settings:      l.state.settings,
 		Inbounds:      l.state.inbounds,
 		Rules:         l.state.rules,
