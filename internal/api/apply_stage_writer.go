@@ -5,9 +5,12 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/veil-panel/veil/internal/generatedconfig"
 	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
 )
+
+var routeDatDownloader = generatedconfig.DownloadRouteDat
 
 type ApplyStageInput struct {
 	ApplyRoot     string
@@ -45,7 +48,7 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		}
 		written = append(written, path)
 	}
-	routingFiles, err := NewRoutingSourceMaterial(input.ApplyRoot, input.RoutingSource).WriteGenerated()
+	routingFiles, err := generatedconfig.NewRoutingSourceMaterial(input.ApplyRoot, input.RoutingSource).WithDownloader(routeDatDownloader).WriteGenerated()
 	if err != nil {
 		return nil, nil, nil, err
 	}
