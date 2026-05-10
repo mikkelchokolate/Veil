@@ -47,6 +47,24 @@ func runRURecommendedInstall(cmd *cobra.Command, opts ruRecommendedInstallOption
 	return NewRURecommendedInstallWorkflow(cmd, opts).Run()
 }
 
+func validateRURecommendedInstallRequirements(opts ruRecommendedInstallOptions) error {
+	if opts.PanelAccess == "caddy" && (opts.Domain == "" || opts.Email == "") {
+		return fmt.Errorf("--domain and --email are required for caddy Panel access")
+	}
+	return nil
+}
+
+func buildRURecommendedInstallFromOptions(opts ruRecommendedInstallOptions) (installer.RURecommendedInstall, error) {
+	return installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
+		Domain:          opts.Domain,
+		Email:           opts.Email,
+		PanelAccess:     opts.PanelAccess,
+		PanelPort:       opts.PanelPort,
+		Secret:          randomSecret,
+		RandomPanelPort: installer.RandomHighPort,
+	})
+}
+
 func (w RURecommendedInstallWorkflow) Run() error {
 	cmd := w.cmd
 	opts := w.opts
@@ -58,7 +76,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 			return err
 		}
 	}
-	if err := NewRURecommendedInstallRequirements().Validate(opts); err != nil {
+	if err := validateRURecommendedInstallRequirements(opts); err != nil {
 		return err
 	}
 	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)
