@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/veil-panel/veil/internal/generatedconfig"
 	"github.com/veil-panel/veil/internal/panelaccess"
+	"github.com/veil-panel/veil/internal/protocols"
 )
 
 type PanelAccess struct {
@@ -12,7 +13,7 @@ type PanelAccess struct {
 type PanelAccessApplyIntent = panelaccess.ApplyIntent
 
 func NewPanelAccess(settings Settings) PanelAccess {
-	return PanelAccess{inner: panelaccess.New(settings, NewInboundProtocolCatalog().RequiresCaddy)}
+	return PanelAccess{inner: panelaccess.New(settings, protocols.NewCatalog().RequiresCaddy)}
 }
 
 func (p PanelAccess) CaddyRoute() (panelaccess.CaddyRoute, bool, error) {
