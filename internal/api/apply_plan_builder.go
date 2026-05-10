@@ -3,6 +3,8 @@ package api
 import (
 	"github.com/veil-panel/veil/internal/applyplan"
 	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/panelaccess"
+	"github.com/veil-panel/veil/internal/protocols"
 	"github.com/veil-panel/veil/internal/service"
 )
 
@@ -18,7 +20,7 @@ type ApplyPlanInput struct {
 }
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
-	panelAccessIntent := NewPanelAccess(input.Settings).ApplyIntent(input.Inbounds)
+	panelAccessIntent := panelaccess.New(input.Settings, protocols.NewCatalog().RequiresCaddy).ApplyIntent(input.Inbounds)
 	capabilities := []applyplan.ProtocolCapability{}
 	catalog := NewApplyProtocolCapabilityCatalog()
 	for _, protocolCapability := range catalog.All() {

@@ -1,6 +1,10 @@
 package api
 
-import "github.com/veil-panel/veil/internal/generatedconfig"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/panelaccess"
+	"github.com/veil-panel/veil/internal/protocols"
+)
 
 type GeneratedConfigInput struct {
 	ApplyRoot string
@@ -18,7 +22,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		Inbounds:  input.Inbounds,
 		Registry:  registry.inner,
 		PanelAccess: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
-			return NewPanelAccess(input.Settings).GeneratedConfig(paths)
+			return panelaccess.New(input.Settings, protocols.NewCatalog().RequiresCaddy).GeneratedConfig(paths)
 		},
 		Warp: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
 			return generatedconfig.NewGeneratedWarpConfigRenderer(paths).Render(input.Warp, input.Rules)
