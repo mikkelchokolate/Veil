@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
+)
 
 type RuntimeRoutes struct{}
 
@@ -25,7 +29,7 @@ func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := NewRuntimeTelemetry().System()
+		stats, err := veilruntime.NewRuntimeTelemetry().System()
 		if err != nil {
 			writeError(w, "failed to read system stats", http.StatusInternalServerError)
 			return
@@ -41,7 +45,7 @@ func handleTLSRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, NewRuntimeTelemetry().TLS())
+		writeJSON(w, veilruntime.NewRuntimeTelemetry().TLS())
 	}
 }
 
@@ -52,7 +56,7 @@ func handleNetworkRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := NewRuntimeTelemetry().Network()
+		stats, err := veilruntime.NewRuntimeTelemetry().Network()
 		if err != nil {
 			writeError(w, "failed to read network stats", http.StatusInternalServerError)
 			return
@@ -68,7 +72,7 @@ func handleConnectionsRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := NewRuntimeTelemetry().Connections()
+		stats, err := veilruntime.NewRuntimeTelemetry().Connections()
 		if err != nil {
 			writeError(w, "failed to read connections", http.StatusInternalServerError)
 			return
@@ -84,7 +88,7 @@ func handleProcessesRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := NewRuntimeTelemetry().Processes()
+		stats, err := veilruntime.NewRuntimeTelemetry().Processes()
 		if err != nil {
 			writeError(w, "failed to read processes", http.StatusInternalServerError)
 			return
@@ -100,7 +104,7 @@ func handleDiskRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, NewRuntimeTelemetry().Disk())
+		writeJSON(w, veilruntime.NewRuntimeTelemetry().Disk())
 	}
 }
 
@@ -111,6 +115,6 @@ func handleRuntimeObservation(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, NewRuntimeTelemetry().Observation())
+		writeJSON(w, veilruntime.NewRuntimeTelemetry().Observation())
 	}
 }

@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
 func TestTLSEndpointRejectsNonGet(t *testing.T) {
@@ -51,7 +53,7 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var info TLSCertInfo
+	var info veilruntime.TLSCertInfo
 	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -72,30 +74,13 @@ func TestTLSEndpointReturnsErrorWhenNoCertConfigured(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var info TLSCertInfo
+	var info veilruntime.TLSCertInfo
 	json.NewDecoder(w.Body).Decode(&info)
 	if info.Valid {
 		t.Error("expected invalid cert when none configured")
 	}
 	if info.Error == "" {
 		t.Error("expected error message when no cert configured")
-	}
-}
-
-func TestReadTLSCertWithInvalidFile(t *testing.T) {
-	info := readTLSCert("/nonexistent/cert.pem")
-	if info.Valid {
-		t.Error("expected invalid for nonexistent file")
-	}
-	if info.Error == "" {
-		t.Error("expected error for nonexistent file")
-	}
-}
-
-func TestReadTLSCertWithEmptyPath(t *testing.T) {
-	info := readTLSCert("")
-	if info.Valid {
-		t.Error("expected invalid for empty path")
 	}
 }
 

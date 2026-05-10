@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
 func TestProcessesEndpointRejectsNonGet(t *testing.T) {
@@ -62,7 +64,7 @@ func TestProcessesEndpointValuesValid(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats ProcessesStats
+	var stats veilruntime.ProcessesStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	for _, p := range stats.Processes {
 		if p.PID <= 0 {
@@ -74,16 +76,5 @@ func TestProcessesEndpointValuesValid(t *testing.T) {
 		if p.MemoryMB < 0 {
 			t.Errorf("negative memory for %s: %d", p.Name, p.MemoryMB)
 		}
-	}
-}
-
-func TestIsManagedProcess(t *testing.T) {
-	for _, name := range []string{"caddy", "hysteria2", "sing-box", "veil"} {
-		if !isManagedProcess(name) {
-			t.Errorf("expected %s to be managed", name)
-		}
-	}
-	if isManagedProcess("nginx") {
-		t.Error("nginx should not be managed")
 	}
 }

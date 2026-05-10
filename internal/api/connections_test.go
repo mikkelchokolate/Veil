@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
 func TestConnectionsEndpointRejectsNonGet(t *testing.T) {
@@ -36,7 +38,7 @@ func TestConnectionsEndpointHasListeners(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats ConnectionsStats
+	var stats veilruntime.ConnectionsStats
 	if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -71,7 +73,7 @@ func TestConnectionsEndpointNoNegativePorts(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats ConnectionsStats
+	var stats veilruntime.ConnectionsStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	for _, l := range stats.Listeners {
 		if l.Port <= 0 || l.Port > 65535 {

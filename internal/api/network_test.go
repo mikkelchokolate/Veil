@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
 func TestNetworkEndpointRejectsNonGet(t *testing.T) {
@@ -36,7 +38,7 @@ func TestNetworkEndpointHasLoopback(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats NetworkStats
+	var stats veilruntime.NetworkStats
 	if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -57,7 +59,7 @@ func TestNetworkEndpointBytesPositive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats NetworkStats
+	var stats veilruntime.NetworkStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	for _, iface := range stats.Interfaces {
 		if iface.RxBytes < 0 || iface.TxBytes < 0 {

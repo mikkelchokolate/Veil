@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	veilruntime "github.com/veil-panel/veil/internal/runtime"
 )
 
 func TestSystemEndpointRejectsNonGet(t *testing.T) {
@@ -37,7 +39,7 @@ func TestSystemEndpointCPUInRange(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats SystemStats
+	var stats veilruntime.SystemStats
 	if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -51,7 +53,7 @@ func TestSystemEndpointMemoryPositive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats SystemStats
+	var stats veilruntime.SystemStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	if stats.MemoryTotalMB <= 0 {
 		t.Errorf("memoryTotalMB should be positive: %d", stats.MemoryTotalMB)
@@ -66,7 +68,7 @@ func TestSystemEndpointDiskPositive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats SystemStats
+	var stats veilruntime.SystemStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	if stats.DiskTotalGB <= 0 {
 		t.Errorf("diskTotalGB should be positive: %f", stats.DiskTotalGB)
@@ -78,7 +80,7 @@ func TestSystemEndpointUptimePositive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	var stats SystemStats
+	var stats veilruntime.SystemStats
 	json.NewDecoder(w.Body).Decode(&stats)
 	if stats.UptimeSeconds <= 0 {
 		t.Errorf("uptimeSeconds should be positive: %d", stats.UptimeSeconds)
