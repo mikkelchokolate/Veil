@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestRunFixedConfigValidationSkipsMissingCommandMaterial(t *testing.T) {
+	empty := RunFixedConfigValidation("test", "/path/to/config", nil)
+	if !empty.Skipped {
+		t.Fatal("expected skipped for empty command")
+	}
+	if empty.Error != "validator command is empty" {
+		t.Fatalf("expected empty command error, got %q", empty.Error)
+	}
+	if empty.Name != "test" || empty.Config != "/path/to/config" || empty.Command != nil {
+		t.Fatalf("expected material preserved, got %+v", empty)
+	}
+
+	missing := RunFixedConfigValidation("sing-box", "/etc/veil/generated/sing-box/warp.json", []string{"nonexistent-validator", "check", "-c", "/etc/veil/generated/sing-box/warp.json"})
+	if !missing.Skipped {
+		t.Fatal("expected skipped when binary not found")
+	}
+	if missing.Error != "nonexistent-validator not found; syntax validation skipped" {
+		t.Fatalf("expected binary not found error, got %q", missing.Error)
+	}
+	if missing.Name != "sing-box" || len(missing.Command) != 4 || missing.Command[0] != "nonexistent-validator" {
+		t.Fatalf("expected material preserved, got %+v", missing)
+	}
+}
+
 func TestStagedConfigValidatorBuildsExpectedCommands(t *testing.T) {
 	root := t.TempDir()
 	commands := [][]string{}

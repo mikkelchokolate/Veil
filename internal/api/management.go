@@ -3,9 +3,13 @@ package api
 import (
 	"net/http"
 	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/generatedconfig"
 )
 
-var stagedConfigValidator = runStagedConfigValidators
+var stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+	return generatedconfig.NewStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
+}
 var serviceActionRunner = runFixedServiceAction
 var serviceHealthChecker = runFixedServiceHealthCheck
 
