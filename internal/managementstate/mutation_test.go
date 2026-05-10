@@ -41,6 +41,19 @@ func TestManagementStateMutationOwnsSettingsInboundAndWarpMutations(t *testing.T
 	}
 }
 
+func TestManagementStateMutationPreservesPanelCaddyAccessFieldsWhenFormOmitsThem(t *testing.T) {
+	settings := Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server"}
+	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Settings: &settings}, func() error { return nil })
+
+	_, err := mutation.UpdateSettings(Settings{PanelListen: "127.0.0.1:2096", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"})
+	if err != nil {
+		t.Fatalf("UpdateSettings: %v", err)
+	}
+	if settings.PanelAccess != "caddy" || settings.WebBasePath != "/panel-secret/" {
+		t.Fatalf("Panel Caddy access fields not preserved: %+v", settings)
+	}
+}
+
 func TestManagementStateMutationDoesNotSaveOnInvalidMutation(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}
 	saves := 0

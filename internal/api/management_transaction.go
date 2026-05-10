@@ -14,10 +14,6 @@ func (tx *managementTransaction) Mutation() ManagementStateMutation {
 	return NewManagementStateMutationFromState(tx.state)
 }
 
-func (tx *managementTransaction) Settings() SettingsManagement {
-	return SettingsManagement{mutation: tx.Mutation()}
-}
-
 func (tx *managementTransaction) Inbounds() InboundManagement {
 	return InboundManagement{mutation: tx.Mutation()}
 }

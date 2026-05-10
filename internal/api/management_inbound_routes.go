@@ -7,16 +7,16 @@ import (
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
-		management := tx.Settings()
+		mutation := tx.Mutation()
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, management.Get())
+			writeJSON(w, mutation.Settings())
 		case http.MethodPut:
 			var settings Settings
 			if !decodeJSONRequest(w, r, &settings) {
 				return nil
 			}
-			updated, err := management.Update(settings)
+			updated, err := mutation.UpdateSettings(settings)
 			if err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
