@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/veil-panel/veil/internal/atomicfile"
 	"github.com/veil-panel/veil/internal/generatedconfig"
 )
 
@@ -37,7 +38,7 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		record := livePromotionRecord{LivePath: livePath}
 		if existing, err := os.ReadFile(livePath); err == nil {
 			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(livePath), "/"))
-			if err := writeAtomicFile(backupPath, existing, 0o600); err != nil {
+			if err := atomicfile.Write(backupPath, existing, 0o600, 0o700); err != nil {
 				return nil, nil, nil, err
 			}
 			record.HadPrevious = true
@@ -46,7 +47,7 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return nil, nil, nil, err
 		}
-		if err := writeAtomicFile(livePath, body, 0o600); err != nil {
+		if err := atomicfile.Write(livePath, body, 0o600, 0o700); err != nil {
 			return nil, nil, nil, err
 		}
 		liveFiles = append(liveFiles, livePath)
@@ -70,7 +71,7 @@ func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles [
 			if err != nil {
 				continue
 			}
-			if err := writeAtomicFile(record.LivePath, body, 0o600); err != nil {
+			if err := atomicfile.Write(record.LivePath, body, 0o600, 0o700); err != nil {
 				continue
 			}
 			rollbackFiles = append(rollbackFiles, record.LivePath)

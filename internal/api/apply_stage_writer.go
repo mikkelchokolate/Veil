@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/veil-panel/veil/internal/atomicfile"
 	"github.com/veil-panel/veil/internal/generatedconfig"
 	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
@@ -30,20 +31,20 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
+	if err := atomicfile.Write(planPath, append(planBody, '\n'), 0o600, 0o700); err != nil {
 		return nil, nil, nil, err
 	}
 	snapshotBody, err := managementstate.NewStore("", input.Cipher).Marshal(input.Snapshot)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := writeAtomicFile(statePath, snapshotBody, 0o600); err != nil {
+	if err := atomicfile.Write(statePath, snapshotBody, 0o600, 0o700); err != nil {
 		return nil, nil, nil, err
 	}
 	written := []string{planPath, statePath}
 	renderedPaths := sortedRenderedPaths(input.Rendered)
 	for _, path := range renderedPaths {
-		if err := writeAtomicFile(path, []byte(input.Rendered[path]), 0o600); err != nil {
+		if err := atomicfile.Write(path, []byte(input.Rendered[path]), 0o600, 0o700); err != nil {
 			return nil, nil, nil, err
 		}
 		written = append(written, path)

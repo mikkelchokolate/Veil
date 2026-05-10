@@ -1,12 +1,12 @@
-package applyhistory
+package atomicfile
 
 import (
 	"os"
 	"path/filepath"
 )
 
-func writeAtomicFile(path string, body []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")

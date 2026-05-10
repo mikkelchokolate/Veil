@@ -4,13 +4,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/atomicfile"
 )
 
 func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
 	root := t.TempDir()
 	staged := filepath.Join(root, "generated", "mieru", "server_config.json")
 	live := filepath.Join(root, "live", "mieru", "server_config.json")
-	if err := writeAtomicFile(staged, []byte(`{"portBindings":[],"users":[]}`), 0o600); err != nil {
+	if err := atomicfile.Write(staged, []byte(`{"portBindings":[],"users":[]}`), 0o600, 0o700); err != nil {
 		t.Fatalf("write staged: %v", err)
 	}
 	promotion := NewLiveConfigPromotion(root, nil)
@@ -29,10 +31,10 @@ func TestLiveConfigPromotionPromotesBacksUpAndRollsBack(t *testing.T) {
 	root := t.TempDir()
 	staged := filepath.Join(root, "generated", "caddy", "Caddyfile")
 	live := filepath.Join(root, "live", "caddy", "Caddyfile")
-	if err := writeAtomicFile(staged, []byte("new"), 0o600); err != nil {
+	if err := atomicfile.Write(staged, []byte("new"), 0o600, 0o700); err != nil {
 		t.Fatalf("write staged: %v", err)
 	}
-	if err := writeAtomicFile(live, []byte("old"), 0o600); err != nil {
+	if err := atomicfile.Write(live, []byte("old"), 0o600, 0o700); err != nil {
 		t.Fatalf("write live: %v", err)
 	}
 	promotion := NewLiveConfigPromotion(root, nil)

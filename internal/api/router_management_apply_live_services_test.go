@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/atomicfile"
 )
 
 var _router_management_apply_live_services_deps = []any{
@@ -67,7 +69,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 	}
 	applyRoot := t.TempDir()
 	existingCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
-	if err := writeAtomicFile(existingCaddy, []byte("old caddy\n"), 0o600); err != nil {
+	if err := atomicfile.Write(existingCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
 	old := stagedConfigValidator
@@ -125,7 +127,7 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 	}
 	applyRoot := t.TempDir()
 	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
-	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
 	old := stagedConfigValidator
@@ -443,7 +445,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	}
 	applyRoot := t.TempDir()
 	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
-	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
 	oldValidator := stagedConfigValidator
@@ -555,7 +557,7 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	}
 	applyRoot := t.TempDir()
 	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
-	if err := writeAtomicFile(liveCaddy, []byte("old caddy\n"), 0o600); err != nil {
+	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write live caddy: %v", err)
 	}
 	oldValidator := stagedConfigValidator

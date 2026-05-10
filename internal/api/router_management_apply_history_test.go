@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/atomicfile"
 )
 
 var _router_management_apply_history_deps = []any{
@@ -36,7 +38,7 @@ func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal seed history: %v", err)
 	}
-	if err := writeAtomicFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600); err != nil {
+	if err := atomicfile.Write(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600, 0o700); err != nil {
 		t.Fatalf("write seed history: %v", err)
 	}
 	oldValidator := stagedConfigValidator
@@ -124,7 +126,7 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal history: %v", err)
 	}
-	if err := writeAtomicFile(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600); err != nil {
+	if err := atomicfile.Write(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600, 0o700); err != nil {
 		t.Fatalf("write history: %v", err)
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})

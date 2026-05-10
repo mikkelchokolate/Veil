@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/veil-panel/veil/internal/applyflow"
+	"github.com/veil-panel/veil/internal/atomicfile"
 )
 
 const MaxEntries = 100
@@ -45,7 +46,7 @@ func (s ApplyHistoryStore) Append(stage string, success bool, response ApplyResp
 	if err != nil {
 		return err
 	}
-	return writeAtomicFile(s.path, append(body, '\n'), 0o600)
+	return atomicfile.Write(s.path, append(body, '\n'), 0o600, 0o755)
 }
 
 func firstQueryValue(values map[string][]string, key string) string {

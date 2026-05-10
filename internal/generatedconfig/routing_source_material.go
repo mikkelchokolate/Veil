@@ -1,6 +1,10 @@
 package generatedconfig
 
-import "path/filepath"
+import (
+	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/atomicfile"
+)
 
 type RoutingSourceDownloader func(string) ([]byte, error)
 
@@ -29,7 +33,7 @@ func (m RoutingSourceMaterial) WriteGenerated() ([]string, error) {
 			return nil, err
 		}
 		path := filepath.Join(m.applyRoot, "generated", "rules", file.Name)
-		if err := writeAtomicFile(path, body, 0o600); err != nil {
+		if err := atomicfile.Write(path, body, 0o600, 0o755); err != nil {
 			return nil, err
 		}
 		written = append(written, path)
