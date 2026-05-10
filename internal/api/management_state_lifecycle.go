@@ -21,7 +21,14 @@ func newManagementState(info ServerInfo) *managementState {
 	if keyPath == "" {
 		keyPath = "/etc/veil/state.key"
 	}
-	model := defaultManagementModel(info)
+	model := managementstate.BuildDefaultState(managementstate.DefaultInput{
+		PanelListen: info.PanelListen,
+		PanelAccess: info.PanelAccess,
+		WebBasePath: info.WebBasePath,
+		Mode:        info.Mode,
+		Domain:      info.Domain,
+		Email:       info.Email,
+	})
 	state := &managementState{
 		statePath: info.StatePath,
 		applyRoot: defaultApplyRoot(info.ApplyRoot),
