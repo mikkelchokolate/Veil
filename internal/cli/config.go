@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/api"
 )
 
 func newConfigCommand() *cobra.Command {
@@ -30,7 +31,7 @@ func newConfigCommand() *cobra.Command {
 				return fmt.Errorf("read state file: %w", err)
 			}
 
-			result, err := NewConfigValidation().ValidateBytes(body)
+			result, err := api.NewManagementStateValidation().ValidateBytes(body)
 			if err != nil {
 				return err
 			}
