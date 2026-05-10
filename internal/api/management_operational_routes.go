@@ -7,6 +7,10 @@ import (
 	"github.com/veil-panel/veil/internal/firewall"
 )
 
+var firewallStatusReader = func() (bool, error) {
+	return firewall.NewStatusReader(nil).Active()
+}
+
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
