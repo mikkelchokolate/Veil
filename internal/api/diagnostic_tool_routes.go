@@ -3,7 +3,17 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	"github.com/veil-panel/veil/internal/diagnostics"
 )
+
+type PingResult = diagnostics.PingResult
+type SpeedtestResult = diagnostics.SpeedtestResult
+
+var dnsLookuper = diagnostics.RunDNSLookup
+var pingRunner = diagnostics.RunPing
+var speedtestRunner = diagnostics.RunSpeedtest
+var errSpeedtestUnavailable = diagnostics.ErrSpeedtestUnavailable
 
 type DiagnosticToolRoutes struct{}
 
@@ -32,7 +42,8 @@ func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Reque
 		writeError(w, "hostname is required", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, DiagnosticTools{}.DNSLookup(req.Hostname))
+	addrs, cname, err := dnsLookuper(req.Hostname)
+	writeJSON(w, diagnostics.NewDNSLookupResult(req.Hostname, addrs, cname, err).Map())
 }
 
 func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +69,7 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "count must be 1-10", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, DiagnosticTools{}.Ping(req.Host, req.Count))
+	writeJSON(w, pingRunner(req.Host, req.Count))
 }
 
 func (DiagnosticToolRoutes) handleSpeedtest(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +81,7 @@ func (DiagnosticToolRoutes) handleSpeedtest(w http.ResponseWriter, r *http.Reque
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	result, err := DiagnosticTools{}.Speedtest(r)
+	result, err := speedtestRunner(r)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusServiceUnavailable)
 		return
