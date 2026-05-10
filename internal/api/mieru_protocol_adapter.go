@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 type MieruProtocolAdapter struct{}
 
@@ -19,7 +22,7 @@ func (MieruProtocolAdapter) Capability() ProtocolCapability {
 		PromotedVerb:          "restart",
 		ValidateInboundRender: true,
 		RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-			return NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
+			return generatedconfig.NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
 		},
 		ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
 			return mieruClientConfigLink(input)
