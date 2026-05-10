@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/veil-panel/veil/internal/applyhistory"
 	"github.com/veil-panel/veil/internal/generatedconfig"
 )
 
@@ -26,8 +27,8 @@ func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
 }
 
-func (s *managementState) applyHistoryLocked() ApplyHistory {
-	return NewApplyHistory(s.applyHistoryPathLocked(), maxApplyHistoryEntries)
+func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
+	return applyhistory.NewApplyHistory(s.applyHistoryPathLocked(), applyhistory.MaxEntries)
 }
 
 func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) {

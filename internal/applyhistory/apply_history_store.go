@@ -10,8 +10,6 @@ import (
 
 const MaxEntries = 100
 
-const maxApplyHistoryEntries = MaxEntries
-
 type ApplyHistoryStore struct {
 	path string
 	max  int
@@ -59,8 +57,4 @@ func firstQueryValue(values map[string][]string, key string) string {
 
 func HistoryStage(response ApplyResponse) string {
 	return applyflow.HistoryStage(response)
-}
-
-func applyHistoryStage(response ApplyResponse) string {
-	return HistoryStage(response)
 }

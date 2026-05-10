@@ -6,7 +6,7 @@ type ApplyHistoryRetention struct {
 
 func NewApplyHistoryRetention(max int) ApplyHistoryRetention {
 	if max <= 0 {
-		max = maxApplyHistoryEntries
+		max = MaxEntries
 	}
 	return ApplyHistoryRetention{max: max}
 }
