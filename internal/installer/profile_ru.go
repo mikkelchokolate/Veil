@@ -1,5 +1,7 @@
 package installer
 
+import "github.com/veil-panel/veil/internal/panelaccess"
+
 type SecretFunc func(label string) string
 
 type RURecommendedInput struct {
@@ -45,7 +47,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	username := defaults.Username
 	masqueradeURL := defaults.MasqueradeURL
 	fallbackRoot := defaults.FallbackRoot
-	panelAccess, err := NewPanelAccessProfile(PanelAccessProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
+	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
