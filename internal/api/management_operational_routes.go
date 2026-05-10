@@ -77,7 +77,11 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	plan := NewManagementApplyContext(s).buildApplyPlanLocked()
-	writeJSONStatus(w, NewApplyPlanHTTPStatus().Status(plan), plan)
+	status := http.StatusOK
+	if !plan.Valid {
+		status = http.StatusBadRequest
+	}
+	writeJSONStatus(w, status, plan)
 }
 
 func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Request) {
