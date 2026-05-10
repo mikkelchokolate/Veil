@@ -1,26 +1,13 @@
 package api
 
-import (
-	"errors"
-	"fmt"
-)
+import "github.com/veil-panel/veil/internal/generatedconfig"
 
-type ConfigValidationPassPolicy struct{}
+type ConfigValidationPassPolicy = generatedconfig.ValidationPassPolicy
 
-func NewConfigValidationPassPolicy() ConfigValidationPassPolicy { return ConfigValidationPassPolicy{} }
-
-func (ConfigValidationPassPolicy) RequirePassed(validations []ConfigValidationResult) error {
-	for _, validation := range validations {
-		if validation.Skipped || !validation.Valid {
-			if validation.Error != "" {
-				return errors.New(validation.Error)
-			}
-			return fmt.Errorf("%s validation did not pass", validation.Name)
-		}
-	}
-	return nil
+func NewConfigValidationPassPolicy() ConfigValidationPassPolicy {
+	return generatedconfig.NewValidationPassPolicy()
 }
 
 func requirePassedValidations(validations []ConfigValidationResult) error {
-	return NewConfigValidationPassPolicy().RequirePassed(validations)
+	return generatedconfig.NewValidationPassPolicy().RequirePassed(validations)
 }

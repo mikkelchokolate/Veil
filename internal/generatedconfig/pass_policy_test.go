@@ -1,9 +1,9 @@
-package api
+package generatedconfig
 
 import "testing"
 
-func TestConfigValidationPassPolicyRejectsSkippedInvalidAndUsesErrorText(t *testing.T) {
-	policy := NewConfigValidationPassPolicy()
+func TestValidationPassPolicyRejectsSkippedInvalidAndUsesErrorText(t *testing.T) {
+	policy := NewValidationPassPolicy()
 	if err := policy.RequirePassed([]ConfigValidationResult{{Name: "caddy", Valid: true}}); err != nil {
 		t.Fatalf("RequirePassed valid: %v", err)
 	}
