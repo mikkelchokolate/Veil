@@ -11,3 +11,21 @@ func TestRenderEventBindingsBuildsDOMEventWiring(t *testing.T) {
 		t.Fatalf("unexpected event binding JS:\n%s", js)
 	}
 }
+
+func TestEventBindingsJSRendersCrossModuleBindings(t *testing.T) {
+	js := EventBindingsJS(NewSliceCatalog(nil).EventBindings())
+	for _, want := range []string{
+		`document.querySelectorAll('[data-load]')`,
+		`settings-form`,
+		`load-client-links`,
+		`inbound-form`,
+		`routing-rule-form`,
+		`warp-form`,
+		`loadSettingsIntoForm();`,
+		`loadServiceStatus();`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("event bindings missing %q:\n%s", want, js)
+		}
+	}
+}

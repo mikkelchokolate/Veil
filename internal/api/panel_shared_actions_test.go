@@ -17,21 +17,3 @@ func TestPanelUtilityActionsModuleRendersSharedHelpers(t *testing.T) {
 		}
 	}
 }
-
-func TestPanelEventBindingsModuleRendersCrossModuleBindings(t *testing.T) {
-	bindings := panelEventBindingsJS()
-	for _, want := range []string{
-		`document.querySelectorAll('[data-load]')`,
-		`settings-form`,
-		`load-client-links`,
-		`inbound-form`,
-		`routing-rule-form`,
-		`warp-form`,
-		`loadSettingsIntoForm();`,
-		`loadServiceStatus();`,
-	} {
-		if !strings.Contains(bindings, want) {
-			t.Fatalf("Event bindings missing %q", want)
-		}
-	}
-}
