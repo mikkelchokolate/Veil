@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/service"
 )
 
 var _routerTestDeps_router_utility_security_logs_test = []any{
@@ -97,7 +99,7 @@ func TestIsAllowedHealthService(t *testing.T) {
 		{"veil-naive.service.evil", false},
 	}
 	for _, tt := range tests {
-		got := isAllowedHealthService(tt.service)
+		got := service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsHealth(tt.service)
 		if got != tt.want {
 			t.Errorf("isAllowedHealthService(%q) = %v, want %v", tt.service, got, tt.want)
 		}
@@ -158,7 +160,7 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isAllowedServiceCommand(tt.command)
+			got := service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsAction(tt.command)
 			if got != tt.want {
 				t.Errorf("isAllowedServiceCommand(%v) = %v, want %v", tt.command, got, tt.want)
 			}

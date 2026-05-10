@@ -1,9 +1,13 @@
 package api
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/veil-panel/veil/internal/service"
+)
 
 func TestServiceCommandPolicyAllowsOnlyManagedPromotedActionsAndHealthServices(t *testing.T) {
-	policy := ServiceCommandPolicy{}
+	policy := service.NewCommandPolicy(NewManagedRuntimeCatalog())
 	if !policy.AllowsAction([]string{"systemctl", "reload", "veil-naive.service"}) {
 		t.Fatalf("expected veil-naive reload to be allowed")
 	}

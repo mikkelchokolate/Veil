@@ -27,7 +27,7 @@ func TestPromotedServiceReloaderRestartsMieruWhenMieruConfigPromoted(t *testing.
 }
 
 func TestServiceCommandPolicyAllowsMieruRestartButNotNaiveRestart(t *testing.T) {
-	policy := ServiceCommandPolicy{}
+	policy := service.NewCommandPolicy(NewManagedRuntimeCatalog())
 	if !policy.AllowsAction([]string{"systemctl", "restart", "veil-mieru.service"}) {
 		t.Fatal("Mieru restart should be allowed")
 	}

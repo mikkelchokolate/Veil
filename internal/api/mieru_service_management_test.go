@@ -20,7 +20,7 @@ func TestManagedServiceStatusCatalogIncludesMieru(t *testing.T) {
 }
 
 func TestServiceCommandPolicyAllowsMieruUnit(t *testing.T) {
-	if !(ServiceCommandPolicy{}).AllowsHealth("veil-mieru.service") {
+	if !service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsHealth("veil-mieru.service") {
 		t.Fatal("veil-mieru.service should be allowed")
 	}
 }
