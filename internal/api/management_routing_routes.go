@@ -71,6 +71,19 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 	})
 }
 
+func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
+	switch err {
+	case routing.ErrRoutingRuleInvalid:
+		writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
+	case routing.ErrRoutingRuleDuplicateName:
+		writeError(w, "routing rule name already exists", http.StatusConflict)
+	case routing.ErrRoutingRuleNotFound:
+		writeNotFound(w)
+	default:
+		writeError(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
