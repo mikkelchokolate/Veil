@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/routing"
 )
 
 func TestRoutingRuleErrorResponseMapsKnownErrors(t *testing.T) {
@@ -14,9 +16,9 @@ func TestRoutingRuleErrorResponseMapsKnownErrors(t *testing.T) {
 		code int
 		body string
 	}{
-		{ErrRoutingRuleInvalid, http.StatusBadRequest, "name, match, and outbound are required"},
-		{ErrRoutingRuleDuplicateName, http.StatusConflict, "routing rule name already exists"},
-		{ErrRoutingRuleNotFound, http.StatusNotFound, "not found"},
+		{routing.ErrRoutingRuleInvalid, http.StatusBadRequest, "name, match, and outbound are required"},
+		{routing.ErrRoutingRuleDuplicateName, http.StatusConflict, "routing rule name already exists"},
+		{routing.ErrRoutingRuleNotFound, http.StatusNotFound, "not found"},
 	}
 	for _, tc := range cases {
 		w := httptest.NewRecorder()

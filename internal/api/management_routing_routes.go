@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/veil-panel/veil/internal/routing"
+)
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
 	_ = s.withTransaction(func(tx *managementTransaction) error {
@@ -73,7 +77,7 @@ func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Re
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	writeJSON(w, NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).WithPresets(routingPresetProfiles()).Build())
+	writeJSON(w, routing.NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).WithPresets(routing.PresetProfiles()).Build())
 }
 
 func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +86,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		writeNotFound(w)
 		return
 	}
-	preset, ok := routingPresetByName(name)
+	preset, ok := routing.PresetByName(name)
 	if !ok {
 		writeNotFound(w)
 		return
@@ -93,8 +97,8 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := RoutingPresetState{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: s.rules}
-	NewRoutingPresetApplication(&state).Apply(preset)
+	state := routing.RoutingPresetState{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: s.rules}
+	routing.NewRoutingPresetApplication(&state).Apply(preset)
 	s.routingPreset = state.ActivePreset
 	s.routingSource = state.Source
 	s.rules = state.Rules
@@ -102,7 +106,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build())
+	writeJSON(w, routing.NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build())
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
