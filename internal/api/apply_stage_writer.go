@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
@@ -29,7 +30,7 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 	if err := writeAtomicFile(planPath, append(planBody, '\n'), 0o600); err != nil {
 		return nil, nil, nil, err
 	}
-	snapshotBody, err := NewStateStore("", input.Cipher).Marshal(input.Snapshot)
+	snapshotBody, err := managementstate.NewStore("", input.Cipher).Marshal(input.Snapshot)
 	if err != nil {
 		return nil, nil, nil, err
 	}

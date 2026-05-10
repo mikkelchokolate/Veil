@@ -9,6 +9,7 @@ import (
 
 	"github.com/veil-panel/veil/internal/api"
 	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
@@ -38,7 +39,7 @@ func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
 		Rules:    []api.RoutingRule{},
 		Warp:     api.WarpConfig{Endpoint: "engage.cloudflareclient.com:2408"},
 	})
-	if err := api.NewStateStore(statePath, cipher).Save(snapshot); err != nil {
+	if err := managementstate.NewStore(statePath, cipher).Save(snapshot); err != nil {
 		t.Fatalf("save state: %v", err)
 	}
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/veil-panel/veil/internal/api"
 	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
 )
@@ -40,7 +41,7 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 		}
 		return installer.RepairPlan{}, err
 	}
-	store := api.NewStateStore(statePath, repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
+	store := managementstate.NewStore(statePath, repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
 	snapshot, ok, err := store.Load()
 	if err != nil {
 		return installer.RepairPlan{}, err

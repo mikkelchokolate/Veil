@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
@@ -282,7 +283,7 @@ func loadStateSnapshotForTest(t *testing.T, statePath, keyPath string) managemen
 	if err != nil {
 		t.Fatalf("cipher: %v", err)
 	}
-	snapshot, ok, err := NewStateStore(statePath, cipher).Load()
+	snapshot, ok, err := managementstate.NewStore(statePath, cipher).Load()
 	if err != nil {
 		t.Fatalf("load state: %v", err)
 	}

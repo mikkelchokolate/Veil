@@ -1,4 +1,4 @@
-package api
+package managementstate
 
 import (
 	"crypto/rand"
@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/veil-panel/veil/internal/model"
 	"github.com/veil-panel/veil/internal/secrets"
 )
 
-func TestStateStoreRejectsRemovedStackField(t *testing.T) {
+func TestStoreRejectsRemovedStackField(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(path, []byte(`{
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","stack":"both"},
@@ -21,13 +22,13 @@ func TestStateStoreRejectsRemovedStackField(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 
-	_, _, err := NewStateStore(path, nil).Load()
+	_, _, err := NewStore(path, nil).Load()
 	if err == nil || !strings.Contains(err.Error(), `json: unknown field "stack"`) {
 		t.Fatalf("expected removed stack field rejection, got %v", err)
 	}
 }
 
-func TestStateStoreEncryptsAndDecryptsInboundPasswords(t *testing.T) {
+func TestStoreEncryptsAndDecryptsInboundPasswords(t *testing.T) {
 	var key [secrets.KeySize]byte
 	if _, err := rand.Read(key[:]); err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -37,11 +38,11 @@ func TestStateStoreEncryptsAndDecryptsInboundPasswords(t *testing.T) {
 		t.Fatalf("new cipher: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "state.json")
-	store := NewStateStore(path, cipher)
+	store := NewStore(path, cipher)
 
-	snapshot := managementSnapshot{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com"},
-		Inbounds: []Inbound{{Name: "hy2-vip", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, Password: "vip-secret", Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-secret", Enabled: true}}}},
+	snapshot := model.ManagementSnapshot{
+		Settings: model.Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com"},
+		Inbounds: []model.Inbound{{Name: "hy2-vip", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, Password: "vip-secret", Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-secret", Enabled: true}}}},
 	}
 	if err := store.Save(snapshot); err != nil {
 		t.Fatalf("save: %v", err)

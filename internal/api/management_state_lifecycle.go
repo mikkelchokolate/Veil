@@ -66,11 +66,11 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 }
 
 func (l ManagementStateLifecycle) SaveLocked() error {
-	return NewStateStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked())
+	return managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked())
 }
 
 func (l ManagementStateLifecycle) Load() error {
-	snapshot, ok, err := NewStateStore(l.state.statePath, l.state.cipher).Load()
+	snapshot, ok, err := managementstate.NewStore(l.state.statePath, l.state.cipher).Load()
 	if err != nil {
 		return err
 	}
