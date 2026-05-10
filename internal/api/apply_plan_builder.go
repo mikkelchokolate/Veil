@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/veil-panel/veil/internal/applyplan"
 	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/service"
 )
 
 type ApplyPlanInput struct {
@@ -31,7 +32,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
 	}
-	runtimeUnits := NewProtocolRuntimeProvisioning().Plan(input.Inbounds, input.Warp).SystemdUnits()
+	runtimeUnits := service.NewProtocolRuntimeProvisioning(NewManagedRuntimeCatalog()).Plan(input.Inbounds, input.Warp).SystemdUnits()
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""
 	if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {

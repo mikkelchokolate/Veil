@@ -1,9 +1,13 @@
 package api
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/veil-panel/veil/internal/service"
+)
 
 func TestManagedServiceStatusCatalogIncludesMieru(t *testing.T) {
-	services := NewManagedServiceStatusCatalog(func(unit string) ServiceRuntimeStatus { return ServiceRuntimeStatus{Unit: unit} }).List()
+	services := service.NewManagedServiceStatusCatalog(NewManagedRuntimeCatalog(), service.RuntimeStatusReader(func(unit string) ServiceRuntimeStatus { return ServiceRuntimeStatus{Unit: unit} })).List()
 	found := false
 	for _, svc := range services {
 		if svc.Name == "mieru" && svc.Unit == "veil-mieru.service" {

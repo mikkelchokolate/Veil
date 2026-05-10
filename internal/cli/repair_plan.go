@@ -12,6 +12,7 @@ import (
 	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/veil-panel/veil/internal/service"
 )
 
 func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPlan, error) {
@@ -202,7 +203,7 @@ func repairStateCipher(keyPath string) *secrets.Cipher {
 }
 
 func runtimeUnitNamesForState(inbounds []api.Inbound, warp api.WarpConfig) []string {
-	return api.NewProtocolRuntimeProvisioning().Plan(inbounds, warp).SystemdUnits()
+	return service.NewProtocolRuntimeProvisioning(api.NewManagedRuntimeCatalog()).Plan(inbounds, warp).SystemdUnits()
 }
 
 func appendRepairUnit(units []string, unit string) []string {
