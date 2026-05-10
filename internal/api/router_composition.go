@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/veil-panel/veil/internal/observability"
+)
 
 type RouterComposition struct {
 	Info ServerInfo
@@ -14,7 +18,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	info := c.Info
 	mux := http.NewServeMux()
 	state := newManagementState(info)
-	metrics := NewMetricsCollector()
+	metrics := observability.NewMetricsCollector()
 	basePath := info.WebBasePath
 	if basePath == "" {
 		basePath = "/"

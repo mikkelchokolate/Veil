@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+
+	"github.com/veil-panel/veil/internal/observability"
 )
 
 type ServerInfo struct {
@@ -52,8 +54,8 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(metrics *MetricsCollector, next http.Handler) http.Handler {
-	limiter := DefaultRateLimitPolicy().NewLimiter()
+func rateLimitMiddleware(metrics *observability.MetricsCollector, next http.Handler) http.Handler {
+	limiter := observability.DefaultRateLimitPolicy().NewLimiter()
 	limiter.SetOnRateLimited(func() { metrics.TrackRateLimitHit() })
 	return limiter.Middleware(next)
 }
