@@ -28,19 +28,5 @@ func (Hysteria2ProtocolAdapter) Capability() ProtocolCapability {
 			body, err := renderHysteria2GeneratedConfig(input.Settings, input.Inbounds[0])
 			return GeneratedConfigArtifact{Path: input.Paths.Generated(generatedHysteria2ConfigSubpath), Body: body}, true, err
 		},
-		ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-			link := newProtocolClientLink(input)
-			link.URI = hysteria2UserPassClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name)
-			return link, true
-		},
-		FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-			link := newProtocolClientLink(input)
-			password := input.Inbound.Password
-			if password == "" {
-				password = input.Settings.Hysteria2Password
-			}
-			link.URI = hysteria2ClientURI(input.Settings.Domain, input.Inbound.Port, password, input.Inbound.Name)
-			return link, true
-		},
 	}
 }

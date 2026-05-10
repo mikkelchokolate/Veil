@@ -30,19 +30,5 @@ func (NaiveProxyProtocolAdapter) Capability() ProtocolCapability {
 			body, err := renderNaiveGeneratedConfig(input.Settings, input.Inbounds[0])
 			return GeneratedConfigArtifact{Path: input.Paths.Generated(generatedCaddyfileSubpath), Body: body}, true, err
 		},
-		ProfileClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-			link := newProtocolClientLink(input)
-			link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Credential.Username, input.Credential.Password)
-			return link, true
-		},
-		FallbackClientLink: func(input ClientAccessLinkInput) (ClientLink, bool) {
-			link := newProtocolClientLink(input)
-			password := input.Inbound.Password
-			if password == "" {
-				password = input.Settings.NaivePassword
-			}
-			link.URI = naiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Settings.NaiveUsername, password)
-			return link, true
-		},
 	}
 }

@@ -19,9 +19,6 @@ type ProtocolCapability struct {
 	RequiresCaddySettings  bool
 	MaxEnabled             int
 	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
-	ProfileClientLink      func(ClientAccessLinkInput) (ClientLink, bool)
-	FallbackClientLink     func(ClientAccessLinkInput) (ClientLink, bool)
-	AggregateClientLinks   func(Settings, []Inbound) ([]ClientLink, error)
 }
 
 type InboundProtocolAdapter interface {

@@ -32,8 +32,8 @@ func TestDefaultProtocolCapabilityCatalogUsesProtocolAdapters(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing protocol adapter capability for %s", protocol)
 		}
-		if capability.RenderGeneratedConfig == nil || capability.ProfileClientLink == nil {
-			t.Fatalf("%s adapter capability missing generated config or client access behavior: %+v", protocol, capability)
+		if capability.RenderGeneratedConfig == nil {
+			t.Fatalf("%s adapter capability missing generated config behavior: %+v", protocol, capability)
 		}
 	}
 }
