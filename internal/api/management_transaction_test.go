@@ -22,7 +22,7 @@ func TestManagementTransactionPersistsInboundMutation(t *testing.T) {
 	reloaded := newManagementState(ServerInfo{StatePath: statePath, KeyPath: keyPath})
 	reloaded.mu.Lock()
 	defer reloaded.mu.Unlock()
-	if _, ok := newManagementStateMutationFromState(reloaded).Inbound("extra"); !ok {
+	if _, ok := (&managementTransaction{state: reloaded}).Mutation().Inbound("extra"); !ok {
 		t.Fatalf("created inbound was not persisted: %+v", reloaded.inbounds)
 	}
 }
