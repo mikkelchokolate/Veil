@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/veil-panel/veil/internal/applyflow"
+	"github.com/veil-panel/veil/internal/service"
 )
 
 type applyWorkflowState interface {
@@ -22,7 +23,11 @@ func NewApplyWorkflow(state applyWorkflowState) ApplyWorkflow {
 }
 
 func (w ApplyWorkflow) RunLocked(req ApplyRequest) (ApplyResponse, int, error) {
-	return applyflow.NewWorkflow(applyWorkflowStateAdapter{state: w.state}, checkServiceHealth).RunLocked(req)
+	return applyflow.NewWorkflow(applyWorkflowStateAdapter{state: w.state}, func(actions []ServiceActionResult) []ServiceHealthResult {
+		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
+			return serviceHealthChecker(name)
+		}).Check(actions)
+	}).RunLocked(req)
 }
 
 type applyWorkflowStateAdapter struct {

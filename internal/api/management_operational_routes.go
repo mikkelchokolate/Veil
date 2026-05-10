@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/veil-panel/veil/internal/clientaccess"
+	"github.com/veil-panel/veil/internal/firewall"
 )
 
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +58,7 @@ func (s *managementState) handleFirewall(w http.ResponseWriter, r *http.Request)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	active, _ := firewallStatusReader()
-	rules := buildFirewallRules(s.settings, s.inbounds)
+	rules := firewall.BuildRuleResponses(s.settings, s.inbounds)
 	if r.Method == http.MethodGet {
 		writeJSON(w, map[string]any{
 			"active": active,

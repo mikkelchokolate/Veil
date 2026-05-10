@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/veil-panel/veil/internal/managementstate"
 	"github.com/veil-panel/veil/internal/routing"
 )
 
@@ -31,7 +32,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http.Request) {
-	name, ok := NewManagementResourceName("/api/routing/rules/").Parse(r.URL.Path)
+	name, ok := managementstate.NewResourceNameParser("/api/routing/rules/").Parse(r.URL.Path)
 	if !ok {
 		writeNotFound(w)
 		return
@@ -81,7 +82,7 @@ func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Re
 }
 
 func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *http.Request) {
-	name, ok := NewManagementResourceName("/api/routing/presets/").Parse(r.URL.Path)
+	name, ok := managementstate.NewResourceNameParser("/api/routing/presets/").Parse(r.URL.Path)
 	if !ok {
 		writeNotFound(w)
 		return

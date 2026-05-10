@@ -92,7 +92,3 @@ func (s *managementState) Reload() error {
 func (s *managementState) saveLocked() error {
 	return NewManagementStateLifecycle(s).SaveLocked()
 }
-
-func buildFirewallRules(settings Settings, inbounds []Inbound) []firewallRuleResponse {
-	return BuildFirewallRuleResponses(settings, inbounds)
-}
