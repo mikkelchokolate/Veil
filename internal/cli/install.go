@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/audit"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
@@ -72,7 +73,7 @@ func newInstallCommand() *cobra.Command {
 }
 
 func writeAuditInstall(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:       "install.apply",
 		BackupID:     backupID,
 		Success:      success,

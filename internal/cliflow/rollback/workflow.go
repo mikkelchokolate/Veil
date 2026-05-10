@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/veil-panel/veil/internal/audit"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
@@ -81,7 +82,7 @@ func (w Workflow) Cleanup(backupID string) error {
 }
 
 func writeAuditRestore(auditLog, backupID string, success bool, errMsg string, restoredFiles []string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:        "rollback.restore",
 		BackupID:      backupID,
 		Success:       success,
@@ -91,7 +92,7 @@ func writeAuditRestore(auditLog, backupID string, success bool, errMsg string, r
 }
 
 func writeAuditCleanup(auditLog, backupID string, success bool, errMsg string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:   "rollback.cleanup",
 		BackupID: backupID,
 		Success:  success,

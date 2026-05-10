@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/audit"
 )
 
 func newRepairCommand() *cobra.Command {
@@ -44,7 +44,7 @@ func newRepairCommand() *cobra.Command {
 }
 
 func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:       "repair.apply",
 		BackupID:     backupID,
 		Success:      success,

@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/audit"
 )
 
 func newRollbackCommand() *cobra.Command {
@@ -51,7 +51,7 @@ func newRollbackCommand() *cobra.Command {
 }
 
 func writeAuditRestore(auditLog, backupID string, success bool, errMsg string, restoredFiles []string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:        "rollback.restore",
 		BackupID:      backupID,
 		Success:       success,
@@ -61,7 +61,7 @@ func writeAuditRestore(auditLog, backupID string, success bool, errMsg string, r
 }
 
 func writeAuditCleanup(auditLog, backupID string, success bool, errMsg string) error {
-	return installer.AppendAuditEvent(auditLog, installer.AuditEvent{
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
 		Action:   "rollback.cleanup",
 		BackupID: backupID,
 		Success:  success,
