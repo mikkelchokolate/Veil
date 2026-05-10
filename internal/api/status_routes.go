@@ -32,7 +32,8 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		_ = json.NewEncoder(w).Encode(NewStatusResponseBuilder(routes.Info, buildServiceStatuses).Build())
+		info := service.StatusInfo{Version: routes.Info.Version, Mode: routes.Info.Mode}
+		_ = json.NewEncoder(w).Encode(service.NewStatusResponseBuilder(info, buildServiceStatuses).Build())
 	}
 }
 
