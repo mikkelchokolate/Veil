@@ -13,7 +13,7 @@ func (MieruProtocolAdapter) Capability() ProtocolCapability {
 		DisplayName:           "Mieru",
 		Transports:            []string{"tcp", "udp"},
 		FirewallService:       "Veil Mieru",
-		GeneratedConfig:       GeneratedConfigArtifactSpec{Subpath: generatedMieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
+		GeneratedConfig:       generatedconfig.ArtifactSpec{Subpath: generatedconfig.MieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
 		ApplyAction:           "restart " + renderer.UnitMieru,
 		RuntimeName:           "mieru",
 		RuntimeActionName:     "mieru",
@@ -21,7 +21,7 @@ func (MieruProtocolAdapter) Capability() ProtocolCapability {
 		RuntimeOrder:          40,
 		PromotedVerb:          "restart",
 		ValidateInboundRender: true,
-		RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
+		RenderGeneratedConfig: func(input GeneratedConfigProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
 			return generatedconfig.NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
 		},
 	}

@@ -1,12 +1,14 @@
 package api
 
+import "github.com/veil-panel/veil/internal/generatedconfig"
+
 type ProtocolCapability struct {
 	Protocol               string
 	DisplayName            string
 	Transports             []string
 	FirewallService        string
 	RequiresCaddy          bool
-	GeneratedConfig        GeneratedConfigArtifactSpec
+	GeneratedConfig        generatedconfig.ArtifactSpec
 	ApplyAction            string
 	RuntimeName            string
 	RuntimeActionName      string
@@ -18,7 +20,7 @@ type ProtocolCapability struct {
 	RequiresRenderSettings bool
 	RequiresCaddySettings  bool
 	MaxEnabled             int
-	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
+	RenderGeneratedConfig  func(GeneratedConfigProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error)
 }
 
 type InboundProtocolAdapter interface {

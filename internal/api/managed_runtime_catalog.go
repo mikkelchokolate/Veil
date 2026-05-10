@@ -3,6 +3,7 @@ package api
 import (
 	"sort"
 
+	"github.com/veil-panel/veil/internal/generatedconfig"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/service"
 )
@@ -41,7 +42,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	ordered = append(ordered, struct {
 		Order   int
 		Runtime ManagedRuntime
-	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: renderer.UnitWarp, PromotedSubpath: generatedWarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
+	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: renderer.UnitWarp, PromotedSubpath: generatedconfig.WarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Order < ordered[j].Order })
 	for _, item := range ordered {
 		runtimes = append(runtimes, item.Runtime)

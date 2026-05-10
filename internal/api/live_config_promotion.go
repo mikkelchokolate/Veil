@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/veil-panel/veil/internal/generatedconfig"
 )
 
 type LiveConfigPromotion struct {
@@ -57,7 +59,7 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {
-	return NewGeneratedConfigArtifactCatalog().LivePathForStagedConfig(p.applyRoot, stagedPath)
+	return generatedconfig.NewArtifactCatalog().LivePathForStagedConfig(p.applyRoot, stagedPath)
 }
 
 func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {

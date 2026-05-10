@@ -6,16 +6,9 @@ type GeneratedConfigProtocolRegistry struct {
 	inner generatedconfig.ProtocolRegistry
 }
 
-type GeneratedConfigProtocol struct {
-	Protocol               string
-	MaxEnabled             int
-	RequiresRenderSettings bool
-	Render                 func(GeneratedConfigProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
-}
-
 type GeneratedConfigProtocolRenderInput struct {
 	Settings Settings
-	Paths    GeneratedConfigPaths
+	Paths    generatedconfig.Paths
 	Inbounds []Inbound
 }
 
@@ -46,6 +39,6 @@ func (r GeneratedConfigProtocolRegistry) Render(input GeneratedConfigInput) (map
 	return r.inner.Render(generatedconfig.ConfigInput{ApplyRoot: input.ApplyRoot, Settings: input.Settings, Inbounds: input.Inbounds})
 }
 
-func (r GeneratedConfigProtocolRegistry) RenderInbound(settings Settings, paths GeneratedConfigPaths, inbound Inbound) (GeneratedConfigArtifact, bool, error) {
+func (r GeneratedConfigProtocolRegistry) RenderInbound(settings Settings, paths generatedconfig.Paths, inbound Inbound) (generatedconfig.GeneratedConfigArtifact, bool, error) {
 	return r.inner.RenderInbound(settings, paths, inbound)
 }

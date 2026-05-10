@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/generatedconfig"
 )
 
 func TestGeneratedConfigProtocolRegistryOwnsSingleVsAggregateCardinality(t *testing.T) {
@@ -63,7 +65,7 @@ func TestGeneratedConfigProtocolRegistryRendersProtocolArtifacts(t *testing.T) {
 func TestGeneratedConfigProtocolRegistryRendersSingleInboundForPlanValidation(t *testing.T) {
 	artifact, ok, err := NewGeneratedConfigProtocolRegistry().RenderInbound(
 		Settings{},
-		NewGeneratedConfigPaths(t.TempDir()),
+		generatedconfig.NewPaths(t.TempDir()),
 		Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret"},
 	)
 	if err != nil {

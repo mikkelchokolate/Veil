@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/panelaccess"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/panelaccess"
+)
 
 type PanelAccess struct {
 	inner panelaccess.PanelAccess
@@ -16,7 +19,7 @@ func (p PanelAccess) CaddyRoute() (PanelCaddyRoute, bool, error) {
 	return p.inner.CaddyRoute()
 }
 
-func (p PanelAccess) GeneratedConfig(paths GeneratedConfigPaths) (GeneratedConfigArtifact, bool, error) {
+func (p PanelAccess) GeneratedConfig(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
 	return p.inner.GeneratedConfig(paths)
 }
 

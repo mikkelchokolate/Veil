@@ -37,7 +37,7 @@ func (r ManagementConfigRenderer) HasRenderSettings() bool {
 }
 
 func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error) {
-	artifact, _, err := NewGeneratedConfigProtocolRegistry().RenderInbound(r.input.Settings, NewGeneratedConfigPaths(r.input.ApplyRoot), inbound)
+	artifact, _, err := NewGeneratedConfigProtocolRegistry().RenderInbound(r.input.Settings, generatedconfig.NewPaths(r.input.ApplyRoot), inbound)
 	return artifact.Body, err
 }
 
