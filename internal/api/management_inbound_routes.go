@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	"github.com/veil-panel/veil/internal/inbounds"
 )
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -95,15 +97,15 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 
 func writeInboundManagementError(w http.ResponseWriter, err error) {
 	switch err {
-	case ErrInboundInvalid:
+	case inbounds.ErrInboundInvalid:
 		writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
-	case ErrInboundDuplicateName:
+	case inbounds.ErrInboundDuplicateName:
 		writeError(w, "inbound name already exists", http.StatusConflict)
-	case ErrInboundDuplicateTransportPort:
+	case inbounds.ErrInboundDuplicateTransportPort:
 		writeError(w, "inbound transport/port already exists", http.StatusConflict)
-	case ErrInboundUnsupportedProtocolTransport:
+	case inbounds.ErrInboundUnsupportedProtocolTransport:
 		writeError(w, "unsupported inbound protocol/transport", http.StatusBadRequest)
-	case ErrInboundNotFound:
+	case inbounds.ErrInboundNotFound:
 		writeNotFound(w)
 	default:
 		writeError(w, err.Error(), http.StatusInternalServerError)
