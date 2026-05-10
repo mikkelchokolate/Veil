@@ -20,7 +20,7 @@ func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath strin
 	if err := runSystemctlRestart(renderer.UnitVeil); err != nil {
 		if opts.Staged {
 			fmt.Fprintf(out, "Restart failed, rolling back to previous binary...\n")
-			if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
+			if rollbackErr := updateflow.RollbackBinary(backupPath, currentPath); rollbackErr != nil {
 				return fmt.Errorf("restart failed and rollback also failed: restart: %w; rollback: %v", err, rollbackErr)
 			}
 			fmt.Fprintln(out, "Rolled back to previous binary.")
@@ -33,7 +33,7 @@ func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath strin
 	if err := updateHealthChecker(addr, token, 10*time.Second); err != nil {
 		if opts.Staged {
 			fmt.Fprintf(out, "Health check failed, rolling back to previous binary...\n")
-			if rollbackErr := rollbackBinary(backupPath, currentPath); rollbackErr != nil {
+			if rollbackErr := updateflow.RollbackBinary(backupPath, currentPath); rollbackErr != nil {
 				return fmt.Errorf("health check failed and rollback also failed: health: %w; rollback: %v", err, rollbackErr)
 			}
 			// Restart again after rollback to get the old binary running

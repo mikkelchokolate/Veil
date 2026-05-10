@@ -1,9 +1,13 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
+)
 
 func TestUpdateReleaseArchiveExtractsVeilBinary(t *testing.T) {
-	archive := NewUpdateReleaseArchive(createTarGz(t, "./veil", []byte("binary-body")))
+	archive := updateflow.NewReleaseArchive(createTarGz(t, "./veil", []byte("binary-body")))
 
 	binary, err := archive.ExtractVeilBinary()
 	if err != nil {

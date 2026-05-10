@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestRunUpdateWorkflowSkipsAlreadyLatestWithoutForce(t *testing.T) {
 	oldReleaseFetcher := updateReleaseFetcher
 	oldAssetDownloader := updateAssetDownloader
-	updateReleaseFetcher = func() (*githubRelease, error) {
-		return &githubRelease{TagName: "v1.2.3"}, nil
+	updateReleaseFetcher = func() (*updateflow.Release, error) {
+		return &updateflow.Release{TagName: "v1.2.3"}, nil
 	}
 	updateAssetDownloader = func(url string) ([]byte, error) {
 		t.Fatalf("already-latest update must not download assets")

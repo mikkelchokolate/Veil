@@ -5,11 +5,31 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
 var updateReleaseFetcher = fetchLatestRelease
 var updateAssetDownloader = downloadAsset
+
+func fetchLatestRelease() (*updateflow.Release, error) {
+	catalog := updateflow.NewReleaseCatalog(updateRepoOwner, updateRepoName)
+	catalog.HTTPClient = updateHTTPClient
+	return catalog.Latest()
+}
+
+func downloadAsset(url string) ([]byte, error) {
+	updateflow.HTTPClient = updateHTTPClient
+	return updateflow.DownloadAsset(url)
+}
+
+func downloadVerifiedUpdateAsset(release *updateflow.Release) (string, []byte, error) {
+	archive, err := updateflow.NewReleaseAssets(release, updateAssetDownloader).DownloadVerifiedArchive()
+	if err != nil {
+		return "", nil, err
+	}
+	return archive.Name, archive.Body, nil
+}
 
 type updateWorkflowOptions struct {
 	CurrentVersion string
@@ -51,7 +71,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		fmt.Fprintf(out, "Updating %s → %s\n", opts.CurrentVersion, release.TagName)
 	}
 
-	assetName := updateAssetName()
+	assetName := updateflow.AssetName()
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
 	_, archive, err := downloadVerifiedUpdateAsset(release)

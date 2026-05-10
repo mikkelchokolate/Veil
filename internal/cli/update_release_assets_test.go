@@ -5,16 +5,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"testing"
+
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestUpdateReleaseAssetsDownloadsVerifiedArchive(t *testing.T) {
-	assetName := updateAssetName()
+	assetName := updateflow.AssetName()
 	archive := []byte("archive-body")
 	hash := sha256.Sum256(archive)
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), assetName))
 	downloaded := []string{}
 
-	assets := NewUpdateReleaseAssets(&githubRelease{TagName: "v1.2.4", Assets: []githubAsset{
+	assets := updateflow.NewReleaseAssets(&updateflow.Release{TagName: "v1.2.4", Assets: []updateflow.Asset{
 		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
 		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
 	}}, func(url string) ([]byte, error) {

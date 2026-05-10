@@ -12,10 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestUpdateAssetNameMatchesPlatform(t *testing.T) {
-	name := updateAssetName()
+	name := updateflow.AssetName()
 	if !strings.HasSuffix(name, ".tar.gz") {
 		t.Fatalf("expected .tar.gz suffix, got: %s", name)
 	}
@@ -29,27 +31,27 @@ func TestUpdateAssetNameMatchesPlatform(t *testing.T) {
 }
 
 func TestFindAssetURL(t *testing.T) {
-	assets := []githubAsset{
+	assets := []updateflow.Asset{
 		{Name: "veil_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/veil.tar.gz"},
 		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
 	}
-	if url := findAssetURL(assets, "veil_linux_amd64.tar.gz"); url != "https://example.com/veil.tar.gz" {
+	if url := updateflow.FindAssetURL(assets, "veil_linux_amd64.tar.gz"); url != "https://example.com/veil.tar.gz" {
 		t.Fatalf("bad URL: %s", url)
 	}
-	if url := findAssetURL(assets, "nonexistent"); url != "" {
+	if url := updateflow.FindAssetURL(assets, "nonexistent"); url != "" {
 		t.Fatalf("expected empty for missing, got: %s", url)
 	}
 }
 
 func TestExtractChecksumForFile(t *testing.T) {
 	checksums := "abc123  veil_linux_amd64.tar.gz\ndef456  checksums.txt\n"
-	if got := extractChecksumForFile(checksums, "veil_linux_amd64.tar.gz"); got != "abc123" {
+	if got := updateflow.ExtractChecksumForFile(checksums, "veil_linux_amd64.tar.gz"); got != "abc123" {
 		t.Fatalf("expected abc123, got %s", got)
 	}
-	if got := extractChecksumForFile(checksums, "checksums.txt"); got != "def456" {
+	if got := updateflow.ExtractChecksumForFile(checksums, "checksums.txt"); got != "def456" {
 		t.Fatalf("expected def456, got %s", got)
 	}
-	if got := extractChecksumForFile(checksums, "missing"); got != "" {
+	if got := updateflow.ExtractChecksumForFile(checksums, "missing"); got != "" {
 		t.Fatalf("expected empty, got %s", got)
 	}
 }
@@ -58,20 +60,20 @@ func TestVerifyAssetChecksum(t *testing.T) {
 	data := []byte("test archive")
 	hash := sha256.Sum256(data)
 	checksums := fmt.Sprintf("%s  veil_linux_amd64.tar.gz\n", hex.EncodeToString(hash[:]))
-	if err := verifyAssetChecksum(data, "veil_linux_amd64.tar.gz", checksums); err != nil {
+	if err := updateflow.VerifyAssetChecksum(data, "veil_linux_amd64.tar.gz", checksums); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if err := verifyAssetChecksum(data, "veil_linux_amd64.tar.gz", "deadbeef  veil_linux_amd64.tar.gz\n"); err == nil {
+	if err := updateflow.VerifyAssetChecksum(data, "veil_linux_amd64.tar.gz", "deadbeef  veil_linux_amd64.tar.gz\n"); err == nil {
 		t.Fatal("expected error for bad checksum")
 	}
-	if err := verifyAssetChecksum(data, "missing.tar.gz", checksums); err == nil {
+	if err := updateflow.VerifyAssetChecksum(data, "missing.tar.gz", checksums); err == nil {
 		t.Fatal("expected error for missing entry")
 	}
 }
 
 func TestExtractVeilBinary(t *testing.T) {
 	archive := createTarGz(t, "veil", []byte("fake binary content"))
-	bin, err := extractVeilBinary(archive)
+	bin, err := updateflow.ExtractVeilBinary(archive)
 	if err != nil {
 		t.Fatalf("extract error: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestExtractVeilBinary(t *testing.T) {
 	}
 
 	empty := createTarGz(t, "other", []byte("x"))
-	if _, err := extractVeilBinary(empty); err == nil {
+	if _, err := updateflow.ExtractVeilBinary(empty); err == nil {
 		t.Fatal("expected error when veil not in archive")
 	}
 }
@@ -92,7 +94,7 @@ func TestCopyFileData(t *testing.T) {
 	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := copyFileData(src, dst); err != nil {
+	if err := updateflow.CopyFileData(src, dst); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(dst)
@@ -105,7 +107,7 @@ func TestReplaceBinaryAtomic(t *testing.T) {
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "veil")
 	os.WriteFile(dst, []byte("old"), 0o755)
-	if err := replaceBinaryAtomic(dst, []byte("new")); err != nil {
+	if err := updateflow.ReplaceBinaryAtomic(dst, []byte("new")); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(dst)
@@ -146,7 +148,7 @@ func TestRollbackBinary(t *testing.T) {
 	os.WriteFile(currentPath, []byte("new-broken"), 0o755)
 	os.WriteFile(backupPath, []byte("old-working"), 0o755)
 
-	if err := rollbackBinary(backupPath, currentPath); err != nil {
+	if err := updateflow.RollbackBinary(backupPath, currentPath); err != nil {
 		t.Fatalf("rollbackBinary failed: %v", err)
 	}
 
@@ -172,7 +174,7 @@ func TestRollbackBinaryMissingBackup(t *testing.T) {
 	os.WriteFile(currentPath, []byte("current"), 0o755)
 	// No backup file exists
 
-	if err := rollbackBinary(backupPath, currentPath); err == nil {
+	if err := updateflow.RollbackBinary(backupPath, currentPath); err == nil {
 		t.Fatal("expected error when backup is missing")
 	}
 }
