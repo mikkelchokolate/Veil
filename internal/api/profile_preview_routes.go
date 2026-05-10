@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/veil-panel/veil/internal/installer"
+	veilsettings "github.com/veil-panel/veil/internal/settings"
 )
 
 type RURecommendedPreviewRequest struct {
@@ -64,5 +65,5 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 }
 
 func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
-	return NewCredentialDisclosure().RedactText(text, []string{profile.PanelAuthToken})
+	return veilsettings.NewCredentialDisclosure().RedactText(text, []string{profile.PanelAuthToken})
 }
