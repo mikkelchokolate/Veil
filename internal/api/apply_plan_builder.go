@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/applyplan"
+import (
+	"github.com/veil-panel/veil/internal/applyplan"
+	"github.com/veil-panel/veil/internal/generatedconfig"
+)
 
 type ApplyPlanInput struct {
 	Settings                Settings
@@ -47,8 +50,10 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			Runtimes: panelAccessIntent.Runtimes,
 			Errors:   panelAccessIntent.Errors,
 		},
-		Capabilities:          capabilities,
-		ValidateCardinality:   validateGeneratedConfigInboundCardinality,
+		Capabilities: capabilities,
+		ValidateCardinality: func(settings Settings, inbounds []Inbound) error {
+			return generatedconfig.NewGeneratedConfigCardinality(settings, NewGeneratedConfigProtocolRegistry().inner).Validate(inbounds)
+		},
 		RuntimeUnits:          runtimeUnits,
 		WarpAction:            warpAction,
 		ValidateInboundRender: validateInboundRender,
