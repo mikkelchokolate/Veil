@@ -8,8 +8,7 @@ import (
 )
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
 			writeJSON(w, mutation.RoutingRules())
@@ -37,8 +36,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 		writeNotFound(w)
 		return
 	}
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		rule, ok := mutation.RoutingRule(name)
 		if !ok {
 			writeNotFound(w)
@@ -124,8 +122,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
 			writeJSON(w, mutation.Warp())

@@ -29,6 +29,16 @@ func (s *managementState) register(mux *http.ServeMux) {
 	ManagementRoutes{}.Register(mux, s)
 }
 
+func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fn(s.mutationLocked())
+}
+
+func (s *managementState) mutationLocked() managementstate.Mutation {
+	return managementstate.NewMutation(managementstate.MutationTarget{Settings: &s.settings, Inbounds: &s.inbounds, Rules: &s.rules, Warp: &s.warp}, s.saveLocked)
+}
+
 func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
 }

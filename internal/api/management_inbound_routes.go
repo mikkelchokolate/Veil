@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/veil-panel/veil/internal/inbounds"
+	"github.com/veil-panel/veil/internal/managementstate"
 )
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
 			writeJSON(w, mutation.Settings())
@@ -32,8 +32,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request) {
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
 			writeJSON(w, mutation.Inbounds())
@@ -61,8 +60,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		writeNotFound(w)
 		return
 	}
-	_ = s.withTransaction(func(tx *managementTransaction) error {
-		mutation := tx.Mutation()
+	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		inbound, ok := mutation.Inbound(name)
 		if !ok {
 			writeNotFound(w)
