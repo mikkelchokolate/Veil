@@ -1,5 +1,7 @@
 package api
 
+import "github.com/veil-panel/veil/internal/service"
+
 type ManagementApplyContext struct {
 	state *managementState
 }
@@ -42,7 +44,9 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 }
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
-	return NewPromotedServiceReloader(ctx.state.applyRoot, serviceActionRunner).Reload(liveFiles)
+	return service.NewPromotedServiceReloader(ctx.state.applyRoot, NewManagedRuntimeCatalog(), func(command []string) ServiceActionResult {
+		return serviceActionRunner(command)
+	}).Reload(liveFiles)
 }
 
 func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {

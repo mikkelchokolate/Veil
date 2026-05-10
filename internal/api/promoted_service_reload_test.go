@@ -3,12 +3,14 @@ package api
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/service"
 )
 
 func TestPromotedServiceReloaderRunsExpectedReloads(t *testing.T) {
 	root := t.TempDir()
 	commands := [][]string{}
-	reloader := NewPromotedServiceReloader(root, func(command []string) ServiceActionResult {
+	reloader := service.NewPromotedServiceReloader(root, NewManagedRuntimeCatalog(), func(command []string) ServiceActionResult {
 		commands = append(commands, append([]string(nil), command...))
 		return ServiceActionResult{Success: true}
 	})
