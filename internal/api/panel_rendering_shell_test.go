@@ -6,7 +6,7 @@ import (
 )
 
 func TestPanelRenderingShellReplacesAllVeilPlaceholders(t *testing.T) {
-	html := renderPanelHTMLBase()
+	html := panelHTML("/")
 	if strings.Contains(html, "__VEIL_PANEL_") {
 		t.Fatalf("Panel rendering shell left unresolved placeholder in HTML")
 	}

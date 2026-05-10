@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"os"
+
+	"github.com/veil-panel/veil/internal/panel"
 )
 
 type PanelRoutes struct {
@@ -66,6 +68,10 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]string{"status": "ok"})
 	}
+}
+
+func panelHTML(basePath string) string {
+	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath)
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
