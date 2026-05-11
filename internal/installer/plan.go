@@ -23,7 +23,9 @@ type InstallPlan struct {
 }
 
 func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (InstallPlan, error) {
-	input = NewInstallPlanDefaults(nil).Apply(input)
+	if input.Platform.OS == "" {
+		input.Platform = hostenv.CurrentPlatform()
+	}
 	if err := hostenv.ValidateLinuxPlatform(input.Platform); err != nil {
 		return InstallPlan{}, err
 	}
