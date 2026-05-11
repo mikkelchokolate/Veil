@@ -3,7 +3,7 @@ package cli
 import "testing"
 
 func TestResolveServeConfigCapturesAuthTLSAndWebBasePath(t *testing.T) {
-	cfg, err := resolveServeConfig(serveWorkflowOptions{
+	cfg, err := NewServeSecurity(serveWorkflowOptions{
 		Listen:      "127.0.0.1:2096",
 		AuthToken:   "secret",
 		StatePath:   "/state.json",
@@ -12,9 +12,9 @@ func TestResolveServeConfigCapturesAuthTLSAndWebBasePath(t *testing.T) {
 		TLSCert:     "/cert.pem",
 		TLSKey:      "/key.pem",
 		WebBasePath: "secret",
-	})
+	}).Resolve()
 	if err != nil {
-		t.Fatalf("resolveServeConfig: %v", err)
+		t.Fatalf("Resolve: %v", err)
 	}
 	if cfg.Token != "secret" || cfg.TokenSource != "--auth-token" {
 		t.Fatalf("unexpected auth config: %+v", cfg)

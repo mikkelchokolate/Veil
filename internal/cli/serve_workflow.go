@@ -21,7 +21,7 @@ type serveWorkflowOptions struct {
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	cfg, err := resolveServeConfig(opts)
+	cfg, err := NewServeSecurity(opts).Resolve()
 	if err != nil {
 		return err
 	}

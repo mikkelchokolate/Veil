@@ -13,9 +13,9 @@ func TestServeEnvironmentResolvesListenFromEnv(t *testing.T) {
 func TestResolveServeConfigCarriesTLSPathsFromEnv(t *testing.T) {
 	t.Setenv("VEIL_TLS_CERT", "/etc/veil/panel/tls.crt")
 	t.Setenv("VEIL_TLS_KEY", "/etc/veil/panel/tls.key")
-	cfg, err := resolveServeConfig(serveWorkflowOptions{})
+	cfg, err := NewServeSecurity(serveWorkflowOptions{}).Resolve()
 	if err != nil {
-		t.Fatalf("resolveServeConfig: %v", err)
+		t.Fatalf("Resolve: %v", err)
 	}
 	if !cfg.TLSEnabled || cfg.TLSCert != "/etc/veil/panel/tls.crt" || cfg.TLSKey != "/etc/veil/panel/tls.key" {
 		t.Fatalf("cfg should carry TLS paths from env: %+v", cfg)
@@ -27,9 +27,9 @@ func TestResolveServeConfigUsesResolvedPanelInstallEnvironment(t *testing.T) {
 	t.Setenv("VEIL_PANEL_ACCESS", "caddy")
 	t.Setenv("VEIL_DOMAIN", "panel.example.com")
 	t.Setenv("VEIL_EMAIL", "admin@example.com")
-	cfg, err := resolveServeConfig(serveWorkflowOptions{})
+	cfg, err := NewServeSecurity(serveWorkflowOptions{}).Resolve()
 	if err != nil {
-		t.Fatalf("resolveServeConfig: %v", err)
+		t.Fatalf("Resolve: %v", err)
 	}
 	if cfg.Listen != "127.0.0.1:34567" || cfg.ListenSource != "VEIL_LISTEN" {
 		t.Fatalf("cfg listen = %+v", cfg)
