@@ -128,6 +128,30 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	return applyRURecommendedInstall(cmd, built, opts)
 }
 
+func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort int) (string, error) {
+	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
+		Platform:     hostenv.CurrentPlatform(),
+		SystemdUnits: installer.PanelSystemdUnits(profile),
+		PanelPort:    panelPort,
+		CaddyBinary:  installPlanCaddyBinary(profile),
+	})
+	if err != nil {
+		return "", err
+	}
+	return plan.Summary(), nil
+}
+
+func installPlanCaddyBinary(profile installer.RURecommendedProfile) string {
+	if !profile.InstallPanelCaddy {
+		return ""
+	}
+	path, err := commandLookPath("caddy")
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
 func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) (string, error) {
 	if profile.InstallPanelCaddy {
 		path, err := commandLookPath("caddy")
