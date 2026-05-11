@@ -19,6 +19,22 @@ func DefaultPublicIPEndpoints() []string {
 	}
 }
 
+func ResolvePublicIP(ctx context.Context, value string, client *http.Client, endpoints []string) (net.IP, error) {
+	if value == "" {
+		return nil, nil
+	}
+	if value == "auto" {
+		detectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		return DetectPublicIP(detectCtx, client, endpoints)
+	}
+	parsed := net.ParseIP(value)
+	if parsed == nil {
+		return nil, fmt.Errorf("public IP must be a valid IPv4 or IPv6 address, or auto")
+	}
+	return parsed, nil
+}
+
 func DetectPublicIP(ctx context.Context, client *http.Client, endpoints []string) (net.IP, error) {
 	if ctx == nil {
 		ctx = context.Background()

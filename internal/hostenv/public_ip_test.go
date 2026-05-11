@@ -8,6 +8,31 @@ import (
 	"testing"
 )
 
+func TestResolvePublicIPParsesExplicitAddress(t *testing.T) {
+	ip, err := ResolvePublicIP(context.Background(), "93.184.216.34", nil, nil)
+	if err != nil {
+		t.Fatalf("ResolvePublicIP: %v", err)
+	}
+	if !ip.Equal(net.ParseIP("93.184.216.34")) {
+		t.Fatalf("unexpected IP: %v", ip)
+	}
+}
+
+func TestResolvePublicIPDetectsAutoAddress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("93.184.216.34\n"))
+	}))
+	defer server.Close()
+
+	ip, err := ResolvePublicIP(context.Background(), "auto", server.Client(), []string{server.URL})
+	if err != nil {
+		t.Fatalf("ResolvePublicIP: %v", err)
+	}
+	if !ip.Equal(net.ParseIP("93.184.216.34")) {
+		t.Fatalf("unexpected IP: %v", ip)
+	}
+}
+
 func TestDetectPublicIPReturnsFirstValidEndpoint(t *testing.T) {
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("not an ip"))

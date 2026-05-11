@@ -79,7 +79,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	if err := validateRURecommendedInstallRequirements(opts); err != nil {
 		return err
 	}
-	parsedPublicIP, err := resolveInstallPublicIP(cmd.Context(), opts.PublicIP)
+	parsedPublicIP, err := hostenv.ResolvePublicIP(cmd.Context(), opts.PublicIP, installPublicIPClient, installPublicIPEndpoints)
 	if err != nil {
 		return err
 	}
