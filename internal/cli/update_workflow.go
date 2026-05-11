@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
+	versionflow "github.com/veil-panel/veil/internal/cliflow/version"
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
@@ -53,7 +54,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 	fmt.Fprintf(out, "Latest release: %s\n", release.TagName)
 
 	// 2. Compare versions
-	cmp := compareVersions(opts.CurrentVersion, release.TagName)
+	cmp := versionflow.Compare(opts.CurrentVersion, release.TagName)
 	switch {
 	case cmp > 0:
 		fmt.Fprintf(out, "Current version (%s) is newer than latest release (%s).\n", opts.CurrentVersion, release.TagName)

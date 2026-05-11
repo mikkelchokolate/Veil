@@ -3,7 +3,9 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os/exec"
+	"time"
 
 	"github.com/spf13/cobra"
 	doctorflow "github.com/veil-panel/veil/internal/cliflow/doctor"
@@ -13,6 +15,7 @@ import (
 var (
 	errCommandNotFound = errors.New("command not found")
 	commandLookPath    = exec.LookPath
+	versionCheckClient = &http.Client{Timeout: 10 * time.Second}
 )
 
 func NewRootCommand(version string) *cobra.Command {
@@ -74,4 +77,11 @@ func buildDoctorSummary(version string) doctorSummary {
 // comparison and returns an error only on network/parse failures.
 func checkLatestVersion(cmd *cobra.Command, current string) error {
 	return versionflow.NewCheck(current, cmd.OutOrStdout(), fetchLatestReleaseTag).Run()
+}
+
+func fetchLatestReleaseTag() (string, error) {
+	old := versionflow.HTTPClient
+	versionflow.HTTPClient = versionCheckClient
+	defer func() { versionflow.HTTPClient = old }()
+	return versionflow.FetchLatestReleaseTag()
 }

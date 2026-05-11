@@ -167,37 +167,6 @@ func TestDoctorMissingUfwIsWarningNotError(t *testing.T) {
 	})
 }
 
-func TestCompareVersions(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"v0.1.0", "v0.1.0", 0},
-		{"v0.1.0", "v0.2.0", -1},
-		{"v0.2.0", "v0.1.0", 1},
-		{"v0.1.0", "v1.0.0", -1},
-		{"v1.0.0", "v0.1.0", 1},
-		{"v0.1.0", "v0.1.1", -1},
-		{"0.1.0", "0.1.0", 0},
-		{"0.1.0", "v0.2.0", -1},
-		{"1.0.0", "1.0.0", 0},
-		{"2.0.0", "1.9.9", 1},
-		{"v0.1.0-alpha", "v0.1.0", 0}, // non-numeric parts treated as 0
-		{"dev", "v0.1.0", -1},         // non-semver shorter than semver
-	}
-	for _, tt := range tests {
-		got := compareVersions(tt.a, tt.b)
-		switch {
-		case tt.want < 0 && got >= 0:
-			t.Errorf("compareVersions(%q, %q) = %d, want < 0", tt.a, tt.b, got)
-		case tt.want > 0 && got <= 0:
-			t.Errorf("compareVersions(%q, %q) = %d, want > 0", tt.a, tt.b, got)
-		case tt.want == 0 && got != 0:
-			t.Errorf("compareVersions(%q, %q) = %d, want 0", tt.a, tt.b, got)
-		}
-	}
-}
-
 func TestVersionCheckFlagRegistered(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
