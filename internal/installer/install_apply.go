@@ -1,6 +1,28 @@
 package installer
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/veil-panel/veil/internal/managedfiles"
+)
+
+type ApplyPaths struct {
+	EtcDir      string
+	VarDir      string
+	SystemdDir  string
+	BackupDir   string
+	VeilBinary  string
+	CaddyBinary string
+}
+
+type ApplyResult struct {
+	CaddyfilePath     string
+	Hysteria2Path     string
+	FallbackIndexPath string
+	WrittenFiles      []string
+	BackupID          string
+}
 
 type InstallApply struct {
 	profile RURecommendedProfile
@@ -43,4 +65,8 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 
 func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (ApplyResult, error) {
 	return NewInstallApply(profile, paths).Apply()
+}
+
+func writeManagedFile(path string, content string, mode os.FileMode) error {
+	return managedfiles.WriteFile(path, content, mode)
 }

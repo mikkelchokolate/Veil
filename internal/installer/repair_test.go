@@ -130,10 +130,20 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 
 	// Pre-create fallback index with matching content
 	indexPath := filepath.Join(varDir, "www", "index.html")
+	indexContent := ""
+	desiredFiles, err := desiredManagedFiles(profile, paths)
+	if err != nil {
+		t.Fatalf("desired files: %v", err)
+	}
+	for _, file := range desiredFiles {
+		if file.Path == indexPath {
+			indexContent = file.Content
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(indexPath, []byte(fallbackIndexHTML("vpn.example.com")), 0o644); err != nil {
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0o644); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
 
