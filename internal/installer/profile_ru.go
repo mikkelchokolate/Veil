@@ -43,10 +43,9 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
-	defaults := NewRURecommendedDefaults()
-	username := defaults.Username
-	masqueradeURL := defaults.MasqueradeURL
-	fallbackRoot := defaults.FallbackRoot
+	username := "veil"
+	masqueradeURL := "https://www.bing.com/"
+	fallbackRoot := "/var/lib/veil/www"
 	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
 	if err != nil {
 		return RURecommendedProfile{}, err
