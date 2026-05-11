@@ -55,7 +55,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		},
 		Capabilities: capabilities,
 		ValidateCardinality: func(settings Settings, inbounds []Inbound) error {
-			return generatedconfig.NewGeneratedConfigCardinality(settings, NewGeneratedConfigProtocolRegistry().inner).Validate(inbounds)
+			return generatedconfig.NewGeneratedConfigCardinality(settings, protocols.NewGeneratedConfigRegistry()).Validate(inbounds)
 		},
 		RuntimeUnits:          runtimeUnits,
 		WarpAction:            warpAction,

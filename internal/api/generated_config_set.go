@@ -15,12 +15,11 @@ type GeneratedConfigInput struct {
 }
 
 func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, error) {
-	registry := NewGeneratedConfigProtocolRegistry()
 	return generatedconfig.NewSetBuilder(generatedconfig.SetInput{
 		ApplyRoot: input.ApplyRoot,
 		Settings:  input.Settings,
 		Inbounds:  input.Inbounds,
-		Registry:  registry.inner,
+		Registry:  protocols.NewGeneratedConfigRegistry(),
 		PanelAccess: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
 			return panelaccess.New(input.Settings, protocols.NewCatalog().RequiresCaddy).GeneratedConfig(paths)
 		},

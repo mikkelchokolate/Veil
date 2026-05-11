@@ -65,6 +65,22 @@ func (c CapabilityCatalog) Choices() []Choice {
 	return choices
 }
 
+func NewGeneratedConfigRegistry() generatedconfig.ProtocolRegistry {
+	protocolRenderers := []generatedconfig.Protocol{}
+	for _, capability := range NewCapabilityCatalog().All() {
+		if capability.RenderGeneratedConfig == nil {
+			continue
+		}
+		protocolRenderers = append(protocolRenderers, generatedconfig.Protocol{
+			Protocol:               capability.Protocol,
+			MaxEnabled:             capability.MaxEnabled,
+			RequiresRenderSettings: capability.RequiresRenderSettings,
+			Render:                 capability.RenderGeneratedConfig,
+		})
+	}
+	return generatedconfig.NewProtocolRegistry(protocolRenderers)
+}
+
 func naiveProxyCapability() Capability {
 	return Capability{
 		Protocol:               "naiveproxy",
