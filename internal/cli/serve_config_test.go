@@ -1,9 +1,13 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
+)
 
 func TestResolveServeConfigCapturesAuthTLSAndWebBasePath(t *testing.T) {
-	cfg, err := NewServeSecurity(serveWorkflowOptions{
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{
 		Listen:      "127.0.0.1:2096",
 		AuthToken:   "secret",
 		StatePath:   "/state.json",

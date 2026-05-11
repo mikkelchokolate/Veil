@@ -17,7 +17,7 @@ func TestServeEnvironmentResolvesListenFromEnv(t *testing.T) {
 func TestResolveServeConfigCarriesTLSPathsFromEnv(t *testing.T) {
 	t.Setenv("VEIL_TLS_CERT", "/etc/veil/panel/tls.crt")
 	t.Setenv("VEIL_TLS_KEY", "/etc/veil/panel/tls.key")
-	cfg, err := NewServeSecurity(serveWorkflowOptions{}).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{}).Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestResolveServeConfigUsesResolvedPanelInstallEnvironment(t *testing.T) {
 	t.Setenv("VEIL_PANEL_ACCESS", "caddy")
 	t.Setenv("VEIL_DOMAIN", "panel.example.com")
 	t.Setenv("VEIL_EMAIL", "admin@example.com")
-	cfg, err := NewServeSecurity(serveWorkflowOptions{}).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{}).Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

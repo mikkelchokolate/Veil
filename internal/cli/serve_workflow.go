@@ -22,7 +22,7 @@ type serveWorkflowOptions struct {
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	cfg, err := NewServeSecurity(opts).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir}).Resolve()
 	if err != nil {
 		return err
 	}

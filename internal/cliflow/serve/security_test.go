@@ -1,9 +1,9 @@
-package cli
+package serve
 
 import "testing"
 
 func TestServeSecurityResolvesSafeConfig(t *testing.T) {
-	security := NewServeSecurity(serveWorkflowOptions{
+	security := NewSecurity(SecurityOptions{
 		Listen:      "127.0.0.1:2096",
 		AuthToken:   "secret",
 		StatePath:   "/state.json",
