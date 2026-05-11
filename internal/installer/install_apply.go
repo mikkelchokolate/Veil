@@ -12,7 +12,7 @@ func NewInstallApply(profile RURecommendedProfile, paths ApplyPaths) InstallAppl
 }
 
 func (a InstallApply) Apply() (ApplyResult, error) {
-	files, err := NewManagedFileRepair(a.profile, a.paths).desiredFiles()
+	files, err := desiredManagedFiles(a.profile, a.paths)
 	if err != nil {
 		return ApplyResult{}, err
 	}

@@ -11,7 +11,7 @@ func TestInstallApplyRendersVeilUnitWithSelectedBinaryPath(t *testing.T) {
 	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd"), VeilBinary: "/opt/veil/bin/veil"}
 
-	files, err := NewManagedFileRepair(profile, paths).desiredFiles()
+	files, err := desiredManagedFiles(profile, paths)
 	if err != nil {
 		t.Fatalf("desiredFiles: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
 	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", Caddyfile: "example.com { respond ok }"}
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd"), CaddyBinary: "/usr/bin/caddy"}
 
-	files, err := NewManagedFileRepair(profile, paths).desiredFiles()
+	files, err := desiredManagedFiles(profile, paths)
 	if err != nil {
 		t.Fatalf("desiredFiles: %v", err)
 	}

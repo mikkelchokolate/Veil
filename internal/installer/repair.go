@@ -14,7 +14,11 @@ type RepairPlan = managedfiles.RepairPlan
 type RepairResult = managedfiles.RepairResult
 
 func BuildRepairPlan(profile RURecommendedProfile, paths ApplyPaths) (RepairPlan, error) {
-	return NewManagedFileRepair(profile, paths).Plan()
+	files, err := desiredManagedFiles(profile, paths)
+	if err != nil {
+		return RepairPlan{}, err
+	}
+	return managedfiles.NewSet(files).Plan()
 }
 
 func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
@@ -24,5 +28,5 @@ func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
 type managedFile = managedfiles.File
 
 func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]managedFile, error) {
-	return NewManagedFileRepair(profile, paths).desiredFiles()
+	return NewPanelManagedMaterialFromProfile(profile, paths).files()
 }
