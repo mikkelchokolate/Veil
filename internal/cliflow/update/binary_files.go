@@ -66,6 +66,24 @@ func (f BinaryFiles) Rollback(backupPath, currentPath string) error {
 	return nil
 }
 
+func ReplaceBinaryFromArchive(currentPath string, archive []byte, yes bool) (string, error) {
+	binary, err := ExtractVeilBinary(archive)
+	if err != nil {
+		return "", fmt.Errorf("extract binary: %w", err)
+	}
+	backupPath := currentPath + ".backup"
+	if err := CopyFileData(currentPath, backupPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("backup: %w", err)
+	}
+	if !yes {
+		return backupPath, fmt.Errorf("update requires --yes to confirm replacing %s", currentPath)
+	}
+	if err := ReplaceBinaryAtomic(currentPath, binary); err != nil {
+		return backupPath, fmt.Errorf("replace binary: %w", err)
+	}
+	return backupPath, nil
+}
+
 func CopyFileData(src, dst string) error {
 	return NewBinaryFiles().Copy(src, dst)
 }

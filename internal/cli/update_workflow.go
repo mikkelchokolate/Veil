@@ -94,7 +94,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 	fmt.Fprintf(out, "Current binary: %s\n", currentPath)
 	fmt.Fprintf(out, "Backing up to %s...\n", backupPath)
 	fmt.Fprintf(out, "Installing to %s...\n", currentPath)
-	backupPath, err = replaceVeilBinaryFromArchive(currentPath, archive, opts.Yes)
+	backupPath, err = updateflow.ReplaceBinaryFromArchive(currentPath, archive, opts.Yes)
 	if err != nil {
 		return err
 	}
