@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	installflow "github.com/veil-panel/veil/internal/cliflow/install"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/service"
 )
@@ -43,7 +44,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
-	fmt.Fprint(cmd.OutOrStdout(), installCredentialSummary(profile))
+	fmt.Fprint(cmd.OutOrStdout(), installflow.CredentialSummary(profile))
 	if err := writeAuditInstall(opts.AuditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
 		return fmt.Errorf("audit log write failed after successful install: %w", err)
 	}

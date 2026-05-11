@@ -1,4 +1,4 @@
-package cli
+package install
 
 import (
 	"strings"
@@ -7,8 +7,8 @@ import (
 	"github.com/veil-panel/veil/internal/installer"
 )
 
-func TestInstallCredentialSummaryDisplaysHTTPSPanelAccessWithoutCaddy(t *testing.T) {
-	summary := installCredentialSummary(installer.RURecommendedProfile{PanelListen: "127.0.0.1:2096", PanelTLSEnabled: true, Username: "veil"})
+func TestCredentialSummaryDisplaysHTTPSPanelAccessWithoutCaddy(t *testing.T) {
+	summary := CredentialSummary(installer.RURecommendedProfile{PanelListen: "127.0.0.1:2096", PanelTLSEnabled: true, Username: "veil"})
 	for _, want := range []string{"Panel: https://127.0.0.1:2096/", "Username: veil"} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("summary missing %q:\n%s", want, summary)
@@ -16,8 +16,8 @@ func TestInstallCredentialSummaryDisplaysHTTPSPanelAccessWithoutCaddy(t *testing
 	}
 }
 
-func TestInstallCredentialSummaryDisplaysPanelOnlyCredentials(t *testing.T) {
-	summary := installCredentialSummary(installer.RURecommendedProfile{
+func TestCredentialSummaryDisplaysPanelOnlyCredentials(t *testing.T) {
+	summary := CredentialSummary(installer.RURecommendedProfile{
 		Domain:      "vpn.example.com",
 		WebBasePath: "/secret/",
 		Username:    "veil",
