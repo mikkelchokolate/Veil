@@ -3,7 +3,21 @@ package cli
 import (
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/audit"
+	repairflow "github.com/veil-panel/veil/internal/cliflow/repair"
+	"github.com/veil-panel/veil/internal/installer"
 )
+
+type repairWorkflowOptions struct {
+	Profile      string
+	DryRun       bool
+	Yes          bool
+	EtcDir       string
+	VarDir       string
+	SystemdDir   string
+	BackupDir    string
+	BackupDirSet bool
+	AuditLog     string
+}
 
 func newRepairCommand() *cobra.Command {
 	var profile string
@@ -41,6 +55,18 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	return cmd
+}
+
+func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
+	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog}
+	return repairflow.Run(flowOpts, cmd.OutOrStdout(), repairflow.Dependencies{
+		BuildPlan: func(repairflow.Options) (installer.RepairPlan, error) {
+			return buildRepairPlanFromOptions(opts)
+		},
+		ApplyPlan: func(plan installer.RepairPlan, _ repairflow.Options) error {
+			return applyRepairPlan(cmd, plan, opts)
+		},
+	})
 }
 
 func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
