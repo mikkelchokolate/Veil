@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {
@@ -29,7 +31,7 @@ func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	err := restartUpdatedVeil(cmd, currentPath, backupPath, updateWorkflowOptions{Staged: true})
+	err := restartUpdatedVeil(cmd, currentPath, backupPath, updateflow.WorkflowOptions{Staged: true})
 	if err == nil || !strings.Contains(err.Error(), "restart failed, rolled back") {
 		t.Fatalf("expected staged rollback error, got %v", err)
 	}

@@ -1,30 +1,15 @@
-package cli
+package update
 
 import (
 	"fmt"
+	"io"
 	"os"
 
-	"github.com/spf13/cobra"
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 	versionflow "github.com/veil-panel/veil/internal/cliflow/version"
 	"github.com/veil-panel/veil/internal/renderer"
 )
 
-var updateReleaseFetcher = fetchLatestRelease
-var updateAssetDownloader = downloadAsset
-
-func fetchLatestRelease() (*updateflow.Release, error) {
-	catalog := updateflow.NewReleaseCatalog(updateRepoOwner, updateRepoName)
-	catalog.HTTPClient = updateHTTPClient
-	return catalog.Latest()
-}
-
-func downloadAsset(url string) ([]byte, error) {
-	updateflow.HTTPClient = updateHTTPClient
-	return updateflow.DownloadAsset(url)
-}
-
-type updateWorkflowOptions struct {
+type WorkflowOptions struct {
 	CurrentVersion string
 	Yes            bool
 	DryRun         bool
@@ -35,11 +20,30 @@ type updateWorkflowOptions struct {
 	AuthToken      string
 }
 
-func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
-	out := cmd.OutOrStdout()
+type WorkflowDependencies struct {
+	FetchRelease             func() (*Release, error)
+	DownloadAsset            func(string) ([]byte, error)
+	Executable               func() (string, error)
+	ReplaceBinaryFromArchive func(currentPath string, archive []byte, yes bool) (string, error)
+	RestartUpdated           func(currentPath string, backupPath string, opts WorkflowOptions) error
+}
+
+func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies) error {
+	if deps.FetchRelease == nil {
+		return fmt.Errorf("update release fetcher is not configured")
+	}
+	if deps.DownloadAsset == nil {
+		return fmt.Errorf("update asset downloader is not configured")
+	}
+	if deps.Executable == nil {
+		deps.Executable = os.Executable
+	}
+	if deps.ReplaceBinaryFromArchive == nil {
+		deps.ReplaceBinaryFromArchive = ReplaceBinaryFromArchive
+	}
 
 	// 1. Fetch latest release metadata
-	release, err := updateReleaseFetcher()
+	release, err := deps.FetchRelease()
 	if err != nil {
 		return fmt.Errorf("fetch latest release: %w", err)
 	}
@@ -64,10 +68,10 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		fmt.Fprintf(out, "Updating %s → %s\n", opts.CurrentVersion, release.TagName)
 	}
 
-	assetName := updateflow.AssetName()
+	assetName := AssetName()
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
-	asset, err := updateflow.NewReleaseAssets(release, updateAssetDownloader).DownloadVerifiedArchive()
+	asset, err := NewReleaseAssets(release, deps.DownloadAsset).DownloadVerifiedArchive()
 	if err != nil {
 		return err
 	}
@@ -79,7 +83,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		return nil
 	}
 
-	currentPath, err := os.Executable()
+	currentPath, err := deps.Executable()
 	if err != nil {
 		currentPath = "/usr/local/bin/veil"
 	}
@@ -88,7 +92,7 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 	fmt.Fprintf(out, "Current binary: %s\n", currentPath)
 	fmt.Fprintf(out, "Backing up to %s...\n", backupPath)
 	fmt.Fprintf(out, "Installing to %s...\n", currentPath)
-	backupPath, err = updateflow.ReplaceBinaryFromArchive(currentPath, archive, opts.Yes)
+	backupPath, err = deps.ReplaceBinaryFromArchive(currentPath, archive, opts.Yes)
 	if err != nil {
 		return err
 	}
@@ -99,6 +103,8 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 		fmt.Fprintln(out, "  systemctl restart "+renderer.UnitVeil)
 		return nil
 	}
-
-	return restartUpdatedVeil(cmd, currentPath, backupPath, opts)
+	if deps.RestartUpdated == nil {
+		return fmt.Errorf("update restart flow is not configured")
+	}
+	return deps.RestartUpdated(currentPath, backupPath, opts)
 }

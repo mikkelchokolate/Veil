@@ -37,16 +37,9 @@ Use --restart to restart the veil service and perform a health check after updat
 Use --staged for a safer staged rollout: restart + health check with automatic
 rollback to the previous binary if the health check fails.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdateWorkflow(cmd, updateWorkflowOptions{
-				CurrentVersion: version,
-				Yes:            yes,
-				DryRun:         dryRun,
-				Force:          force,
-				Restart:        restart,
-				Staged:         staged,
-				Listen:         listen,
-				AuthToken:      authToken,
-			})
+			return updateflow.RunWorkflow(updateflow.WorkflowOptions{CurrentVersion: version, Yes: yes, DryRun: dryRun, Force: force, Restart: restart, Staged: staged, Listen: listen, AuthToken: authToken}, cmd.OutOrStdout(), updateflow.WorkflowDependencies{FetchRelease: fetchLatestRelease, DownloadAsset: downloadAsset, RestartUpdated: func(currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
+				return restartUpdatedVeil(cmd, currentPath, backupPath, opts)
+			}})
 		},
 	}
 
@@ -58,6 +51,17 @@ rollback to the previous binary if the health check fails.`,
 	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check (default: 127.0.0.1:2096)")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API token for health check")
 	return cmd
+}
+
+func fetchLatestRelease() (*updateflow.Release, error) {
+	catalog := updateflow.NewReleaseCatalog(updateRepoOwner, updateRepoName)
+	catalog.HTTPClient = updateHTTPClient
+	return catalog.Latest()
+}
+
+func downloadAsset(url string) ([]byte, error) {
+	updateflow.HTTPClient = updateHTTPClient
+	return updateflow.DownloadAsset(url)
 }
 
 // runSystemctlRestart runs systemctl restart for the given unit.

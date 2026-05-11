@@ -13,7 +13,7 @@ import (
 
 var updateHealthChecker = updateflow.WaitForHealthy
 
-func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateWorkflowOptions) error {
+func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
 	out := cmd.OutOrStdout()
 	addr := statusflow.ResolveListen(opts.Listen)
 	token, _ := serveflow.NewEnvironment().AuthToken(opts.AuthToken)
