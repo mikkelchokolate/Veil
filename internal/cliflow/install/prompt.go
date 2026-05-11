@@ -1,4 +1,4 @@
-package cli
+package install
 
 import (
 	"bufio"
@@ -7,20 +7,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
-type InstallPrompt struct {
+type Prompt struct {
 	in  io.Reader
 	out io.Writer
 }
 
-func NewInstallPrompt(in io.Reader, out io.Writer) InstallPrompt {
-	return InstallPrompt{in: in, out: out}
+func NewPrompt(in io.Reader, out io.Writer) Prompt {
+	return Prompt{in: in, out: out}
 }
 
-func (p InstallPrompt) PromptMissingOptions(panelAccess string, domain *string, email *string, panelPort *int) error {
+func (p Prompt) PromptMissingOptions(panelAccess string, domain *string, email *string, panelPort *int) error {
 	reader := bufio.NewReader(p.in)
 	domainPattern := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$`)
 	if panelAccess == "caddy" {
@@ -82,8 +80,4 @@ func (p InstallPrompt) PromptMissingOptions(panelAccess string, domain *string, 
 		}
 	}
 	return nil
-}
-
-func promptInstallOptions(cmd *cobra.Command, panelAccess string, domain *string, email *string, panelPort *int) error {
-	return NewInstallPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(panelAccess, domain, email, panelPort)
 }

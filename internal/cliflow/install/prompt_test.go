@@ -1,4 +1,4 @@
-package cli
+package install
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ func TestInstallPromptCollectsMissingDomainEmailForPanelCaddy(t *testing.T) {
 	email := ""
 	panelPort := 0
 
-	if err := NewInstallPrompt(in, &out).PromptMissingOptions("caddy", &domain, &email, &panelPort); err != nil {
+	if err := NewPrompt(in, &out).PromptMissingOptions("caddy", &domain, &email, &panelPort); err != nil {
 		t.Fatalf("PromptMissingOptions: %v", err)
 	}
 	if domain != "example.com" || email != "admin@example.com" || panelPort != 0 {

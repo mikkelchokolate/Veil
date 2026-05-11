@@ -73,7 +73,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
 	if opts.Interactive {
-		if err := promptInstallOptions(cmd, opts.PanelAccess, &opts.Domain, &opts.Email, &opts.PanelPort); err != nil {
+		if err := installflow.NewPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(opts.PanelAccess, &opts.Domain, &opts.Email, &opts.PanelPort); err != nil {
 			return err
 		}
 	}
