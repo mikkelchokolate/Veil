@@ -17,10 +17,6 @@ type StatusRoutes struct {
 	Info ServerInfo
 }
 
-func (StatusRoutes) Paths() []string {
-	return []string{"/api/status"}
-}
-
 func (routes StatusRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/status", routes.handleStatus)
 }

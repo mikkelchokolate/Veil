@@ -17,10 +17,6 @@ var errSpeedtestUnavailable = diagnostics.ErrSpeedtestUnavailable
 
 type DiagnosticToolRoutes struct{}
 
-func (DiagnosticToolRoutes) Paths() []string {
-	return []string{"/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest"}
-}
-
 func (routes DiagnosticToolRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tools/dns-lookup", routes.handleDNSLookup)
 	mux.HandleFunc("/api/tools/ping", routes.handlePing)

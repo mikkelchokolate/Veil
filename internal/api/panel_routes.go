@@ -12,10 +12,6 @@ type PanelRoutes struct {
 	BasePath string
 }
 
-func (PanelRoutes) Paths() []string {
-	return []string{"/", "/healthz", "/api/version"}
-}
-
 func (routes PanelRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", routes.handlePanel)
 	mux.HandleFunc("/healthz", routes.handleHealth)

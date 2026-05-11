@@ -8,10 +8,6 @@ import (
 
 type RuntimeRoutes struct{}
 
-func (RuntimeRoutes) Paths() []string {
-	return []string{"/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation"}
-}
-
 func (RuntimeRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/system", handleSystemRuntime)
 	mux.HandleFunc("/api/tls", handleTLSRuntime)

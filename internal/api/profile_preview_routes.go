@@ -23,10 +23,6 @@ type RURecommendedPreviewResponse struct {
 
 type ProfilePreviewRoutes struct{}
 
-func (ProfilePreviewRoutes) Paths() []string {
-	return []string{"/api/profiles/ru-recommended/preview"}
-}
-
 func (routes ProfilePreviewRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/profiles/ru-recommended/preview", routes.handleRURecommendedPreview)
 }

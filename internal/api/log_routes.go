@@ -9,10 +9,6 @@ import (
 
 type LogRoutes struct{}
 
-func (LogRoutes) Paths() []string {
-	return []string{"/api/logs"}
-}
-
 func (routes LogRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logs", routes.handleLogs)
 }
