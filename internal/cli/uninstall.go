@@ -21,7 +21,11 @@ func newUninstallCommand() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove Veil panel, services, and configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewUninstallWorkflow(uninstallWorkflowOptions{DryRun: dryRun, Yes: yes, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir}, cmd.OutOrStdout(), cmd.ErrOrStderr()).Run()
+			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
+				ServiceStopper:  uninstallServiceStopper,
+				FileRemover:     uninstallFileRemover,
+				SystemdReloader: uninstallSystemdReloader,
+			})
 		},
 	}
 
@@ -35,6 +39,6 @@ func newUninstallCommand() *cobra.Command {
 	return cmd
 }
 
-func uninstallPlan(opts uninstallWorkflowOptions) string {
-	return uninstallflow.Plan(toUninstallFlowOptions(opts))
+func uninstallPlan(opts uninstallflow.Options) string {
+	return uninstallflow.Plan(opts)
 }
