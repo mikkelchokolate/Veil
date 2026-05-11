@@ -3,6 +3,7 @@ package installer
 import (
 	"github.com/veil-panel/veil/internal/firewall"
 	"github.com/veil-panel/veil/internal/hostenv"
+	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/service"
 )
 
@@ -16,6 +17,14 @@ func CaddyPanelBuildHint(binaryPath string) BuildHint {
 		binaryPath = "/usr/local/bin/caddy"
 	}
 	return BuildHint{BinaryPath: binaryPath, Commands: []string{"requires standard Caddy at " + binaryPath}}
+}
+
+func PanelSystemdUnits(profile RURecommendedProfile) []string {
+	units := []string{renderer.UnitVeil}
+	if profile.InstallPanelCaddy {
+		units = append(units, renderer.UnitNaive)
+	}
+	return units
 }
 
 type InstallPlanInput struct {
