@@ -92,7 +92,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	built := install.Profile
 	panelListenPort := install.PanelPort
 	panelRandom := install.PanelRandom
-	printRURecommended(cmd, built, opts.DryRun)
+	installflow.NewPresentation(cmd.OutOrStdout()).PrintRURecommended(built, opts.DryRun)
 	if parsedPublicIP != nil {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
@@ -100,7 +100,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		if err != nil {
 			return err
 		}
-		printDNSCheck(cmd, dnsCheck)
+		installflow.NewPresentation(cmd.OutOrStdout()).PrintDNSCheck(dnsCheck)
 	}
 	if _, err := panelaccess.NewMode(opts.PanelAccess).Resolve(panelListenPort); err != nil {
 		return err

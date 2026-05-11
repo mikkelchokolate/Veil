@@ -1,24 +1,23 @@
-package cli
+package install
 
 import (
 	"fmt"
 	"io"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
 )
 
-type InstallPresentation struct {
+type Presentation struct {
 	out io.Writer
 }
 
-func NewInstallPresentation(out io.Writer) InstallPresentation {
-	return InstallPresentation{out: out}
+func NewPresentation(out io.Writer) Presentation {
+	return Presentation{out: out}
 }
 
-func (p InstallPresentation) PrintDNSCheck(check hostenv.DNSCheck) {
+func (p Presentation) PrintDNSCheck(check hostenv.DNSCheck) {
 	fmt.Fprintln(p.out, "DNS check")
 	fmt.Fprintln(p.out, strings.Repeat("-", 9))
 	fmt.Fprintf(p.out, "Domain: %s\n", check.Domain)
@@ -35,7 +34,7 @@ func (p InstallPresentation) PrintDNSCheck(check hostenv.DNSCheck) {
 	}
 }
 
-func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedProfile, dryRun bool) {
+func (p Presentation) PrintRURecommended(profile installer.RURecommendedProfile, dryRun bool) {
 	mode := "apply"
 	if dryRun {
 		mode = "dry run"
@@ -52,7 +51,7 @@ func (p InstallPresentation) PrintRURecommended(profile installer.RURecommendedP
 	}
 }
 
-func (InstallPresentation) RedactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
+func (Presentation) RedactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
 	for _, secret := range []string{profile.PanelAuthToken} {
 		if secret == "" {
 			continue
@@ -60,16 +59,4 @@ func (InstallPresentation) RedactProfileSecrets(profile installer.RURecommendedP
 		text = strings.ReplaceAll(text, secret, "[REDACTED]")
 	}
 	return text
-}
-
-func printDNSCheck(cmd *cobra.Command, check hostenv.DNSCheck) {
-	NewInstallPresentation(cmd.OutOrStdout()).PrintDNSCheck(check)
-}
-
-func printRURecommended(cmd *cobra.Command, profile installer.RURecommendedProfile, dryRun bool) {
-	NewInstallPresentation(cmd.OutOrStdout()).PrintRURecommended(profile, dryRun)
-}
-
-func redactProfileSecrets(profile installer.RURecommendedProfile, text string) string {
-	return NewInstallPresentation(io.Discard).RedactProfileSecrets(profile, text)
 }

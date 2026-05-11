@@ -1,4 +1,4 @@
-package cli
+package install
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ func TestInstallPresentationPrintsRedactedRURecommendedProfile(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	NewInstallPresentation(&out).PrintRURecommended(profile, true)
+	NewPresentation(&out).PrintRURecommended(profile, true)
 
 	got := out.String()
 	for _, want := range []string{"Veil ru-recommended dry run", "Domain: example.com", "Install scope: Panel", "[REDACTED]"} {
