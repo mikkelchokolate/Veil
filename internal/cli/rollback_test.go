@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/backup"
 )
 
 func TestRollbackListShowsBackupIDs(t *testing.T) {
@@ -24,7 +24,7 @@ func TestRollbackListShowsBackupIDs(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestRollbackRestoreBringsFilesBack(t *testing.T) {
 	}
 
 	// Backup
-	backupID, err := installer.BackupBeforeApply([]string{file1, file2}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1, file2}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestRollbackRestoreWithoutYesFails(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestRollbackCleanupRemovesBackup(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestRollbackCleanupWithoutYesFails(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestRollbackRestoreWithAuditLog(t *testing.T) {
 		t.Fatalf("write file2: %v", err)
 	}
 
-	backupID, err := installer.BackupBeforeApply([]string{file1, file2}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1, file2}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestRollbackCleanupWithAuditLog(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("content"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestRollbackRestoreNoAuditFlagBackwardCompatible(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("original"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	backupID, err := installer.BackupBeforeApply([]string{file1}, backupDir)
+	backupID, err := backup.BackupBeforeApply([]string{file1}, backupDir)
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}

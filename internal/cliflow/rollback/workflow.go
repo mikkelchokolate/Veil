@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/veil-panel/veil/internal/audit"
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/backup"
 )
 
 type Options struct {
@@ -27,7 +27,7 @@ func (w Workflow) List() error {
 	if w.opts.BackupDir == "" {
 		return fmt.Errorf("--backup-dir is required")
 	}
-	ids, err := installer.NewBackupLifecycle(w.opts.BackupDir).List()
+	ids, err := backup.NewLifecycle(w.opts.BackupDir).List()
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (w Workflow) Restore(backupID string) error {
 	if !w.opts.Yes {
 		return fmt.Errorf("restore requires --yes to confirm")
 	}
-	restored, err := installer.NewBackupLifecycle(w.opts.BackupDir).Restore(backupID)
+	restored, err := backup.NewLifecycle(w.opts.BackupDir).Restore(backupID)
 	if err != nil {
 		writeAuditRestore(w.opts.AuditLog, backupID, false, err.Error(), nil)
 		return err
@@ -70,7 +70,7 @@ func (w Workflow) Cleanup(backupID string) error {
 	if !w.opts.Yes {
 		return fmt.Errorf("cleanup requires --yes to confirm")
 	}
-	if err := installer.NewBackupLifecycle(w.opts.BackupDir).Cleanup(backupID); err != nil {
+	if err := backup.NewLifecycle(w.opts.BackupDir).Cleanup(backupID); err != nil {
 		_ = writeAuditCleanup(w.opts.AuditLog, backupID, false, err.Error())
 		return err
 	}

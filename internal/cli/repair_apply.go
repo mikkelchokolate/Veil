@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/backup"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/service"
 )
@@ -23,7 +24,7 @@ func applyRepairPlan(cmd *cobra.Command, plan installer.RepairPlan, opts repairW
 		for _, action := range plan.Actions {
 			paths = append(paths, action.Path)
 		}
-		id, err := installer.NewBackupLifecycle(actualBackupDir).BackupExisting(paths)
+		id, err := backup.NewLifecycle(actualBackupDir).BackupExisting(paths)
 		if err != nil {
 			_ = writeAuditRepair(opts.AuditLog, "", false, err.Error(), nil)
 			return err

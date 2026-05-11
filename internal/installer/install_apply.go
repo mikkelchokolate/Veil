@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/veil-panel/veil/internal/backup"
 	"github.com/veil-panel/veil/internal/managedfiles"
 )
 
@@ -48,7 +49,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		for _, file := range files {
 			existingPaths = append(existingPaths, file.Path)
 		}
-		backupID, err := NewBackupLifecycle(a.paths.BackupDir).BackupExisting(existingPaths)
+		backupID, err := backup.NewLifecycle(a.paths.BackupDir).BackupExisting(existingPaths)
 		if err != nil {
 			return ApplyResult{}, err
 		}

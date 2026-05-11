@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/veil-panel/veil/internal/backup"
 )
 
 var _apply_backup_deps = []any{
@@ -156,7 +158,7 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	assertFileContains(t, veilEnvPath, "VEIL_API_TOKEN=secret-panel")
 
 	// Rollback: restore from backup
-	restored, err := RestoreFromBackup(backupDir, result.BackupID)
+	restored, err := backup.RestoreFromBackup(backupDir, result.BackupID)
 	if err != nil {
 		t.Fatalf("restore from backup: %v", err)
 	}
@@ -182,7 +184,7 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	}
 
 	// Cleanup backup
-	if err := CleanupBackup(backupDir, result.BackupID); err != nil {
+	if err := backup.CleanupBackup(backupDir, result.BackupID); err != nil {
 		t.Fatalf("cleanup backup: %v", err)
 	}
 

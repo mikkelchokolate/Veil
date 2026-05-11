@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/backup"
 )
 
 func TestWorkflowListsAndRestoresBackup(t *testing.T) {
@@ -17,7 +17,7 @@ func TestWorkflowListsAndRestoresBackup(t *testing.T) {
 	if err := os.WriteFile(managed, []byte("before"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	backupID, err := installer.NewBackupLifecycle(backupDir).BackupExisting([]string{managed})
+	backupID, err := backup.NewLifecycle(backupDir).BackupExisting([]string{managed})
 	if err != nil {
 		t.Fatal(err)
 	}
