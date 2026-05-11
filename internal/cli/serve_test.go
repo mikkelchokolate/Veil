@@ -397,29 +397,6 @@ func TestResolveServeKeyPathFromFlag(t *testing.T) {
 	}
 }
 
-func TestResolveConfigPathFromEnv(t *testing.T) {
-	t.Setenv("VEIL_STATE_PATH", "/custom/state.json")
-	path := resolveConfigPath("")
-	if path != "/custom/state.json" {
-		t.Fatalf("expected env path, got: %s", path)
-	}
-}
-
-func TestResolveConfigPathFlagPrecedence(t *testing.T) {
-	t.Setenv("VEIL_STATE_PATH", "/custom/state.json")
-	path := resolveConfigPath("/flag/path.json")
-	if path != "/flag/path.json" {
-		t.Fatalf("expected flag path, got: %s", path)
-	}
-}
-
-func TestResolveConfigPathDefault(t *testing.T) {
-	path := resolveConfigPath("")
-	if path != "/var/lib/veil/state.json" {
-		t.Fatalf("expected default path, got: %s", path)
-	}
-}
-
 func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string, webBasePath string) (*http.Server, any) {
 	server, reloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
 		Listen:      listen,

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/veil-panel/veil/internal/api"
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 func newConfigCommand() *cobra.Command {
@@ -23,7 +24,7 @@ func newConfigCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
-			resolvedPath := resolveConfigPath(statePath)
+			resolvedPath, _ := serveflow.NewEnvironment().StatePath(statePath)
 			fmt.Fprintf(out, "Validating %s...\n", resolvedPath)
 
 			body, err := os.ReadFile(resolvedPath)
@@ -52,14 +53,4 @@ func newConfigCommand() *cobra.Command {
 	validateCmd.Flags().StringVar(&statePath, "state", "", "management state JSON path (default: /var/lib/veil/state.json)")
 	cmd.AddCommand(validateCmd)
 	return cmd
-}
-
-func resolveConfigPath(flagValue string) string {
-	if path := flagValue; path != "" {
-		return path
-	}
-	if path := os.Getenv("VEIL_STATE_PATH"); path != "" {
-		return path
-	}
-	return "/var/lib/veil/state.json"
 }

@@ -38,7 +38,3 @@ func newUninstallCommand() *cobra.Command {
 
 	return cmd
 }
-
-func uninstallPlan(opts uninstallflow.Options) string {
-	return uninstallflow.Plan(opts)
-}
