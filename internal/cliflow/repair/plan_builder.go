@@ -11,6 +11,7 @@ import (
 	"github.com/veil-panel/veil/internal/api"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/managementstate"
+	"github.com/veil-panel/veil/internal/panelmaterial"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/secrets"
 	"github.com/veil-panel/veil/internal/service"
@@ -95,8 +96,8 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	if listen == "" {
 		listen = "127.0.0.1:2096"
 	}
-	material := installer.NewPanelManagedMaterial(installer.PanelManagedMaterialInput{
-		Paths:           installer.ApplyPaths{EtcDir: opts.EtcDir},
+	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
+		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir},
 		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir, secret),
 		PanelListen:     listen,
 		PanelAccess:     settings.PanelAccess,

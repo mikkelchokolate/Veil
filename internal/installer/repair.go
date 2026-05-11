@@ -1,6 +1,9 @@
 package installer
 
-import "github.com/veil-panel/veil/internal/managedfiles"
+import (
+	"github.com/veil-panel/veil/internal/managedfiles"
+	"github.com/veil-panel/veil/internal/panelmaterial"
+)
 
 type RepairReason = managedfiles.RepairReason
 
@@ -28,5 +31,26 @@ func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
 type managedFile = managedfiles.File
 
 func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]managedFile, error) {
-	return NewPanelManagedMaterialFromProfile(profile, paths).files()
+	files, err := panelmaterial.NewManagedMaterial(panelmaterial.Input{
+		Paths:             panelmaterial.Paths{EtcDir: paths.EtcDir, VarDir: paths.VarDir, SystemdDir: paths.SystemdDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary},
+		PanelAuthToken:    profile.PanelAuthToken,
+		PanelListen:       profile.PanelListen,
+		PanelAccess:       profile.PanelAccess,
+		Domain:            profile.Domain,
+		Email:             profile.Email,
+		WebBasePath:       profile.WebBasePath,
+		PanelTLSEnabled:   profile.PanelTLSEnabled,
+		PanelTLSCertPEM:   profile.PanelTLSCertPEM,
+		PanelTLSKeyPEM:    profile.PanelTLSKeyPEM,
+		InstallPanelCaddy: profile.InstallPanelCaddy,
+		Caddyfile:         profile.Caddyfile,
+	}).Files()
+	if err != nil {
+		return nil, err
+	}
+	managed := make([]managedFile, 0, len(files))
+	for _, file := range files {
+		managed = append(managed, managedFile{Path: file.Path, Content: file.Content, Mode: file.Mode})
+	}
+	return managed, nil
 }
