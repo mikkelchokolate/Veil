@@ -1,9 +1,9 @@
-package api
+package protocols
 
 import "testing"
 
-func TestProtocolCapabilityCatalogCoversMieruEndToEnd(t *testing.T) {
-	capability, ok := NewProtocolCapabilityCatalog().ForProtocol("mieru")
+func TestCapabilityCatalogCoversMieruEndToEnd(t *testing.T) {
+	capability, ok := NewCapabilityCatalog().ForProtocol("mieru")
 	if !ok {
 		t.Fatal("missing Mieru protocol capability")
 	}
@@ -20,5 +20,14 @@ func TestProtocolCapabilityCatalogCoversMieruEndToEnd(t *testing.T) {
 	cmd := validation.Command
 	if len(cmd) != 4 || cmd[0] != "mieru" || cmd[1] != "check" || cmd[2] != "-c" {
 		t.Fatalf("Mieru validation command = %+v", cmd)
+	}
+}
+
+func TestCapabilityCatalogReturnsClonedTransports(t *testing.T) {
+	all := NewCapabilityCatalog().All()
+	all[0].Transports[0] = "mutated"
+	capability, ok := NewCapabilityCatalog().ForProtocol("naiveproxy")
+	if !ok || capability.Transports[0] != "tcp" {
+		t.Fatalf("catalog leaked transport slice mutation: %+v", capability)
 	}
 }

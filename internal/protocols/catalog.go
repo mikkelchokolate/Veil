@@ -13,11 +13,7 @@ type Catalog struct {
 }
 
 func NewCatalog() Catalog {
-	return Catalog{choices: []Choice{
-		{Protocol: "naiveproxy", DisplayName: "NaiveProxy", Transports: []string{"tcp"}, FirewallService: "Veil NaiveProxy", RequiresCaddy: true},
-		{Protocol: "hysteria2", DisplayName: "Hysteria2", Transports: []string{"udp"}, FirewallService: "Veil Hysteria2"},
-		{Protocol: "mieru", DisplayName: "Mieru", Transports: []string{"tcp", "udp"}, FirewallService: "Veil Mieru"},
-	}}
+	return Catalog{choices: NewCapabilityCatalog().Choices()}
 }
 
 func (c Catalog) Choices() []Choice {

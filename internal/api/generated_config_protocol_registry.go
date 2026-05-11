@@ -1,34 +1,28 @@
 package api
 
-import "github.com/veil-panel/veil/internal/generatedconfig"
+import (
+	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/protocols"
+)
 
 type GeneratedConfigProtocolRegistry struct {
 	inner generatedconfig.ProtocolRegistry
 }
 
-type GeneratedConfigProtocolRenderInput struct {
-	Settings Settings
-	Paths    generatedconfig.Paths
-	Inbounds []Inbound
-}
-
 func NewGeneratedConfigProtocolRegistry() GeneratedConfigProtocolRegistry {
-	protocols := []generatedconfig.Protocol{}
-	for _, capability := range NewProtocolCapabilityCatalog().All() {
+	protocolRenderers := []generatedconfig.Protocol{}
+	for _, capability := range protocols.NewCapabilityCatalog().All() {
 		if capability.RenderGeneratedConfig == nil {
 			continue
 		}
-		render := capability.RenderGeneratedConfig
-		protocols = append(protocols, generatedconfig.Protocol{
+		protocolRenderers = append(protocolRenderers, generatedconfig.Protocol{
 			Protocol:               capability.Protocol,
 			MaxEnabled:             capability.MaxEnabled,
 			RequiresRenderSettings: capability.RequiresRenderSettings,
-			Render: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
-				return render(GeneratedConfigProtocolRenderInput{Settings: input.Settings, Paths: input.Paths, Inbounds: input.Inbounds})
-			},
+			Render:                 capability.RenderGeneratedConfig,
 		})
 	}
-	return GeneratedConfigProtocolRegistry{inner: generatedconfig.NewProtocolRegistry(protocols)}
+	return GeneratedConfigProtocolRegistry{inner: generatedconfig.NewProtocolRegistry(protocolRenderers)}
 }
 
 func (r GeneratedConfigProtocolRegistry) Validate(settings Settings, inbounds []Inbound) error {

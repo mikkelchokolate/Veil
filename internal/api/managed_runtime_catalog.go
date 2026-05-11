@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/veil-panel/veil/internal/protocols"
 	"github.com/veil-panel/veil/internal/renderer"
 	"github.com/veil-panel/veil/internal/service"
 )
@@ -17,7 +18,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 		Order   int
 		Runtime ManagedRuntime
 	}{}
-	for _, capability := range NewProtocolCapabilityCatalog().All() {
+	for _, capability := range protocols.NewCapabilityCatalog().All() {
 		if capability.RuntimeUnit == "" {
 			continue
 		}

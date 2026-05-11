@@ -1,6 +1,9 @@
 package api
 
-import "github.com/veil-panel/veil/internal/panelaccess"
+import (
+	"github.com/veil-panel/veil/internal/panelaccess"
+	"github.com/veil-panel/veil/internal/protocols"
+)
 
 type ApplyProtocolCapability struct {
 	Protocol               string
@@ -17,7 +20,7 @@ type ApplyProtocolCapabilityCatalog struct {
 
 func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 	byProtocol := map[string]ApplyProtocolCapability{}
-	for _, capability := range NewProtocolCapabilityCatalog().All() {
+	for _, capability := range protocols.NewCapabilityCatalog().All() {
 		byProtocol[capability.Protocol] = ApplyProtocolCapability{
 			Protocol:               capability.Protocol,
 			Config:                 capability.GeneratedConfig.PlanPath(),
