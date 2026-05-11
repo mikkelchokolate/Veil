@@ -1,17 +1,16 @@
-package cli
+package install
 
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
-func confirmInstallPlan(cmd *cobra.Command, interactive bool) error {
+func ConfirmPlan(in io.Reader, out io.Writer, interactive bool) error {
 	if interactive {
-		fmt.Fprint(cmd.OutOrStdout(), "Apply install plan? [y/N]: ")
-		answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		fmt.Fprint(out, "Apply install plan? [y/N]: ")
+		answer, err := bufio.NewReader(in).ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("read confirmation: %w", err)
 		}

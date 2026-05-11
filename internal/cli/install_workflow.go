@@ -121,7 +121,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	}
 	opts.CaddyBinary = caddyBinary
 	if !opts.Yes {
-		if err := confirmInstallPlan(cmd, opts.Interactive); err != nil {
+		if err := installflow.ConfirmPlan(cmd.InOrStdin(), cmd.OutOrStdout(), opts.Interactive); err != nil {
 			return err
 		}
 	}
