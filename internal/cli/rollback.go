@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/audit"
+	rollbackflow "github.com/veil-panel/veil/internal/cliflow/rollback"
 )
 
 func newRollbackCommand() *cobra.Command {
@@ -19,7 +19,7 @@ func newRollbackCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List available backups",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).List()
+			return rollbackflow.NewWorkflow(rollbackflow.Options{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).List()
 		},
 	}
 
@@ -28,7 +28,7 @@ func newRollbackCommand() *cobra.Command {
 		Short: "Restore files from a backup",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Restore(args[0])
+			return rollbackflow.NewWorkflow(rollbackflow.Options{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Restore(args[0])
 		},
 	}
 
@@ -37,7 +37,7 @@ func newRollbackCommand() *cobra.Command {
 		Short: "Remove a backup after successful restore",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewRollbackWorkflow(rollbackWorkflowOptions{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Cleanup(args[0])
+			return rollbackflow.NewWorkflow(rollbackflow.Options{BackupDir: backupDir, Yes: yes, AuditLog: auditLog}, cmd.OutOrStdout()).Cleanup(args[0])
 		},
 	}
 
@@ -48,23 +48,4 @@ func newRollbackCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 
 	return cmd
-}
-
-func writeAuditRestore(auditLog, backupID string, success bool, errMsg string, restoredFiles []string) error {
-	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
-		Action:        "rollback.restore",
-		BackupID:      backupID,
-		Success:       success,
-		Error:         errMsg,
-		RestoredFiles: restoredFiles,
-	})
-}
-
-func writeAuditCleanup(auditLog, backupID string, success bool, errMsg string) error {
-	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
-		Action:   "rollback.cleanup",
-		BackupID: backupID,
-		Success:  success,
-		Error:    errMsg,
-	})
 }
