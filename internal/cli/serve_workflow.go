@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 type serveWorkflowOptions struct {
@@ -25,20 +26,23 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	if err != nil {
 		return err
 	}
-	server, stateReloader := NewServeHTTPServer(serveHTTPServerOptions{
-		Listen:      cfg.Listen,
-		Version:     opts.Version,
-		AuthToken:   cfg.Token,
-		StatePath:   cfg.StatePath,
-		ApplyRoot:   cfg.ApplyRoot,
-		KeyPath:     cfg.KeyPath,
-		TLSEnabled:  cfg.TLSEnabled,
-		TLSCert:     cfg.TLSCert,
-		TLSKey:      cfg.TLSKey,
-		PanelAccess: cfg.PanelAccess,
-		Domain:      cfg.Domain,
-		Email:       cfg.Email,
-		WebBasePath: cfg.WebBasePath,
+	server, stateReloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
+		Listen:          cfg.Listen,
+		Version:         opts.Version,
+		AuthToken:       cfg.Token,
+		StatePath:       cfg.StatePath,
+		ApplyRoot:       cfg.ApplyRoot,
+		KeyPath:         cfg.KeyPath,
+		TLSEnabled:      cfg.TLSEnabled,
+		TLSCert:         cfg.TLSCert,
+		TLSKey:          cfg.TLSKey,
+		AutoTLSDomain:   cfg.AutoTLSDomain,
+		AutoTLSEmail:    cfg.AutoTLSEmail,
+		AutoTLSCacheDir: cfg.AutoTLSCacheDir,
+		PanelAccess:     cfg.PanelAccess,
+		Domain:          cfg.Domain,
+		Email:           cfg.Email,
+		WebBasePath:     cfg.WebBasePath,
 	}).Build()
 	tlsLabel := "http"
 	if cfg.TLSEnabled {

@@ -50,6 +50,3 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or /var/lib/veil/autocert")
 	return cmd
 }
-
-// Package-level variables set by ServeSecurity and used by newServeHTTPServer.
-var autoTLSDomain, autoTLSEmail, autoTLSCacheDir string

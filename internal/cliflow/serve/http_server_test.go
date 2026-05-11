@@ -1,4 +1,4 @@
-package cli
+package serve
 
 import (
 	"crypto/tls"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestServeHTTPServerBuildsTLSConfiguredServer(t *testing.T) {
-	server, reloader := NewServeHTTPServer(serveHTTPServerOptions{
+	server, reloader := NewHTTPServer(HTTPServerOptions{
 		Listen:      "127.0.0.1:2096",
 		Version:     "test",
 		AuthToken:   "token",

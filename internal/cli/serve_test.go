@@ -135,7 +135,7 @@ func TestServeCommandPrintsTLSStatus(t *testing.T) {
 }
 
 func TestNewServeTLSConfigEnforcesModernTLS(t *testing.T) {
-	cfg := newServeTLSConfig()
+	cfg := serveflow.NewTLSConfig()
 	if cfg.MinVersion != tls.VersionTLS12 {
 		t.Fatalf("expected TLS 1.2 min, got %d", cfg.MinVersion)
 	}
@@ -418,4 +418,20 @@ func TestResolveConfigPathDefault(t *testing.T) {
 	if path != "/var/lib/veil/state.json" {
 		t.Fatalf("expected default path, got: %s", path)
 	}
+}
+
+func newServeHTTPServer(listen string, version string, authToken string, statePath string, applyRoot string, keyPath string, tlsEnabled bool, tlsCert string, tlsKey string, webBasePath string) (*http.Server, any) {
+	server, reloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
+		Listen:      listen,
+		Version:     version,
+		AuthToken:   authToken,
+		StatePath:   statePath,
+		ApplyRoot:   applyRoot,
+		KeyPath:     keyPath,
+		TLSEnabled:  tlsEnabled,
+		TLSCert:     tlsCert,
+		TLSKey:      tlsKey,
+		WebBasePath: webBasePath,
+	}).Build()
+	return server, reloader
 }

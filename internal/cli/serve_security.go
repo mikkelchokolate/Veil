@@ -25,6 +25,9 @@ type serveConfig struct {
 	TLSSource       string
 	TLSCert         string
 	TLSKey          string
+	AutoTLSDomain   string
+	AutoTLSEmail    string
+	AutoTLSCacheDir string
 }
 
 type ServeSecurity struct {
@@ -51,14 +54,13 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 	keyPath, keySource := env.KeyPath(opts.KeyPath)
 	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
 	tlsEnabled, tlsSource, tlsCert, tlsKey := env.TLSFiles(opts.TLSCert, opts.TLSKey)
+	autoTLSConfig := serveflow.AutoTLSConfig{}
 	if opts.AutoTLS && !tlsEnabled {
-		autoTLSConfig, autoTLSErr := env.AutoTLS(opts.AutoTLS, opts.AutoTLSDir, statePath, keyPath)
+		var autoTLSErr error
+		autoTLSConfig, autoTLSErr = env.AutoTLS(opts.AutoTLS, opts.AutoTLSDir, statePath, keyPath)
 		if autoTLSErr != nil {
 			return serveConfig{}, fmt.Errorf("auto-tls: %w", autoTLSErr)
 		}
-		autoTLSDomain = autoTLSConfig.Domain
-		autoTLSEmail = autoTLSConfig.Email
-		autoTLSCacheDir = autoTLSConfig.CacheDir
 		tlsEnabled = autoTLSConfig.Enabled
 		tlsSource = "auto-tls (Let's Encrypt)"
 		tlsCert = ""
@@ -83,5 +85,8 @@ func (s ServeSecurity) Resolve() (serveConfig, error) {
 		TLSSource:       tlsSource,
 		TLSCert:         tlsCert,
 		TLSKey:          tlsKey,
+		AutoTLSDomain:   autoTLSConfig.Domain,
+		AutoTLSEmail:    autoTLSConfig.Email,
+		AutoTLSCacheDir: autoTLSConfig.CacheDir,
 	}, nil
 }
