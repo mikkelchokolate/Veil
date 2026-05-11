@@ -24,6 +24,37 @@ type ProfileInput struct {
 	PanelPort   int
 }
 
+type ModeResolution struct {
+	Mode          string
+	PanelListen   string
+	RequiresCaddy bool
+}
+
+type Mode struct {
+	mode string
+}
+
+func NewMode(mode string) Mode {
+	return Mode{mode: mode}
+}
+
+func (m Mode) Resolve(port int) (ModeResolution, error) {
+	mode := m.mode
+	if mode == "" {
+		mode = "local"
+	}
+	switch mode {
+	case "direct":
+		return ModeResolution{Mode: mode, PanelListen: RecommendedListen(mode, port)}, nil
+	case "local":
+		return ModeResolution{Mode: mode, PanelListen: RecommendedListen(mode, port)}, nil
+	case "caddy":
+		return ModeResolution{Mode: mode, PanelListen: RecommendedListen(mode, port), RequiresCaddy: true}, nil
+	default:
+		return ModeResolution{}, fmt.Errorf("panel access must be direct, local, or caddy")
+	}
+}
+
 type ProfileMaterial struct {
 	PanelListen       string
 	PanelTLSEnabled   bool

@@ -10,6 +10,7 @@ import (
 	installflow "github.com/veil-panel/veil/internal/cliflow/install"
 	"github.com/veil-panel/veil/internal/hostenv"
 	"github.com/veil-panel/veil/internal/installer"
+	"github.com/veil-panel/veil/internal/panelaccess"
 )
 
 const defaultSystemdDir = "/etc/systemd/system"
@@ -101,7 +102,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		}
 		printDNSCheck(cmd, dnsCheck)
 	}
-	if _, err := NewPanelAccessMode(opts.PanelAccess).Resolve(panelListenPort); err != nil {
+	if _, err := panelaccess.NewMode(opts.PanelAccess).Resolve(panelListenPort); err != nil {
 		return err
 	}
 	fmt.Fprint(cmd.OutOrStdout(), installflow.NewPanelSummary(installflow.PanelSummaryInput{Profile: built, PanelPort: panelListenPort, PanelRandom: panelRandom, PanelPortSet: opts.PanelPortSet}).String())
