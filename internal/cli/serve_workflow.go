@@ -66,5 +66,5 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", cfg.TokenSource)
 	}
 
-	return runServeLifecycle(cmd, server, stateReloader, cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey)
+	return serveflow.RunLifecycle(serveflow.LifecycleOptions{Context: cmd.Context(), Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr(), Server: server, StateReloader: stateReloader, TLSEnabled: cfg.TLSEnabled, TLSCert: cfg.TLSCert, TLSKey: cfg.TLSKey, DrainTimeout: serveDrainTimeout})
 }
