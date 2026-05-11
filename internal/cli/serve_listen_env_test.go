@@ -1,10 +1,14 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
+)
 
 func TestServeEnvironmentResolvesListenFromEnv(t *testing.T) {
 	t.Setenv("VEIL_LISTEN", "127.0.0.1:34567")
-	listen, source := NewServeEnvironment().Listen("")
+	listen, source := serveflow.NewEnvironment().Listen("")
 	if listen != "127.0.0.1:34567" || source != "VEIL_LISTEN" {
 		t.Fatalf("listen = %q %q", listen, source)
 	}

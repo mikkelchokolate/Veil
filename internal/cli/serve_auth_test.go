@@ -4,12 +4,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 func TestResolveServeAuthTokenUsesFlagBeforeEnvironment(t *testing.T) {
 	t.Setenv("VEIL_API_TOKEN", "env-token")
 
-	token, source := resolveServeAuthToken("flag-token")
+	token, source := serveflow.NewEnvironment().AuthToken("flag-token")
 
 	if token != "flag-token" || source != "--auth-token" {
 		t.Fatalf("expected flag token/source, got token=%q source=%q", token, source)
@@ -19,7 +21,7 @@ func TestResolveServeAuthTokenUsesFlagBeforeEnvironment(t *testing.T) {
 func TestResolveServeAuthTokenUsesEnvironmentFallback(t *testing.T) {
 	t.Setenv("VEIL_API_TOKEN", "env-token")
 
-	token, source := resolveServeAuthToken("")
+	token, source := serveflow.NewEnvironment().AuthToken("")
 
 	if token != "env-token" || source != "VEIL_API_TOKEN" {
 		t.Fatalf("expected env token/source, got token=%q source=%q", token, source)
@@ -29,7 +31,7 @@ func TestResolveServeAuthTokenUsesEnvironmentFallback(t *testing.T) {
 func TestResolveServeAuthTokenAllowsDisabledAuthForDevelopment(t *testing.T) {
 	t.Setenv("VEIL_API_TOKEN", "")
 
-	token, source := resolveServeAuthToken("")
+	token, source := serveflow.NewEnvironment().AuthToken("")
 
 	if token != "" || source != "disabled" {
 		t.Fatalf("expected disabled auth, got token=%q source=%q", token, source)
@@ -37,7 +39,7 @@ func TestResolveServeAuthTokenAllowsDisabledAuthForDevelopment(t *testing.T) {
 }
 
 func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T) {
-	err := validateServeAuthBinding("0.0.0.0:2096", "disabled")
+	err := serveflow.NewEnvironment().ValidateAuthBinding("0.0.0.0:2096", "disabled")
 	if err == nil {
 		t.Fatalf("expected public listen without auth token to be rejected")
 	}
@@ -47,7 +49,7 @@ func TestValidateServeAuthBindingRejectsDisabledAuthOnPublicListen(t *testing.T)
 }
 
 func TestValidateServeAuthBindingRejectsInvalidPortOnLocalhost(t *testing.T) {
-	err := validateServeAuthBinding("localhost:notaport", "disabled")
+	err := serveflow.NewEnvironment().ValidateAuthBinding("localhost:notaport", "disabled")
 	if err == nil {
 		t.Fatalf("expected invalid port on localhost to be rejected")
 	}
@@ -59,7 +61,7 @@ func TestValidateServeAuthBindingRejectsInvalidPortOnLocalhost(t *testing.T) {
 func TestValidateServeAuthBindingAllowsDisabledAuthOnLocalhost(t *testing.T) {
 	for _, listen := range []string{"localhost:2096", "LOCALHOST:2096", "127.0.0.1:2096", "[::1]:2096"} {
 		t.Run(listen, func(t *testing.T) {
-			if err := validateServeAuthBinding(listen, "disabled"); err != nil {
+			if err := serveflow.NewEnvironment().ValidateAuthBinding(listen, "disabled"); err != nil {
 				t.Fatalf("expected local listen without auth token to be allowed: %v", err)
 			}
 		})

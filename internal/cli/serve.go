@@ -51,5 +51,5 @@ func newServeCommand(version string) *cobra.Command {
 	return cmd
 }
 
-// Package-level variables set by resolveServeAutoTLS and used by newServeHTTPServer.
+// Package-level variables set by ServeSecurity and used by newServeHTTPServer.
 var autoTLSDomain, autoTLSEmail, autoTLSCacheDir string

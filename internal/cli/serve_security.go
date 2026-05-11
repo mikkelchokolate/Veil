@@ -1,6 +1,10 @@
 package cli
 
-import "fmt"
+import (
+	"fmt"
+
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
+)
 
 type serveConfig struct {
 	Listen          string
@@ -33,26 +37,29 @@ func NewServeSecurity(opts serveWorkflowOptions) ServeSecurity {
 
 func (s ServeSecurity) Resolve() (serveConfig, error) {
 	opts := s.opts
-	env := NewServeEnvironment()
-	listen, listenSource := resolveServeListen(opts.Listen)
-	if err := validateServeListen(listen); err != nil {
+	env := serveflow.NewEnvironment()
+	listen, listenSource := env.Listen(opts.Listen)
+	if err := env.ValidateListen(listen); err != nil {
 		return serveConfig{}, err
 	}
-	token, tokenSource := resolveServeAuthToken(opts.AuthToken)
-	if err := validateServeAuthBinding(listen, tokenSource); err != nil {
+	token, tokenSource := env.AuthToken(opts.AuthToken)
+	if err := env.ValidateAuthBinding(listen, tokenSource); err != nil {
 		return serveConfig{}, err
 	}
-	statePath, stateSource := resolveServeStatePath(opts.StatePath)
-	applyRoot, applyRootSource := resolveServeApplyRoot(opts.ApplyRoot)
-	keyPath, keySource := resolveServeKeyPath(opts.KeyPath)
-	webBasePath, _ := resolveServeWebBasePath(opts.WebBasePath)
-	tlsEnabled, tlsSource, tlsCert, tlsKey := resolveServeTLSFiles(opts.TLSCert, opts.TLSKey)
+	statePath, stateSource := env.StatePath(opts.StatePath)
+	applyRoot, applyRootSource := env.ApplyRoot(opts.ApplyRoot)
+	keyPath, keySource := env.KeyPath(opts.KeyPath)
+	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
+	tlsEnabled, tlsSource, tlsCert, tlsKey := env.TLSFiles(opts.TLSCert, opts.TLSKey)
 	if opts.AutoTLS && !tlsEnabled {
-		autoTLSEnabled, autoTLSErr := resolveServeAutoTLS(opts.AutoTLS, opts.AutoTLSDir, statePath, keyPath)
+		autoTLSConfig, autoTLSErr := env.AutoTLS(opts.AutoTLS, opts.AutoTLSDir, statePath, keyPath)
 		if autoTLSErr != nil {
 			return serveConfig{}, fmt.Errorf("auto-tls: %w", autoTLSErr)
 		}
-		tlsEnabled = autoTLSEnabled
+		autoTLSDomain = autoTLSConfig.Domain
+		autoTLSEmail = autoTLSConfig.Email
+		autoTLSCacheDir = autoTLSConfig.CacheDir
+		tlsEnabled = autoTLSConfig.Enabled
 		tlsSource = "auto-tls (Let's Encrypt)"
 		tlsCert = ""
 		tlsKey = ""

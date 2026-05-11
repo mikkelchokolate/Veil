@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 	"github.com/veil-panel/veil/internal/renderer"
 )
@@ -14,7 +15,7 @@ var updateHealthChecker = updateflow.WaitForHealthy
 func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateWorkflowOptions) error {
 	out := cmd.OutOrStdout()
 	addr := resolveStatusListen(opts.Listen)
-	token, _ := resolveServeAuthToken(opts.AuthToken)
+	token, _ := serveflow.NewEnvironment().AuthToken(opts.AuthToken)
 
 	fmt.Fprintln(out, "Restarting "+renderer.UnitVeil+"...")
 	if err := runSystemctlRestart(renderer.UnitVeil); err != nil {

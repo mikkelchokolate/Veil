@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 func TestServeCommandRejectsInvalidListenAddress(t *testing.T) {
@@ -90,7 +92,7 @@ func TestNewServeHTTPServerDoesNotSetTLSConfigWhenDisabled(t *testing.T) {
 }
 
 func TestResolveServeTLSFromFlags(t *testing.T) {
-	enabled, source := resolveServeTLS("/tmp/cert.pem", "/tmp/key.pem")
+	enabled, source := serveflow.NewEnvironment().TLS("/tmp/cert.pem", "/tmp/key.pem")
 	if !enabled {
 		t.Fatal("expected TLS enabled when both cert and key flags are set")
 	}
@@ -100,14 +102,14 @@ func TestResolveServeTLSFromFlags(t *testing.T) {
 }
 
 func TestResolveServeTLSRejectsCertOnly(t *testing.T) {
-	enabled, _ := resolveServeTLS("/tmp/cert.pem", "")
+	enabled, _ := serveflow.NewEnvironment().TLS("/tmp/cert.pem", "")
 	if enabled {
 		t.Fatal("expected TLS disabled when only cert is set")
 	}
 }
 
 func TestResolveServeTLSRejectsKeyOnly(t *testing.T) {
-	enabled, _ := resolveServeTLS("", "/tmp/key.pem")
+	enabled, _ := serveflow.NewEnvironment().TLS("", "/tmp/key.pem")
 	if enabled {
 		t.Fatal("expected TLS disabled when only key is set")
 	}
@@ -333,7 +335,7 @@ func TestServeGracefulShutdown(t *testing.T) {
 func TestResolveServeTLSFromEnv(t *testing.T) {
 	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
 	t.Setenv("VEIL_TLS_KEY", "/env/key.pem")
-	enabled, source := resolveServeTLS("", "")
+	enabled, source := serveflow.NewEnvironment().TLS("", "")
 	if !enabled {
 		t.Fatal("expected TLS enabled from env vars")
 	}
@@ -346,7 +348,7 @@ func TestResolveServeTLSEnvFlagPrecedence(t *testing.T) {
 	// Flags should take precedence over env vars
 	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
 	t.Setenv("VEIL_TLS_KEY", "/env/key.pem")
-	enabled, source := resolveServeTLS("/flag/cert.pem", "/flag/key.pem")
+	enabled, source := serveflow.NewEnvironment().TLS("/flag/cert.pem", "/flag/key.pem")
 	if !enabled {
 		t.Fatal("expected TLS enabled from flags")
 	}
@@ -358,7 +360,7 @@ func TestResolveServeTLSEnvFlagPrecedence(t *testing.T) {
 func TestResolveServeTLSEnvOnlyOneVarSet(t *testing.T) {
 	// Only cert in env, no key — should be disabled
 	t.Setenv("VEIL_TLS_CERT", "/env/cert.pem")
-	enabled, _ := resolveServeTLS("", "")
+	enabled, _ := serveflow.NewEnvironment().TLS("", "")
 	if enabled {
 		t.Fatal("expected TLS disabled when only VEIL_TLS_CERT is set")
 	}
@@ -366,7 +368,7 @@ func TestResolveServeTLSEnvOnlyOneVarSet(t *testing.T) {
 
 func TestResolveServeKeyPathFromEnv(t *testing.T) {
 	t.Setenv("VEIL_KEY_PATH", "/custom/key.path")
-	path, source := resolveServeKeyPath("")
+	path, source := serveflow.NewEnvironment().KeyPath("")
 	if path != "/custom/key.path" {
 		t.Fatalf("expected /custom/key.path from env, got: %s", path)
 	}
@@ -376,7 +378,7 @@ func TestResolveServeKeyPathFromEnv(t *testing.T) {
 }
 
 func TestResolveServeKeyPathDefault(t *testing.T) {
-	path, source := resolveServeKeyPath("")
+	path, source := serveflow.NewEnvironment().KeyPath("")
 	if path != "/etc/veil/state.key" {
 		t.Fatalf("expected default key path, got: %s", path)
 	}
@@ -386,7 +388,7 @@ func TestResolveServeKeyPathDefault(t *testing.T) {
 }
 
 func TestResolveServeKeyPathFromFlag(t *testing.T) {
-	path, source := resolveServeKeyPath("/custom/key.path")
+	path, source := serveflow.NewEnvironment().KeyPath("/custom/key.path")
 	if path != "/custom/key.path" {
 		t.Fatalf("expected flag key path, got: %s", path)
 	}

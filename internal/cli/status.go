@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/spf13/cobra"
+	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
 )
 
@@ -21,7 +22,7 @@ func newStatusCommand(version string) *cobra.Command {
 By default it connects to 127.0.0.1:2096. Use --listen to specify a different
 address and --auth-token to authenticate.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return statusflow.NewQuery(statusflow.Options{Listen: listen, AuthToken: authToken, JSON: jsonOutput}, cmd.OutOrStdout(), resolveServeAuthToken).Run(cmd.Context())
+			return statusflow.NewQuery(statusflow.Options{Listen: listen, AuthToken: authToken, JSON: jsonOutput}, cmd.OutOrStdout(), serveflow.NewEnvironment().AuthToken).Run(cmd.Context())
 		},
 	}
 
