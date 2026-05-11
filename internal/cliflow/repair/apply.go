@@ -1,16 +1,21 @@
-package cli
+package repair
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
+	"github.com/veil-panel/veil/internal/audit"
 	"github.com/veil-panel/veil/internal/backup"
 	"github.com/veil-panel/veil/internal/installer"
 	"github.com/veil-panel/veil/internal/service"
 )
 
-func applyRepairPlan(cmd *cobra.Command, plan installer.RepairPlan, opts repairWorkflowOptions) error {
+type ApplyDependencies struct {
+	RunSystemd func([]service.SystemdAction) error
+}
+
+func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps ApplyDependencies) error {
 	if !opts.Yes {
 		return fmt.Errorf("repair apply requires --yes; rerun with --dry-run to preview")
 	}
@@ -36,20 +41,23 @@ func applyRepairPlan(cmd *cobra.Command, plan installer.RepairPlan, opts repairW
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), nil)
 		return err
 	}
-	if actions := service.SystemdApplyPlan(systemdUnitsFromRepairPlan(plan)); len(actions) > 0 {
-		if err := installSystemdRunFunc(actions); err != nil {
+	if actions := service.SystemdApplyPlan(SystemdUnitsFromRepairPlan(plan)); len(actions) > 0 {
+		if deps.RunSystemd == nil {
+			return fmt.Errorf("repair systemd runner is not configured")
+		}
+		if err := deps.RunSystemd(actions); err != nil {
 			_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
 			return err
 		}
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Repaired files:")
+	fmt.Fprintln(out, "Repaired files:")
 	for _, path := range result.WrittenFiles {
-		fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", path)
+		fmt.Fprintf(out, "- %s\n", path)
 	}
 	if backupID != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "Backup ID: %s\n", backupID)
+		fmt.Fprintf(out, "Backup ID: %s\n", backupID)
 	} else if len(plan.Actions) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No backup created")
+		fmt.Fprintln(out, "No backup created")
 	}
 	if err := writeAuditRepair(opts.AuditLog, backupID, true, "", result.WrittenFiles); err != nil {
 		return fmt.Errorf("audit log write failed after successful repair: %w", err)
@@ -57,7 +65,7 @@ func applyRepairPlan(cmd *cobra.Command, plan installer.RepairPlan, opts repairW
 	return nil
 }
 
-func systemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {
+func SystemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {
 	seen := map[string]bool{}
 	units := []string{}
 	for _, action := range plan.Actions {
@@ -69,4 +77,14 @@ func systemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {
 		units = append(units, name)
 	}
 	return units
+}
+
+func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
+	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
+		Action:       "repair.apply",
+		BackupID:     backupID,
+		Success:      success,
+		Error:        errMsg,
+		WrittenFiles: writtenFiles,
+	})
 }

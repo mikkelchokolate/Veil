@@ -1,4 +1,4 @@
-package cli
+package repair
 
 import (
 	"bytes"
@@ -10,20 +10,15 @@ import (
 )
 
 func TestApplyRepairPlanRunsSystemdActionsForRepairedUnits(t *testing.T) {
-	oldSystemd := installSystemdRunFunc
 	var gotActions []service.SystemdAction
-	installSystemdRunFunc = func(actions []service.SystemdAction) error {
+	installSystemdRunFunc := func(actions []service.SystemdAction) error {
 		gotActions = actions
 		return nil
 	}
-	t.Cleanup(func() { installSystemdRunFunc = oldSystemd })
 
-	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
 	plan := installer.RepairPlan{Actions: []installer.RepairAction{{Path: t.TempDir() + "/veil.service", Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644}}}
-	if err := applyRepairPlan(cmd, plan, repairWorkflowOptions{Yes: true, VarDir: t.TempDir(), BackupDirSet: true}); err != nil {
+	if err := ApplyPlan(plan, Options{Yes: true, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: installSystemdRunFunc}); err != nil {
 		t.Fatalf("applyRepairPlan: %v", err)
 	}
 	if len(gotActions) == 0 || gotActions[0].Command != "systemctl" || gotActions[0].Args[0] != "daemon-reload" {
@@ -32,12 +27,9 @@ func TestApplyRepairPlanRunsSystemdActionsForRepairedUnits(t *testing.T) {
 }
 
 func TestApplyRepairPlanReportsNoBackupWhenNoActions(t *testing.T) {
-	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
 
-	err := applyRepairPlan(cmd, installer.RepairPlan{}, repairWorkflowOptions{Yes: true, VarDir: t.TempDir()})
+	err := ApplyPlan(installer.RepairPlan{}, Options{Yes: true, VarDir: t.TempDir()}, &out, ApplyDependencies{})
 	if err != nil {
 		t.Fatalf("applyRepairPlan: %v", err)
 	}

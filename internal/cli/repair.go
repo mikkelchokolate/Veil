@@ -2,7 +2,6 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/audit"
 	repairflow "github.com/veil-panel/veil/internal/cliflow/repair"
 	"github.com/veil-panel/veil/internal/installer"
 )
@@ -63,18 +62,8 @@ func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
 			return repairflow.BuildPlanFromOptions(flowOpts, repairflow.PlanDependencies{Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath})
 		},
-		ApplyPlan: func(plan installer.RepairPlan, _ repairflow.Options) error {
-			return applyRepairPlan(cmd, plan, opts)
+		ApplyPlan: func(plan installer.RepairPlan, flowOpts repairflow.Options) error {
+			return repairflow.ApplyPlan(plan, flowOpts, cmd.OutOrStdout(), repairflow.ApplyDependencies{RunSystemd: installSystemdRunFunc})
 		},
-	})
-}
-
-func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {
-	return audit.AppendAuditEvent(auditLog, audit.AuditEvent{
-		Action:       "repair.apply",
-		BackupID:     backupID,
-		Success:      success,
-		Error:        errMsg,
-		WrittenFiles: writtenFiles,
 	})
 }
