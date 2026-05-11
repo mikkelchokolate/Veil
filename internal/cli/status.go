@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"context"
-	"net/http"
-
 	"github.com/spf13/cobra"
 	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
@@ -30,23 +27,4 @@ address and --auth-token to authenticate.`,
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 	return cmd
-}
-
-func resolveStatusListen(flagValue string) string {
-	return statusflow.ResolveListen(flagValue)
-}
-
-type statusResponse = statusflow.Response
-type serviceStatus = statusflow.ServiceStatus
-
-func fetchStatus(ctx context.Context, url string, token string) (*statusResponse, error) {
-	return statusflow.Fetch(ctx, url, token)
-}
-
-func statusHTTPClient(rawURL string) *http.Client {
-	return statusflow.HTTPClient(rawURL)
-}
-
-func isLocalStatusHost(host string) bool {
-	return statusflow.IsLocalHost(host)
 }

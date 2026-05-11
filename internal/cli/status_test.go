@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
 )
 
 func TestStatusCommandRegistered(t *testing.T) {
@@ -38,12 +40,12 @@ func TestFetchStatusJSON(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResponse{
+		json.NewEncoder(w).Encode(statusflow.Response{
 			SchemaVersion: "v1",
 			Name:          "Veil",
 			Version:       "0.1.0",
 			Mode:          "server",
-			Services: []serviceStatus{
+			Services: []statusflow.ServiceStatus{
 				{Name: "veil", Managed: true, Unit: "veil.service", ActiveState: "active", SubState: "running"},
 				{Name: "naive", Managed: true, Transport: "tcp", Unit: "veil-naive.service", ActiveState: "active", SubState: "running"},
 				{Name: "hysteria2", Managed: true, Transport: "udp", Unit: "veil-hysteria2.service", ActiveState: "active", SubState: "running"},
@@ -76,7 +78,7 @@ func TestStatusListenWithoutSchemeTriesGeneratedPanelTLSOnLoopback(t *testing.T)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResponse{SchemaVersion: "v1", Name: "Veil", Version: "tls-noscheme", Mode: "server"})
+		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1", Name: "Veil", Version: "tls-noscheme", Mode: "server"})
 	})
 	server := httptest.NewTLSServer(handler)
 	defer server.Close()
@@ -102,7 +104,7 @@ func TestFetchStatusSupportsGeneratedPanelTLSOnLoopback(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResponse{SchemaVersion: "v1", Name: "Veil", Version: "tls-test", Mode: "server"})
+		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1", Name: "Veil", Version: "tls-test", Mode: "server"})
 	})
 	server := httptest.NewTLSServer(handler)
 	defer server.Close()
@@ -124,12 +126,12 @@ func TestFetchStatusSupportsGeneratedPanelTLSOnLoopback(t *testing.T) {
 func TestFetchStatusHumanReadable(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResponse{
+		json.NewEncoder(w).Encode(statusflow.Response{
 			SchemaVersion: "v1",
 			Name:          "Veil",
 			Version:       "0.1.0",
 			Mode:          "server",
-			Services: []serviceStatus{
+			Services: []statusflow.ServiceStatus{
 				{Name: "veil", Managed: true, ActiveState: "active"},
 				{Name: "naive", Managed: true, Transport: "tcp", ActiveState: "active"},
 				{Name: "hysteria2", Managed: true, Transport: "udp", ActiveState: "failed", Error: "connection refused"},
@@ -184,7 +186,7 @@ func TestFetchStatusAuth(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResponse{SchemaVersion: "v1"})
+		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1"})
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
