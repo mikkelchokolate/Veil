@@ -7,7 +7,7 @@ import (
 
 func TestInstallPlanSummaryDoesNotPrintLegacyProtocolRuntimeArtifacts(t *testing.T) {
 	plan := InstallPlan{PanelTools: []string{"speedtest-cli or speedtest"}}
-	summary := NewInstallPlanSummary(plan).String()
+	summary := plan.Summary()
 	for _, unwanted := range []string{"Shared port:", "NaiveProxy:", "Hysteria2 asset:", "Mieru asset:"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("summary should not include legacy protocol install artifact %q:\n%s", unwanted, summary)
@@ -23,7 +23,7 @@ func TestInstallPlanSummaryIncludesPanelCaddyPrerequisite(t *testing.T) {
 		Profile:    RURecommendedProfile{InstallPanelCaddy: true},
 		CaddyBuild: CaddyPanelBuildHint("/usr/local/bin/caddy"),
 	}
-	summary := NewInstallPlanSummary(plan).String()
+	summary := plan.Summary()
 	if !strings.Contains(summary, "Caddy/Panel reverse proxy: /usr/local/bin/caddy") {
 		t.Fatalf("summary missing Panel Caddy prerequisite:\n%s", summary)
 	}
