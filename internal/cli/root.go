@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	doctorflow "github.com/veil-panel/veil/internal/cliflow/doctor"
+	versionflow "github.com/veil-panel/veil/internal/cliflow/version"
 )
 
 var (
@@ -72,5 +73,5 @@ func buildDoctorSummary(version string) doctorSummary {
 // compares it against the current version. It prints a human-readable
 // comparison and returns an error only on network/parse failures.
 func checkLatestVersion(cmd *cobra.Command, current string) error {
-	return NewVersionCheck(current, cmd.OutOrStdout()).Run()
+	return versionflow.NewCheck(current, cmd.OutOrStdout(), fetchLatestReleaseTag).Run()
 }
