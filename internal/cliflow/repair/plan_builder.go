@@ -1,8 +1,9 @@
-package cli
+package repair
 
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,26 +16,54 @@ import (
 	"github.com/veil-panel/veil/internal/service"
 )
 
-func buildRepairPlanFromOptions(opts repairWorkflowOptions) (installer.RepairPlan, error) {
+type PlanDependencies struct {
+	Secret     installer.SecretFunc
+	Executable func() (string, error)
+	LookPath   func(string) (string, error)
+}
+
+func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
+	secret := deps.secret()
 	built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-		Secret: randomSecret,
+		Secret: secret,
 	})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
 	preserveExistingPanelRepairMaterial(&built, opts.EtcDir)
-	veilBinary, executableErr := installExecutableFunc()
+	veilBinary, executableErr := deps.executable()()
 	if executableErr != nil {
 		veilBinary = ""
 	}
-	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary, CaddyBinary: resolvedRepairBinaryPath("caddy")})
+	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary, CaddyBinary: deps.resolvedBinaryPath("caddy")})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
-	return addPanelStateRepairActions(plan, opts)
+	return addPanelStateRepairActions(plan, opts, deps)
 }
 
-func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOptions) (installer.RepairPlan, error) {
+func (d PlanDependencies) secret() installer.SecretFunc {
+	if d.Secret != nil {
+		return d.Secret
+	}
+	return func(label string) string { return label }
+}
+
+func (d PlanDependencies) executable() func() (string, error) {
+	if d.Executable != nil {
+		return d.Executable
+	}
+	return os.Executable
+}
+
+func (d PlanDependencies) lookPath() func(string) (string, error) {
+	if d.LookPath != nil {
+		return d.LookPath
+	}
+	return exec.LookPath
+}
+
+func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
 	statePath := filepath.Join(opts.VarDir, "state.json")
 	if _, err := os.Stat(statePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -55,10 +84,10 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts repairWorkflowOp
 		Inbounds: snapshot.Inbounds,
 		Rules:    snapshot.Rules,
 		Warp:     snapshot.Warp,
-	}).Apply(plan)
+	}, deps).Apply(plan)
 }
 
-func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWorkflowOptions, settings api.Settings) error {
+func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, settings api.Settings, secret installer.SecretFunc) error {
 	if settings.PanelAccess == "" {
 		return nil
 	}
@@ -68,7 +97,7 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWork
 	}
 	material := installer.NewPanelManagedMaterial(installer.PanelManagedMaterialInput{
 		Paths:           installer.ApplyPaths{EtcDir: opts.EtcDir},
-		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir),
+		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir, secret),
 		PanelListen:     listen,
 		PanelAccess:     settings.PanelAccess,
 		Domain:          settings.Domain,
@@ -82,13 +111,13 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts repairWork
 	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), material.EnvContent(), 0o600)
 }
 
-func repairPanelAuthToken(plan installer.RepairPlan, etcDir string) string {
+func repairPanelAuthToken(plan installer.RepairPlan, etcDir string, secret installer.SecretFunc) string {
 	token := repairPlanEnvValue(plan, "VEIL_API_TOKEN")
 	if token == "" {
 		token = readRepairEnv(filepath.Join(etcDir, "veil.env"))["VEIL_API_TOKEN"]
 	}
 	if token == "" {
-		token = randomSecret("panel")
+		token = secret("panel")
 	}
 	return token
 }
@@ -179,8 +208,8 @@ func readRepairEnv(path string) map[string]string {
 	return values
 }
 
-func resolvedRepairBinaryPath(name string) string {
-	path, err := commandLookPath(name)
+func (d PlanDependencies) resolvedBinaryPath(name string) string {
+	path, err := d.lookPath()(name)
 	if err != nil {
 		return ""
 	}

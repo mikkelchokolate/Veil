@@ -1,4 +1,4 @@
-package cli
+package repair
 
 import (
 	"os"
@@ -9,12 +9,19 @@ import (
 	"github.com/veil-panel/veil/internal/installer"
 )
 
-func TestBuildRepairPlanFromOptionsUsesCurrentExecutableForPanelUnit(t *testing.T) {
-	oldExecutable := installExecutableFunc
-	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
-	t.Cleanup(func() { installExecutableFunc = oldExecutable })
+var testExecutableFunc = func() (string, error) { return "", os.ErrNotExist }
+var testLookPath = func(string) (string, error) { return "", os.ErrNotExist }
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()})
+func buildRepairPlanFromOptions(opts Options) (installer.RepairPlan, error) {
+	return BuildPlanFromOptions(opts, PlanDependencies{Secret: func(label string) string { return "repair-" + label }, Executable: testExecutableFunc, LookPath: testLookPath})
+}
+
+func TestBuildRepairPlanFromOptionsUsesCurrentExecutableForPanelUnit(t *testing.T) {
+	oldExecutable := testExecutableFunc
+	testExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	t.Cleanup(func() { testExecutableFunc = oldExecutable })
+
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -37,11 +44,11 @@ func TestBuildRepairPlanFromOptionsPreservesExistingPanelSecrets(t *testing.T) {
 	if _, err := installer.ApplyRURecommendedProfile(profile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
 		t.Fatalf("ApplyRURecommendedProfile: %v", err)
 	}
-	oldExecutable := installExecutableFunc
-	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
-	t.Cleanup(func() { installExecutableFunc = oldExecutable })
+	oldExecutable := testExecutableFunc
+	testExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
+	t.Cleanup(func() { testExecutableFunc = oldExecutable })
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -72,7 +79,7 @@ func TestBuildRepairPlanFromOptionsDoesNotReenablePanelTLSForCaddyAccess(t *test
 		t.Fatalf("Apply caddy profile: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -101,7 +108,7 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 		t.Fatalf("remove veil-naive.service: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -114,7 +121,7 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 }
 
 func TestBuildRepairPlanFromOptionsBuildsPanelInstallPlan(t *testing.T) {
-	plan, err := buildRepairPlanFromOptions(repairWorkflowOptions{
+	plan, err := buildRepairPlanFromOptions(Options{
 		Profile:    "ru-recommended",
 		EtcDir:     t.TempDir(),
 		VarDir:     t.TempDir(),

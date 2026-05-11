@@ -60,8 +60,8 @@ func newRepairCommand() *cobra.Command {
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog}
 	return repairflow.Run(flowOpts, cmd.OutOrStdout(), repairflow.Dependencies{
-		BuildPlan: func(repairflow.Options) (installer.RepairPlan, error) {
-			return buildRepairPlanFromOptions(opts)
+		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
+			return repairflow.BuildPlanFromOptions(flowOpts, repairflow.PlanDependencies{Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath})
 		},
 		ApplyPlan: func(plan installer.RepairPlan, _ repairflow.Options) error {
 			return applyRepairPlan(cmd, plan, opts)

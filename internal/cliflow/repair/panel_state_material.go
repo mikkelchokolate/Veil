@@ -1,4 +1,4 @@
-package cli
+package repair
 
 import (
 	"path/filepath"
@@ -16,17 +16,18 @@ type panelStateRepairSnapshot struct {
 }
 
 type panelStateRepairMaterial struct {
-	opts     repairWorkflowOptions
+	opts     Options
 	snapshot panelStateRepairSnapshot
+	deps     PlanDependencies
 }
 
-func newPanelStateRepairMaterial(opts repairWorkflowOptions, snapshot panelStateRepairSnapshot) panelStateRepairMaterial {
-	return panelStateRepairMaterial{opts: opts, snapshot: snapshot}
+func newPanelStateRepairMaterial(opts Options, snapshot panelStateRepairSnapshot, deps PlanDependencies) panelStateRepairMaterial {
+	return panelStateRepairMaterial{opts: opts, snapshot: snapshot, deps: deps}
 }
 
 func (m panelStateRepairMaterial) Apply(plan installer.RepairPlan) (installer.RepairPlan, error) {
 	snapshot := m.snapshot
-	if err := applyPanelSettingsRepairActions(&plan, m.opts, snapshot.Settings); err != nil {
+	if err := applyPanelSettingsRepairActions(&plan, m.opts, snapshot.Settings, m.deps.secret()); err != nil {
 		return installer.RepairPlan{}, err
 	}
 	if err := m.addGeneratedConfigActions(&plan); err != nil {
@@ -57,7 +58,7 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 		return nil
 	}
 	snapshot := m.snapshot
-	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: resolvedRepairBinaryPath("caddy")})
+	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")})
 	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
 	if snapshot.Settings.PanelAccess == "caddy" {
 		unitNames = appendRepairUnit(unitNames, renderer.UnitNaive)

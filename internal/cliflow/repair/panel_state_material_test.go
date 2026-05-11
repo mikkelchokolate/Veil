@@ -1,4 +1,4 @@
-package cli
+package repair
 
 import (
 	"path/filepath"
@@ -11,7 +11,7 @@ import (
 
 func TestPanelStateRepairMaterialAddsGeneratedConfigsAndRuntimeUnits(t *testing.T) {
 	dir := t.TempDir()
-	opts := repairWorkflowOptions{
+	opts := Options{
 		EtcDir:     filepath.Join(dir, "etc", "veil"),
 		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
 		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
@@ -20,7 +20,7 @@ func TestPanelStateRepairMaterialAddsGeneratedConfigsAndRuntimeUnits(t *testing.
 		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel/", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
 		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 		Warp:     api.WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
-	})
+	}, PlanDependencies{Secret: func(label string) string { return "repair-" + label }})
 
 	plan, err := material.Apply(installer.RepairPlan{})
 	if err != nil {
