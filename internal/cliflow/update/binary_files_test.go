@@ -1,18 +1,16 @@
-package cli
+package update
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestUpdateBinaryFilesReplacesAndRollsBackBinary(t *testing.T) {
 	dir := t.TempDir()
 	currentPath := filepath.Join(dir, "veil")
 	backupPath := currentPath + ".backup"
-	files := updateflow.NewBinaryFiles()
+	files := NewBinaryFiles()
 
 	if err := os.WriteFile(currentPath, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)

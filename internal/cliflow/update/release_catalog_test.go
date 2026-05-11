@@ -1,11 +1,9 @@
-package cli
+package update
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 )
 
 func TestUpdateReleaseCatalogFetchesLatestRelease(t *testing.T) {
@@ -21,7 +19,7 @@ func TestUpdateReleaseCatalogFetchesLatestRelease(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	catalog := updateflow.NewReleaseCatalog("acme", "veil")
+	catalog := NewReleaseCatalog("acme", "veil")
 	catalog.BaseURL = server.URL
 	catalog.HTTPClient = server.Client()
 

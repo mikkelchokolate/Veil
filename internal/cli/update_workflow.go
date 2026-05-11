@@ -24,14 +24,6 @@ func downloadAsset(url string) ([]byte, error) {
 	return updateflow.DownloadAsset(url)
 }
 
-func downloadVerifiedUpdateAsset(release *updateflow.Release) (string, []byte, error) {
-	archive, err := updateflow.NewReleaseAssets(release, updateAssetDownloader).DownloadVerifiedArchive()
-	if err != nil {
-		return "", nil, err
-	}
-	return archive.Name, archive.Body, nil
-}
-
 type updateWorkflowOptions struct {
 	CurrentVersion string
 	Yes            bool
@@ -75,10 +67,11 @@ func runUpdateWorkflow(cmd *cobra.Command, opts updateWorkflowOptions) error {
 	assetName := updateflow.AssetName()
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
-	_, archive, err := downloadVerifiedUpdateAsset(release)
+	asset, err := updateflow.NewReleaseAssets(release, updateAssetDownloader).DownloadVerifiedArchive()
 	if err != nil {
 		return err
 	}
+	archive := asset.Body
 	fmt.Fprintln(out, "Checksum verified.")
 
 	if opts.DryRun {
