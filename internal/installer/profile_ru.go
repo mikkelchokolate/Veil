@@ -72,5 +72,12 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 }
 
 func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
-	return NewRURecommendedInputDefaults().Apply(m.input)
+	input := m.input
+	if input.PanelAccess == "" {
+		input.PanelAccess = "local"
+	}
+	if input.Secret == nil {
+		input.Secret = func(label string) string { return label }
+	}
+	return input
 }
