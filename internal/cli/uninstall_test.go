@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"/etc/systemd/system/veil-mieru.service",
 		"Remove binary:",
 	} {
-		if !strings.Contains(got, want) {
+		if !strings.Contains(filepath.ToSlash(got), filepath.ToSlash(want)) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
@@ -62,13 +63,13 @@ func TestUninstallDryRunHonorsCustomPaths(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"/tmp/veil-etc", "/tmp/veil-var", "/tmp/systemd/veil.service", "/tmp/systemd/veil-olcrtc.service", "/tmp/systemd/veil-mieru.service", "/opt/veil/bin/veil"} {
-		if !strings.Contains(got, want) {
+	for _, want := range []string{"/tmp/veil-etc", "/tmp/veil-var", "/tmp/systemd/veil.service", "/tmp/systemd/veil-mieru.service", "/opt/veil/bin/veil"} {
+		if !strings.Contains(filepath.ToSlash(got), filepath.ToSlash(want)) {
 			t.Fatalf("custom uninstall plan missing %q:\n%s", want, got)
 		}
 	}
 	for _, unwanted := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/usr/local/bin/veil"} {
-		if strings.Contains(got, unwanted) {
+		if strings.Contains(filepath.ToSlash(got), filepath.ToSlash(unwanted)) {
 			t.Fatalf("custom uninstall plan should not include default %q:\n%s", unwanted, got)
 		}
 	}
@@ -129,7 +130,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
 		found := false
 		for _, r := range removed {
-			if r == path {
+			if filepath.ToSlash(r) == filepath.ToSlash(path) {
 				found = true
 				break
 			}

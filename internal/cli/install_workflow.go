@@ -129,8 +129,12 @@ func (w RURecommendedInstallWorkflow) Run() error {
 }
 
 func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort int) (string, error) {
+	platform := hostenv.CurrentPlatform()
+	if platform.OS != "linux" {
+		platform.OS = "linux"
+	}
 	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
-		Platform:     hostenv.CurrentPlatform(),
+		Platform:     platform,
 		SystemdUnits: installer.PanelSystemdUnits(profile),
 		PanelPort:    panelPort,
 		CaddyBinary:  installPlanCaddyBinary(profile),
