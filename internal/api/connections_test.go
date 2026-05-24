@@ -1,6 +1,7 @@
 package api
 
 import (
+	"runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,9 @@ func TestConnectionsEndpointRejectsNonGet(t *testing.T) {
 }
 
 func TestConnectionsEndpointReturnsJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
@@ -34,6 +38,9 @@ func TestConnectionsEndpointReturnsJSON(t *testing.T) {
 }
 
 func TestConnectionsEndpointHasListeners(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
@@ -48,6 +55,9 @@ func TestConnectionsEndpointHasListeners(t *testing.T) {
 }
 
 func TestConnectionsEndpointFieldsPresent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
@@ -69,6 +79,9 @@ func TestConnectionsEndpointFieldsPresent(t *testing.T) {
 }
 
 func TestConnectionsEndpointNoNegativePorts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()

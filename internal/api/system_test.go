@@ -1,6 +1,7 @@
 package api
 
 import (
+	"runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,9 @@ func TestSystemEndpointRejectsNonGet(t *testing.T) {
 }
 
 func TestSystemEndpointReturnsValidJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
@@ -35,6 +39,9 @@ func TestSystemEndpointReturnsValidJSON(t *testing.T) {
 }
 
 func TestSystemEndpointCPUInRange(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
@@ -49,6 +56,9 @@ func TestSystemEndpointCPUInRange(t *testing.T) {
 }
 
 func TestSystemEndpointMemoryPositive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
@@ -64,6 +74,9 @@ func TestSystemEndpointMemoryPositive(t *testing.T) {
 }
 
 func TestSystemEndpointDiskPositive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
@@ -76,6 +89,9 @@ func TestSystemEndpointDiskPositive(t *testing.T) {
 }
 
 func TestSystemEndpointUptimePositive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
@@ -88,6 +104,9 @@ func TestSystemEndpointUptimePositive(t *testing.T) {
 }
 
 func TestSystemEndpointHasAllFields(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()

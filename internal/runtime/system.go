@@ -4,7 +4,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -50,16 +49,7 @@ func readMeminfo() (memInfo, error) {
 
 type diskInfo struct{ total, used uint64 }
 
-func readDiskStats(path string) (diskInfo, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return diskInfo{}, err
-	}
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bfree * uint64(stat.Bsize)
-	used := total - free
-	return diskInfo{total: total, used: used}, nil
-}
+
 
 func readUptime() (int64, error) {
 	data, err := os.ReadFile("/proc/uptime")
