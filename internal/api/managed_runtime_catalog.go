@@ -57,7 +57,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 			Order   int
 			Runtime ManagedRuntime
 		}{
-			Order: 50,
+			Order: 30,
 			Runtime: ManagedRuntime{
 				Name:             "olcrtc",
 				ActionName:       "olcrtc",
@@ -65,7 +65,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 				Transport:        "udp",
 				Unit:             "veil-olcrtc.service",
 				PromotedSubpath:  "olcrtc/server.yaml",
-				PromotedVerb:     "reload",
+				PromotedVerb:     "restart",
 				ManualRestart:    true,
 				HealthCheckAfter: true,
 			},
