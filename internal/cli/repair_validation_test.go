@@ -68,7 +68,7 @@ func TestRepairCommandDefaultsToRURecommendedPanelRepair(t *testing.T) {
 	if !strings.Contains(out.String(), "Veil repair plan") {
 		t.Fatalf("repair output missing plan:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "/etc/systemd/system/veil.service") {
+	if !strings.Contains(filepath.ToSlash(out.String()), "/etc/systemd/system/veil.service") {
 		t.Fatalf("default repair should include Panel systemd unit repair:\n%s", out.String())
 	}
 }

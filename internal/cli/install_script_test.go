@@ -7,12 +7,22 @@ import (
 	"testing"
 )
 
+func checkBash(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("skipping test: bash is not available")
+	}
+	cmd := exec.Command("bash", "-c", "echo")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("skipping test: bash is not working: %v", err)
+	}
+}
+
 func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		`REPO="${VEIL_REPO:-mikkelchokolate/Veil}"`,
 		"releases/latest/download",
@@ -29,6 +39,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 }
 
 func TestCurlInstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
+	checkBash(t)
 	cmd := exec.Command("bash", "../../scripts/install.sh", "--domain")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -41,6 +52,7 @@ func TestCurlInstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.
 }
 
 func TestCurlUninstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
+	checkBash(t)
 	cmd := exec.Command("bash", "../../scripts/uninstall.sh", "--install-dir")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -57,7 +69,7 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, unwanted := range []string{`PORT="443"`, `STACK=`, "default 443", "preferred shared TCP/UDP port", "Shared proxy port passed to veil install", "--port PORT", "--stack STACK", `--stack "${STACK}"`} {
 		if strings.Contains(script, unwanted) {
 			t.Fatalf("install.sh should not expose legacy stack/port option %q:\n%s", unwanted, script)
@@ -73,7 +85,7 @@ func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if !strings.Contains(script, "| sudo bash") {
 		t.Fatalf("install.sh usage should show sudo for systemd install:\n%s", script)
 	}
@@ -87,7 +99,7 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{"run_veil_install()", "< /dev/tty", "run_veil_install"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh should run interactive veil install from /dev/tty when launched through curl pipe; missing %q:\n%s", want, script)
@@ -100,7 +112,7 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if strings.Contains(script, `else args+=(--interactive); fi`) {
 		t.Fatalf("install.sh should not pass --interactive when --dry-run is set:\n%s", script)
 	}
@@ -114,7 +126,7 @@ func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	marker := "done\n\nRUN_BIN=\"${INSTALL_DIR}/veil\"\n\nrequire_cmd curl"
 	if !strings.Contains(script, marker) {
 		t.Fatalf("install.sh should resolve RUN_BIN after parsing --install-dir before idempotency path:\n%s", script)
@@ -126,7 +138,7 @@ func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{`if [[ -n "${DRY_RUN}" ]]; then`, `"${RUN_BIN}" install "${args[@]}"`, `return $?`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should run temp binary without exec so cleanup trap can run; missing %q:\n%s", want, script)
@@ -139,7 +151,7 @@ func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `exec "${RUN_BIN}" install`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should execute downloaded temp binary without installing; missing %q:\n%s", want, script)
@@ -158,7 +170,7 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if strings.Contains(script, `&& "${INSTALL_DIR}" == "/usr/local/bin"`) {
 		t.Fatalf("install.sh should require root for systemd Panel install even with custom install-dir:\n%s", script)
 	}
@@ -174,7 +186,7 @@ func TestCurlUninstallScriptSupportsSudoAndCustomPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"| sudo bash",
 		`ETC_DIR="${VEIL_ETC_DIR:-/etc/veil}"`,
@@ -196,7 +208,7 @@ func TestCurlUninstallScriptDryRunDoesNotRequireRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if strings.Contains(script, `if [[ "${EUID}" -ne 0 ]]; then`) {
 		t.Fatalf("uninstall.sh should not require root for --dry-run:\n%s", script)
 	}
@@ -210,7 +222,7 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := string(body)
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"on:",
 		"tags:",
@@ -233,7 +245,7 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := string(body)
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"quality:",
 		"go test ./... -count=1",
@@ -256,7 +268,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := string(body)
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"go test ./... -count=1",
 		"go vet ./...",
@@ -277,7 +289,7 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	readme := string(body)
+	readme := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"repair --backup-dir",
 		"rollback list --backup-dir",
@@ -300,7 +312,7 @@ func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	found := false
 	for _, want := range []string{
 		"-f \"${INSTALL_DIR}/veil\"",
@@ -323,7 +335,7 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"--force",
 		"FORCE",
@@ -339,7 +351,7 @@ func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(body)
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		`count=$(awk -v asset="${asset}" '$2 == asset { count++ } END { print count+0 }' checksums.txt)`,
 		`if [[ "${count}" -ne 1 ]]; then`,

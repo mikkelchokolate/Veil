@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,13 +44,13 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: "/etc/veil", VarDir: "/var/lib/veil"}); err != nil {
 		t.Fatalf("applyRURecommendedInstall: %v", err)
 	}
-	if gotPaths.BackupDir != "/var/lib/veil/backups" {
+	if filepath.ToSlash(gotPaths.BackupDir) != "/var/lib/veil/backups" {
 		t.Fatalf("BackupDir = %q", gotPaths.BackupDir)
 	}
-	if gotPaths.SystemdDir != "/etc/systemd/system" {
+	if filepath.ToSlash(gotPaths.SystemdDir) != "/etc/systemd/system" {
 		t.Fatalf("SystemdDir = %q", gotPaths.SystemdDir)
 	}
-	if gotPaths.VeilBinary != "/opt/veil/bin/veil" {
+	if filepath.ToSlash(gotPaths.VeilBinary) != "/opt/veil/bin/veil" {
 		t.Fatalf("VeilBinary = %q", gotPaths.VeilBinary)
 	}
 	if len(gotActions) == 0 || gotActions[0].Command != "systemctl" || gotActions[0].Args[0] != "daemon-reload" {

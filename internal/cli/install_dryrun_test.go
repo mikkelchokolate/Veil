@@ -234,7 +234,7 @@ func TestRepairDryRunReportsMissingManagedFiles(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{"Veil repair plan", "repair missing", "panel/tls.crt", "veil.env", "veil.service"} {
-		if !strings.Contains(got, want) {
+		if !strings.Contains(filepath.ToSlash(got), filepath.ToSlash(want)) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
