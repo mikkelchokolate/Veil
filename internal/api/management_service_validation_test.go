@@ -116,6 +116,7 @@ func TestLivePathForStagedConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotPath, gotOK := state.livePathForStagedConfig(tt.stagedPath)
+			gotPath = filepath.ToSlash(gotPath)
 			if gotPath != tt.wantPath {
 				t.Fatalf("livePathForStagedConfig(%q) path = %q, want %q", tt.stagedPath, gotPath, tt.wantPath)
 			}
@@ -133,6 +134,7 @@ func TestLivePathForStagedConfigTrailingSlashRoot(t *testing.T) {
 	}
 
 	gotPath, gotOK := state.livePathForStagedConfig("/tmp/veil-test/generated/caddy/Caddyfile")
+	gotPath = filepath.ToSlash(gotPath)
 	wantPath := "/tmp/veil-test/live/caddy/Caddyfile"
 	if gotPath != wantPath {
 		t.Fatalf("path = %q, want %q", gotPath, wantPath)

@@ -37,7 +37,8 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		}
 		record := livePromotionRecord{LivePath: livePath}
 		if existing, err := os.ReadFile(livePath); err == nil {
-			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(livePath), "/"))
+			relPath := strings.TrimPrefix(livePath, filepath.VolumeName(livePath))
+			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
 			if err := atomicfile.Write(backupPath, existing, 0o600, 0o700); err != nil {
 				return nil, nil, nil, err
 			}

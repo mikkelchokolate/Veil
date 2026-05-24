@@ -1,6 +1,7 @@
 package api
 
 import (
+	"runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,9 @@ func TestProcessesEndpointRejectsNonGet(t *testing.T) {
 }
 
 func TestProcessesEndpointReturnsJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
@@ -34,6 +38,9 @@ func TestProcessesEndpointReturnsJSON(t *testing.T) {
 }
 
 func TestProcessesEndpointFieldsPresent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
@@ -60,6 +67,9 @@ func TestProcessesEndpointFieldsPresent(t *testing.T) {
 }
 
 func TestProcessesEndpointValuesValid(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()

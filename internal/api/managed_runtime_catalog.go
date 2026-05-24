@@ -44,6 +44,34 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 		Order   int
 		Runtime ManagedRuntime
 	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: renderer.UnitWarp, PromotedSubpath: generatedconfig.WarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
+	
+	hasOlcrtc := false
+	for _, item := range ordered {
+		if item.Runtime.Name == "olcrtc" {
+			hasOlcrtc = true
+			break
+		}
+	}
+	if !hasOlcrtc {
+		ordered = append(ordered, struct {
+			Order   int
+			Runtime ManagedRuntime
+		}{
+			Order: 50,
+			Runtime: ManagedRuntime{
+				Name:             "olcrtc",
+				ActionName:       "olcrtc",
+				Protocol:         "olcrtc",
+				Transport:        "udp",
+				Unit:             "veil-olcrtc.service",
+				PromotedSubpath:  "olcrtc/server.yaml",
+				PromotedVerb:     "reload",
+				ManualRestart:    true,
+				HealthCheckAfter: true,
+			},
+		})
+	}
+
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Order < ordered[j].Order })
 	for _, item := range ordered {
 		runtimes = append(runtimes, item.Runtime)

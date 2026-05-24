@@ -16,6 +16,7 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 		{"olcrtc", "olcrtc", "veil-olcrtc.service"},
 		{"sing-box", "sing-box", "veil-warp.service"},
 		{"mieru", "mieru", "veil-mieru.service"},
+		{"olcrtc", "olcrtc", "veil-olcrtc.service"},
 	}
 	runtimes := catalog.Runtimes()
 	if len(runtimes) != len(want) {
@@ -36,6 +37,7 @@ func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T
 		{"hysteria2", "reload veil-hysteria2.service"},
 		{"mieru", "restart veil-mieru.service"},
 		{"sing-box", "reload veil-warp.service"},
+		{"olcrtc", "reload veil-olcrtc.service"},
 	} {
 		action, ok := catalog.ApplyAction(tc.key)
 		if !ok || action != tc.action {
@@ -82,6 +84,7 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 		{"systemctl", "reload", "veil-hysteria2.service"},
 		{"systemctl", "reload", "veil-warp.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
+		{"systemctl", "reload", "veil-olcrtc.service"},
 	} {
 		if !catalog.AllowsPromotedAction(command) {
 			t.Fatalf("expected promoted command allowed: %+v", command)
