@@ -57,6 +57,18 @@ func panelSettingsCardHTML() string {
               <label for="settings-fallback-root">Fallback root</label>
               <input id="settings-fallback-root" autocomplete="off" placeholder="/var/lib/veil/www">
             </div>
+            <div>
+              <label for="settings-olcrtc-auth">olcRTC Auth Provider</label>
+              <input id="settings-olcrtc-auth" autocomplete="off" placeholder="jitsi">
+            </div>
+            <div>
+              <label for="settings-olcrtc-transport">olcRTC Transport</label>
+              <input id="settings-olcrtc-transport" autocomplete="off" placeholder="datachannel">
+            </div>
+            <div>
+              <label for="settings-olcrtc-room-id">olcRTC Room ID</label>
+              <input id="settings-olcrtc-room-id" autocomplete="off" placeholder="Room ID">
+            </div>
           </div>
           <div class="actions">
             <button id="save-settings" type="submit">Save settings</button>

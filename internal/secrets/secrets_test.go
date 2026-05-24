@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -183,8 +184,10 @@ func TestLoadOrCreateKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat key file: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("key file permissions: want 0600, got %#o", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("key file permissions: want 0600, got %#o", info.Mode().Perm())
+		}
 	}
 
 	data, err := os.ReadFile(keyPath)
@@ -259,8 +262,10 @@ func TestLoadOrCreateKeyFixesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("permissions not fixed: got %#o, want 0600", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("permissions not fixed: got %#o, want 0600", info.Mode().Perm())
+		}
 	}
 }
 

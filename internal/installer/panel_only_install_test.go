@@ -43,7 +43,7 @@ func TestPanelOnlyInstallWritesSelfSignedPanelTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read veil.env: %v", err)
 	}
-	for _, want := range []string{"VEIL_TLS_CERT=" + certPath, "VEIL_TLS_KEY=" + keyPath} {
+	for _, want := range []string{"VEIL_TLS_CERT=" + filepath.ToSlash(certPath), "VEIL_TLS_KEY=" + filepath.ToSlash(keyPath)} {
 		if !strings.Contains(string(envBody), want) {
 			t.Fatalf("veil.env missing %q:\n%s", want, string(envBody))
 		}

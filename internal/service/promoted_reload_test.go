@@ -1,6 +1,7 @@
 package service
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/veil-panel/veil/internal/model"
@@ -12,11 +13,14 @@ func TestPromotedServiceReloaderStopsOnFirstFailure(t *testing.T) {
 		{Name: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload"},
 	})
 	calls := 0
-	reloader := NewPromotedServiceReloader("/etc/veil", catalog, func(command []string) model.ServiceActionResult {
+	reloader := NewPromotedServiceReloader(filepath.FromSlash("/etc/veil"), catalog, func(command []string) model.ServiceActionResult {
 		calls++
 		return model.ServiceActionResult{Name: command[2], Command: command, Success: false, Error: "boom"}
 	})
-	results := reloader.Reload([]string{"/etc/veil/live/mieru/server_config.json", "/etc/veil/live/sing-box/warp.json"})
+	results := reloader.Reload([]string{
+		filepath.FromSlash("/etc/veil/live/mieru/server_config.json"),
+		filepath.FromSlash("/etc/veil/live/sing-box/warp.json"),
+	})
 	if calls != 1 || len(results) != 1 || results[0].Name != "veil-mieru.service" {
 		t.Fatalf("calls=%d results=%+v", calls, results)
 	}

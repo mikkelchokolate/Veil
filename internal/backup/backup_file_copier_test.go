@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -27,7 +28,9 @@ func TestBackupFileCopierCopiesContentsAndMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat dst: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %o", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("mode = %o", info.Mode().Perm())
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -66,8 +67,10 @@ func TestAppendAuditEventWritesJSONLLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat audit file: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("expected 0600 permissions, got %o", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("expected 0600 permissions, got %o", info.Mode().Perm())
+		}
 	}
 }
 

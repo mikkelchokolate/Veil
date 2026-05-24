@@ -40,3 +40,14 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)
 }
+
+func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {
+	if auth == "" {
+		auth = "jitsi"
+	}
+	if transport == "" {
+		transport = "datachannel"
+	}
+	return fmt.Sprintf("olcrtc://%s?%s@%s#%s$%s", auth, transport, roomID, key, mimo)
+}
+

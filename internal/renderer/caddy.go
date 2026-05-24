@@ -56,6 +56,7 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
 		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", cfg.FallbackRoot)
 	}
+	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
 	const tpl = `{
   order forward_proxy before file_server
   servers {

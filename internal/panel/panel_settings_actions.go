@@ -19,6 +19,9 @@ func panelSettingsActionsJS() string {
       document.getElementById('settings-hysteria2-password').value = data.hysteria2Password || '';
       document.getElementById('settings-masquerade-url').value = data.masqueradeURL || '';
       document.getElementById('settings-fallback-root').value = data.fallbackRoot || '';
+      document.getElementById('settings-olcrtc-auth').value = data.olcrtcAuth || '';
+      document.getElementById('settings-olcrtc-transport').value = data.olcrtcTransport || '';
+      document.getElementById('settings-olcrtc-room-id').value = data.olcrtcRoomID || '';
     }
 
     async function saveSettings(event) {
@@ -37,7 +40,10 @@ func panelSettingsActionsJS() string {
           naivePassword: document.getElementById('settings-naive-password').value,
           hysteria2Password: document.getElementById('settings-hysteria2-password').value,
           masqueradeURL: document.getElementById('settings-masquerade-url').value,
-          fallbackRoot: document.getElementById('settings-fallback-root').value
+          fallbackRoot: document.getElementById('settings-fallback-root').value,
+          olcrtcAuth: document.getElementById('settings-olcrtc-auth').value,
+          olcrtcTransport: document.getElementById('settings-olcrtc-transport').value,
+          olcrtcRoomID: document.getElementById('settings-olcrtc-room-id').value
         })
       });
     }`

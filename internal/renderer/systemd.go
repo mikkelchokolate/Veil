@@ -1,17 +1,18 @@
 package renderer
 
-import "path/filepath"
+import "path"
 
 const (
 	UnitVeil      = "veil.service"
 	UnitNaive     = "veil-naive.service"
 	UnitHysteria2 = "veil-hysteria2.service"
+	UnitOlcrtc    = "veil-olcrtc.service"
 	UnitWarp      = "veil-warp.service"
 	UnitMieru     = "veil-mieru.service"
 )
 
 func ManagedSystemdUnitNames() []string {
-	return []string{UnitVeil, UnitNaive, UnitHysteria2, UnitWarp, UnitMieru}
+	return []string{UnitVeil, UnitNaive, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru}
 }
 
 type SystemdConfig struct {
@@ -20,6 +21,7 @@ type SystemdConfig struct {
 	HysteriaBinary string
 	SingBoxBinary  string
 	MieruBinary    string
+	OlcrtcBinary   string
 	EtcDir         string
 }
 
@@ -39,13 +41,17 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.MieruBinary == "" {
 		cfg.MieruBinary = "/usr/local/bin/mieru"
 	}
+	if cfg.OlcrtcBinary == "" {
+		cfg.OlcrtcBinary = "/usr/local/bin/olcrtc"
+	}
 	if cfg.EtcDir == "" {
 		cfg.EtcDir = "/etc/veil"
 	}
-	caddyfile := filepath.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
-	hysteriaConfig := filepath.Join(cfg.EtcDir, "generated", "hysteria2", "server.yaml")
-	warpConfig := filepath.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
-	mieruConfig := filepath.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
+	caddyfile := path.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
+	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "server.yaml")
+	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "server.yaml")
+	warpConfig := path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
+	mieruConfig := path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
 	return map[string]string{
 		UnitVeil: `[Unit]
 Description=Veil panel
@@ -54,7 +60,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-` + filepath.Join(cfg.EtcDir, "veil.env") + `
+EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
 ExecStart=` + cfg.VeilBinary + ` serve
 Restart=on-failure
 RestartSec=3
@@ -85,6 +91,20 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+`,
+		UnitOlcrtc: `[Unit]
+Description=Veil managed olcRTC
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=` + cfg.OlcrtcBinary + ` --config ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
 

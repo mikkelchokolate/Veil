@@ -75,7 +75,7 @@ func (p RepairPlan) Summary() string {
 	}
 	var b strings.Builder
 	for _, action := range p.Actions {
-		fmt.Fprintf(&b, "repair %s %s\n", action.Reason, action.Path)
+		fmt.Fprintf(&b, "repair %s %s\n", action.Reason, filepath.ToSlash(action.Path))
 	}
 	return b.String()
 }

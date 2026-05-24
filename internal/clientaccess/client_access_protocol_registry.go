@@ -38,6 +38,11 @@ func NewClientAccessProtocolRegistry() ClientAccessProtocolRegistry {
 				return NewMieruClientAccessAggregator().Build(settings, inbounds)
 			},
 		},
+		"olcrtc": {
+			Protocol:     "olcrtc",
+			ProfileLink:  olcrtcProfileClientLink,
+			FallbackLink: olcrtcFallbackClientLink,
+		},
 	}}
 }
 
@@ -151,4 +156,28 @@ func mieruClientConfigLink(input ClientAccessLinkInput) (ClientLink, bool) {
 func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
 	return mieruClientConfigLink(input)
+}
+
+func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
+	link := newProtocolClientLink(input)
+	link.URI = OlcrtcClientURI(
+		input.Settings.OlcrtcAuth,
+		input.Settings.OlcrtcTransport,
+		input.Settings.OlcrtcRoomID,
+		input.Credential.Password,
+		input.Credential.Username,
+	)
+	return link, true
+}
+
+func olcrtcFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
+	link := newProtocolClientLink(input)
+	link.URI = OlcrtcClientURI(
+		input.Settings.OlcrtcAuth,
+		input.Settings.OlcrtcTransport,
+		input.Settings.OlcrtcRoomID,
+		input.Inbound.Password,
+		"",
+	)
+	return link, true
 }

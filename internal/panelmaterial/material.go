@@ -66,8 +66,8 @@ func (m ManagedMaterial) EnvContent() string {
 		env.WriteString("VEIL_EMAIL=" + input.Email + "\n")
 	}
 	if input.PanelTLSEnabled {
-		env.WriteString("VEIL_TLS_CERT=" + m.PanelTLSCertPath() + "\n")
-		env.WriteString("VEIL_TLS_KEY=" + m.PanelTLSKeyPath() + "\n")
+		env.WriteString("VEIL_TLS_CERT=" + filepath.ToSlash(m.PanelTLSCertPath()) + "\n")
+		env.WriteString("VEIL_TLS_KEY=" + filepath.ToSlash(m.PanelTLSKeyPath()) + "\n")
 	}
 	if input.WebBasePath != "" && input.WebBasePath != "/" {
 		env.WriteString("VEIL_WEB_BASE_PATH=" + input.WebBasePath + "\n")

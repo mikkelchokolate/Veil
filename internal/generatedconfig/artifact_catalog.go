@@ -10,6 +10,7 @@ const (
 	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
 	MieruConfigSubpath     = "mieru/server_config.json"
 	WarpConfigSubpath      = "sing-box/warp.json"
+	OlcrtcConfigSubpath    = "olcrtc/server.yaml"
 )
 
 type ValidationSpec struct {
@@ -80,6 +81,7 @@ func NewArtifactCatalog() ArtifactCatalog {
 		{Subpath: Hysteria2ConfigSubpath, ValidationName: "hysteria2", ValidationCommand: func(path string) []string { return []string{"hysteria", "server", "--config", path, "--check"} }},
 		{Subpath: MieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
 		{Subpath: WarpConfigSubpath, ValidationName: "warp", ValidationCommand: func(path string) []string { return []string{"sing-box", "check", "-c", path} }},
+		{Subpath: OlcrtcConfigSubpath, ValidationName: "olcrtc", ValidationCommand: func(path string) []string { return []string{"olcrtc", "--config", path, "--check"} }},
 	}}
 }
 

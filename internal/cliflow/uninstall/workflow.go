@@ -97,7 +97,7 @@ func (opts Options) WithDefaults() Options {
 
 func Paths(opts Options) []string {
 	opts = opts.WithDefaults()
-	paths := []string{opts.EtcDir, opts.VarDir}
+	paths := []string{filepath.ToSlash(opts.EtcDir), filepath.ToSlash(opts.VarDir)}
 	paths = append(paths, SystemdUnitPaths(opts)...)
 	paths = append(paths, BinaryPath(opts))
 	return paths
@@ -107,12 +107,12 @@ func SystemdUnitPaths(opts Options) []string {
 	opts = opts.WithDefaults()
 	paths := make([]string, 0, len(renderer.ManagedSystemdUnitNames()))
 	for _, name := range renderer.ManagedSystemdUnitNames() {
-		paths = append(paths, filepath.Join(opts.SystemdDir, name))
+		paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, name)))
 	}
 	return paths
 }
 
 func BinaryPath(opts Options) string {
 	opts = opts.WithDefaults()
-	return filepath.Join(opts.InstallDir, "veil")
+	return filepath.ToSlash(filepath.Join(opts.InstallDir, "veil"))
 }

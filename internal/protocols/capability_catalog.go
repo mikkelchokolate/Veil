@@ -34,6 +34,7 @@ func NewCapabilityCatalog() CapabilityCatalog {
 	return CapabilityCatalog{capabilities: []Capability{
 		naiveProxyCapability(),
 		hysteria2Capability(),
+		olcrtcCapability(),
 		mieruCapability(),
 	}}
 }
@@ -133,6 +134,33 @@ func hysteria2Capability() Capability {
 			}
 			body, err := generatedconfig.RenderHysteria2Inbound(input.Settings, input.Inbounds[0])
 			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.Hysteria2ConfigSubpath), Body: body}, true, err
+		},
+	}
+}
+
+func olcrtcCapability() Capability {
+	return Capability{
+		Protocol:               "olcrtc",
+		DisplayName:            "olcRTC",
+		Transports:             []string{"udp"},
+		FirewallService:        "",
+		GeneratedConfig:        generatedconfig.ArtifactSpec{Subpath: generatedconfig.OlcrtcConfigSubpath, ValidationName: "olcrtc", ValidationCommand: func(path string) []string { return []string{"olcrtc", "--config", path, "--check"} }},
+		ApplyAction:            "restart " + renderer.UnitOlcrtc,
+		RuntimeName:            "olcrtc",
+		RuntimeActionName:      "olcrtc",
+		RuntimeUnit:            renderer.UnitOlcrtc,
+		RuntimeTransport:       "udp",
+		RuntimeOrder:           30,
+		PromotedVerb:           "restart",
+		ValidateInboundRender:  true,
+		RequiresRenderSettings: true,
+		MaxEnabled:             1,
+		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+			if len(input.Inbounds) == 0 {
+				return generatedconfig.GeneratedConfigArtifact{}, false, nil
+			}
+			body, err := generatedconfig.RenderOlcrtcInbound(input.Settings, input.Inbounds[0])
+			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.OlcrtcConfigSubpath), Body: body}, true, err
 		},
 	}
 }

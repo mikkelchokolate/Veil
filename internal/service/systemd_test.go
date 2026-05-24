@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -112,6 +113,9 @@ func TestRunSystemdActionsReturnsErrorOnLaterFailure(t *testing.T) {
 }
 
 func TestSystemdCommandTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping sleep timeout test on Windows")
+	}
 	runner := ExecRunner{}
 
 	done := make(chan error, 1)
@@ -134,6 +138,9 @@ func TestSystemdCommandTimeout(t *testing.T) {
 }
 
 func TestSystemdCommandTimeoutForSystemctl(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping sleep timeout test on Windows")
+	}
 	runner := ExecRunner{}
 
 	done := make(chan error, 1)

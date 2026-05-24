@@ -25,8 +25,8 @@ func TestManagedMaterialBuildsEnvContent(t *testing.T) {
 		"VEIL_PANEL_ACCESS=local\n",
 		"VEIL_DOMAIN=vpn.example.com\n",
 		"VEIL_EMAIL=admin@example.com\n",
-		"VEIL_TLS_CERT=" + filepath.Join("tmp", "etc", "veil", "panel", "tls.crt") + "\n",
-		"VEIL_TLS_KEY=" + filepath.Join("tmp", "etc", "veil", "panel", "tls.key") + "\n",
+		"VEIL_TLS_CERT=" + filepath.ToSlash(filepath.Join("tmp", "etc", "veil", "panel", "tls.crt")) + "\n",
+		"VEIL_TLS_KEY=" + filepath.ToSlash(filepath.Join("tmp", "etc", "veil", "panel", "tls.key")) + "\n",
 		"VEIL_WEB_BASE_PATH=/panel/\n",
 	} {
 		if !strings.Contains(env, want) {
@@ -48,8 +48,9 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 		t.Fatalf("Files: %v", err)
 	}
 	for _, want := range []string{"/etc/veil/generated/caddy/Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-naive.service"} {
-		if !hasFile(files, want) {
-			t.Fatalf("files missing %q: %+v", want, files)
+		wantSlash := filepath.FromSlash(want)
+		if !hasFile(files, wantSlash) {
+			t.Fatalf("files missing %q (native: %q): %+v", want, wantSlash, files)
 		}
 	}
 }

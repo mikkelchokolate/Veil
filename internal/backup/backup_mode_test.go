@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -48,7 +49,9 @@ func TestBackupPreservesFileMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Mode().Perm() != 0o755 {
-		t.Fatalf("expected mode 0755, got %o", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("expected mode 0755, got %o", info.Mode().Perm())
+		}
 	}
 }

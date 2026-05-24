@@ -35,6 +35,15 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.PanelAccess == "caddy" && settings.WebBasePath == "" {
 		return errors.New("webBasePath is required for caddy Panel access")
 	}
+	if settings.OlcrtcAuth == "" {
+		settings.OlcrtcAuth = current.OlcrtcAuth
+	}
+	if settings.OlcrtcTransport == "" {
+		settings.OlcrtcTransport = current.OlcrtcTransport
+	}
+	if settings.OlcrtcRoomID == "" {
+		settings.OlcrtcRoomID = current.OlcrtcRoomID
+	}
 	if settings.PanelAccess == "caddy" && (strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "") {
 		return errors.New("--domain and --email are required for caddy Panel access")
 	}
@@ -65,6 +74,7 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
 			return errors.New("fallbackRoot must be within /var/lib/veil")
 		}
+		settings.FallbackRoot = filepath.ToSlash(settings.FallbackRoot)
 	}
 	return nil
 }

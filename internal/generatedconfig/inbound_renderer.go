@@ -1,6 +1,8 @@
 package generatedconfig
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -64,12 +66,38 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 	})
 }
 
+func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
+	password := inbound.Password
+	if password == "" {
+		bytes := make([]byte, 32)
+		if _, err := rand.Read(bytes); err != nil {
+			return "", err
+		}
+		password = hex.EncodeToString(bytes)
+	}
+	transport := r.settings.OlcrtcTransport
+	if transport == "" {
+		transport = inbound.Transport
+	}
+	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
+		Auth:      r.settings.OlcrtcAuth,
+		RoomID:    r.settings.OlcrtcRoomID,
+		Key:       password,
+		Transport: transport,
+		DNS:       r.settings.Domain,
+	})
+}
+
 func RenderNaiveInbound(settings Settings, inbound Inbound) (string, error) {
 	return NewInboundRenderer(settings, Paths{}).RenderNaive(inbound)
 }
 
 func RenderHysteria2Inbound(settings Settings, inbound Inbound) (string, error) {
 	return NewInboundRenderer(settings, Paths{}).RenderHysteria2(inbound)
+}
+
+func RenderOlcrtcInbound(settings Settings, inbound Inbound) (string, error) {
+	return NewInboundRenderer(settings, Paths{}).RenderOlcrtc(inbound)
 }
 
 func (r InboundRenderer) Paths() Paths {

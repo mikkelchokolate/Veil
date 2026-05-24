@@ -31,7 +31,7 @@ func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T
 	cards := panelIntroCardsHTML()
 	for _, want := range []string{
 		`Veil Panel`,
-		`NaiveProxy, Hysteria2, and Mieru management`,
+		`NaiveProxy, Hysteria2, olcRTC, and Mieru management`,
 		`<h2>Version</h2>`,
 		`id="load-version"`,
 		`<h2>API token</h2>`,

@@ -13,6 +13,7 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 		{"veil", "veil", "veil.service"},
 		{"naive", "caddy", "veil-naive.service"},
 		{"hysteria2", "hysteria2", "veil-hysteria2.service"},
+		{"olcrtc", "olcrtc", "veil-olcrtc.service"},
 		{"sing-box", "sing-box", "veil-warp.service"},
 		{"mieru", "mieru", "veil-mieru.service"},
 	}

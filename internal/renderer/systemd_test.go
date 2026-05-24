@@ -27,8 +27,10 @@ func TestPackagingSystemdUnitsMatchDefaultRenderer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read packaging unit %s: %v", name, err)
 		}
-		if string(body) != units[name] {
-			t.Fatalf("packaging unit %s drifted from default renderer\n--- packaging ---\n%s\n--- renderer ---\n%s", name, string(body), units[name])
+		bodyStr := strings.ReplaceAll(string(body), "\r\n", "\n")
+		unitsStr := strings.ReplaceAll(units[name], "\r\n", "\n")
+		if bodyStr != unitsStr {
+			t.Fatalf("packaging unit %s drifted from default renderer\n--- packaging ---\n%s\n--- renderer ---\n%s", name, bodyStr, unitsStr)
 		}
 	}
 }
@@ -60,6 +62,9 @@ func TestRenderSystemdUnits(t *testing.T) {
 	}
 	if !strings.Contains(units["veil-hysteria2.service"], "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("bad hysteria2 unit:\n%s", units["veil-hysteria2.service"])
+	}
+	if !strings.Contains(units["veil-olcrtc.service"], "/etc/veil/generated/olcrtc/server.yaml") {
+		t.Fatalf("bad olcrtc unit:\n%s", units["veil-olcrtc.service"])
 	}
 	if !strings.Contains(units["veil-warp.service"], "ExecStart=/usr/local/bin/sing-box run -c /etc/veil/generated/sing-box/warp.json") || !strings.Contains(units["veil-warp.service"], "ExecReload=/usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json") {
 		t.Fatalf("bad WARP unit:\n%s", units["veil-warp.service"])
@@ -101,6 +106,12 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 	hysteriaUnit := units["veil-hysteria2.service"]
 	if !strings.Contains(hysteriaUnit, "ExecStart=/usr/local/bin/hysteria server --config /etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("veil-hysteria2.service: expected default HysteriaBinary and EtcDir, got:\n%s", hysteriaUnit)
+	}
+
+	// veil-olcrtc.service: default OlcrtcBinary and EtcDir config path
+	olcrtcUnit := units["veil-olcrtc.service"]
+	if !strings.Contains(olcrtcUnit, "ExecStart=/usr/local/bin/olcrtc --config /etc/veil/generated/olcrtc/server.yaml") {
+		t.Fatalf("veil-olcrtc.service: expected default OlcrtcBinary and EtcDir, got:\n%s", olcrtcUnit)
 	}
 
 	// veil-warp.service: default SingBoxBinary and EtcDir config path

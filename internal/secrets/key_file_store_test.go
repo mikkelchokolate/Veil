@@ -3,6 +3,7 @@ package secrets
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -20,8 +21,10 @@ func TestKeyFileStoreCreatesAndReloadsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat key: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %o", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("mode = %o", info.Mode().Perm())
+		}
 	}
 	loaded, err := store.LoadOrCreate()
 	if err != nil {

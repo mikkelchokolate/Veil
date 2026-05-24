@@ -3,6 +3,7 @@ package atomicfile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -22,14 +23,18 @@ func TestWriteCreatesParentsAndSetsFileMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat file: %v", err)
 	}
-	if fileInfo.Mode().Perm() != 0o640 {
-		t.Fatalf("file mode = %o", fileInfo.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if fileInfo.Mode().Perm() != 0o640 {
+			t.Fatalf("file mode = %o", fileInfo.Mode().Perm())
+		}
 	}
 	dirInfo, err := os.Stat(filepath.Dir(path))
 	if err != nil {
 		t.Fatalf("Stat dir: %v", err)
 	}
-	if dirInfo.Mode().Perm() != 0o750 {
-		t.Fatalf("dir mode = %o", dirInfo.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if dirInfo.Mode().Perm() != 0o750 {
+			t.Fatalf("dir mode = %o", dirInfo.Mode().Perm())
+		}
 	}
 }

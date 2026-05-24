@@ -4,7 +4,7 @@ import "testing"
 
 func TestCatalogOwnsInboundProtocolChoices(t *testing.T) {
 	catalog := NewCatalog()
-	if got := catalog.DisplayNameList(); got != "NaiveProxy, Hysteria2, and Mieru" {
+	if got := catalog.DisplayNameList(); got != "NaiveProxy, Hysteria2, olcRTC, and Mieru" {
 		t.Fatalf("DisplayNameList = %q", got)
 	}
 	for _, tc := range []struct{ protocol, service string }{
@@ -18,7 +18,7 @@ func TestCatalogOwnsInboundProtocolChoices(t *testing.T) {
 		}
 	}
 	choices := catalog.Choices()
-	if len(choices) != 3 || choices[0].Protocol != "naiveproxy" || choices[1].Protocol != "hysteria2" || choices[2].Protocol != "mieru" {
+	if len(choices) != 4 || choices[0].Protocol != "naiveproxy" || choices[1].Protocol != "hysteria2" || choices[2].Protocol != "olcrtc" || choices[3].Protocol != "mieru" {
 		t.Fatalf("choices = %+v", choices)
 	}
 	for _, tc := range []struct {
@@ -28,6 +28,7 @@ func TestCatalogOwnsInboundProtocolChoices(t *testing.T) {
 	}{
 		{"naiveproxy", "tcp", true},
 		{"hysteria2", "udp", false},
+		{"olcrtc", "udp", false},
 		{"mieru", "tcp", false},
 		{"mieru", "udp", false},
 	} {

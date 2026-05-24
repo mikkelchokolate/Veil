@@ -12,6 +12,9 @@ type Settings struct {
 	Hysteria2Password string `json:"hysteria2Password,omitempty"`
 	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
 	FallbackRoot      string `json:"fallbackRoot,omitempty"`
+	OlcrtcAuth       string `json:"olcrtcAuth,omitempty"`
+	OlcrtcTransport  string `json:"olcrtcTransport,omitempty"`
+	OlcrtcRoomID     string `json:"olcrtcRoomID,omitempty"`
 }
 
 type ClientProfile struct {

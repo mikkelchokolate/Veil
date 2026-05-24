@@ -1,6 +1,7 @@
 package panelaccess
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,11 +20,12 @@ func TestPanelAccessBuildsCaddyRouteConfigAndApplyIntent(t *testing.T) {
 	if route.Port != 2096 || route.WebBasePath != "/panel-secret/" {
 		t.Fatalf("route = %+v", route)
 	}
-	artifact, ok, err := access.GeneratedConfig(generatedconfig.NewPaths("/etc/veil"))
+	artifact, ok, err := access.GeneratedConfig(generatedconfig.NewPaths(filepath.FromSlash("/etc/veil")))
 	if err != nil || !ok {
 		t.Fatalf("GeneratedConfig ok=%v err=%v", ok, err)
 	}
-	if artifact.Path != "/etc/veil/generated/caddy/Caddyfile" || !strings.Contains(artifact.Body, "reverse_proxy 127.0.0.1:2096") {
+	expectedPath := filepath.FromSlash("/etc/veil/generated/caddy/Caddyfile")
+	if artifact.Path != expectedPath || !strings.Contains(artifact.Body, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("artifact = %+v", artifact)
 	}
 	intent := access.ApplyIntent([]model.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}})

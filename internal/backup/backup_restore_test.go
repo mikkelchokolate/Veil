@@ -254,11 +254,14 @@ func TestRestoreFromBackupCreatesSafetyBackup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read safety manifest: %v", err)
 	}
-	if !strings.Contains(string(manifestData), file1) {
-		t.Fatalf("safety backup manifest should contain %s, got: %s", file1, string(manifestData))
+	manifestStr := strings.ReplaceAll(string(manifestData), "\\\\", "/")
+	f1Slash := filepath.ToSlash(file1)
+	f2Slash := filepath.ToSlash(file2)
+	if !strings.Contains(manifestStr, f1Slash) {
+		t.Fatalf("safety backup manifest should contain %s (slashed: %s), got normalized manifest: %s", file1, f1Slash, manifestStr)
 	}
-	if !strings.Contains(string(manifestData), file2) {
-		t.Fatalf("safety backup manifest should contain %s, got: %s", file2, string(manifestData))
+	if !strings.Contains(manifestStr, f2Slash) {
+		t.Fatalf("safety backup manifest should contain %s (slashed: %s), got normalized manifest: %s", file2, f2Slash, manifestStr)
 	}
 
 	// Verify safety backup contains the modified content (not the original)

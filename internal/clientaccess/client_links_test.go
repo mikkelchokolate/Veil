@@ -90,3 +90,55 @@ func TestBuildClientLinksUsesPerInboundPasswordAndGlobalFallback(t *testing.T) {
 		t.Fatalf("hy2 per-inbound URI = %q", byName["hy2-vip"].URI)
 	}
 }
+
+func TestOlcrtcClientLinkGeneration(t *testing.T) {
+	t.Run("default values", func(t *testing.T) {
+		uri := OlcrtcClientURI("", "", "myroom", "mykey", "mymimo")
+		expected := "olcrtc://jitsi?datachannel@myroom#mykey$mymimo"
+		if uri != expected {
+			t.Errorf("expected %q, got %q", expected, uri)
+		}
+	})
+
+	t.Run("custom values", func(t *testing.T) {
+		uri := OlcrtcClientURI("customauth", "customtransport", "myroom", "mykey", "mymimo")
+		expected := "olcrtc://customauth?customtransport@myroom#mykey$mymimo"
+		if uri != expected {
+			t.Errorf("expected %q, got %q", expected, uri)
+		}
+	})
+
+	t.Run("integration build links", func(t *testing.T) {
+		settings := Settings{
+			Domain:          "vpn.example.com",
+			OlcrtcAuth:      "customauth",
+			OlcrtcTransport: "customtransport",
+			OlcrtcRoomID:    "myroom",
+		}
+		inbounds := []Inbound{
+			{Name: "olc-fallback", Protocol: "olcrtc", Enabled: true, Password: "fallbackkey"},
+			{Name: "olc-profile", Protocol: "olcrtc", Enabled: true, Password: "fallbackkey", Profiles: []ClientProfile{
+				{Name: "alice", Username: "mymimo", Password: "mykey", Enabled: true},
+			}},
+		}
+
+		response, err := BuildClientLinks(settings, inbounds)
+		if err != nil {
+			t.Fatalf("BuildClientLinks: %v", err)
+		}
+
+		byName := map[string]ClientLink{}
+		for _, link := range response.Links {
+			byName[link.Name] = link
+		}
+
+		if byName["olc-fallback"].URI != "olcrtc://customauth?customtransport@myroom#fallbackkey$" {
+			t.Errorf("fallback URI = %q", byName["olc-fallback"].URI)
+		}
+
+		if byName["olc-profile/alice"].URI != "olcrtc://customauth?customtransport@myroom#mykey$mymimo" {
+			t.Errorf("profile URI = %q", byName["olc-profile/alice"].URI)
+		}
+	})
+}
+
