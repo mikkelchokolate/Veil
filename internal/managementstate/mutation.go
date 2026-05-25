@@ -211,6 +211,36 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 	if m.target.Warp != nil {
 		*m.target.Warp = update
 	}
+
+	if m.target.Rules != nil {
+		if update.Enabled {
+			hasWarp := false
+			for _, r := range *m.target.Rules {
+				if r.Outbound == "warp" {
+					hasWarp = true
+					break
+				}
+			}
+			if !hasWarp {
+				warpRule := RoutingRule{
+					Name:     "warp-routing",
+					Match:    "geosite:openai",
+					Outbound: "warp",
+					Enabled:  true,
+				}
+				*m.target.Rules = append([]RoutingRule{warpRule}, (*m.target.Rules)...)
+			}
+		} else {
+			nextRules := []RoutingRule{}
+			for _, r := range *m.target.Rules {
+				if r.Outbound != "warp" {
+					nextRules = append(nextRules, r)
+				}
+			}
+			*m.target.Rules = nextRules
+		}
+	}
+
 	if err := m.save(); err != nil {
 		return WarpConfig{}, err
 	}

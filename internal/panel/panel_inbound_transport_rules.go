@@ -30,6 +30,9 @@ func panelInboundProtocolTransportRulesJS() string {
       if (transports.includes(previous)) {
         transportSelect.value = previous;
       }
+      if (window.renderDynamicProtocolFields) {
+        window.renderDynamicProtocolFields();
+      }
     }
 `
 }

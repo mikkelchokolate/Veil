@@ -21,8 +21,6 @@ func TestSliceCatalogContainsApplyDiagnosticsAndServiceSlots(t *testing.T) {
 	}
 	bindings := catalog.EventBindings()
 	for id, handler := range map[string]string{
-		"settings-form":          "saveSettings",
-		"load-settings":          "loadSettingsIntoForm",
 		"load-client-links":      "loadClientLinks",
 		"inbound-form":           "saveInbound",
 		"routing-rule-form":      "saveRoutingRule",

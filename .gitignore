@@ -9,3 +9,4 @@ node_modules/
 web/dist/
 coverage*.out
 api.test
+/scratch/

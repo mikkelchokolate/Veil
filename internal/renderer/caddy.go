@@ -24,6 +24,7 @@ type NaiveConfig struct {
 	FallbackRoot string
 	PanelPort    int
 	WebBasePath  string
+	Upstream     string
 }
 
 func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
@@ -74,6 +75,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
     hide_ip
     hide_via
     probe_resistance
+{{- if .Upstream }}
+    upstream {{ .Upstream }}
+{{- end }}
   }
 
   root * {{ .FallbackRoot }}

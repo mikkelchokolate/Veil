@@ -110,7 +110,7 @@ func Build(input Input) model.ApplyPlanResponse {
 			continue
 		}
 		switch rule.Outbound {
-		case "direct":
+		case "direct", "proxy":
 		case "warp":
 			if !input.Warp.Enabled {
 				plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" requires WARP to be enabled")

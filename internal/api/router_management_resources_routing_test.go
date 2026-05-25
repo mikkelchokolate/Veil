@@ -178,7 +178,7 @@ func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("apply preset expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{"all-except-Russia", "geoip:ru", "geosite:category-ru", `"match":"all"`, `"outbound":"warp"`} {
+	for _, want := range []string{"all-except-Russia", "geoip:ru", "geosite:category-ru", `"match":"all"`, `"outbound":"proxy"`} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("preset response missing %q: %s", want, w.Body.String())
 		}

@@ -8,7 +8,11 @@ func RenderWarpRoutingRules(rules []RoutingRule) []renderer.WarpRoutingRule {
 		if !rule.Enabled {
 			continue
 		}
-		rendered = append(rendered, renderer.WarpRoutingRule{Match: rule.Match, Outbound: rule.Outbound})
+		outbound := rule.Outbound
+		if outbound == "proxy" {
+			outbound = "direct"
+		}
+		rendered = append(rendered, renderer.WarpRoutingRule{Match: rule.Match, Outbound: outbound})
 	}
 	return rendered
 }

@@ -5,16 +5,36 @@ import "github.com/veil-panel/veil/internal/protocols"
 const panelClientLinksCardPlaceholder = "__VEIL_PANEL_CLIENT_LINKS_CARD__"
 
 func panelClientLinksCardHTML() string {
-	return `    <div class="card">
+	return `    <!-- Main Card containing general tools -->
+    <div class="card">
       <h2>Client links</h2>
       <p>Generate current ` + protocols.NewCatalog().DisplayNameList() + ` client connection URIs/client config artifacts from saved settings and enabled inbounds through <code>/api/client-links</code>.</p>
-      <button id="load-client-links" type="button">Load client links</button>
-      <button id="load-client-subscription" type="button">Load base64 subscription</button>
-      <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
-      <button id="download-client-subscription" class="secondary" type="button">Download base64 subscription</button>
-      <button id="download-client-subscription-raw" class="secondary" type="button">Download raw subscription</button>
-      <button id="download-mieru-configs" class="secondary" type="button">Download Mieru client configs</button>
-      <button id="copy-client-links" class="secondary" type="button">Copy output</button>
-      <pre id="client-links-output">Not loaded</pre>
+      <div class="actions" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <button id="load-client-links" type="button">Load client links</button>
+        <button id="load-client-subscription" type="button">Load base64 subscription</button>
+        <button id="load-client-subscription-raw" type="button">Load raw subscription</button>
+        <button id="download-client-subscription" class="secondary" type="button">Download base64 subscription</button>
+        <button id="download-client-subscription-raw" class="secondary" type="button">Download raw subscription</button>
+        <button id="download-mieru-configs" class="secondary" type="button">Download Mieru client configs</button>
+        <button id="copy-client-links" class="secondary" type="button">Copy output</button>
+      </div>
+      <pre id="client-links-output" style="margin-top: 16px;">Not loaded</pre>
+    </div>
+
+    <!-- Interactive Client Links Modal -->
+    <div id="client-links-modal-overlay" class="modal-overlay">
+      <div class="modal-content" style="max-width: 650px;">
+        <div class="modal-header">
+          <h2 id="client-links-modal-title">Client Connection Links</h2>
+          <button type="button" class="modal-close" onclick="closeClientLinksModal()">&times;</button>
+        </div>
+        <p class="hint" style="margin-bottom: 20px;">Copy the connection strings below or import them into client applications (e.g. v2rayN, Nekobox, Sing-box, Mieru Client).</p>
+        <div id="modal-links-container" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; max-height: 50vh; overflow-y: auto; padding-right: 4px;">
+          <div style="text-align: center; color: var(--text-muted); padding: 24px;">Loading connection links...</div>
+        </div>
+        <div class="actions" style="display: flex; justify-content: flex-end;">
+          <button class="secondary" type="button" onclick="closeClientLinksModal()">Close</button>
+        </div>
+      </div>
     </div>`
 }

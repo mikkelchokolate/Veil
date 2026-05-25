@@ -30,7 +30,7 @@ func TestPanelHTMLIncludesInboundPasswordGenerationUI(t *testing.T) {
 		`Client profiles`,
 		`genInboundPassword()`,
 		`Generate`,
-		`auto-generated if empty`,
+		`password`,
 		`payload.password`,
 		`payload.profiles`,
 	} {

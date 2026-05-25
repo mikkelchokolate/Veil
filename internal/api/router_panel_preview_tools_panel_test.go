@@ -49,7 +49,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 			if nosniff := w.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 				t.Fatalf("expected nosniff for panel shell, got %q", nosniff)
 			}
-			if csp := w.Header().Get("Content-Security-Policy"); csp != "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" {
+			if csp := w.Header().Get("Content-Security-Policy"); csp != "default-src 'self'; img-src 'self' data: https://api.qrserver.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" {
 				t.Fatalf("unexpected panel content-security-policy: %q", csp)
 			}
 			if referrer := w.Header().Get("Referrer-Policy"); referrer != "no-referrer" {
@@ -121,7 +121,7 @@ func TestRouterServesPanelShellWithManagementSections(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	body := w.Body.String()
-	for _, want := range []string{"Settings", "Inbounds", "Routing rules", "WARP", "/api/settings", "/api/inbounds", "/api/routing/rules", "/api/warp"} {
+	for _, want := range []string{"Inbounds", "Routing rules", "WARP", "/api/inbounds", "/api/routing/rules", "/api/warp"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("panel shell missing %q: %s", want, body)
 		}
@@ -152,11 +152,6 @@ func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
 
 	body := w.Body.String()
 	for _, want := range []string{
-		"settings-form",
-		"settings-domain",
-		"settings-naive-password",
-		"saveSettings",
-		"loadSettingsIntoForm",
 		"inbound-form",
 		"inbound-name",
 		"inbound-protocol",

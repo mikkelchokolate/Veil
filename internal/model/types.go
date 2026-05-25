@@ -25,13 +25,21 @@ type ClientProfile struct {
 }
 
 type Inbound struct {
-	Name      string          `json:"name"`
-	Protocol  string          `json:"protocol"`
-	Transport string          `json:"transport"`
-	Port      int             `json:"port"`
-	Enabled   bool            `json:"enabled"`
-	Password  string          `json:"password,omitempty"`
-	Profiles  []ClientProfile `json:"profiles,omitempty"`
+	Name              string          `json:"name"`
+	Protocol          string          `json:"protocol"`
+	Transport         string          `json:"transport"`
+	Port              int             `json:"port"`
+	Enabled           bool            `json:"enabled"`
+	Password          string          `json:"password,omitempty"`
+	Profiles          []ClientProfile `json:"profiles,omitempty"`
+	NaiveUsername     string          `json:"naiveUsername,omitempty"`
+	NaivePassword     string          `json:"naivePassword,omitempty"`
+	Hysteria2Password string          `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     string          `json:"masqueradeURL,omitempty"`
+	FallbackRoot      string          `json:"fallbackRoot,omitempty"`
+	OlcrtcAuth        string          `json:"olcrtcAuth,omitempty"`
+	OlcrtcTransport   string          `json:"olcrtcTransport,omitempty"`
+	OlcrtcRoomID      string          `json:"olcrtcRoomID,omitempty"`
 }
 
 type RoutingRule struct {

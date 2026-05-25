@@ -4,6 +4,7 @@ const panelSettingsActionsPlaceholder = "__VEIL_PANEL_SETTINGS_ACTIONS__"
 
 func panelSettingsActionsJS() string {
 	return `    async function loadSettingsIntoForm() {
+      if (!document.getElementById('settings-form')) return;
       const data = await loadJSON('/api/settings', 'settings-output');
       if (!data) {
         return;
@@ -25,6 +26,7 @@ func panelSettingsActionsJS() string {
     }
 
     async function saveSettings(event) {
+      if (!document.getElementById('settings-form')) return;
       event.preventDefault();
       await loadJSON('/api/settings', 'settings-output', {
         method: 'PUT',

@@ -13,9 +13,18 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
 	return `    <div class="card">
       <h2>Speedtest</h2>
       <p>Run server-side speedtest-cli/Ookla speedtest from the panel.</p>
-      <button id="run-speedtest" type="button">Run speedtest</button>
-      <pre id="speedtest-output">Not started</pre>
+      <div class="actions">
+        <button id="run-speedtest" type="button">Run speedtest</button>
+      </div>
+      
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-title">speedtest-cli</div>
+        </div>
+        <pre class="terminal-body" id="speedtest-output" style="color: #60a5fa;">Not started</pre>
+      </div>
     </div>
+
     <div class="card">
       <h2>DNS lookup</h2>
       <p>Resolve a hostname from the server using <code>/api/tools/dns-lookup</code>.</p>
@@ -26,10 +35,17 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         </div>
       </div>
       <div class="actions">
-        <button id="run-dns-lookup" type="button">Lookup</button>
+        <button id="run-dns-lookup" type="button">Lookup hostname</button>
       </div>
-      <pre id="dns-lookup-output">Not started</pre>
+      
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-title">nslookup</div>
+        </div>
+        <pre class="terminal-body" id="dns-lookup-output" style="color: #a78bfa;">Not started</pre>
+      </div>
     </div>
+
     <div class="card">
       <h2>Ping</h2>
       <p>Ping a host from the server using <code>/api/tools/ping</code>.</p>
@@ -46,14 +62,30 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
       <div class="actions">
         <button id="run-ping" type="button">Ping</button>
       </div>
-      <pre id="ping-output">Not started</pre>
+      
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-title">ping</div>
+        </div>
+        <pre class="terminal-body" id="ping-output">Not started</pre>
+      </div>
     </div>
+
     <div class="card">
       <h2>Firewall</h2>
       <p>Check UFW firewall status and planned rules from <code>/api/firewall</code>.</p>
-      <button id="load-firewall" type="button">Load firewall</button>
-      <pre id="firewall-output">Not loaded</pre>
+      <div class="actions">
+        <button id="load-firewall" type="button">Load firewall</button>
+      </div>
+      
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-title">ufw status</div>
+        </div>
+        <pre class="terminal-body" id="firewall-output" style="color: #fbbf24;">Not loaded</pre>
+      </div>
     </div>
+
     <div class="card">
       <h2>Service logs</h2>
       <p>View recent journald logs for managed services.</p>
@@ -71,7 +103,13 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
       <div class="actions">
         <button id="load-logs" type="button">Load logs</button>
       </div>
-      <pre id="logs-output" style="max-height: 400px; overflow-y: auto;">Not loaded</pre>
+      
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-title">journalctl</div>
+        </div>
+        <pre class="terminal-body" id="logs-output" style="max-height: 400px; overflow-y: auto; color: #34d399;">Not loaded</pre>
+      </div>
     </div>`
 }
 
@@ -100,7 +138,6 @@ func DiagnosticsActionsJS() string {
       const unit = document.getElementById('log-unit').value;
       const lines = document.getElementById('log-lines').value || '50';
       await loadJSON('/api/logs?unit=' + encodeURIComponent(unit) + '&lines=' + encodeURIComponent(lines), 'logs-output');
-      // Extract the output field for nicer display
       try {
         const el = document.getElementById('logs-output');
         const data = JSON.parse(el.textContent);

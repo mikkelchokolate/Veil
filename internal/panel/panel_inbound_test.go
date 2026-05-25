@@ -56,8 +56,11 @@ func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 	for _, want := range []string{
 		`function genClientProfilePassword()`,
 		`function addClientProfile()`,
+		`function generateAndAddProfile()`,
 		`Client profile name is required`,
-		`profiles.push({ name, username: username || name, password, enabled: true })`,
+		`name: name`,
+		`password: password`,
+		`enabled: true`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Client profile actions missing %q", want)

@@ -15,29 +15,48 @@ import (
 type InboundRenderer struct {
 	settings Settings
 	paths    Paths
+	warp     WarpConfig
 }
 
-func NewInboundRenderer(settings Settings, paths Paths) InboundRenderer {
-	return InboundRenderer{settings: settings, paths: paths}
+func NewInboundRenderer(settings Settings, paths Paths, warp WarpConfig) InboundRenderer {
+	return InboundRenderer{settings: settings, paths: paths, warp: warp}
 }
 
 func (r InboundRenderer) RenderNaive(inbound Inbound) (string, error) {
 	password := inbound.Password
 	if password == "" {
-		password = r.settings.NaivePassword
+		password = inbound.NaivePassword
+		if password == "" {
+			password = r.settings.NaivePassword
+		}
 	}
 	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
 	if err != nil {
 		return "", err
 	}
+	username := inbound.NaiveUsername
+	if username == "" {
+		username = r.settings.NaiveUsername
+	}
+	fallbackRoot := inbound.FallbackRoot
+	if fallbackRoot == "" {
+		fallbackRoot = r.settings.FallbackRoot
+	}
 	naiveConfig := renderer.NaiveConfig{
 		Domain:       r.settings.Domain,
 		Email:        r.settings.Email,
 		ListenPort:   inbound.Port,
-		Username:     r.settings.NaiveUsername,
+		Username:     username,
 		Password:     password,
 		Users:        access.NaiveUsers(),
-		FallbackRoot: r.settings.FallbackRoot,
+		FallbackRoot: fallbackRoot,
+	}
+	if r.warp.Enabled {
+		socksPort := r.warp.SocksPort
+		if socksPort == 0 {
+			socksPort = 40000
+		}
+		naiveConfig.Upstream = fmt.Sprintf("socks5://127.0.0.1:%d", socksPort)
 	}
 	if route, ok, err := panelCaddyRoute(r.settings); err != nil {
 		return "", err
@@ -51,19 +70,34 @@ func (r InboundRenderer) RenderNaive(inbound Inbound) (string, error) {
 func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 	password := inbound.Password
 	if password == "" {
-		password = r.settings.Hysteria2Password
+		password = inbound.Hysteria2Password
+		if password == "" {
+			password = r.settings.Hysteria2Password
+		}
 	}
 	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
 	if err != nil {
 		return "", err
 	}
-	return renderer.RenderHysteria2(renderer.Hysteria2Config{
+	masqueradeURL := inbound.MasqueradeURL
+	if masqueradeURL == "" {
+		masqueradeURL = r.settings.MasqueradeURL
+	}
+	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
 		Domain:        r.settings.Domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
-		MasqueradeURL: r.settings.MasqueradeURL,
-	})
+		MasqueradeURL: masqueradeURL,
+	}
+	if r.warp.Enabled {
+		socksPort := r.warp.SocksPort
+		if socksPort == 0 {
+			socksPort = 40000
+		}
+		hystConfig.Upstream = fmt.Sprintf("127.0.0.1:%d", socksPort)
+	}
+	return renderer.RenderHysteria2(hystConfig)
 }
 
 func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
@@ -75,29 +109,40 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 		}
 		password = hex.EncodeToString(bytes)
 	}
-	transport := r.settings.OlcrtcTransport
+	transport := inbound.OlcrtcTransport
 	if transport == "" {
-		transport = inbound.Transport
+		transport = r.settings.OlcrtcTransport
+		if transport == "" {
+			transport = inbound.Transport
+		}
+	}
+	auth := inbound.OlcrtcAuth
+	if auth == "" {
+		auth = r.settings.OlcrtcAuth
+	}
+	roomID := inbound.OlcrtcRoomID
+	if roomID == "" {
+		roomID = r.settings.OlcrtcRoomID
 	}
 	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
-		Auth:      r.settings.OlcrtcAuth,
-		RoomID:    r.settings.OlcrtcRoomID,
+		Auth:      auth,
+		RoomID:    roomID,
 		Key:       password,
 		Transport: transport,
 		DNS:       r.settings.Domain,
 	})
 }
 
-func RenderNaiveInbound(settings Settings, inbound Inbound) (string, error) {
-	return NewInboundRenderer(settings, Paths{}).RenderNaive(inbound)
+func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
+	return NewInboundRenderer(settings, Paths{}, warp).RenderNaive(inbound)
 }
 
-func RenderHysteria2Inbound(settings Settings, inbound Inbound) (string, error) {
-	return NewInboundRenderer(settings, Paths{}).RenderHysteria2(inbound)
+func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
+	return NewInboundRenderer(settings, Paths{}, warp).RenderHysteria2(inbound)
 }
 
-func RenderOlcrtcInbound(settings Settings, inbound Inbound) (string, error) {
-	return NewInboundRenderer(settings, Paths{}).RenderOlcrtc(inbound)
+func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
+	return NewInboundRenderer(settings, Paths{}, warp).RenderOlcrtc(inbound)
 }
 
 func (r InboundRenderer) Paths() Paths {

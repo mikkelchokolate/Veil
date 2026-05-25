@@ -226,3 +226,71 @@ func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
 		t.Fatalf("expected 404 for missing inbound, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestManagementAPIInboundProtocolOverrides(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	payload := `{
+		"name": "naive-overridden",
+		"protocol": "naiveproxy",
+		"transport": "tcp",
+		"port": 1443,
+		"enabled": true,
+		"naiveUsername": "custom-naive-user",
+		"naivePassword": "custom-naive-password",
+		"fallbackRoot": "/custom/fallback/root",
+		"hysteria2Password": "custom-hy2-pass",
+		"masqueradeURL": "https://custom-masquerade.com",
+		"olcrtcAuth": "livekit",
+		"olcrtcTransport": "websocket",
+		"olcrtcRoomID": "custom-livekit-room-12345"
+	}`
+
+	create := httptest.NewRecorder()
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(payload)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create inbound expected 201, got %d: %s", create.Code, create.Body.String())
+	}
+
+	var response Inbound
+	if err := json.NewDecoder(create.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if response.NaiveUsername != "custom-naive-user" ||
+		response.NaivePassword != "custom-naive-password" ||
+		response.FallbackRoot != "/custom/fallback/root" ||
+		response.Hysteria2Password != "custom-hy2-pass" ||
+		response.MasqueradeURL != "https://custom-masquerade.com" ||
+		response.OlcrtcAuth != "livekit" ||
+		response.OlcrtcTransport != "websocket" ||
+		response.OlcrtcRoomID != "custom-livekit-room-12345" {
+		t.Fatalf("unexpected parsed overrides in response: %+v", response)
+	}
+
+	// Reload state from path and verify persistence
+	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	readRecorder := httptest.NewRecorder()
+	restarted.ServeHTTP(readRecorder, httptest.NewRequest(http.MethodGet, "/api/inbounds/naive-overridden", nil))
+
+	if readRecorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", readRecorder.Code, readRecorder.Body.String())
+	}
+
+	var reloaded Inbound
+	if err := json.NewDecoder(readRecorder.Body).Decode(&reloaded); err != nil {
+		t.Fatalf("decode reloaded inbound: %v", err)
+	}
+
+	if reloaded.NaiveUsername != "custom-naive-user" ||
+		reloaded.NaivePassword != "custom-naive-password" ||
+		reloaded.FallbackRoot != "/custom/fallback/root" ||
+		reloaded.Hysteria2Password != "custom-hy2-pass" ||
+		reloaded.MasqueradeURL != "https://custom-masquerade.com" ||
+		reloaded.OlcrtcAuth != "livekit" ||
+		reloaded.OlcrtcTransport != "websocket" ||
+		reloaded.OlcrtcRoomID != "custom-livekit-room-12345" {
+		t.Fatalf("unexpected persisted overrides: %+v", reloaded)
+	}
+}

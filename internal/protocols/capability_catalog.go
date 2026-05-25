@@ -105,7 +105,7 @@ func naiveProxyCapability() Capability {
 			if len(input.Inbounds) == 0 {
 				return generatedconfig.GeneratedConfigArtifact{}, false, nil
 			}
-			body, err := generatedconfig.RenderNaiveInbound(input.Settings, input.Inbounds[0])
+			body, err := generatedconfig.RenderNaiveInbound(input.Settings, input.Inbounds[0], input.Warp)
 			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.CaddyfileSubpath), Body: body}, true, err
 		},
 	}
@@ -132,7 +132,7 @@ func hysteria2Capability() Capability {
 			if len(input.Inbounds) == 0 {
 				return generatedconfig.GeneratedConfigArtifact{}, false, nil
 			}
-			body, err := generatedconfig.RenderHysteria2Inbound(input.Settings, input.Inbounds[0])
+			body, err := generatedconfig.RenderHysteria2Inbound(input.Settings, input.Inbounds[0], input.Warp)
 			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.Hysteria2ConfigSubpath), Body: body}, true, err
 		},
 	}
@@ -159,7 +159,7 @@ func olcrtcCapability() Capability {
 			if len(input.Inbounds) == 0 {
 				return generatedconfig.GeneratedConfigArtifact{}, false, nil
 			}
-			body, err := generatedconfig.RenderOlcrtcInbound(input.Settings, input.Inbounds[0])
+			body, err := generatedconfig.RenderOlcrtcInbound(input.Settings, input.Inbounds[0], input.Warp)
 			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.OlcrtcConfigSubpath), Body: body}, true, err
 		},
 	}

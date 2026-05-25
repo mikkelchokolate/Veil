@@ -6,6 +6,7 @@ type SetInput struct {
 	ApplyRoot   string
 	Settings    Settings
 	Inbounds    []Inbound
+	WarpConfig  WarpConfig
 	Registry    ProtocolRegistry
 	PanelAccess ArtifactRenderer
 	Warp        ArtifactRenderer
@@ -21,7 +22,12 @@ func NewSetBuilder(input SetInput) SetBuilder {
 
 func (b SetBuilder) Build() (map[string]string, error) {
 	input := b.input
-	configs, err := input.Registry.Render(ConfigInput{ApplyRoot: input.ApplyRoot, Settings: input.Settings, Inbounds: input.Inbounds})
+	configs, err := input.Registry.Render(ConfigInput{
+		ApplyRoot: input.ApplyRoot,
+		Settings:  input.Settings,
+		Inbounds:  input.Inbounds,
+		Warp:      input.WarpConfig,
+	})
 	if err != nil {
 		return nil, err
 	}

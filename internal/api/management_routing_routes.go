@@ -111,6 +111,15 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	defer s.mu.Unlock()
 	state := routing.RoutingPresetState{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: s.rules}
 	routing.NewRoutingPresetApplication(&state).Apply(preset)
+	if s.warp.Enabled {
+		warpRule := RoutingRule{
+			Name:     "warp-routing",
+			Match:    "geosite:openai",
+			Outbound: "warp",
+			Enabled:  true,
+		}
+		state.Rules = append([]RoutingRule{warpRule}, state.Rules...)
+	}
 	s.routingPreset = state.ActivePreset
 	s.routingSource = state.Source
 	s.rules = state.Rules

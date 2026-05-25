@@ -17,6 +17,7 @@ type Hysteria2Config struct {
 	Password      string
 	Users         []Hysteria2User
 	MasqueradeURL string
+	Upstream      string
 }
 
 func RenderHysteria2(cfg Hysteria2Config) (string, error) {
@@ -61,6 +62,13 @@ masquerade:
   proxy:
     url: {{ .MasqueradeURL }}
     rewriteHost: true
+
+{{- if .Upstream }}
+outbound:
+  type: socks5
+  socks5:
+    addr: {{ .Upstream }}
+{{- end }}
 `
 	var out bytes.Buffer
 	if err := template.Must(template.New("hysteria2").Parse(tpl)).Execute(&out, cfg); err != nil {

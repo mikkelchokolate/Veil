@@ -121,9 +121,16 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
 	password := input.Inbound.Password
 	if password == "" {
-		password = input.Settings.NaivePassword
+		password = input.Inbound.NaivePassword
+		if password == "" {
+			password = input.Settings.NaivePassword
+		}
 	}
-	link.URI = NaiveClientURI(input.Settings.Domain, input.Inbound.Port, input.Settings.NaiveUsername, password)
+	username := input.Inbound.NaiveUsername
+	if username == "" {
+		username = input.Settings.NaiveUsername
+	}
+	link.URI = NaiveClientURI(input.Settings.Domain, input.Inbound.Port, username, password)
 	return link, true
 }
 
@@ -137,7 +144,10 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 	link := newProtocolClientLink(input)
 	password := input.Inbound.Password
 	if password == "" {
-		password = input.Settings.Hysteria2Password
+		password = input.Inbound.Hysteria2Password
+		if password == "" {
+			password = input.Settings.Hysteria2Password
+		}
 	}
 	link.URI = Hysteria2ClientURI(input.Settings.Domain, input.Inbound.Port, password, input.Inbound.Name)
 	return link, true
@@ -160,10 +170,22 @@ func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 
 func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
+	auth := input.Inbound.OlcrtcAuth
+	if auth == "" {
+		auth = input.Settings.OlcrtcAuth
+	}
+	transport := input.Inbound.OlcrtcTransport
+	if transport == "" {
+		transport = input.Settings.OlcrtcTransport
+	}
+	roomID := input.Inbound.OlcrtcRoomID
+	if roomID == "" {
+		roomID = input.Settings.OlcrtcRoomID
+	}
 	link.URI = OlcrtcClientURI(
-		input.Settings.OlcrtcAuth,
-		input.Settings.OlcrtcTransport,
-		input.Settings.OlcrtcRoomID,
+		auth,
+		transport,
+		roomID,
 		input.Credential.Password,
 		input.Credential.Username,
 	)
@@ -172,10 +194,22 @@ func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 
 func olcrtcFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
+	auth := input.Inbound.OlcrtcAuth
+	if auth == "" {
+		auth = input.Settings.OlcrtcAuth
+	}
+	transport := input.Inbound.OlcrtcTransport
+	if transport == "" {
+		transport = input.Settings.OlcrtcTransport
+	}
+	roomID := input.Inbound.OlcrtcRoomID
+	if roomID == "" {
+		roomID = input.Settings.OlcrtcRoomID
+	}
 	link.URI = OlcrtcClientURI(
-		input.Settings.OlcrtcAuth,
-		input.Settings.OlcrtcTransport,
-		input.Settings.OlcrtcRoomID,
+		auth,
+		transport,
+		roomID,
 		input.Inbound.Password,
 		"",
 	)

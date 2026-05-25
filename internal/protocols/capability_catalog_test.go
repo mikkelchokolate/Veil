@@ -39,7 +39,7 @@ func TestGeneratedConfigRegistryOwnsCardinalityAndMieruRendering(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "multiple enabled naiveproxy inbounds") {
 		t.Fatalf("expected single-config protocol cardinality error, got %v", err)
 	}
-	artifact, ok, err := registry.RenderInbound(model.Settings{}, generatedconfig.NewPaths(t.TempDir()), model.Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret"})
+	artifact, ok, err := registry.RenderInbound(model.Settings{}, generatedconfig.NewPaths(t.TempDir()), model.Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret"}, generatedconfig.WarpConfig{})
 	if err != nil {
 		t.Fatalf("RenderInbound: %v", err)
 	}

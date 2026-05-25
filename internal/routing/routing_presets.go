@@ -17,27 +17,27 @@ func routingPresetProfiles() []RoutingPreset {
 	return []RoutingPreset{
 		{
 			Name:        "all",
-			Description: "Route all traffic through WARP.",
-			Rules:       []RoutingRule{{Name: "preset-all-through-warp", Match: "all", Outbound: "warp", Enabled: true}},
+			Description: "Route all traffic through proxy.",
+			Rules:       []RoutingRule{{Name: "preset-all-through-proxy", Match: "all", Outbound: "proxy", Enabled: true}},
 		},
 		{
 			Name:        "all-except-Russia",
-			Description: "Route Russian geo/site categories direct and everything else through WARP.",
+			Description: "Route Russian geo/site categories direct and everything else through proxy.",
 			Source:      source,
 			Rules: []RoutingRule{
 				{Name: "preset-all-except-russia-private", Match: "geoip:private", Outbound: "direct", Enabled: true},
 				{Name: "preset-all-except-russia-geoip", Match: "geoip:ru", Outbound: "direct", Enabled: true},
 				{Name: "preset-all-except-russia-geosite", Match: "geosite:category-ru", Outbound: "direct", Enabled: true},
-				{Name: "preset-all-except-russia-rest", Match: "all", Outbound: "warp", Enabled: true},
+				{Name: "preset-all-except-russia-rest", Match: "all", Outbound: "proxy", Enabled: true},
 			},
 		},
 		{
 			Name:        "RU-blocked",
-			Description: "Route domains and IPs blocked in Russia through WARP; leave everything else direct.",
+			Description: "Route domains and IPs blocked in Russia through proxy; leave everything else direct.",
 			Source:      source,
 			Rules: []RoutingRule{
-				{Name: "preset-ru-blocked-geoip", Match: "geoip:ru-blocked", Outbound: "warp", Enabled: true},
-				{Name: "preset-ru-blocked-geosite", Match: "geosite:ru-blocked", Outbound: "warp", Enabled: true},
+				{Name: "preset-ru-blocked-geoip", Match: "geoip:ru-blocked", Outbound: "proxy", Enabled: true},
+				{Name: "preset-ru-blocked-geosite", Match: "geosite:ru-blocked", Outbound: "proxy", Enabled: true},
 			},
 		},
 	}

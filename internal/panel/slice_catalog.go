@@ -50,14 +50,7 @@ func (c SliceCatalog) Slices() []Slice {
 				{ElementID: "copy-client-links", Handler: "copyClientLinksOutput", Event: "click"},
 			},
 		},
-		{
-			Name:        "settings",
-			RenderSlots: []RenderSlot{{Placeholder: panelSettingsCardPlaceholder, Render: panelSettingsCardHTML}, {Placeholder: panelSettingsActionsPlaceholder, Render: panelSettingsActionsJS}},
-			EventBindings: []EventBinding{
-				{ElementID: "settings-form", Handler: "saveSettings", Event: "submit"},
-				{ElementID: "load-settings", Handler: "loadSettingsIntoForm", Event: "click"},
-			},
-		},
+
 		{
 			Name: "inbounds",
 			RenderSlots: []RenderSlot{
@@ -142,6 +135,5 @@ func EventBindingsJS(bindings []EventBinding) string {
     syncInboundTransportOptions();
 
     // Auto-load settings and service status on panel open.
-    loadSettingsIntoForm();
     loadServiceStatus();`
 }

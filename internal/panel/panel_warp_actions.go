@@ -38,5 +38,8 @@ func panelWarpActionsJS() string {
           mtu: numberOrZero('warp-mtu')
         })
       });
-    }`
+    }
+
+    // Auto-load WARP config on page mount
+    setTimeout(loadWarpIntoForm, 150);`
 }
