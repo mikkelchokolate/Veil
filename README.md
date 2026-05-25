@@ -1,6 +1,6 @@
 # Veil
 
-Veil is a management panel for NaiveProxy, Hysteria2, and Mieru. It installs the Panel first; proxy Inbounds are added later from the Panel.
+Veil is a management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru. It installs the Panel first; proxy Inbounds are added later from the Panel.
 
 ## Quick start
 
@@ -56,6 +56,7 @@ Open the Panel and add Inbounds for the protocols you need:
 |---|---:|---|
 | NaiveProxy | TCP | Requires Caddy, domain, email, username, and password |
 | Hysteria2 | UDP | Does not require Caddy |
+| olcRTC | UDP | Does not require Caddy |
 | Mieru | TCP or UDP | Does not require Caddy |
 
 TCP and UDP can use the same numeric port at the same time. For example, `mieru tcp 443` and `mieru udp 443` are different transport bindings and can coexist.
@@ -76,6 +77,7 @@ When you add and apply Inbounds, Veil can also manage:
 |---|---|
 | `veil-naive.service` | NaiveProxy via Caddy |
 | `veil-hysteria2.service` | Hysteria2 |
+| `veil-olcrtc.service` | olcRTC |
 | `veil-mieru.service` | Mieru |
 
 All secrets are stored encrypted at rest.
