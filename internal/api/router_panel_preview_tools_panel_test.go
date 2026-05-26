@@ -179,3 +179,40 @@ func TestRouterServesPanelShellWithManagementForms(t *testing.T) {
 		}
 	}
 }
+
+func TestRouterServesPanelShellWithUpdateControls(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if !strings.Contains(body, "update-version") || !strings.Contains(body, "Update panel") {
+		t.Fatalf("expected update control in panel shell: %s", body)
+	}
+}
+
+func TestRouterVersionUpdateEndpointRejectsGet(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/api/version/update", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for GET on update endpoint, got %d", w.Code)
+	}
+}
+
+func TestRouterVersionUpdateEndpointRequiresAuth(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret"})
+	req := httptest.NewRequest(http.MethodPost, "/api/version/update", strings.NewReader("{}"))
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated request, got %d", w.Code)
+	}
+}

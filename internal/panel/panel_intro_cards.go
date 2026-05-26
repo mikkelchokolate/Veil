@@ -502,6 +502,12 @@ func panelIntroCardsHTML() string {
           </svg>
           Load version
         </button>
+        <button id="update-version" type="button" class="veil-btn" style="margin-left: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="margin-right:4px; display:inline-block; vertical-align:middle;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+          </svg>
+          Update panel
+        </button>
         <div class="veil-output-container">
           <div class="veil-output-label">Runtime Output</div>
           <pre id="version-output" class="veil-output-pre">Not loaded</pre>

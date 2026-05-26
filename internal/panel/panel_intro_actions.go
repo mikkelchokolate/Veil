@@ -69,5 +69,62 @@ func panelIntroActionsJS() string {
 
     document.getElementById('load-version').addEventListener('click', async () => {
       await loadJSON('/api/version', 'version-output');
+    });
+
+    document.getElementById('update-version').addEventListener('click', async () => {
+      const btn = document.getElementById('update-version');
+      const output = document.getElementById('version-output');
+      btn.disabled = true;
+      output.textContent = 'Starting self-update... Fetching latest release, verifying checksums and installing binary. Please wait, this will take a moment...';
+      
+      try {
+        const response = await fetch('/api/version/update', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' })
+        });
+        const text = await response.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch (_) {}
+        
+        if (!response.ok) {
+          btn.disabled = false;
+          if (data && data.log) {
+            output.textContent = "UPDATE FAILED:\n" + data.log + "\n\nError: " + (data.message || 'unknown error');
+          } else {
+            output.textContent = "UPDATE FAILED:\n" + text;
+          }
+          return;
+        }
+        
+        output.textContent = (data && data.log ? data.log + "\n\n" : "") + "Update staged successfully! Restarting panel service to apply...";
+        
+        setTimeout(() => {
+          let attempts = 0;
+          const maxAttempts = 20;
+          const pollInterval = setInterval(async () => {
+            attempts++;
+            output.textContent = "Staging completed. Waiting for service restart and health check... (Attempt " + attempts + "/" + maxAttempts + ")";
+            try {
+              const checkResp = await fetch('/api/version', { headers: authHeaders() });
+              if (checkResp.ok) {
+                const checkData = await checkResp.json();
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                output.textContent = "SERVICE BACK ONLINE!\n\n" + JSON.stringify(checkData, null, 2);
+              }
+            } catch (_) {
+            }
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              btn.disabled = false;
+              output.textContent = "Restart is taking longer than expected. Please refresh the page manually in a few seconds to check status.";
+            }
+          }, 2000);
+        }, 3000);
+        
+      } catch (err) {
+        btn.disabled = false;
+        output.textContent = "Request error: " + String(err);
+      }
     });`
 }

@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"net/http"
 	"os"
+	"os/exec"
+	"time"
 
+	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
 	"github.com/veil-panel/veil/internal/panel"
 )
 
@@ -17,6 +21,7 @@ func (routes PanelRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/favicon.ico", routes.handleFavicon)
 	mux.HandleFunc("/healthz", routes.handleHealth)
 	mux.HandleFunc("/api/version", routes.handleVersion)
+	mux.HandleFunc("/api/version/update", routes.handleUpdateVersion)
 }
 
 func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -96,4 +101,61 @@ func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) 
 			"name":    "Veil",
 		})
 	}
+}
+
+func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	if err := validateEmptyJSONBody(r); err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	setJSONHeaders(w)
+
+	var logBuf bytes.Buffer
+
+	deps := updateflow.WorkflowDependencies{
+		FetchRelease: func() (*updateflow.Release, error) {
+			catalog := updateflow.NewReleaseCatalog("mikkelchokolate", "Veil")
+			catalog.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+			return catalog.Latest()
+		},
+		DownloadAsset: func(url string) ([]byte, error) {
+			updateflow.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+			return updateflow.DownloadAsset(url)
+		},
+	}
+
+	opts := updateflow.WorkflowOptions{
+		CurrentVersion: routes.Info.Version,
+		Yes:            true,
+		DryRun:         false,
+		Force:          false,
+		Restart:        false,
+		Staged:         true,
+	}
+
+	err := updateflow.RunWorkflow(opts, &logBuf, deps)
+	if err != nil {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]any{
+			"success": false,
+			"log":     logBuf.String(),
+			"message": err.Error(),
+		})
+		return
+	}
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		_ = exec.Command("systemctl", "restart", "veil.service").Run()
+	}()
+
+	writeJSON(w, map[string]any{
+		"success": true,
+		"log":     logBuf.String(),
+		"message": "Update staged successfully. Restarting panel service...",
+	})
 }
