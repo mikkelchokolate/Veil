@@ -1,6 +1,10 @@
 package generatedconfig
 
-import "github.com/veil-panel/veil/internal/renderer"
+import (
+	"fmt"
+
+	"github.com/veil-panel/veil/internal/renderer"
+)
 
 type MieruGeneratedConfigModel struct {
 	settings Settings
@@ -12,6 +16,15 @@ func NewMieruGeneratedConfigModel(settings Settings) MieruGeneratedConfigModel {
 
 func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConfig, bool, error) {
 	config := renderer.MieruConfig{}
+	seen := map[string]struct{}{}
+	addUser := func(name, password string) error {
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("duplicate mieru user name %q across enabled mieru inbounds", name)
+		}
+		seen[name] = struct{}{}
+		config.Users = append(config.Users, renderer.MieruUser{Name: name, Password: password})
+		return nil
+	}
 	for _, inbound := range inbounds {
 		if !m.includes(inbound) {
 			continue
@@ -22,11 +35,15 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 			return renderer.MieruConfig{}, false, err
 		}
 		if len(credentials) == 0 {
-			config.Users = append(config.Users, renderer.MieruUser{Name: inbound.Name, Password: inbound.Password})
+			if err := addUser(inbound.Name, inbound.Password); err != nil {
+				return renderer.MieruConfig{}, false, err
+			}
 			continue
 		}
 		for _, credential := range credentials {
-			config.Users = append(config.Users, renderer.MieruUser{Name: credential.Username, Password: credential.Password})
+			if err := addUser(credential.Username, credential.Password); err != nil {
+				return renderer.MieruConfig{}, false, err
+			}
 		}
 	}
 	if len(config.PortBindings) == 0 {
