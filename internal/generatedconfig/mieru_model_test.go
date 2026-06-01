@@ -29,3 +29,36 @@ func TestMieruGeneratedConfigModelReturnsNotRenderableWhenNoEnabledMieru(t *test
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 }
+
+func TestMieruGeneratedConfigModelRejectsDuplicateUsernamesAcrossInbounds(t *testing.T) {
+	_, _, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{Name: "shared", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "p1"},
+		{Name: "shared", Protocol: "mieru", Transport: "udp", Port: 444, Enabled: true, Password: "p2"},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate username error across aggregated mieru inbounds")
+	}
+}
+
+func TestMieruGeneratedConfigModelRejectsDuplicateProfileUsernames(t *testing.T) {
+	_, _, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{Name: "a", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "x", Enabled: true}}},
+		{Name: "b", Protocol: "mieru", Transport: "udp", Port: 444, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "y", Enabled: true}}},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate profile username error across aggregated mieru inbounds")
+	}
+}
+
+func TestMieruGeneratedConfigModelAllowsDistinctUsernames(t *testing.T) {
+	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{Name: "a", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "x"},
+		{Name: "b", Protocol: "mieru", Transport: "udp", Port: 444, Enabled: true, Password: "y"},
+	})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if len(config.Users) != 2 {
+		t.Fatalf("users = %+v", config.Users)
+	}
+}
