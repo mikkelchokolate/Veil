@@ -8,6 +8,10 @@ All notable changes to Veil will be documented in this file.
 
 - Bumped `golang.org/x/net`, `golang.org/x/crypto`, and `golang.org/x/text` and raised the Go toolchain to 1.25 to clear all `govulncheck`-reported vulnerabilities in called code.
 
+### Fixed
+
+- Mieru generated config now rejects duplicate usernames across aggregated enabled Inbounds (including generated client profiles) instead of emitting a config the `mieru` server would reject at load time.
+
 ### Added
 
 - Added native `.deb`, `.rpm`, and `.apk` packages (built with nfpm) attached to releases, installing the Panel binary and managed systemd units.
