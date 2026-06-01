@@ -23,7 +23,7 @@ func NewApplyWorkflow(state applyWorkflowState) ApplyWorkflow {
 }
 
 func (w ApplyWorkflow) RunLocked(req ApplyRequest) (ApplyResponse, int, error) {
-	return applyflow.NewWorkflow(applyWorkflowStateAdapter{state: w.state}, func(actions []ServiceActionResult) []ServiceHealthResult {
+	return applyflow.NewWorkflow(applyWorkflowStateAdapter(w), func(actions []ServiceActionResult) []ServiceHealthResult {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
 		}).Check(actions)

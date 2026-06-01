@@ -2,20 +2,9 @@ package cli
 
 import (
 	"bytes"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/veil-panel/veil/internal/installer"
 )
-
-var _installTestDeps_interactive = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.RURecommendedProfile{},
-}
 
 func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {
 	cmd := NewRootCommand("test")

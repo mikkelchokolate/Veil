@@ -21,11 +21,6 @@ type ConnectionsStats struct {
 	Listeners []ConnectionListener `json:"listeners"`
 }
 
-// readConnectionsStats reads listening TCP/UDP sockets from /proc/net/tcp, /proc/net/udp.
-func readConnectionsStats() (ConnectionsStats, error) {
-	return NewConnectionDiscovery().Read()
-}
-
 func readListeningSockets(path, proto string) ([]ConnectionListener, error) {
 	return newConnectionDiscoveryWithSource(fileConnectionSource{path: path}).listeningSockets(proto)
 }

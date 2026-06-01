@@ -1,0 +1,405 @@
+openapi: 3.1.0
+info:
+  title: Veil Panel API
+  version: "1.0.0"
+  description: |
+    HTTP management API exposed by the Veil Panel (`veil serve`).
+
+    ## Authentication
+    When the Panel is started with an API token, every `/api/*` request must
+    present it either as `X-Veil-Token: <token>` or
+    `Authorization: Bearer <token>`. Requests without a valid token receive
+    `401 Unauthorized`. Non-API routes (the Panel UI, `/healthz`, `/metrics`)
+    are not token-gated at the application layer. When no token is configured,
+    the API is open at the application layer and must be protected by network
+    controls (local-only bind, SSH tunnel, or Caddy in front).
+  license:
+    name: GPL-3.0-or-later
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+servers:
+  - url: /
+security:
+  - veilToken: []
+  - bearerAuth: []
+tags:
+  - name: status
+  - name: settings
+  - name: inbounds
+  - name: routing
+  - name: warp
+  - name: client-links
+  - name: apply
+  - name: runtime
+  - name: diagnostics
+  - name: services
+  - name: version
+paths:
+  /healthz:
+    get:
+      tags: [status]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Panel is serving.
+  /metrics:
+    get:
+      tags: [status]
+      summary: Prometheus metrics exposition
+      security: []
+      responses:
+        "200":
+          description: Prometheus text exposition format.
+          content:
+            text/plain: {}
+  /api/status:
+    get:
+      tags: [status]
+      summary: Service status snapshot for managed systemd units
+      responses:
+        "200":
+          description: Status snapshot.
+          content:
+            application/json: {}
+  /api/version:
+    get:
+      tags: [version]
+      summary: Current Veil version and latest release comparison
+      responses:
+        "200":
+          description: Version info.
+          content:
+            application/json: {}
+  /api/version/update:
+    post:
+      tags: [version]
+      summary: Trigger a self-update to the latest release
+      responses:
+        "200":
+          description: Update result.
+          content:
+            application/json: {}
+  /api/settings:
+    get:
+      tags: [settings]
+      summary: Read Panel settings (secrets redacted)
+      responses:
+        "200":
+          description: Current settings.
+          content:
+            application/json: {}
+    put:
+      tags: [settings]
+      summary: Update Panel settings
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "200":
+          description: Updated settings.
+        "400":
+          description: Validation error.
+  /api/inbounds:
+    get:
+      tags: [inbounds]
+      summary: List inbounds
+      responses:
+        "200":
+          description: Inbound list.
+          content:
+            application/json: {}
+    post:
+      tags: [inbounds]
+      summary: Create an inbound
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "201":
+          description: Created inbound.
+        "400":
+          description: Validation or duplicate transport-binding error.
+  /api/inbounds/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [inbounds]
+      summary: Read one inbound
+      responses:
+        "200":
+          description: Inbound.
+        "404":
+          description: Not found.
+    put:
+      tags: [inbounds]
+      summary: Update an inbound
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "200":
+          description: Updated inbound.
+        "400":
+          description: Validation error.
+        "404":
+          description: Not found.
+    delete:
+      tags: [inbounds]
+      summary: Delete an inbound
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          description: Not found.
+  /api/routing/rules:
+    get:
+      tags: [routing]
+      summary: List routing rules
+      responses:
+        "200":
+          description: Rule list.
+    post:
+      tags: [routing]
+      summary: Create a routing rule
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "201":
+          description: Created rule.
+        "400":
+          description: Validation error.
+  /api/routing/rules/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [routing]
+      summary: Read a routing rule
+      responses:
+        "200":
+          description: Rule.
+        "404":
+          description: Not found.
+    put:
+      tags: [routing]
+      summary: Update a routing rule
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "200":
+          description: Updated rule.
+        "404":
+          description: Not found.
+    delete:
+      tags: [routing]
+      summary: Delete a routing rule
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          description: Not found.
+  /api/routing/presets:
+    get:
+      tags: [routing]
+      summary: List routing presets
+      responses:
+        "200":
+          description: Preset list.
+  /api/routing/presets/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [routing]
+      summary: Apply a routing preset
+      responses:
+        "200":
+          description: Applied preset result.
+        "404":
+          description: Unknown preset.
+  /api/warp:
+    get:
+      tags: [warp]
+      summary: Read WARP state (secrets redacted)
+      responses:
+        "200":
+          description: WARP state.
+    put:
+      tags: [warp]
+      summary: Update WARP state
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "200":
+          description: Updated WARP state.
+        "400":
+          description: Validation error.
+  /api/client-links:
+    get:
+      tags: [client-links]
+      summary: Client links derived from enabled inbounds and profiles
+      responses:
+        "200":
+          description: Client links.
+  /api/client-links/subscription:
+    get:
+      tags: [client-links]
+      summary: Subscription-format client links
+      responses:
+        "200":
+          description: Subscription payload.
+  /api/firewall:
+    get:
+      tags: [status]
+      summary: Firewall rule plan and status
+      responses:
+        "200":
+          description: Firewall material.
+  /api/apply:
+    post:
+      tags: [apply]
+      summary: Stage and apply current management state
+      responses:
+        "200":
+          description: Apply workflow result.
+  /api/apply/plan:
+    get:
+      tags: [apply]
+      summary: Preview the apply plan without writing live files
+      responses:
+        "200":
+          description: Apply plan.
+  /api/apply/history:
+    get:
+      tags: [apply]
+      summary: Apply workflow history
+      responses:
+        "200":
+          description: Apply history entries.
+  /api/profiles/ru-recommended/preview:
+    get:
+      tags: [apply]
+      summary: Preview the ru-recommended install profile
+      responses:
+        "200":
+          description: Profile preview.
+          content:
+            application/json: {}
+  /api/services/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [services]
+      summary: Control a managed systemd unit (restart, etc.)
+      responses:
+        "200":
+          description: Service action result.
+  /api/system:
+    get:
+      tags: [runtime]
+      summary: System resource observation
+      responses:
+        "200":
+          description: System runtime snapshot.
+  /api/tls:
+    get:
+      tags: [runtime]
+      summary: Panel TLS observation
+      responses:
+        "200":
+          description: TLS runtime snapshot.
+  /api/network:
+    get:
+      tags: [runtime]
+      summary: Network counters observation
+      responses:
+        "200":
+          description: Network runtime snapshot.
+  /api/connections:
+    get:
+      tags: [runtime]
+      summary: Listening ports / connections observation
+      responses:
+        "200":
+          description: Connections runtime snapshot.
+  /api/processes:
+    get:
+      tags: [runtime]
+      summary: Managed processes observation
+      responses:
+        "200":
+          description: Processes runtime snapshot.
+  /api/disk:
+    get:
+      tags: [runtime]
+      summary: Disk usage observation
+      responses:
+        "200":
+          description: Disk runtime snapshot.
+  /api/runtime/observation:
+    get:
+      tags: [runtime]
+      summary: Combined runtime observation
+      responses:
+        "200":
+          description: Aggregated runtime snapshot.
+  /api/logs:
+    get:
+      tags: [runtime]
+      summary: Bounded journald reads for managed units
+      responses:
+        "200":
+          description: Log lines.
+  /api/tools/dns-lookup:
+    post:
+      tags: [diagnostics]
+      summary: DNS lookup diagnostic
+      responses:
+        "200":
+          description: DNS lookup result.
+  /api/tools/ping:
+    post:
+      tags: [diagnostics]
+      summary: Ping diagnostic
+      responses:
+        "200":
+          description: Ping result.
+  /api/tools/speedtest:
+    post:
+      tags: [diagnostics]
+      summary: Speedtest diagnostic
+      responses:
+        "200":
+          description: Speedtest result.
+components:
+  securitySchemes:
+    veilToken:
+      type: apiKey
+      in: header
+      name: X-Veil-Token
+    bearerAuth:
+      type: http
+      scheme: bearer

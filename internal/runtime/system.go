@@ -49,8 +49,6 @@ func readMeminfo() (memInfo, error) {
 
 type diskInfo struct{ total, used uint64 }
 
-
-
 func readUptime() (int64, error) {
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -76,16 +74,6 @@ func parseKB(line string) int64 {
 	}
 	v, _ := strconv.ParseInt(fields[1], 10, 64)
 	return v
-}
-
-// cpuPercent returns a rough CPU usage percentage computed from /proc/stat.
-// It stores the previous tick values and returns the delta since last call.
-func cpuPercent() float64 {
-	return NewSystemStatsCollector(procSystemStatsSource{}).cpuPercent()
-}
-
-func readCPUTicks() (idle, total uint64) {
-	return procSystemStatsSource{}.CPUTicks()
 }
 
 func (procSystemStatsSource) CPUTicks() (idle, total uint64) {

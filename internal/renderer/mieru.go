@@ -58,7 +58,7 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 		if user.Name == "" || user.Password == "" {
 			return "", errors.New("mieru user name and password are required")
 		}
-		out.Users = append(out.Users, mieruUserJSON{Name: user.Name, Password: user.Password})
+		out.Users = append(out.Users, mieruUserJSON(user))
 	}
 	body, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

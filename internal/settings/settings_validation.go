@@ -86,7 +86,3 @@ func NormalizeWebBasePath(path string) string {
 	}
 	return "/" + strings.Trim(path, "/") + "/"
 }
-
-func normalizeAndValidateSettings(settings *Settings, current Settings) error {
-	return NewSettingsValidation().NormalizeAndValidate(settings, current)
-}

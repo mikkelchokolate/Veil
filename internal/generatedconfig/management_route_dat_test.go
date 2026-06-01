@@ -2,23 +2,13 @@ package generatedconfig
 
 import (
 	"bytes"
-	"crypto/rand"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/veil-panel/veil/internal/secrets"
 )
-
-var _managementTestDeps_route_dat = []any{
-	bytes.Buffer{}, rand.Reader, fmt.Sprintf, log.Printf, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, time.Second, secrets.IsEncrypted,
-}
 
 func TestDownloadRouteDatReturnsBodyOnSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

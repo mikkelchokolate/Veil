@@ -60,10 +60,6 @@ func DownloadRouteDat(url string) ([]byte, error) {
 	return nil, fmt.Errorf("download %s failed after %d attempts: %w", url, maxAttempts, lastErr)
 }
 
-func fetchVerifiedRouteDatFile(file RoutingSourceFile) ([]byte, error) {
-	return NewRoutingSourceMaterial("", RoutingSource{}).Fetch(file)
-}
-
 func downloadRouteDat(url string) ([]byte, error) {
 	return DownloadRouteDat(url)
 }

@@ -15,7 +15,3 @@ func (GeneratedRenderSettingsPolicy) HasRenderSettings(settings Settings) bool {
 		settings.MasqueradeURL != "" ||
 		settings.FallbackRoot != ""
 }
-
-func hasRenderSettings(settings Settings) bool {
-	return NewGeneratedRenderSettingsPolicy().HasRenderSettings(settings)
-}
