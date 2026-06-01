@@ -76,8 +76,8 @@ func TestNewServeHTTPServerSetsTLSConfigWhenEnabled(t *testing.T) {
 	if server.TLSConfig.MinVersion != tls.VersionTLS12 {
 		t.Fatalf("expected TLS 1.2 minimum, got version %d", server.TLSConfig.MinVersion)
 	}
-	if !server.TLSConfig.PreferServerCipherSuites {
-		t.Fatal("expected PreferServerCipherSuites to be true")
+	if len(server.TLSConfig.CipherSuites) == 0 {
+		t.Fatal("expected explicit cipher suites to be configured")
 	}
 	if len(server.TLSConfig.CurvePreferences) < 2 {
 		t.Fatal("expected X25519 and P-256 curve preferences")

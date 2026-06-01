@@ -1,33 +1,12 @@
 package api
 
 import (
-	"bytes"
 	"crypto/rand"
-	"fmt"
-	"log"
-	"net/http"
-	"net/http/httptest"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/veil-panel/veil/internal/secrets"
 )
-
-var _managementTestDeps_service_validation = []any{
-	bytes.Buffer{}, rand.Reader, fmt.Sprintf, log.Printf, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, time.Second, secrets.IsEncrypted,
-}
-
-type timeoutRecordingTransport struct {
-	onRoundTrip func(req *http.Request)
-}
-
-func (t *timeoutRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	t.onRoundTrip(req)
-	return http.DefaultTransport.RoundTrip(req)
-}
 
 func TestLivePathForStagedConfig(t *testing.T) {
 	state := &managementState{

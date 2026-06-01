@@ -2,9 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,10 +9,6 @@ import (
 
 	"github.com/veil-panel/veil/internal/installer"
 )
-
-var _installTestDeps_apply_audit_backup = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.RURecommendedProfile{},
-}
 
 func TestRepairApplyRequiresYes(t *testing.T) {
 	cmd := NewRootCommand("test")

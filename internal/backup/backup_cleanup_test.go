@@ -3,15 +3,8 @@ package backup
 import (
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
-	"time"
 )
-
-var _backup_cleanup_deps = []any{
-	os.ReadFile, filepath.Join, sort.Strings, strings.Contains, testing.T{}, time.Second,
-}
 
 func TestCleanupBackupRemovesBackupDirectory(t *testing.T) {
 	dir := t.TempDir()

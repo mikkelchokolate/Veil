@@ -3,15 +3,10 @@ package installer
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/veil-panel/veil/internal/backup"
 )
-
-var _apply_backup_deps = []any{
-	os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
 
 func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	dir := t.TempDir()

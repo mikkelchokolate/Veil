@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-var _backup_create_list_deps = []any{
-	os.ReadFile, filepath.Join, sort.Strings, strings.Contains, testing.T{}, time.Second,
-}
-
 func TestBackupBeforeApplyBacksUpExistingFiles(t *testing.T) {
 	dir := t.TempDir()
 	backupDir := filepath.Join(dir, "backups")

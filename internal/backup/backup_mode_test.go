@@ -4,15 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
-	"strings"
 	"testing"
-	"time"
 )
-
-var _backup_mode_deps = []any{
-	os.ReadFile, filepath.Join, sort.Strings, strings.Contains, testing.T{}, time.Second,
-}
 
 func TestBackupPreservesFileMode(t *testing.T) {
 	dir := t.TempDir()

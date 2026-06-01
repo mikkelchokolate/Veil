@@ -2,16 +2,11 @@ package cli
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-var _repair_validation_deps = []any{
-	bytes.Buffer{}, os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
 
 func TestRepairWorkflowOptionsDoNotExposeDeprecatedProtocolInstallInputs(t *testing.T) {
 	optionsType := reflect.TypeOf(repairWorkflowOptions{})

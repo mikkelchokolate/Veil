@@ -2,21 +2,10 @@ package cli
 
 import (
 	"bytes"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/veil-panel/veil/internal/installer"
 )
-
-var _installTestDeps_misc = []any{
-	bytes.Buffer{}, net.ParseIP, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, installer.RURecommendedProfile{},
-}
 
 func TestRURecommendedInstallOptionsDoesNotExposeSharedProxyPort(t *testing.T) {
 	if _, ok := reflect.TypeOf(ruRecommendedInstallOptions{}).FieldByName("SharedPort"); ok {

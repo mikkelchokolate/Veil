@@ -153,6 +153,7 @@ func TestDetectPublicIPNilContextDoesNotPanic(t *testing.T) {
 	}))
 	defer server.Close()
 
+	//lint:ignore SA1012 intentionally passing a nil context to verify DetectPublicIP falls back to context.Background()
 	ip, err := DetectPublicIP(nil, server.Client(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("unexpected error with nil context: %v", err)

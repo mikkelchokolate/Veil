@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-var _apply_repair_deps = []any{
-	os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
-
 func TestBuildRepairPlanDetectsPanelCaddyDrift(t *testing.T) {
 	dir := t.TempDir()
 	profile := mustPanelCaddyProfile(t)

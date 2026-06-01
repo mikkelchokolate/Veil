@@ -2,24 +2,15 @@ package api
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/veil-panel/veil/internal/secrets"
 )
-
-var _managementTestDeps_state_secrets = []any{
-	bytes.Buffer{}, rand.Reader, fmt.Sprintf, log.Printf, http.MethodGet, httptest.NewRecorder, os.ReadFile, filepath.Join, strings.Contains, testing.T{}, time.Second, secrets.IsEncrypted,
-}
 
 func TestManagementStateLoadReturnsErrorOnCorruptedState(t *testing.T) {
 	dir := t.TempDir()

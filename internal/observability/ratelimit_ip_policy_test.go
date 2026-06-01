@@ -4,12 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
-
-var _rateLimitTestDeps_ip_policy = []any{
-	http.MethodGet, httptest.NewRecorder, testing.T{}, time.Second,
-}
 
 func TestRateLimitIPFromXForwardedFor(t *testing.T) {
 	limiter := NewRateLimiter(60, 1)
