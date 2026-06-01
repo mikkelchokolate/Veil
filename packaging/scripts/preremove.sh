@@ -1,0 +1,10 @@
+#!/bin/sh
+# Veil package preremove: stop and disable managed units before files are removed.
+set -e
+
+if command -v systemctl >/dev/null 2>&1; then
+    for unit in veil veil-naive veil-hysteria2 veil-mieru veil-olcrtc veil-warp; do
+        systemctl stop "${unit}.service" >/dev/null 2>&1 || true
+        systemctl disable "${unit}.service" >/dev/null 2>&1 || true
+    done
+fi

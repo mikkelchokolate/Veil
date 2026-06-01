@@ -4,8 +4,17 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Security
+
+- Bumped `golang.org/x/net`, `golang.org/x/crypto`, and `golang.org/x/text` and raised the Go toolchain to 1.25 to clear all `govulncheck`-reported vulnerabilities in called code.
+
 ### Added
 
+- Added native `.deb`, `.rpm`, and `.apk` packages (built with nfpm) attached to releases, installing the Panel binary and managed systemd units.
+- Added an SPDX SBOM and keyless cosign signatures for release checksums and SBOM.
+- Added an OpenAPI 3.1 specification for the Panel HTTP API at `docs/openapi.yaml`.
+- Added a hardening guide at `docs/HARDENING.md` and documentation index in the README.
+- Expanded CI and release quality gates to enforce gofmt, `go mod tidy`, staticcheck, govulncheck, shellcheck, the race detector, and coverage reporting.
 - Added end-to-end Mieru Inbounds, generated config, client artifacts, managed runtime metadata, firewall planning, apply validation, live promotion, repair, and uninstall coverage.
 - Added optional HTTPS Panel access through Caddy with a random Web base path.
 - Added self-signed Panel TLS for direct/local Panel access without Caddy.
