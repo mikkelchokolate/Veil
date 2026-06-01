@@ -134,3 +134,12 @@ docker run -d --name veil --network host \
   -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
   veil-panel/veil:latest serve
 ```
+
+## Testing
+
+```bash
+make test    # unit + in-process integration tests
+make e2e     # end-to-end tests: real veil binary launched over a socket
+```
+
+The end-to-end suite (`test/e2e/`, guarded by the `e2e` build tag) compiles the `veil` binary, runs `veil serve` as a subprocess bound to a real port, and drives it over HTTP — covering the readiness lifecycle, API auth gating, graceful shutdown, state persistence across restarts, the full inbound-to-apply flow, and the CLI subcommands.

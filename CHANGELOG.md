@@ -18,6 +18,7 @@ All notable changes to Veil will be documented in this file.
 - Added an SPDX SBOM and keyless cosign signatures for release checksums and SBOM.
 - Added an OpenAPI 3.1 specification for the Panel HTTP API at `docs/openapi.yaml`.
 - Added a hardening guide at `docs/HARDENING.md` and documentation index in the README.
+- Added a black-box end-to-end test suite (`test/e2e`, behind the `e2e` build tag) that compiles the real `veil` binary, runs `serve` over a live socket, and verifies health/readiness, bearer-auth gating, the full inbound→client-link→apply flow with on-disk generated config, duplicate-username rejection, state persistence across restarts, graceful shutdown, and the `config validate`/`version`/`doctor` CLIs.
 - Expanded CI and release quality gates to enforce gofmt, `go mod tidy`, staticcheck, govulncheck, shellcheck, the race detector, and coverage reporting.
 - Added end-to-end Mieru Inbounds, generated config, client artifacts, managed runtime metadata, firewall planning, apply validation, live promotion, repair, and uninstall coverage.
 - Added optional HTTPS Panel access through Caddy with a random Web base path.

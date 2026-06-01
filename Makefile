@@ -4,10 +4,13 @@ DOCKER_IMAGE?=veil-panel/veil
 GOARCH?=$(shell go env GOARCH)
 MAINTAINER?=Veil Maintainers <veil@users.noreply.github.com>
 
-.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom
+.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom e2e
 
 test:
 	go test ./...
+
+e2e:
+	go test -tags e2e ./test/e2e/... -count=1
 
 build:
 	mkdir -p bin
@@ -47,6 +50,7 @@ tidy:
 release-check:
 	go vet ./...
 	go test ./... -count=1
+	go test -tags e2e ./test/e2e/... -count=1
 	make build
 	bash -n scripts/install.sh scripts/uninstall.sh
 	bash scripts/install.sh --help >/dev/null
