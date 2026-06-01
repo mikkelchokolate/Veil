@@ -24,7 +24,7 @@ type ProtocolRenderInput struct {
 	Settings Settings
 	Paths    Paths
 	Inbounds []Inbound
-	Warp      WarpConfig
+	Warp     WarpConfig
 }
 
 func NewProtocolRegistry(protocols []Protocol) ProtocolRegistry {

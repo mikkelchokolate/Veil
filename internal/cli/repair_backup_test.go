@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-var _repair_backup_deps = []any{
-	bytes.Buffer{}, os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
-
 func TestRepairWithBackupDirPrintsBackupID(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")

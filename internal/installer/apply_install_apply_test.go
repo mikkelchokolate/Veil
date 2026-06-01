@@ -3,13 +3,8 @@ package installer
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
-
-var _apply_install_apply_deps = []any{
-	os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
 
 func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	dir := t.TempDir()

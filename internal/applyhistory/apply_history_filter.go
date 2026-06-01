@@ -83,7 +83,3 @@ func (f ApplyHistoryFilter) validateKeys() error {
 	}
 	return nil
 }
-
-func filterApplyHistory(history []ApplyHistoryEntry, values map[string][]string) ([]ApplyHistoryEntry, error) {
-	return NewApplyHistoryFilter(values).Apply(history)
-}

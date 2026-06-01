@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-var _repair_audit_deps = []any{
-	bytes.Buffer{}, os.ReadFile, filepath.Join, strings.Contains, testing.T{},
-}
-
 func TestRepairDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")

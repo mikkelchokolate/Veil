@@ -50,4 +50,3 @@ func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {
 	}
 	return fmt.Sprintf("olcrtc://%s?%s@%s#%s$%s", auth, transport, roomID, key, mimo)
 }
-

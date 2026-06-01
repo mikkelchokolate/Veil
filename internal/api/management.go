@@ -60,10 +60,6 @@ func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
 	return applyhistory.NewApplyHistory(s.applyHistoryPathLocked(), applyhistory.MaxEntries)
 }
 
-func (s *managementState) loadApplyHistoryLocked() ([]ApplyHistoryEntry, error) {
-	return s.applyHistoryLocked().Load()
-}
-
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
 	context := NewManagementApplyContext(s)
 	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
@@ -71,14 +67,6 @@ func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bo
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
 	return s.managementConfigRendererLocked().Render()
-}
-
-func (s *managementState) hasRenderSettingsLocked() bool {
-	return s.managementConfigRendererLocked().HasRenderSettings()
-}
-
-func (s *managementState) renderWarpConfigLocked() (string, error) {
-	return s.managementConfigRendererLocked().RenderWarp()
 }
 
 func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {

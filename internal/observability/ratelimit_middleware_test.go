@@ -4,12 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
-
-var _rateLimitTestDeps_middleware = []any{
-	http.MethodGet, httptest.NewRecorder, testing.T{}, time.Second,
-}
 
 func TestRateLimitAllowsRequestsUnderBurst(t *testing.T) {
 	limiter := NewRateLimiter(60, 5) // 60 req/min, burst 5

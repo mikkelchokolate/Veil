@@ -46,7 +46,7 @@ func (r Renderer) BaseHTML() string {
 		}
 		html = strings.ReplaceAll(html, slot.Placeholder, slot.Render())
 	}
-	
+
 	// Clean up any remaining placeholders (e.g. from disabled modules)
 	html = placeholderRegex.ReplaceAllString(html, "")
 	return html

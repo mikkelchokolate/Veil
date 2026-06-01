@@ -113,6 +113,20 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 - **Rate limiting** — protects expensive endpoints
 - **Input validation** — all API inputs validated
 
+See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-chain verification (signed releases, SBOM), and systemd hardening.
+
+## Documentation
+
+- [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
+- [Hardening guide](docs/HARDENING.md) — secure deployment and operations
+- [Security policy](SECURITY.md) — vulnerability reporting
+- [Changelog](CHANGELOG.md) — release history
+- [Context](CONTEXT.md) — domain language and architecture
+
+## Native packages
+
+Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary and managed systemd units; run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
+
 ## Docker
 
 ```bash

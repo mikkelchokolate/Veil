@@ -3,15 +3,9 @@ package backup
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
-	"time"
 )
-
-var _backup_restore_deps = []any{
-	os.ReadFile, filepath.Join, sort.Strings, strings.Contains, testing.T{}, time.Second,
-}
 
 func TestRestoreFromBackupBringsFilesBack(t *testing.T) {
 	dir := t.TempDir()

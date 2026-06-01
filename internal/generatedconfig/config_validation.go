@@ -25,10 +25,6 @@ func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult
 	return results
 }
 
-func runStagedConfigValidators(paths []string) []ConfigValidationResult {
-	return NewStagedConfigValidator(RunFixedConfigValidation).Validate(paths)
-}
-
 func RunFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
 	result := ConfigValidationResult{Name: name, Config: config, Command: append([]string(nil), command...)}
 	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})

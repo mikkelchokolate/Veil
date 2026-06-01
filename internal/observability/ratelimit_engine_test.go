@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-var _rateLimitTestDeps_engine = []any{
-	http.MethodGet, httptest.NewRecorder, testing.T{}, time.Second,
-}
-
 func TestRateLimitTokenRefill(t *testing.T) {
 	limiter := NewRateLimiter(600, 1) // 600 req/min = 10 req/sec, burst 1
 	t.Cleanup(func() { limiter.Stop() })

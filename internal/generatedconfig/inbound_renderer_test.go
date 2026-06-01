@@ -42,7 +42,7 @@ func TestInboundRendererRendersHysteria2WithPerInboundPassword(t *testing.T) {
 
 func TestInboundRendererRendersUpstreamSocksWhenWarpEnabled(t *testing.T) {
 	warp := WarpConfig{Enabled: true, SocksPort: 40050}
-	
+
 	// Test Naive
 	naiveRenderer := NewInboundRenderer(Settings{
 		Domain:        "panel.example.com",
@@ -57,7 +57,7 @@ func TestInboundRendererRendersUpstreamSocksWhenWarpEnabled(t *testing.T) {
 	if !strings.Contains(naiveBody, "upstream socks5://127.0.0.1:40050") {
 		t.Fatalf("naive body missing SOCKS5 upstream:\n%s", naiveBody)
 	}
-	
+
 	// Test Hysteria2
 	hyRenderer := NewInboundRenderer(Settings{Domain: "vpn.example.com", Hysteria2Password: "global"}, NewPaths("/etc/veil"), warp)
 	hyBody, err := hyRenderer.RenderHysteria2(Inbound{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, Password: "pass"})

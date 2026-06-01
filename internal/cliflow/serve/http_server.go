@@ -82,7 +82,6 @@ func NewTLSConfig() *tls.Config {
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 		},
-		PreferServerCipherSuites: true,
 		CurvePreferences: []tls.CurveID{
 			tls.X25519,
 			tls.CurveP256,

@@ -248,9 +248,13 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"quality:",
-		"go test ./... -count=1",
+		"go test ./... -race -count=1",
 		"go vet ./...",
 		"make build",
+		"gofmt -l",
+		"staticcheck",
+		"govulncheck ./...",
+		"shellcheck scripts/*.sh",
 		"bash -n scripts/install.sh scripts/uninstall.sh",
 		"bash scripts/install.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
@@ -270,9 +274,13 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
-		"go test ./... -count=1",
+		"go test ./... -race -count=1",
 		"go vet ./...",
 		"make build",
+		"gofmt -l",
+		"staticcheck",
+		"govulncheck ./...",
+		"shellcheck scripts/*.sh",
 		"bash -n scripts/install.sh scripts/uninstall.sh",
 		"bash scripts/install.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",

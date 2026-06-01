@@ -44,7 +44,7 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 		Order   int
 		Runtime ManagedRuntime
 	}{Order: 30, Runtime: ManagedRuntime{Name: "sing-box", ActionName: "sing-box", Unit: renderer.UnitWarp, PromotedSubpath: generatedconfig.WarpConfigSubpath, PromotedVerb: "reload", ManualRestart: true, HealthCheckAfter: true}})
-	
+
 	hasOlcrtc := false
 	for _, item := range ordered {
 		if item.Runtime.Name == "olcrtc" {

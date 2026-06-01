@@ -1,0 +1,70 @@
+# nfpm configuration for Veil native Linux packages (.deb, .rpm, .apk).
+#
+# Build locally with:
+#   VEIL_VERSION=1.2.3 GOOS=linux GOARCH=amd64 make package
+# or directly:
+#   nfpm package --config packaging/nfpm.yaml --packager deb --target dist/
+#
+# The veil binary must already exist at dist/veil for the target arch before
+# packaging. The release workflow builds it per-arch and then invokes nfpm.
+
+name: veil
+arch: ${VEIL_ARCH}
+platform: linux
+version: ${VEIL_VERSION}
+section: net
+priority: optional
+maintainer: ${VEIL_MAINTAINER}
+description: |
+  Veil management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru.
+  Installs the Panel first; proxy Inbounds are added later from the Panel.
+vendor: Veil
+homepage: https://github.com/mikkelchokolate/Veil
+license: GPL-3.0-or-later
+
+# Packages ship the Panel binary and managed systemd units only. Protocol
+# runtimes and configuration are provisioned later from the Panel, matching the
+# install-script behavior.
+contents:
+  - src: dist/veil
+    dst: /usr/local/bin/veil
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/veil.service
+    dst: /lib/systemd/system/veil.service
+    type: config
+  - src: packaging/systemd/veil-naive.service
+    dst: /lib/systemd/system/veil-naive.service
+    type: config
+  - src: packaging/systemd/veil-hysteria2.service
+    dst: /lib/systemd/system/veil-hysteria2.service
+    type: config
+  - src: packaging/systemd/veil-mieru.service
+    dst: /lib/systemd/system/veil-mieru.service
+    type: config
+  - src: packaging/systemd/veil-olcrtc.service
+    dst: /lib/systemd/system/veil-olcrtc.service
+    type: config
+  - src: packaging/systemd/veil-warp.service
+    dst: /lib/systemd/system/veil-warp.service
+    type: config
+  - dst: /etc/veil
+    type: dir
+    file_info:
+      mode: 0750
+
+overrides:
+  deb:
+    depends:
+      - ca-certificates
+  rpm:
+    depends:
+      - ca-certificates
+  apk:
+    depends:
+      - ca-certificates
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh

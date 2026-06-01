@@ -29,7 +29,3 @@ func (RouteDatRetryPolicy) Retryable(err error) bool {
 	}
 	return false
 }
-
-func isRetryableError(err error) bool {
-	return NewRouteDatRetryPolicy().Retryable(err)
-}
