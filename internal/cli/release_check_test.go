@@ -42,3 +42,29 @@ func TestMakefileDefinesReleaseCheck(t *testing.T) {
 		}
 	}
 }
+
+func TestCiWorkflowRunsE2ESuite(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{"e2e:", "go test -tags e2e ./test/e2e/..."} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml missing required e2e gate %q:\n%s", want, workflow)
+		}
+	}
+}
+
+func TestMakefileDefinesE2ETarget(t *testing.T) {
+	body, err := os.ReadFile("../../Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	makefile := string(body)
+	for _, want := range []string{"e2e:", "go test -tags e2e ./test/e2e/... -count=1"} {
+		if !strings.Contains(makefile, want) {
+			t.Fatalf("Makefile missing e2e target %q:\n%s", want, makefile)
+		}
+	}
+}
