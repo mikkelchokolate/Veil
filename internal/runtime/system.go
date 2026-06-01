@@ -49,8 +49,6 @@ func readMeminfo() (memInfo, error) {
 
 type diskInfo struct{ total, used uint64 }
 
-
-
 func readUptime() (int64, error) {
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {

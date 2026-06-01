@@ -141,4 +141,3 @@ func TestOlcrtcClientLinkGeneration(t *testing.T) {
 		}
 	})
 }
-
