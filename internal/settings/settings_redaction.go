@@ -11,7 +11,3 @@ func (SettingsRedaction) Redact(settings Settings) Settings {
 	redacted.Hysteria2Password = disclosure.Redact(redacted.Hysteria2Password)
 	return redacted
 }
-
-func redactedSettings(settings Settings) Settings {
-	return NewSettingsRedaction().Redact(settings)
-}

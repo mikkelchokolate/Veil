@@ -76,16 +76,6 @@ func parseKB(line string) int64 {
 	return v
 }
 
-// cpuPercent returns a rough CPU usage percentage computed from /proc/stat.
-// It stores the previous tick values and returns the delta since last call.
-func cpuPercent() float64 {
-	return NewSystemStatsCollector(procSystemStatsSource{}).cpuPercent()
-}
-
-func readCPUTicks() (idle, total uint64) {
-	return procSystemStatsSource{}.CPUTicks()
-}
-
 func (procSystemStatsSource) CPUTicks() (idle, total uint64) {
 	data, err := os.ReadFile("/proc/stat")
 	if err != nil {
