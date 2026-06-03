@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"time"
 
+	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
+	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
 	"github.com/spf13/cobra"
-	doctorflow "github.com/veil-panel/veil/internal/cliflow/doctor"
-	versionflow "github.com/veil-panel/veil/internal/cliflow/version"
 )
 
 var (

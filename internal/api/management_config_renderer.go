@@ -1,10 +1,10 @@
 package api
 
 import (
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/protocols"
-	"github.com/veil-panel/veil/internal/renderer"
-	veilwarp "github.com/veil-panel/veil/internal/warp"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
 
 type ManagementConfigInput struct {

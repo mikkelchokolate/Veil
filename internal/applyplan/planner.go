@@ -3,7 +3,7 @@ package applyplan
 import (
 	"fmt"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 type Material struct {

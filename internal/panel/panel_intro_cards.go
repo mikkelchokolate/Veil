@@ -1,6 +1,6 @@
 package panel
 
-import "github.com/veil-panel/veil/internal/protocols"
+import "github.com/mikkelchokolate/Veil/internal/protocols"
 
 const panelIntroCardsPlaceholder = "__VEIL_PANEL_INTRO_CARDS__"
 

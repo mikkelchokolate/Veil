@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func TestMain(m *testing.M) {

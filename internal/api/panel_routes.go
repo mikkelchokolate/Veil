@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"time"
 
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
-	"github.com/veil-panel/veil/internal/panel"
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/panel"
 )
 
 type PanelRoutes struct {

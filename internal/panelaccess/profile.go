@@ -13,8 +13,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/veil-panel/veil/internal/hostenv"
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type ProfileInput struct {

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestWorkflowRequiresConfirmBeforeWritingStage(t *testing.T) {

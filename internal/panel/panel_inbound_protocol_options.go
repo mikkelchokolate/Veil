@@ -1,6 +1,6 @@
 package panel
 
-import "github.com/veil-panel/veil/internal/protocols"
+import "github.com/mikkelchokolate/Veil/internal/protocols"
 
 import "strings"
 

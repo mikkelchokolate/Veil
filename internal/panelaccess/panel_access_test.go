@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestPanelAccessBuildsCaddyRouteConfigAndApplyIntent(t *testing.T) {

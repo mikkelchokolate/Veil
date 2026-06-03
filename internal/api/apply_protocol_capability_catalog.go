@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/veil-panel/veil/internal/panelaccess"
-	"github.com/veil-panel/veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/panelaccess"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type ApplyProtocolCapability struct {

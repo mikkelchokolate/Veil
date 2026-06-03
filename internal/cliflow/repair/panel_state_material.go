@@ -3,9 +3,9 @@ package repair
 import (
 	"path/filepath"
 
-	"github.com/veil-panel/veil/internal/api"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type panelStateRepairSnapshot struct {

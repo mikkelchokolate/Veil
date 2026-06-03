@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 )
 
 func TestStatusCommandRegistered(t *testing.T) {

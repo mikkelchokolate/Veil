@@ -1,6 +1,6 @@
 package generatedconfig
 
-import "github.com/veil-panel/veil/internal/renderer"
+import "github.com/mikkelchokolate/Veil/internal/renderer"
 
 func RenderWarpRoutingRules(rules []RoutingRule) []renderer.WarpRoutingRule {
 	rendered := []renderer.WarpRoutingRule{}

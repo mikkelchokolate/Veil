@@ -1,6 +1,6 @@
 package clientaccess
 
-import "github.com/veil-panel/veil/internal/renderer"
+import "github.com/mikkelchokolate/Veil/internal/renderer"
 
 type ClientAccess struct {
 	settings    Settings

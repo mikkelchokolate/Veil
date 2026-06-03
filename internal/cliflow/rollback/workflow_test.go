@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 func TestWorkflowListsAndRestoresBackup(t *testing.T) {

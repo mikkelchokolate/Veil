@@ -1,6 +1,6 @@
 package clientaccess
 
-import "github.com/veil-panel/veil/internal/model"
+import "github.com/mikkelchokolate/Veil/internal/model"
 
 type Settings = model.Settings
 type ClientProfile = model.ClientProfile

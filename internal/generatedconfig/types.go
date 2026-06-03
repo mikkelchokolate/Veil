@@ -1,9 +1,9 @@
 package generatedconfig
 
 import (
-	"github.com/veil-panel/veil/internal/clientaccess"
-	"github.com/veil-panel/veil/internal/model"
-	veilruntime "github.com/veil-panel/veil/internal/runtime"
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
 type Settings = model.Settings

@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func TestManagedServiceStatusCatalogIncludesMieru(t *testing.T) {

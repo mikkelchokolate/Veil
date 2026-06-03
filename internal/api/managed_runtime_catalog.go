@@ -3,10 +3,10 @@ package api
 import (
 	"sort"
 
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/protocols"
-	"github.com/veil-panel/veil/internal/renderer"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 type ManagedRuntime = service.ManagedRuntime

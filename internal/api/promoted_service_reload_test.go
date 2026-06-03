@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func TestPromotedServiceReloaderRunsExpectedReloads(t *testing.T) {

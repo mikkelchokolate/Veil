@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/veil-panel/veil/internal/installer"
-	veilsettings "github.com/veil-panel/veil/internal/settings"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 type RURecommendedPreviewRequest struct {

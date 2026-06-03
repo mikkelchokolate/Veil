@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/veil-panel/veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
 type ManagementStateValidation struct{}

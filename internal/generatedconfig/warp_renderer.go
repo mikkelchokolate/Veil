@@ -1,8 +1,8 @@
 package generatedconfig
 
 import (
-	"github.com/veil-panel/veil/internal/renderer"
-	veilwarp "github.com/veil-panel/veil/internal/warp"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
 
 type GeneratedWarpConfigRenderer struct {

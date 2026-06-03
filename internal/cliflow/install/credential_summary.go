@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
 func CredentialSummary(profile installer.RURecommendedProfile) string {

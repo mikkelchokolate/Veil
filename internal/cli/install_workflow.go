@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
+	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/panelaccess"
 	"github.com/spf13/cobra"
-	installflow "github.com/veil-panel/veil/internal/cliflow/install"
-	"github.com/veil-panel/veil/internal/hostenv"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/panelaccess"
 )
 
 const defaultSystemdDir = "/etc/systemd/system"

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestCapabilityCatalogCoversMieruEndToEnd(t *testing.T) {

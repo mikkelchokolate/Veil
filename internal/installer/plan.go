@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/firewall"
-	"github.com/veil-panel/veil/internal/hostenv"
-	"github.com/veil-panel/veil/internal/renderer"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 type BuildHint struct {

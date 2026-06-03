@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
 func TestBuildRURecommendedInstallPlanSummaryUsesPanelOnlySystemdUnits(t *testing.T) {

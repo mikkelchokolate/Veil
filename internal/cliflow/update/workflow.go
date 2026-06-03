@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	versionflow "github.com/veil-panel/veil/internal/cliflow/version"
-	"github.com/veil-panel/veil/internal/renderer"
+	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type WorkflowOptions struct {

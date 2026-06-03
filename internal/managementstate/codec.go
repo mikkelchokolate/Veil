@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 type ManagementStateCodec struct{}

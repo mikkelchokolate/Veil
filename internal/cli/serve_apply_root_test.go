@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 )
 
 func TestResolveServeApplyRootUsesFlagBeforeEnvironment(t *testing.T) {

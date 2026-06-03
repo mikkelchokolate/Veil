@@ -3,7 +3,7 @@ package panelaccess
 import (
 	"strings"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 type CaddyRequirement struct {

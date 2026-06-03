@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/api"
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 func newConfigCommand() *cobra.Command {

@@ -1,6 +1,6 @@
 package managementstate
 
-import "github.com/veil-panel/veil/internal/model"
+import "github.com/mikkelchokolate/Veil/internal/model"
 
 // SecretPolicy is the State store Module that knows which Management state
 // snapshot fields are secrets. Store supplies encryption/decryption as an

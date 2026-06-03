@@ -1,8 +1,8 @@
 package cli
 
 import (
+	rollbackflow "github.com/mikkelchokolate/Veil/internal/cliflow/rollback"
 	"github.com/spf13/cobra"
-	rollbackflow "github.com/veil-panel/veil/internal/cliflow/rollback"
 )
 
 func newRollbackCommand() *cobra.Command {

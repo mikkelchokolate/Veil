@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/veil-panel/veil/internal/model"
-	veilruntime "github.com/veil-panel/veil/internal/runtime"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
 type CommandPolicy struct {

@@ -3,7 +3,7 @@ package managementstate
 import (
 	"testing"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestBuildSnapshotClonesMutableSlices(t *testing.T) {

@@ -25,7 +25,7 @@ Veil supports multiple Inbounds, but there is an architectural limitation regard
 
 ---
 
-## 3. Go Module Path Mismatch
+## 3. Go Module Path
 
-- **Path:** The module is named `github.com/veil-panel/veil`, but the active repository is hosted at `github.com/mikkelchokolate/Veil`.
-- **Implication:** Running `go install github.com/mikkelchokolate/Veil/cmd/veil@latest` directly will fail. To compile from source, you must clone the repository first and run the build within the cloned workspace folder.
+- **Path:** The module path is canonicalized to `github.com/mikkelchokolate/Veil`, matching the GitHub repository URL.
+- **Implication:** You can install the CLI tool directly from GitHub via `go install github.com/mikkelchokolate/Veil/cmd/veil@latest`.

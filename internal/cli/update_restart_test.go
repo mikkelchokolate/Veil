@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 )
 
 func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/inbounds"
-	"github.com/veil-panel/veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/inbounds"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {

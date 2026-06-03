@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	veilruntime "github.com/veil-panel/veil/internal/runtime"
+	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
 type LogResult struct {

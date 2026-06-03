@@ -4,8 +4,8 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type Settings = model.Settings

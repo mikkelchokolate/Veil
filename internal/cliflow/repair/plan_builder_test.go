@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
 var testExecutableFunc = func() (string, error) { return "", os.ErrNotExist }

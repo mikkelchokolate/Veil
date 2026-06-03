@@ -3,7 +3,7 @@ package panel
 import (
 	"strings"
 
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 const ServiceStatusCardPlaceholder = "__VEIL_PANEL_SERVICE_STATUS_CARD__"

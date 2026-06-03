@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 // ServiceActionRequest is the body for service control endpoints.

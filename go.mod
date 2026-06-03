@@ -1,4 +1,4 @@
-module github.com/veil-panel/veil
+module github.com/mikkelchokolate/Veil
 
 go 1.25.0
 
@@ -13,3 +13,4 @@ require (
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )
+

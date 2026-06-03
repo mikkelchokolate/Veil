@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/veil-panel/veil/internal/managementstate"
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 type ManagementStateLifecycle struct {

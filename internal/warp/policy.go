@@ -1,8 +1,8 @@
 package warp
 
 import (
-	"github.com/veil-panel/veil/internal/model"
-	veilsettings "github.com/veil-panel/veil/internal/settings"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 type Config = model.WarpConfig

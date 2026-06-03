@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/api"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/managementstate"
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {

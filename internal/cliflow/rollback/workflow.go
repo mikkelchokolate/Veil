@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/veil-panel/veil/internal/audit"
-	"github.com/veil-panel/veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 type Options struct {

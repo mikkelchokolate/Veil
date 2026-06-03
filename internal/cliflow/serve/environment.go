@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 type Environment struct{}

@@ -1,6 +1,6 @@
 package installer
 
-import "github.com/veil-panel/veil/internal/panelaccess"
+import "github.com/mikkelchokolate/Veil/internal/panelaccess"
 
 type SecretFunc func(label string) string
 

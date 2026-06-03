@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/api"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/managementstate"
-	"github.com/veil-panel/veil/internal/panelmaterial"
-	"github.com/veil-panel/veil/internal/renderer"
-	"github.com/veil-panel/veil/internal/secrets"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/panelmaterial"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 type PlanDependencies struct {

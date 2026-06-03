@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/veil-panel/veil/internal/clientaccess"
-	"github.com/veil-panel/veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 )
 
 var firewallStatusReader = func() (bool, error) {

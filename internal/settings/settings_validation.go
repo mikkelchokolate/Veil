@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 type SettingsValidation struct{}
