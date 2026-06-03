@@ -2,7 +2,7 @@ package panel
 
 import (
 	"encoding/json"
-	"github.com/veil-panel/veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"strings"
 	"testing"
 )

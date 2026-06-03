@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {

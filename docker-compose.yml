@@ -10,7 +10,7 @@ services:
     container_name: veil
     restart: unless-stopped
     ports:
-      - "2096:2096"
+      - "127.0.0.1:2096:2096"
     volumes:
       - veil-state:/var/lib/veil
       - veil-etc:/etc/veil

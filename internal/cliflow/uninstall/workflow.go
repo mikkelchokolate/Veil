@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type Options struct {

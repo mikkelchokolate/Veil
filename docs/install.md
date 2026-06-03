@@ -70,7 +70,7 @@ Exposes the Panel directly on all interfaces on the configured port using self-s
 If you prefer to compile Veil from source, follow these instructions.
 
 ### Go Module Configuration
-The project uses the Go module path `github.com/veil-panel/veil`. Although this module path differs from the GitHub repository path (`github.com/mikkelchokolate/Veil`), local compilation works out-of-the-box using standard Go tools because Go treats the `go.mod` declaration as the module root.
+The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is canonical and matches the GitHub repository URL. You can build the binary from source or install it directly using Go toolchain commands.
 
 ### Build Steps
 

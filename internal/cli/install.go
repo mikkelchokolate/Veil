@@ -5,10 +5,10 @@ import (
 	"encoding/base64"
 	"net/http"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/spf13/cobra"
-	"github.com/veil-panel/veil/internal/audit"
-	"github.com/veil-panel/veil/internal/hostenv"
-	"github.com/veil-panel/veil/internal/installer"
 )
 
 var installDNSResolver hostenv.DNSResolver = hostenv.NetResolver{}

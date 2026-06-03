@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 func TestLivePathForStagedConfig(t *testing.T) {

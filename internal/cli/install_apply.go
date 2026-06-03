@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/spf13/cobra"
-	installflow "github.com/veil-panel/veil/internal/cliflow/install"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/service"
 )
 
 var installSystemdRunFunc = func(actions []service.SystemdAction) error {

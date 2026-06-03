@@ -1,11 +1,11 @@
 package managementstate
 
 import (
-	"github.com/veil-panel/veil/internal/inbounds"
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/routing"
-	veilsettings "github.com/veil-panel/veil/internal/settings"
-	veilwarp "github.com/veil-panel/veil/internal/warp"
+	"github.com/mikkelchokolate/Veil/internal/inbounds"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/routing"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
 
 type Settings = model.Settings

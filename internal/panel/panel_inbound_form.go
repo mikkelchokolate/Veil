@@ -1,6 +1,6 @@
 package panel
 
-import "github.com/veil-panel/veil/internal/protocols"
+import "github.com/mikkelchokolate/Veil/internal/protocols"
 
 const panelInboundFormPlaceholder = "__VEIL_PANEL_INBOUND_FORM__"
 

@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/veil-panel/veil/internal/backup"
-	"github.com/veil-panel/veil/internal/managedfiles"
+	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/managedfiles"
 )
 
 type ApplyPaths struct {

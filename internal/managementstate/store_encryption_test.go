@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 func TestStoreRejectsRemovedStackField(t *testing.T) {

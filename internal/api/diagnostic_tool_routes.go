@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/diagnostics"
+	"github.com/mikkelchokolate/Veil/internal/diagnostics"
 )
 
 type PingResult = diagnostics.PingResult

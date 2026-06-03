@@ -3,7 +3,7 @@ package generatedconfig
 import (
 	"fmt"
 
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type MieruGeneratedConfigModel struct {

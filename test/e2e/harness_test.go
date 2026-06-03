@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +44,9 @@ func veilBinary(t *testing.T) string {
 			return
 		}
 		bin := filepath.Join(dir, "veil")
+		if runtime.GOOS == "windows" {
+			bin += ".exe"
+		}
 		// The e2e package lives at <module>/test/e2e, so the module root is two
 		// directories up. Build the CLI entrypoint from there.
 		cmd := exec.Command("go", "build", "-o", bin, "./cmd/veil")

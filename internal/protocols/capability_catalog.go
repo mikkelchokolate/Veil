@@ -1,8 +1,8 @@
 package protocols
 
 import (
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type Capability struct {

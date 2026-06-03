@@ -1,6 +1,6 @@
 package panel
 
-import "github.com/veil-panel/veil/internal/service"
+import "github.com/mikkelchokolate/Veil/internal/service"
 
 const EventBindingsPlaceholder = "__VEIL_PANEL_EVENT_BINDINGS__"
 

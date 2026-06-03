@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 func TestManagementStateLoadReturnsErrorOnCorruptedState(t *testing.T) {

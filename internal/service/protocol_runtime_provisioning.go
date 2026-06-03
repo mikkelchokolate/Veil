@@ -1,6 +1,6 @@
 package service
 
-import "github.com/veil-panel/veil/internal/model"
+import "github.com/mikkelchokolate/Veil/internal/model"
 
 type ProtocolRuntimeProvisioning struct {
 	catalog ManagedRuntimeCatalog

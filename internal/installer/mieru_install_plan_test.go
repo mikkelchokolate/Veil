@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 func TestPanelInstallDoesNotPlanMieruRuntime(t *testing.T) {

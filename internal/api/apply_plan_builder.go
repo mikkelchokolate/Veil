@@ -1,11 +1,11 @@
 package api
 
 import (
-	"github.com/veil-panel/veil/internal/applyplan"
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/panelaccess"
-	"github.com/veil-panel/veil/internal/protocols"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/applyplan"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/panelaccess"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 type ApplyPlanInput struct {

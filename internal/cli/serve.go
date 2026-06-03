@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/spf13/cobra"
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
 )
 
 const serveDrainTimeout = 5 * time.Second

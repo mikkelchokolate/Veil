@@ -1,8 +1,8 @@
 package cli
 
 import (
+	uninstallflow "github.com/mikkelchokolate/Veil/internal/cliflow/uninstall"
 	"github.com/spf13/cobra"
-	uninstallflow "github.com/veil-panel/veil/internal/cliflow/uninstall"
 )
 
 var uninstallServiceStopper = uninstallflow.StopAndDisableService

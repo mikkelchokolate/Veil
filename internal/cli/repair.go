@@ -1,9 +1,9 @@
 package cli
 
 import (
+	repairflow "github.com/mikkelchokolate/Veil/internal/cliflow/repair"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/spf13/cobra"
-	repairflow "github.com/veil-panel/veil/internal/cliflow/repair"
-	"github.com/veil-panel/veil/internal/installer"
 )
 
 type repairWorkflowOptions struct {

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 )
 
 func TestUpdateAssetNameMatchesPlatform(t *testing.T) {

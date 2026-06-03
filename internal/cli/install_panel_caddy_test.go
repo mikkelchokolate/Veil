@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {

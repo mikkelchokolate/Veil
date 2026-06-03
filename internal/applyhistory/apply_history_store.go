@@ -5,8 +5,8 @@ import (
 	"errors"
 	"os"
 
-	"github.com/veil-panel/veil/internal/applyflow"
-	"github.com/veil-panel/veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/applyflow"
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 const MaxEntries = 100

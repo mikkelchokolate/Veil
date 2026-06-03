@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	veilruntime "github.com/veil-panel/veil/internal/runtime"
+	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
 func TestNetworkEndpointRejectsNonGet(t *testing.T) {

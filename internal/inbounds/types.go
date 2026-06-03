@@ -1,9 +1,9 @@
 package inbounds
 
 import (
-	"github.com/veil-panel/veil/internal/clientaccess"
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type Inbound = model.Inbound

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/observability"
+	"github.com/mikkelchokolate/Veil/internal/observability"
 )
 
 type ServerInfo struct {

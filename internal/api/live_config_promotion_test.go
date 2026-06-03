@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {

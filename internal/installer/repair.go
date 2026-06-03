@@ -1,8 +1,8 @@
 package installer
 
 import (
-	"github.com/veil-panel/veil/internal/managedfiles"
-	"github.com/veil-panel/veil/internal/panelmaterial"
+	"github.com/mikkelchokolate/Veil/internal/managedfiles"
+	"github.com/mikkelchokolate/Veil/internal/panelmaterial"
 )
 
 type RepairReason = managedfiles.RepairReason

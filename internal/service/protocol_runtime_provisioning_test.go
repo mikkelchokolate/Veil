@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestProtocolRuntimeProvisioningSelectsRuntimesFromEnabledInbounds(t *testing.T) {

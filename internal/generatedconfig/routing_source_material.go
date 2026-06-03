@@ -3,7 +3,7 @@ package generatedconfig
 import (
 	"path/filepath"
 
-	"github.com/veil-panel/veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 type RoutingSourceDownloader func(string) ([]byte, error)

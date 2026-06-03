@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 )
 
 func TestResolveServeAuthTokenUsesFlagBeforeEnvironment(t *testing.T) {

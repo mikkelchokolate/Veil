@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/veil-panel/veil/internal/managementstate"
-	"github.com/veil-panel/veil/internal/routing"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/routing"
 )
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {

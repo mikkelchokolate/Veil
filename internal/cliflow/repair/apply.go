@@ -5,10 +5,10 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/veil-panel/veil/internal/audit"
-	"github.com/veil-panel/veil/internal/backup"
-	"github.com/veil-panel/veil/internal/installer"
-	"github.com/veil-panel/veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 type ApplyDependencies struct {

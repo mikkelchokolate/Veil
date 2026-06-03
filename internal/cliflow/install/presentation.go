@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/veil-panel/veil/internal/hostenv"
-	"github.com/veil-panel/veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
 type Presentation struct {

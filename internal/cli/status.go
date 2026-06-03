@@ -1,9 +1,9 @@
 package cli
 
 import (
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	"github.com/spf13/cobra"
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
-	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
 )
 
 func newStatusCommand(version string) *cobra.Command {

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/spf13/cobra"
-	serveflow "github.com/veil-panel/veil/internal/cliflow/serve"
-	statusflow "github.com/veil-panel/veil/internal/cliflow/status"
-	updateflow "github.com/veil-panel/veil/internal/cliflow/update"
-	"github.com/veil-panel/veil/internal/renderer"
 )
 
 const (

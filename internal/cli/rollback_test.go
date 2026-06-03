@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/veil-panel/veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 func TestRollbackListShowsBackupIDs(t *testing.T) {

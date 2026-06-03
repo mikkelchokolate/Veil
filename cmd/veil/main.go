@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/veil-panel/veil/internal/cli"
+	"github.com/mikkelchokolate/Veil/internal/cli"
 )
 
 var version = "dev"

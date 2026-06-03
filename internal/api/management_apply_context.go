@@ -1,6 +1,6 @@
 package api
 
-import "github.com/veil-panel/veil/internal/service"
+import "github.com/mikkelchokolate/Veil/internal/service"
 
 type ManagementApplyContext struct {
 	state *managementState

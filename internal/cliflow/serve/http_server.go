@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/veil-panel/veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"golang.org/x/crypto/acme/autocert"
 )
 

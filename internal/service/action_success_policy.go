@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/veil-panel/veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 type ActionSuccessPolicy struct{}

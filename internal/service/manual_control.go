@@ -1,6 +1,6 @@
 package service
 
-import veilruntime "github.com/veil-panel/veil/internal/runtime"
+import veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 
 type ManualActionResponse struct {
 	Service string `json:"service"`

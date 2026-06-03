@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/veil-panel/veil/internal/observability"
+	"github.com/mikkelchokolate/Veil/internal/observability"
 )
 
 type RouterComposition struct {

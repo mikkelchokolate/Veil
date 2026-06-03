@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/veil-panel/veil/internal/atomicfile"
-	"github.com/veil-panel/veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 )
 
 type LiveConfigPromotion struct {

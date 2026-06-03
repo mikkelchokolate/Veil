@@ -5,10 +5,10 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/veil-panel/veil/internal/generatedconfig"
-	"github.com/veil-panel/veil/internal/model"
-	"github.com/veil-panel/veil/internal/renderer"
-	veilsettings "github.com/veil-panel/veil/internal/settings"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 type RequiresCaddyFunc func(protocol string) bool
