@@ -52,4 +52,3 @@ func TestSettingsValidationRejectsInvalidPanelListenPorts(t *testing.T) {
 		}
 	}
 }
-
