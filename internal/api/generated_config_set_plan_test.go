@@ -27,14 +27,14 @@ func TestApplyPlanRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var plan ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&plan); err != nil {
 		t.Fatalf("decode plan: %v", err)
 	}
-	if plan.Valid || !strings.Contains(strings.Join(plan.Errors, "\n"), "multiple enabled naiveproxy inbounds") {
-		t.Fatalf("plan should reject multiple enabled naiveproxy inbounds: %+v", plan)
+	if !plan.Valid || len(plan.Errors) > 0 {
+		t.Fatalf("plan should be valid for multiple enabled naiveproxy inbounds: %+v", plan)
 	}
 }

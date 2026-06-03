@@ -378,6 +378,7 @@ func TestResolveServeKeyPathFromEnv(t *testing.T) {
 }
 
 func TestResolveServeKeyPathDefault(t *testing.T) {
+	t.Setenv("VEIL_KEY_PATH", "")
 	path, source := serveflow.NewEnvironment().KeyPath("")
 	if path != "/etc/veil/state.key" {
 		t.Fatalf("expected default key path, got: %s", path)

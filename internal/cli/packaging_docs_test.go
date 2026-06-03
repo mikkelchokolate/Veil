@@ -45,7 +45,7 @@ func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 		"dst: /usr/local/bin/veil",
 		"veil.service",
 		"veil-naive.service",
-		"veil-hysteria2.service",
+		"veil-hysteria2@.service",
 		"veil-mieru.service",
 		"veil-warp.service",
 		"postinstall: packaging/scripts/postinstall.sh",

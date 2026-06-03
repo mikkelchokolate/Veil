@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -20,6 +21,12 @@ func newManagementState(info ServerInfo) *managementState {
 	keyPath := info.KeyPath
 	if keyPath == "" {
 		keyPath = "/etc/veil/state.key"
+	}
+	if info.StatePath != "" {
+		os.Setenv("VEIL_STATE_PATH", info.StatePath)
+	}
+	if keyPath != "" {
+		os.Setenv("VEIL_KEY_PATH", keyPath)
 	}
 	model := managementstate.BuildDefaultState(managementstate.DefaultInput{
 		PanelListen: info.PanelListen,

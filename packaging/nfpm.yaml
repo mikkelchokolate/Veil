@@ -36,14 +36,14 @@ contents:
   - src: packaging/systemd/veil-naive.service
     dst: /lib/systemd/system/veil-naive.service
     type: config
-  - src: packaging/systemd/veil-hysteria2.service
-    dst: /lib/systemd/system/veil-hysteria2.service
+  - src: packaging/systemd/veil-hysteria2@.service
+    dst: /lib/systemd/system/veil-hysteria2@.service
     type: config
   - src: packaging/systemd/veil-mieru.service
     dst: /lib/systemd/system/veil-mieru.service
     type: config
-  - src: packaging/systemd/veil-olcrtc.service
-    dst: /lib/systemd/system/veil-olcrtc.service
+  - src: packaging/systemd/veil-olcrtc@.service
+    dst: /lib/systemd/system/veil-olcrtc@.service
     type: config
   - src: packaging/systemd/veil-warp.service
     dst: /lib/systemd/system/veil-warp.service

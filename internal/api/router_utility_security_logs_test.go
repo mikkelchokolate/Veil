@@ -79,7 +79,8 @@ func TestIsAllowedHealthService(t *testing.T) {
 		want    bool
 	}{
 		{"veil-naive.service", true},
-		{"veil-hysteria2.service", true},
+		{"veil-hysteria2@default.service", true},
+		{"veil-hysteria2@.service", true},
 		{"veil-warp.service", true},
 		{"veil.service", false},
 		{"caddy.service", false},
@@ -108,8 +109,13 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "reload hysteria2",
-			command: []string{"systemctl", "reload", "veil-hysteria2.service"},
+			name:    "reload hysteria2 template",
+			command: []string{"systemctl", "reload", "veil-hysteria2@.service"},
+			want:    true,
+		},
+		{
+			name:    "reload hysteria2 instance",
+			command: []string{"systemctl", "reload", "veil-hysteria2@default.service"},
 			want:    true,
 		},
 		{

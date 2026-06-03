@@ -5,8 +5,8 @@ import "path"
 const (
 	UnitVeil      = "veil.service"
 	UnitNaive     = "veil-naive.service"
-	UnitHysteria2 = "veil-hysteria2.service"
-	UnitOlcrtc    = "veil-olcrtc.service"
+	UnitHysteria2 = "veil-hysteria2@.service"
+	UnitOlcrtc    = "veil-olcrtc@.service"
 	UnitWarp      = "veil-warp.service"
 	UnitMieru     = "veil-mieru.service"
 )
@@ -48,8 +48,8 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 		cfg.EtcDir = "/etc/veil"
 	}
 	caddyfile := path.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
-	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "server.yaml")
-	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "server.yaml")
+	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")
+	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")
 	warpConfig := path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
 	mieruConfig := path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
 	return map[string]string{
@@ -84,7 +84,7 @@ RestartSec=3
 WantedBy=multi-user.target
 `,
 		UnitHysteria2: `[Unit]
-Description=Veil managed Hysteria2
+Description=Veil managed Hysteria2 (%i)
 After=network-online.target
 Wants=network-online.target
 
@@ -98,7 +98,7 @@ RestartSec=3
 WantedBy=multi-user.target
 `,
 		UnitOlcrtc: `[Unit]
-Description=Veil managed olcRTC
+Description=Veil managed olcRTC (%i)
 After=network-online.target
 Wants=network-online.target
 

@@ -22,10 +22,10 @@ func TestPromotedServiceReloaderRunsExpectedReloads(t *testing.T) {
 	if len(results) != 2 || len(commands) != 2 {
 		t.Fatalf("results=%+v commands=%+v", results, commands)
 	}
-	if commands[0][2] != "veil-naive.service" || commands[1][2] != "veil-hysteria2.service" {
+	if commands[0][2] != "veil-hysteria2@.service" || commands[1][2] != "veil-naive.service" {
 		t.Fatalf("commands = %+v", commands)
 	}
-	if results[0].Name != "veil-naive.service" || results[1].Name != "veil-hysteria2.service" {
+	if results[0].Name != "veil-hysteria2@.service" || results[1].Name != "veil-naive.service" {
 		t.Fatalf("result names = %+v", results)
 	}
 }
