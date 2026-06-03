@@ -117,8 +117,11 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 
 ## Documentation
 
-- [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
+- [Installation guide](docs/install.md) — setup options, access modes, and compiling from source
+- [Troubleshooting guide](docs/troubleshooting.md) — diagnostics, logs, and state rollback
 - [Hardening guide](docs/HARDENING.md) — secure deployment and operations
+- [Known limitations](docs/known-limitations.md) — same-protocol inbound overwrites and platform limits
+- [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
 - [Security policy](SECURITY.md) — vulnerability reporting
 - [Changelog](CHANGELOG.md) — release history
 - [Context](CONTEXT.md) — domain language and architecture
@@ -132,7 +135,7 @@ Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](http
 ```bash
 docker run -d --name veil --network host \
   -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-  veil-panel/veil:latest serve
+  ghcr.io/mikkelchokolate/veil:latest serve
 ```
 
 ## Testing

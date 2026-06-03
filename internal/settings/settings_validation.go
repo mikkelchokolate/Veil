@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/veil-panel/veil/internal/hostenv"
@@ -58,9 +59,13 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		}
 	}
 	if settings.PanelListen != "" {
-		host, _, err := net.SplitHostPort(settings.PanelListen)
+		host, portStr, err := net.SplitHostPort(settings.PanelListen)
 		if err != nil || host == "" {
 			return errors.New("panelListen must be host:port")
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 1 || port > 65535 {
+			return errors.New("panelListen port must be a valid integer between 1 and 65535")
 		}
 	}
 	disclosure := NewCredentialDisclosure()

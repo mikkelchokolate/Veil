@@ -31,3 +31,25 @@ func TestSettingsValidationRejectsCaddyPanelAccessWithoutWebBasePath(t *testing.
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestSettingsValidationRejectsInvalidPanelListenPorts(t *testing.T) {
+	tests := []struct {
+		listen string
+		errStr string
+	}{
+		{"127.0.0.1:abc", "panelListen port must be a valid integer between 1 and 65535"},
+		{"127.0.0.1:0", "panelListen port must be a valid integer between 1 and 65535"},
+		{"127.0.0.1:70000", "panelListen port must be a valid integer between 1 and 65535"},
+		{"127.0.0.1:-5", "panelListen port must be a valid integer between 1 and 65535"},
+		{"127.0.0.1", "panelListen must be host:port"},
+	}
+
+	for _, tc := range tests {
+		settings := Settings{PanelListen: tc.listen, Mode: "server"}
+		err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+		if err == nil || err.Error() != tc.errStr {
+			t.Errorf("listen %q: expected error %q, got %v", tc.listen, tc.errStr, err)
+		}
+	}
+}
+

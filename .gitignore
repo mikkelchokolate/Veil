@@ -11,3 +11,5 @@ coverage*.out
 api.test
 /scratch/
 /veil
+.codegraph/
+
