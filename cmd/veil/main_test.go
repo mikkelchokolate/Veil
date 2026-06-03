@@ -11,6 +11,10 @@ import (
 )
 
 func TestRunReturnsNilForHelp(t *testing.T) {
+	origArgs := os.Args
+	os.Args = []string{"veil"}
+	defer func() { os.Args = origArgs }()
+
 	err := run()
 	if err != nil {
 		t.Fatalf("expected no error for default (help) command, got: %v", err)

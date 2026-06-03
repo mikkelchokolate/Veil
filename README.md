@@ -132,6 +132,22 @@ Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](http
 
 ## Docker
 
+### Docker Compose (Recommended)
+
+Copy `.env.example` to `.env` and set a secure `VEIL_API_TOKEN`.
+
+- **Local Development / Private Exposure (Default):**
+  The default `docker-compose.yml` binds the panel only to loopback (`127.0.0.1:2096`), keeping the control plane private:
+  ```bash
+  docker compose up -d
+  ```
+
+- **Production Exposure:**
+  If exposing the panel publicly (e.g. via direct binding or reverse proxy), ensure `VEIL_API_TOKEN` is populated with a strong token, and configure TLS/HTTPS. The CLI server will refuse to start if listening publicly without an authentication token configured.
+
+### Single Container Run
+
+To run a single container locally on the host network:
 ```bash
 docker run -d --name veil --network host \
   -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \

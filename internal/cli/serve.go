@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
@@ -110,6 +112,17 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", cfg.TokenSource)
+	}
+
+	// Output red ANSI warning if listening publicly without TLS
+	isLoopback := false
+	host, _, _ := net.SplitHostPort(cfg.Listen)
+	ip := net.ParseIP(host)
+	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
+		isLoopback = true
+	}
+	if !cfg.TLSEnabled && !isLoopback {
+		fmt.Fprintln(cmd.OutOrStderr(), "\x1b[31mWARNING: Running on a public interface with TLS disabled! Admin credentials and API token will be sent in PLAIN TEXT.\x1b[0m")
 	}
 
 	return serveflow.RunLifecycle(serveflow.LifecycleOptions{Context: cmd.Context(), Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr(), Server: server, StateReloader: stateReloader, TLSEnabled: cfg.TLSEnabled, TLSCert: cfg.TLSCert, TLSKey: cfg.TLSKey, DrainTimeout: serveDrainTimeout})

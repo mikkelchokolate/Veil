@@ -9,6 +9,11 @@ ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/Caddyfile 
 ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/Caddyfile --adapter caddyfile
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

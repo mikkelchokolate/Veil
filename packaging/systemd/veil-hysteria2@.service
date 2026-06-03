@@ -8,6 +8,11 @@ Type=simple
 ExecStart=/usr/local/bin/hysteria server --config /etc/veil/generated/hysteria2/%i.yaml
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
