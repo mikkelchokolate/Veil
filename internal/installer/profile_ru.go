@@ -1,6 +1,11 @@
 package installer
 
-import "github.com/mikkelchokolate/Veil/internal/panelaccess"
+import (
+	"crypto/rand"
+	"encoding/hex"
+
+	"github.com/mikkelchokolate/Veil/internal/panelaccess"
+)
 
 type SecretFunc func(label string) string
 
@@ -16,6 +21,7 @@ type RURecommendedProfile struct {
 	Domain            string
 	Email             string
 	Username          string
+	Password          string
 	PanelAuthToken    string
 	PanelListen       string
 	PanelAccess       string
@@ -85,7 +91,18 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
-	username := "veil"
+
+	suffix, err := generateRandomHex(4)
+	if err != nil {
+		suffix = "admin"
+	}
+	username := "admin_" + suffix
+
+	password, err := generateRandomHex(16)
+	if err != nil {
+		password = "change-me"
+	}
+
 	masqueradeURL := "https://www.bing.com/"
 	fallbackRoot := "/var/lib/veil/www"
 	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
@@ -98,6 +115,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		Domain:            input.Domain,
 		Email:             input.Email,
 		Username:          username,
+		Password:          password,
 		PanelAuthToken:    panelAuthToken,
 		PanelListen:       panelAccess.PanelListen,
 		PanelAccess:       input.PanelAccess,
@@ -121,4 +139,12 @@ func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 		input.Secret = func(label string) string { return label }
 	}
 	return input
+}
+
+func generateRandomHex(length int) (string, error) {
+	b := make([]byte, length/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

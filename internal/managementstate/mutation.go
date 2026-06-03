@@ -1,6 +1,8 @@
 package managementstate
 
 import (
+	"errors"
+
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/routing"
@@ -24,6 +26,7 @@ type MutationTarget struct {
 	Inbounds *[]Inbound
 	Rules    *[]RoutingRule
 	Warp     *WarpConfig
+	Users    *[]model.User
 }
 
 type ManagementStateMutationTarget = MutationTarget
@@ -245,4 +248,64 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 		return WarpConfig{}, err
 	}
 	return veilwarp.Redact(update), nil
+}
+
+func (m Mutation) Users() []model.User {
+	if m.target.Users == nil {
+		return nil
+	}
+	return cloneUsers(*m.target.Users)
+}
+
+func (m Mutation) CreateUser(user model.User) (model.User, error) {
+	if user.Username == "" || (user.Role != "admin" && user.Role != "viewer") {
+		return model.User{}, errors.New("invalid user data")
+	}
+	for _, existing := range *m.target.Users {
+		if existing.Username == user.Username {
+			return model.User{}, errors.New("user already exists")
+		}
+	}
+	*m.target.Users = append(*m.target.Users, user)
+	if err := m.save(); err != nil {
+		return model.User{}, err
+	}
+	return user, nil
+}
+
+func (m Mutation) UpdateUser(username string, update model.User) (model.User, error) {
+	idx := -1
+	for i, existing := range *m.target.Users {
+		if existing.Username == username {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return model.User{}, errors.New("user not found")
+	}
+	if update.Role != "admin" && update.Role != "viewer" {
+		return model.User{}, errors.New("invalid role")
+	}
+	update.Username = username
+	(*m.target.Users)[idx] = update
+	if err := m.save(); err != nil {
+		return model.User{}, err
+	}
+	return update, nil
+}
+
+func (m Mutation) DeleteUser(username string) error {
+	idx := -1
+	for i, existing := range *m.target.Users {
+		if existing.Username == username {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return errors.New("user not found")
+	}
+	*m.target.Users = append((*m.target.Users)[:idx], (*m.target.Users)[idx+1:]...)
+	return m.save()
 }

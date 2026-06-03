@@ -3,8 +3,10 @@ package api
 import (
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyhistory"
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -40,6 +42,11 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
+	mux.HandleFunc("/api/auth/login", s.handleLogin)
+	mux.HandleFunc("/api/auth/logout", s.handleLogout)
+	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/users", s.handleUsersRoute)
+	mux.HandleFunc("/api/users/", s.handleUsersRoute)
 }
 
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
@@ -49,7 +56,13 @@ func (s *managementState) withMutation(fn func(managementstate.Mutation) error) 
 }
 
 func (s *managementState) mutationLocked() managementstate.Mutation {
-	return managementstate.NewMutation(managementstate.MutationTarget{Settings: &s.settings, Inbounds: &s.inbounds, Rules: &s.rules, Warp: &s.warp}, s.saveLocked)
+	return managementstate.NewMutation(managementstate.MutationTarget{
+		Settings: &s.settings,
+		Inbounds: &s.inbounds,
+		Rules:    &s.rules,
+		Warp:     &s.warp,
+		Users:    &s.users,
+	}, s.saveLocked)
 }
 
 func (s *managementState) applyHistoryPathLocked() string {
@@ -108,4 +121,31 @@ func (s *managementState) Reload() error {
 
 func (s *managementState) saveLocked() error {
 	return NewManagementStateLifecycle(s).SaveLocked()
+}
+
+func (s *managementState) logUserAction(r *http.Request, action string, target string, success bool, details string) {
+	username, _ := r.Context().Value(contextKeyUsername).(string)
+	role, _ := r.Context().Value(contextKeyRole).(string)
+
+	if username == "" {
+		// Fallback defaults (e.g. if auth middleware bypassed, or static token was used)
+		username = "api-token"
+		role = "admin"
+	}
+
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.Split(fwd, ",")[0]
+	}
+
+	auditLogPath := filepath.Join(s.applyRoot, "generated", "veil", "audit.log")
+	_ = audit.LogUserAction(auditLogPath, audit.UserAuditEvent{
+		Username:  username,
+		Role:      role,
+		Action:    action,
+		Target:    target,
+		IPAddress: ip,
+		Success:   success,
+		Details:   details,
+	})
 }

@@ -25,9 +25,9 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	}
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
 	RuntimeRoutes{}.Register(mux)
-	mux.HandleFunc("/api/services/", handleServiceActionRoute)
+	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)
-	PanelRoutes{Info: info, BasePath: basePath}.Register(mux)
+	PanelRoutes{Info: info, BasePath: basePath, State: state}.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
 	StatusRoutes{Info: info}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)
@@ -38,7 +38,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		handler = stripBasePathMiddleware(basePath, mux)
 	}
 	rateLimited := rateLimitMiddleware(metrics, handler)
-	authenticated := authMiddleware(info.AuthToken, rateLimited)
+	authenticated := authMiddleware(state, info.AuthToken, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	return metrics.MetricsMiddleware(secured), state
 }

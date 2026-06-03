@@ -19,6 +19,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			updated, err := mutation.UpdateSettings(settings)
+			s.logUserAction(r, "update_settings", "settings", err == nil, "")
 			if err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
@@ -42,6 +43,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			created, err := mutation.CreateInbound(inbound)
+			s.logUserAction(r, "create_inbound", inbound.Name, err == nil, "")
 			if err != nil {
 				writeInboundManagementError(w, err)
 				return nil
@@ -75,13 +77,16 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				return nil
 			}
 			updated, err := mutation.UpdateInbound(name, update)
+			s.logUserAction(r, "update_inbound", name, err == nil, "")
 			if err != nil {
 				writeInboundManagementError(w, err)
 				return nil
 			}
 			writeJSON(w, updated)
 		case http.MethodDelete:
-			if err := mutation.DeleteInbound(name); err != nil {
+			err := mutation.DeleteInbound(name)
+			s.logUserAction(r, "delete_inbound", name, err == nil, "")
+			if err != nil {
 				writeInboundManagementError(w, err)
 				return nil
 			}

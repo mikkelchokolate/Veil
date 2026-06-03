@@ -1,12 +1,16 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type ManagementStateLifecycle struct {
@@ -52,6 +56,41 @@ func newManagementState(info ServerInfo) *managementState {
 	if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
 	}
+
+	// Generate default admin account if no users are present, no static AuthToken is set,
+	// we have a persistent database, and we are not in dev mode.
+	if len(state.users) == 0 && info.AuthToken == "" && info.StatePath != "" && info.KeyPath != "" && info.Mode != "dev" {
+		username, password, err := generateRandomAdminAuth()
+		if err == nil {
+			hashed, bcryptErr := bcrypt.GenerateFromPassword([]byte(password), 10)
+			if bcryptErr == nil {
+				state.users = []User{
+					{
+						Username:     username,
+						PasswordHash: string(hashed),
+						Role:         "admin",
+					},
+				}
+				if state.settings.WebBasePath == "" {
+					state.settings.WebBasePath = generateRandomWebBasePath()
+				}
+				if saveErr := lifecycle.SaveLocked(); saveErr == nil {
+					fmt.Printf("\n========================================================================\n")
+					fmt.Printf("VEIL INITIAL ADMIN CREDENTIALS GENERATED\n")
+					fmt.Printf("Username: %s\n", username)
+					fmt.Printf("Password: %s\n", password)
+					fmt.Printf("WebBasePath: %s\n", state.settings.WebBasePath)
+					fmt.Printf("Please record these credentials! You can change them later in the Web UI.\n")
+					fmt.Printf("========================================================================\n\n")
+				} else {
+					log.Printf("error saving generated admin credentials: %v", saveErr)
+				}
+			}
+		} else {
+			log.Printf("error generating random admin credentials: %v", err)
+		}
+	}
+
 	return state
 }
 
@@ -76,6 +115,7 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 		RoutingPreset: l.state.routingPreset,
 		RoutingSource: l.state.routingSource,
 		Warp:          l.state.warp,
+		Users:         l.state.users,
 	})
 }
 
@@ -126,6 +166,7 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		RoutingPreset: &state.routingPreset,
 		RoutingSource: &state.routingSource,
 		Warp:          &state.warp,
+		Users:         &state.users,
 	}, snapshot)
 }
 
@@ -134,4 +175,32 @@ func defaultApplyRoot(root string) string {
 		return root
 	}
 	return "/etc/veil"
+}
+
+func generateRandomHex(length int) (string, error) {
+	b := make([]byte, length/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func generateRandomAdminAuth() (string, string, error) {
+	suffix, err := generateRandomHex(4)
+	if err != nil {
+		return "", "", err
+	}
+	pass, err := generateRandomHex(16)
+	if err != nil {
+		return "", "", err
+	}
+	return "admin_" + suffix, pass, nil
+}
+
+func generateRandomWebBasePath() string {
+	b := make([]byte, 9)
+	if _, err := rand.Read(b); err != nil {
+		return "/veil-panel/"
+	}
+	return "/" + base64.RawURLEncoding.EncodeToString(b) + "/"
 }

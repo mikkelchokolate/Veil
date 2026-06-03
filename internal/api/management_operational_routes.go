@@ -115,6 +115,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
+	s.logUserAction(r, "apply_configuration", "system", err == nil && status == http.StatusOK, "")
 	if err != nil {
 		writeError(w, err.Error(), status)
 		return

@@ -76,6 +76,7 @@ func NewProfile(input ProfileInput) Profile {
 func (p Profile) Build() (ProfileMaterial, error) {
 	input := p.input
 	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
+	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
 	panelCaddy := input.PanelAccess == "caddy"
 	if panelCaddy {
 		if err := hostenv.ValidateDomain(input.Domain); err != nil {
@@ -84,7 +85,6 @@ func (p Profile) Build() (ProfileMaterial, error) {
 		if err := hostenv.ValidateEmail(input.Email); err != nil {
 			return ProfileMaterial{}, err
 		}
-		material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
 		material.InstallPanelCaddy = true
 		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: material.WebBasePath})
 		if err != nil {

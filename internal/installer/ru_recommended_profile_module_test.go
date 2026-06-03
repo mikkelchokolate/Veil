@@ -18,7 +18,7 @@ func TestRURecommendedProfileModuleBuildsPanelInstallPolicy(t *testing.T) {
 	if profile.PanelAuthToken != "secret-panel" || !profile.PanelTLSEnabled {
 		t.Fatalf("panel credential/TLS policy = %+v", profile)
 	}
-	if profile.WebBasePath != "" {
-		t.Fatalf("panel-only install should not generate Web base path without Caddy: %q", profile.WebBasePath)
+	if profile.WebBasePath == "" {
+		t.Fatalf("panel-only install should generate Web base path: %q", profile.WebBasePath)
 	}
 }

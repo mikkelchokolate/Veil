@@ -9,6 +9,7 @@ type SnapshotInput struct {
 	RoutingPreset string
 	RoutingSource model.RoutingSource
 	Warp          model.WarpConfig
+	Users         []model.User
 }
 
 type SnapshotTarget struct {
@@ -18,6 +19,7 @@ type SnapshotTarget struct {
 	RoutingPreset *string
 	RoutingSource *model.RoutingSource
 	Warp          *model.WarpConfig
+	Users         *[]model.User
 }
 
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
@@ -28,6 +30,7 @@ func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 		RoutingPreset: input.RoutingPreset,
 		RoutingSource: input.RoutingSource,
 		Warp:          input.Warp,
+		Users:         cloneUsers(input.Users),
 	}
 }
 
@@ -49,6 +52,9 @@ func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
 	}
 	if target.Warp != nil && (snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "") {
 		*target.Warp = snapshot.Warp
+	}
+	if target.Users != nil && snapshot.Users != nil {
+		*target.Users = cloneUsers(snapshot.Users)
 	}
 }
 
@@ -81,5 +87,14 @@ func cloneInbounds(inbounds []model.Inbound) []model.Inbound {
 		out[i] = inbound
 		out[i].Profiles = append([]model.ClientProfile(nil), inbound.Profiles...)
 	}
+	return out
+}
+
+func cloneUsers(users []model.User) []model.User {
+	if users == nil {
+		return nil
+	}
+	out := make([]model.User, len(users))
+	copy(out, users)
 	return out
 }

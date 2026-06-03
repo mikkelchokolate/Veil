@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
 	"strings"
@@ -23,19 +24,92 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func authMiddleware(token string, next http.Handler) http.Handler {
-	if token == "" {
-		return next
-	}
+func authMiddleware(state *managementState, token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") && !validAuthToken(r, token) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="Veil API"`)
-			writeError(w, "missing or invalid API token", http.StatusUnauthorized)
+		path := r.URL.Path
+
+		// Exclude public endpoints and auth endpoints
+		if !strings.HasPrefix(path, "/api/") ||
+			path == "/api/auth/login" ||
+			path == "/api/auth/logout" ||
+			path == "/api/auth/status" {
+			next.ServeHTTP(w, r)
 			return
 		}
+
+		var username string
+		var role string
+		var isCookieSession bool
+		var session Session
+
+		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
+		hasStaticToken := false
+		if token != "" && validAuthToken(r, token) {
+			username = "api-token"
+			role = "admin"
+			hasStaticToken = true
+		}
+
+		// 2. If no static token, check cookie session
+		if !hasStaticToken {
+			cookie, err := r.Cookie("veil_session")
+			if err == nil {
+				if sess, ok := globalSessions.Get(cookie.Value); ok {
+					username = sess.Username
+					role = sess.Role
+					isCookieSession = true
+					session = sess
+				}
+			}
+		}
+
+		// 3. Fallback check: if there are no registered users in state, and token is empty, we allow access
+		if username == "" {
+			state.mu.Lock()
+			noUsers := len(state.users) == 0
+			state.mu.Unlock()
+			if noUsers && token == "" {
+				username = "dev-anonymous"
+				role = "admin"
+			}
+		}
+
+		if username == "" {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="Veil API"`)
+			writeError(w, "missing or invalid API token or session", http.StatusUnauthorized)
+			return
+		}
+
+		// 4. CSRF check for mutating cookie sessions
+		if isCookieSession && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+			providedCSRF := r.Header.Get("X-CSRF-Token")
+			if providedCSRF == "" || subtle.ConstantTimeCompare([]byte(providedCSRF), []byte(session.CSRFToken)) != 1 {
+				writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
+				return
+			}
+		}
+
+		// 5. RBAC check for mutating operations
+		if role != "admin" && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+			writeError(w, "forbidden: admin role required", http.StatusForbidden)
+			return
+		}
+
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, contextKeyUsername, username)
+		ctx = context.WithValue(ctx, contextKeyRole, role)
+		r = r.WithContext(ctx)
+
 		next.ServeHTTP(w, r)
 	})
 }
+
+type contextKey string
+
+const (
+	contextKeyUsername contextKey = "username"
+	contextKeyRole     contextKey = "role"
+)
 
 func validAuthToken(r *http.Request, want string) bool {
 	provided := r.Header.Get("X-Veil-Token")

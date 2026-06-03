@@ -11,6 +11,11 @@ func CredentialSummary(profile installer.RURecommendedProfile) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Panel: %s\n", PanelURL(profile))
 	fmt.Fprintf(&b, "Username: %s\n", profile.Username)
+	if profile.Password != "" {
+		fmt.Fprintf(&b, "Password: %s\n", profile.Password)
+	} else {
+		fmt.Fprintf(&b, "Password: [preserved existing password]\n")
+	}
 	return b.String()
 }
 

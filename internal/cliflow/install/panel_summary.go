@@ -33,7 +33,7 @@ func (s PanelSummary) String() string {
 		fmt.Fprintf(&b, "Panel port: %d (default)\n", input.PanelPort)
 	}
 	profile := input.Profile
-	if profile.WebBasePath != "" && profile.WebBasePath != "/" {
+	if profile.Domain != "" {
 		fmt.Fprintf(&b, "Panel URL: https://%s%s\n", profile.Domain, profile.WebBasePath)
 		return b.String()
 	}
@@ -45,6 +45,10 @@ func (s PanelSummary) String() string {
 	if panelListen == "" {
 		panelListen = fmt.Sprintf("127.0.0.1:%d", input.PanelPort)
 	}
-	fmt.Fprintf(&b, "Panel access: %s://%s/\n", scheme, panelListen)
+	basePath := profile.WebBasePath
+	if basePath == "" {
+		basePath = "/"
+	}
+	fmt.Fprintf(&b, "Panel access: %s://%s%s\n", scheme, panelListen, basePath)
 	return b.String()
 }
