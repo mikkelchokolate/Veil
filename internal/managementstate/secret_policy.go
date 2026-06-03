@@ -13,8 +13,10 @@ func (SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform func
 	}
 	snapshot.Settings.NaivePassword = transform(snapshot.Settings.NaivePassword)
 	snapshot.Settings.Hysteria2Password = transform(snapshot.Settings.Hysteria2Password)
+	snapshot.Settings.OlcrtcAuth = transform(snapshot.Settings.OlcrtcAuth)
 	for i := range snapshot.Inbounds {
 		snapshot.Inbounds[i].Password = transform(snapshot.Inbounds[i].Password)
+		snapshot.Inbounds[i].OlcrtcAuth = transform(snapshot.Inbounds[i].OlcrtcAuth)
 		for j := range snapshot.Inbounds[i].Profiles {
 			snapshot.Inbounds[i].Profiles[j].Password = transform(snapshot.Inbounds[i].Profiles[j].Password)
 		}

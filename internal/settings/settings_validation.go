@@ -71,6 +71,7 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	disclosure := NewCredentialDisclosure()
 	settings.NaivePassword = disclosure.PreserveRedacted(settings.NaivePassword, current.NaivePassword)
 	settings.Hysteria2Password = disclosure.PreserveRedacted(settings.Hysteria2Password, current.Hysteria2Password)
+	settings.OlcrtcAuth = disclosure.PreserveRedacted(settings.OlcrtcAuth, current.OlcrtcAuth)
 	if settings.FallbackRoot != "" {
 		settings.FallbackRoot = filepath.Clean(settings.FallbackRoot)
 		if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
