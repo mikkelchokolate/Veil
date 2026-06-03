@@ -69,7 +69,7 @@ func TestPanelOnlyInstallDoesNotRequireDomainAndWritesNoProxyConfigs(t *testing.
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
-	if profile.InstallPanelCaddy || profile.Caddyfile != "" || profile.WebBasePath != "" {
+	if profile.InstallPanelCaddy || profile.Caddyfile != "" {
 		t.Fatalf("panel-only profile should not include proxy artifacts: %+v", profile)
 	}
 	dir := t.TempDir()

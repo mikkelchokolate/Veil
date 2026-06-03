@@ -95,6 +95,17 @@ func (c SliceCatalog) Slices() []Slice {
 			},
 		},
 		{
+			Name: "users",
+			RenderSlots: []RenderSlot{
+				{Placeholder: UsersCardPlaceholder, Render: UsersCardHTML},
+				{Placeholder: UsersActionsPlaceholder, Render: UsersActionsJS},
+			},
+			EventBindings: []EventBinding{
+				{ElementID: "user-form", Handler: "saveUser", Event: "submit"},
+				{ElementID: "btn-cancel-user-edit", Handler: "cancelUserEdit", Event: "click"},
+			},
+		},
+		{
 			Name:        "utility",
 			RenderSlots: []RenderSlot{{Placeholder: panelUtilityActionsPlaceholder, Render: panelUtilityActionsJS}, {Placeholder: EventBindingsPlaceholder, Render: func() string { return EventBindingsJS(c.EventBindings()) }}},
 		},

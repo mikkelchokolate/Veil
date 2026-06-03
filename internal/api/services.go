@@ -17,7 +17,7 @@ type ServiceActionResponse = service.ManualActionResponse
 
 var serviceControlRunner = runServiceControl
 
-func handleServiceActionRoute(w http.ResponseWriter, r *http.Request) {
+func (s *managementState) handleServiceActionRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
 		return
@@ -33,10 +33,10 @@ func handleServiceActionRoute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "unsupported action: "+action, http.StatusBadRequest)
 		return
 	}
-	handleServiceAction(w, r, name, action)
+	s.handleServiceAction(w, r, name, action)
 }
 
-func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
+func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
 	if !service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Allows(name) {
 		writeError(w, "unknown service: "+name, http.StatusBadRequest)
 		return
@@ -56,6 +56,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request, name, action st
 	if !resp.Success {
 		status = http.StatusInternalServerError
 	}
+	s.logUserAction(r, "service_"+action, name, resp.Success, "")
 	writeJSONStatus(w, status, resp)
 }
 

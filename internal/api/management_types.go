@@ -28,6 +28,8 @@ type ConfigValidationResult = model.ConfigValidationResult
 type ServiceActionResult = model.ServiceActionResult
 type ServiceHealthResult = model.ServiceHealthResult
 
+type User = model.User
+
 type livePromotionRecord = applyflow.PromotionRecord
 
 type managementSnapshot = model.ManagementSnapshot
@@ -44,4 +46,5 @@ type managementState struct {
 	routingPreset string
 	routingSource RoutingSource
 	warp          WarpConfig
+	users         []User
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -61,7 +62,7 @@ func TestSpeedtestEndpointReportsRunnerError(t *testing.T) {
 }
 
 func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
-	handler, _ := NewRouter(ServerInfo{Version: "test", StatePath: "/dev/null"})
+	handler, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: filepath.Join(t.TempDir(), "state.json")})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 

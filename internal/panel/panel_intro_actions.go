@@ -22,8 +22,16 @@ func panelIntroActionsJS() string {
     }
 
     function authHeaders() {
+      const headers = {};
       const token = localStorage.getItem('veil_api_token') || '';
-      return token ? { 'X-Veil-Token': token } : {};
+      if (token) {
+        headers['X-Veil-Token'] = token;
+      }
+      const csrf = window.veil_csrf_token || localStorage.getItem('veil_csrf_token') || '';
+      if (csrf) {
+        headers['X-CSRF-Token'] = csrf;
+      }
+      return headers;
     }
 
     function requestHeaders(extra) {
@@ -126,5 +134,20 @@ func panelIntroActionsJS() string {
         btn.disabled = false;
         output.textContent = "Request error: " + String(err);
       }
-    });`
+    });
+
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: requestHeaders()
+          });
+        } catch (_) {}
+        localStorage.removeItem('veil_csrf_token');
+        localStorage.removeItem('veil_username');
+        window.location.reload();
+      });
+    }`
 }

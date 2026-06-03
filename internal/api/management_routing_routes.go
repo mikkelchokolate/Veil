@@ -18,6 +18,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 				return nil
 			}
 			created, err := mutation.CreateRoutingRule(rule)
+			s.logUserAction(r, "create_routing_rule", rule.Name, err == nil, "")
 			if err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
@@ -51,13 +52,16 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				return nil
 			}
 			updated, err := mutation.UpdateRoutingRule(name, update)
+			s.logUserAction(r, "update_routing_rule", name, err == nil, "")
 			if err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
 			writeJSON(w, updated)
 		case http.MethodDelete:
-			if err := mutation.DeleteRoutingRule(name); err != nil {
+			err := mutation.DeleteRoutingRule(name)
+			s.logUserAction(r, "delete_routing_rule", name, err == nil, "")
+			if err != nil {
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
@@ -123,7 +127,9 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	s.routingPreset = state.ActivePreset
 	s.routingSource = state.Source
 	s.rules = state.Rules
-	if err := s.saveLocked(); err != nil {
+	err := s.saveLocked()
+	s.logUserAction(r, "apply_routing_preset", name, err == nil, "")
+	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -141,6 +147,7 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				return nil
 			}
 			updated, err := mutation.UpdateWarp(warp)
+			s.logUserAction(r, "update_warp", "warp", err == nil, "")
 			if err != nil {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil

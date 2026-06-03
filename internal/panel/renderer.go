@@ -20,8 +20,9 @@ func NewRenderer(slots []RenderSlot) Renderer {
 	return Renderer{slots: append([]RenderSlot(nil), slots...)}
 }
 
-func (r Renderer) HTML(basePath string) string {
+func (r Renderer) HTML(basePath string, csrfToken string) string {
 	html := r.BaseHTML()
+	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
 	if basePath == "" || basePath == "/" {
 		return html
 	}
@@ -819,6 +820,12 @@ const panelHTMLBase = `<!doctype html>
       <a href="#diagnostics" class="nav-item" onclick="switchTab('diagnostics')">
         System Tools
       </a>
+      <a href="#users" class="nav-item" onclick="switchTab('users')">
+        Users
+      </a>
+      <a id="btn-logout" class="nav-item" style="margin-top: auto; border-top: 1px solid var(--border); border-bottom: 0;">
+        Log Out
+      </a>
     </nav>
   </aside>
 
@@ -860,10 +867,16 @@ __VEIL_PANEL_WARP_CARD__
 __VEIL_PANEL_APPLY_CARD__
 __VEIL_PANEL_DIAGNOSTICS_CARDS__
       </div>
+
+      <!-- Section: Users -->
+      <div id="users" class="tab-content">
+__VEIL_PANEL_USERS_CARD__
+      </div>
     </main>
   </div>
 
   <script>
+    window.veil_csrf_token = '__VEIL_CSRF_TOKEN__';
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       const activeTab = document.getElementById(tabId);
@@ -878,16 +891,20 @@ __VEIL_PANEL_DIAGNOSTICS_CARDS__
         'inbounds': 'Inbounds',
         'routing': 'Routing Rules',
         'warp': 'WARP',
-        'diagnostics': 'System Tools'
+        'diagnostics': 'System Tools',
+        'users': 'Users'
       };
       document.getElementById('current-page-title').innerText = pageNames[tabId] || 'Dashboard';
+      if (tabId === 'users' && typeof loadUsers === 'function') {
+        loadUsers();
+      }
       window.scrollTo(0, 0);
     }
 
     // Handle hash reload
     window.addEventListener('DOMContentLoaded', () => {
       const hash = window.location.hash.substring(1);
-      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics'].includes(hash)) {
+      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics', 'users'].includes(hash)) {
         switchTab(hash);
       }
     });
@@ -912,6 +929,7 @@ __VEIL_PANEL_SERVICE_RESTART_ACTIONS__
 __VEIL_PANEL_RUNTIME_STATS_ACTIONS__
 __VEIL_PANEL_APPLY_ACTIONS__
 __VEIL_PANEL_DIAGNOSTICS_ACTIONS__
+__VEIL_PANEL_USERS_ACTIONS__
 __VEIL_PANEL_EVENT_BINDINGS__
   </script>
 </body>

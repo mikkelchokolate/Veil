@@ -19,6 +19,8 @@ const RuntimeStatsActionsPlaceholder = panelRuntimeStatsActionsPlaceholder
 const SettingsActionsPlaceholder = panelSettingsActionsPlaceholder
 const UtilityActionsPlaceholder = panelUtilityActionsPlaceholder
 const WarpActionsPlaceholder = panelWarpActionsPlaceholder
+const UsersCardPlaceholder = panelUsersCardPlaceholder
+const UsersActionsPlaceholder = panelUsersActionsPlaceholder
 
 func ApplyCardHTML() string                   { return panelApplyCardHTML() }
 func ApplyActionsJS() string                  { return panelApplyActionsJS() }
@@ -42,3 +44,5 @@ func SettingsActionsJS() string               { return panelSettingsActionsJS() 
 func UtilityActionsJS() string                { return panelUtilityActionsJS() }
 func WarpCardHTML() string                    { return panelWarpCardHTML() }
 func WarpActionsJS() string                   { return panelWarpActionsJS() }
+func UsersCardHTML() string                   { return panelUsersCardHTML() }
+func UsersActionsJS() string                  { return panelUsersActionsJS() }

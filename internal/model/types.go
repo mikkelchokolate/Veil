@@ -196,6 +196,12 @@ type ServiceHealthResult struct {
 	Error   string   `json:"error,omitempty"`
 }
 
+type User struct {
+	Username     string `json:"username"`
+	PasswordHash string `json:"passwordHash"`
+	Role         string `json:"role"` // "admin" or "viewer"
+}
+
 type ManagementSnapshot struct {
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`
@@ -203,4 +209,5 @@ type ManagementSnapshot struct {
 	RoutingPreset string        `json:"routingPreset,omitempty"`
 	RoutingSource RoutingSource `json:"routingSource,omitempty"`
 	Warp          WarpConfig    `json:"warp"`
+	Users         []User        `json:"users,omitempty"`
 }
