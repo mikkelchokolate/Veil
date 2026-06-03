@@ -113,12 +113,12 @@ func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	// naive proxy has 1 aggregated caddy unit
 	// sing-box is present because warp is enabled
 	expectedUnits := map[string]bool{
-		"veil.service":                 true,
+		"veil.service":                  true,
 		"veil-hysteria2@vip.service":    true,
 		"veil-hysteria2@public.service": true,
 		"veil-olcrtc@rtc1.service":      true,
-		"veil-naive.service":           true,
-		"veil-warp.service":            true,
+		"veil-naive.service":            true,
+		"veil-warp.service":             true,
 	}
 
 	foundUnits := make(map[string]bool)

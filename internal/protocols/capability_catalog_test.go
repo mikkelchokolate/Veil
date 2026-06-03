@@ -66,7 +66,7 @@ func TestCapabilityCatalogReturnsClonedTransports(t *testing.T) {
 func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 	registry := NewGeneratedConfigRegistry()
 	root := t.TempDir()
-	
+
 	inbounds := []model.Inbound{
 		{Name: "hy2-a", Protocol: "hysteria2", Transport: "udp", Port: 10001, Enabled: true, Hysteria2Password: "passa"},
 		{Name: "hy2-b", Protocol: "hysteria2", Transport: "udp", Port: 10002, Enabled: true, Hysteria2Password: "passb"},
