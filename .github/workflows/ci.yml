@@ -32,8 +32,16 @@ jobs:
       - run: make build
       - name: Test with race detector and coverage
         run: go test ./... -race -count=1 -coverprofile=coverage.out
-      - name: Report coverage
-        run: go tool cover -func=coverage.out | tail -1
+      - name: Verify coverage threshold (min 70%)
+        run: |
+          total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total statement coverage is $total_coverage%"
+          awk -v cov="$total_coverage" 'BEGIN { if (cov < 70.0) { print "Error: coverage " cov "% is below threshold (70.0%)"; exit 1 } }'
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage-report
+          path: coverage.out
       - run: bash -n scripts/install.sh scripts/uninstall.sh
       - run: bash scripts/install.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null

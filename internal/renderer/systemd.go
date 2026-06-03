@@ -64,6 +64,11 @@ EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
 ExecStart=` + cfg.VeilBinary + ` serve
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -79,6 +84,11 @@ ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyfile + ` --adapter caddy
 ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyfile + ` --adapter caddyfile
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -93,6 +103,11 @@ Type=simple
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -107,6 +122,11 @@ Type=simple
 ExecStart=` + cfg.OlcrtcBinary + ` --config ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -122,6 +142,11 @@ ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
 ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -136,6 +161,11 @@ Type=simple
 ExecStart=` + cfg.MieruBinary + ` run -c ` + mieruConfig + `
 Restart=on-failure
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

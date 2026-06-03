@@ -7,10 +7,11 @@ This document lists design constraints, architectural boundaries, and known limi
 ## 1. Multiple Inbounds of the Same Protocol
 
 ### Overview
-Veil supports multiple Inbounds, but there is an architectural limitation regarding how certain proxy protocol runtimes generate their configuration files:
+Veil supports multiple Inbounds, with varying levels of isolation depending on the proxy protocol:
 
-- **NaiveProxy & Hysteria2:** Currently, if you configure multiple enabled Inbounds of the same protocol (e.g., two separate Hysteria2 Inbounds), they cannot be merged into a single configuration file. Applying such a configuration will result in an validation error or staging failure rather than silently overwriting the generated config.
-- **Mieru:** Mieru Inbounds support aggregation. If you define multiple Mieru Inbounds, their transport bindings and client profiles are aggregated cleanly into a single generated configuration file, allowing TCP and UDP configurations to coexist.
+- **Hysteria2 & olcRTC:** Full isolation. Defining multiple enabled Inbounds for Hysteria2 or olcRTC generates isolated configuration files and spawns independent daemon processes managed via systemd template units (`veil-hysteria2@<inbound>.service` and `veil-olcrtc@<inbound>.service`).
+- **Mieru:** Aggregation. If you define multiple Mieru Inbounds, their port/transport bindings and client profiles are aggregated cleanly into a single generated configuration file managed by a single daemon process.
+- **NaiveProxy:** Single-instance limitation. Multiple NaiveProxy inbounds cannot currently be merged into a single Caddy config, nor run under separate template units. Applying multiple NaiveProxy inbounds will result in a staging error.
 
 ### Workaround
 - If you need multiple users on Hysteria2 or NaiveProxy, add multiple **Client Profiles** under the same Inbound instead of creating separate Inbound instances.

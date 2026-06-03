@@ -108,6 +108,8 @@ type serverOptions struct {
 	token string
 	// seedState, when non-empty, is written to the state file before launch.
 	seedState string
+	// extraEnv allows appending additional environment variables
+	extraEnv []string
 }
 
 // startServer launches `veil serve` on a free port with a private temp state
@@ -137,6 +139,9 @@ func startServer(t *testing.T, opts serverOptions) *serverProc {
 	)
 	if opts.token != "" {
 		cmd.Env = append(cmd.Env, "VEIL_API_TOKEN="+opts.token)
+	}
+	if len(opts.extraEnv) > 0 {
+		cmd.Env = append(cmd.Env, opts.extraEnv...)
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
