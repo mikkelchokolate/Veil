@@ -1,6 +1,6 @@
 BINARY=veil
 VERSION?=dev
-DOCKER_IMAGE?=veil-panel/veil
+DOCKER_IMAGE?=ghcr.io/mikkelchokolate/veil
 GOARCH?=$(shell go env GOARCH)
 MAINTAINER?=Veil Maintainers <veil@users.noreply.github.com>
 

@@ -5,7 +5,7 @@ version: "3.8"
 
 services:
   veil:
-    image: veil-panel/veil:dev
+    image: ghcr.io/mikkelchokolate/veil:dev
     build: .
     container_name: veil
     restart: unless-stopped

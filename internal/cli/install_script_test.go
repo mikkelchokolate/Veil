@@ -259,7 +259,7 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"bash scripts/install.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
 		"git diff --check",
-		"needs: [quality, release]",
+		"needs: [quality, release, docker-publish]",
 	} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("release workflow missing required release gate %q:\n%s", want, workflow)
