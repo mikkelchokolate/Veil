@@ -99,6 +99,7 @@ type serverProc struct {
 	applyRoot string
 	logBuf    *syncBuffer
 	waitErr   chan error
+	stdin     io.WriteCloser
 }
 
 // serverOptions configures a serve subprocess.
@@ -132,9 +133,14 @@ func startServer(t *testing.T, opts serverOptions) *serverProc {
 		"VEIL_STATE_PATH="+statePath,
 		"VEIL_APPLY_ROOT="+applyRoot,
 		"VEIL_KEY_PATH="+keyPath,
+		"VEIL_SHUTDOWN_ON_STDIN_CLOSE=1",
 	)
 	if opts.token != "" {
 		cmd.Env = append(cmd.Env, "VEIL_API_TOKEN="+opts.token)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
 	}
 	logBuf := &syncBuffer{}
 	cmd.Stdout = logBuf
@@ -152,6 +158,7 @@ func startServer(t *testing.T, opts serverOptions) *serverProc {
 		applyRoot: applyRoot,
 		logBuf:    logBuf,
 		waitErr:   make(chan error, 1),
+		stdin:     stdin,
 	}
 	go func() { p.waitErr <- cmd.Wait() }()
 	t.Cleanup(p.stop)
@@ -249,7 +256,9 @@ func (p *serverProc) stop() {
 	if p.cmd.Process == nil {
 		return
 	}
-	_ = p.cmd.Process.Signal(os.Interrupt)
+	if p.stdin != nil {
+		_ = p.stdin.Close()
+	}
 	select {
 	case err := <-p.waitErr:
 		if err != nil {
@@ -266,7 +275,9 @@ func (p *serverProc) stop() {
 // logs a clean stop. Returns the captured logs.
 func (p *serverProc) gracefulShutdown() string {
 	p.t.Helper()
-	_ = p.cmd.Process.Signal(os.Interrupt)
+	if p.stdin != nil {
+		_ = p.stdin.Close()
+	}
 	select {
 	case err := <-p.waitErr:
 		if err != nil {
