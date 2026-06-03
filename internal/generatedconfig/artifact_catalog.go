@@ -58,8 +58,12 @@ func (s ArtifactSpec) ValidationSuffix() string {
 }
 
 func (s ArtifactSpec) MatchesGeneratedPath(path string) bool {
-	suffix := s.ValidationSuffix()
-	return suffix != "" && strings.HasSuffix(filepath.ToSlash(path), suffix)
+	slashPath := filepath.ToSlash(path)
+	dir := s.Subpath
+	if idx := strings.Index(dir, "/"); idx != -1 {
+		dir = dir[:idx]
+	}
+	return dir != "" && strings.Contains(slashPath, "/generated/"+dir+"/")
 }
 
 func (s ArtifactSpec) ValidationSpec(path string) (ValidationSpec, bool) {
@@ -111,10 +115,19 @@ func (c ArtifactCatalog) LivePathForStagedConfig(applyRoot string, stagedPath st
 		return "", false
 	}
 	rel := strings.TrimPrefix(slashPath, prefix)
+	matched := false
 	for _, artifact := range c.artifacts {
-		if rel == filepath.ToSlash(artifact.Subpath) {
-			return artifact.LivePath(applyRoot), true
+		dir := artifact.Subpath
+		if idx := strings.Index(dir, "/"); idx != -1 {
+			dir = dir[:idx]
+		}
+		if strings.HasPrefix(filepath.ToSlash(rel), dir+"/") {
+			matched = true
+			break
 		}
 	}
-	return "", false
+	if !matched {
+		return "", false
+	}
+	return filepath.Join(applyRoot, "live", filepath.FromSlash(rel)), true
 }

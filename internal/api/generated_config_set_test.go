@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestGeneratedConfigSetRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T) {
 	_, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: t.TempDir(),
 		Settings: Settings{
@@ -23,8 +23,8 @@ func TestGeneratedConfigSetRejectsMultipleEnabledInboundsPerProtocol(t *testing.
 			{Name: "naive-b", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, Password: "b"},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "multiple enabled naiveproxy inbounds") {
-		t.Fatalf("expected multiple naiveproxy inbound error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected no error for multiple enabled naiveproxy inbounds, got %v", err)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 			t.Fatalf("Caddyfile missing %q:\n%s", want, caddy)
 		}
 	}
-	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml")]
+	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2.yaml")]
 	for _, want := range []string{"type: userpass", "carol: carol-pass", "dave: dave-pass"} {
 		if !strings.Contains(hy2, want) {
 			t.Fatalf("Hysteria2 config missing %q:\n%s", want, hy2)
@@ -94,7 +94,7 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	if !strings.Contains(caddy, "basic_auth veil vip-naive") {
 		t.Fatalf("Caddyfile should use per-inbound naive password:\n%s", caddy)
 	}
-	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml")]
+	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2-vip.yaml")]
 	if !strings.Contains(hy2, "password: vip-hy2") {
 		t.Fatalf("Hysteria2 config should use per-inbound password:\n%s", hy2)
 	}

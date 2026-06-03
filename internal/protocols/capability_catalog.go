@@ -23,7 +23,7 @@ type Capability struct {
 	RequiresRenderSettings bool
 	RequiresCaddySettings  bool
 	MaxEnabled             int
-	RenderGeneratedConfig  func(generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error)
+	RenderGeneratedConfig  func(generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error)
 }
 
 type CapabilityCatalog struct {
@@ -100,13 +100,13 @@ func naiveProxyCapability() Capability {
 		ValidateInboundRender:  true,
 		RequiresRenderSettings: true,
 		RequiresCaddySettings:  true,
-		MaxEnabled:             1,
-		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+		MaxEnabled:             0,
+		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error) {
 			if len(input.Inbounds) == 0 {
-				return generatedconfig.GeneratedConfigArtifact{}, false, nil
+				return nil, false, nil
 			}
-			body, err := generatedconfig.RenderNaiveInbound(input.Settings, input.Inbounds[0], input.Warp)
-			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.CaddyfileSubpath), Body: body}, true, err
+			body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderNaiveSet(input.Inbounds)
+			return []generatedconfig.GeneratedConfigArtifact{{Path: input.Paths.Generated(generatedconfig.CaddyfileSubpath), Body: body}}, true, err
 		},
 	}
 }
@@ -127,13 +127,24 @@ func hysteria2Capability() Capability {
 		PromotedVerb:           "reload",
 		ValidateInboundRender:  true,
 		RequiresRenderSettings: true,
-		MaxEnabled:             1,
-		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+		MaxEnabled:             0,
+		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error) {
 			if len(input.Inbounds) == 0 {
-				return generatedconfig.GeneratedConfigArtifact{}, false, nil
+				return nil, false, nil
 			}
-			body, err := generatedconfig.RenderHysteria2Inbound(input.Settings, input.Inbounds[0], input.Warp)
-			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.Hysteria2ConfigSubpath), Body: body}, true, err
+			var artifacts []generatedconfig.GeneratedConfigArtifact
+			for _, inbound := range input.Inbounds {
+				body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderHysteria2(inbound)
+				if err != nil {
+					return nil, false, err
+				}
+				subpath := "hysteria2/" + inbound.Name + ".yaml"
+				artifacts = append(artifacts, generatedconfig.GeneratedConfigArtifact{
+					Path: input.Paths.Generated(subpath),
+					Body: body,
+				})
+			}
+			return artifacts, true, nil
 		},
 	}
 }
@@ -154,13 +165,24 @@ func olcrtcCapability() Capability {
 		PromotedVerb:           "restart",
 		ValidateInboundRender:  true,
 		RequiresRenderSettings: true,
-		MaxEnabled:             1,
-		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
+		MaxEnabled:             0,
+		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error) {
 			if len(input.Inbounds) == 0 {
-				return generatedconfig.GeneratedConfigArtifact{}, false, nil
+				return nil, false, nil
 			}
-			body, err := generatedconfig.RenderOlcrtcInbound(input.Settings, input.Inbounds[0], input.Warp)
-			return generatedconfig.GeneratedConfigArtifact{Path: input.Paths.Generated(generatedconfig.OlcrtcConfigSubpath), Body: body}, true, err
+			var artifacts []generatedconfig.GeneratedConfigArtifact
+			for _, inbound := range input.Inbounds {
+				body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderOlcrtc(inbound)
+				if err != nil {
+					return nil, false, err
+				}
+				subpath := "olcrtc/" + inbound.Name + ".yaml"
+				artifacts = append(artifacts, generatedconfig.GeneratedConfigArtifact{
+					Path: input.Paths.Generated(subpath),
+					Body: body,
+				})
+			}
+			return artifacts, true, nil
 		},
 	}
 }
@@ -179,8 +201,12 @@ func mieruCapability() Capability {
 		RuntimeOrder:          40,
 		PromotedVerb:          "restart",
 		ValidateInboundRender: true,
-		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) (generatedconfig.GeneratedConfigArtifact, bool, error) {
-			return generatedconfig.NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
+		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error) {
+			art, ok, err := generatedconfig.NewGeneratedMieruConfigRenderer(input.Settings, input.Paths).Render(input.Inbounds)
+			if err != nil || !ok {
+				return nil, ok, err
+			}
+			return []generatedconfig.GeneratedConfigArtifact{art}, true, nil
 		},
 	}
 }

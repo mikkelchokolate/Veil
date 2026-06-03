@@ -150,7 +150,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")
-	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml")
+	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml")
 	if !containsString(response.WrittenFiles, caddyPath) || !containsString(response.WrittenFiles, hy2Path) {
 		t.Fatalf("apply response missing rendered configs: %+v", response.WrittenFiles)
 	}
@@ -254,7 +254,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{
 			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")}, Valid: true},
-			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"), "--check"}, Valid: true},
+			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), "--check"}, Valid: true},
 		}
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})

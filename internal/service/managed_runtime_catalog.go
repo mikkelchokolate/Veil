@@ -1,6 +1,9 @@
 package service
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
 
 type ManagedRuntime struct {
 	Name             string
@@ -81,7 +84,7 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 		if runtime.PromotedVerb == "" {
 			continue
 		}
-		if command[1] == runtime.PromotedVerb && command[2] == runtime.Unit {
+		if command[1] == runtime.PromotedVerb && matchUnit(command[2], runtime.Unit) {
 			return true
 		}
 	}
@@ -90,9 +93,21 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 
 func (c ManagedRuntimeCatalog) AllowsHealthUnit(unit string) bool {
 	for _, runtime := range c.runtimes {
-		if runtime.HealthCheckAfter && runtime.Unit == unit {
+		if runtime.HealthCheckAfter && matchUnit(unit, runtime.Unit) {
 			return true
 		}
+	}
+	return false
+}
+
+func matchUnit(candidate, catalogUnit string) bool {
+	if candidate == catalogUnit {
+		return true
+	}
+	if idx := strings.Index(catalogUnit, "@"); idx != -1 {
+		prefix := catalogUnit[:idx+1]
+		suffix := catalogUnit[idx+1:]
+		return strings.HasPrefix(candidate, prefix) && strings.HasSuffix(candidate, suffix)
 	}
 	return false
 }

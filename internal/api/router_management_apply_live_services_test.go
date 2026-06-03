@@ -82,7 +82,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 		t.Fatalf("decode response: %v", err)
 	}
 	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "Caddyfile")
-	liveHysteria := filepath.Join(applyRoot, "live", "hysteria2", "server.yaml")
+	liveHysteria := filepath.Join(applyRoot, "live", "hysteria2", "hysteria2.yaml")
 	if !response.LiveApplied || !containsString(response.LiveFiles, liveCaddy) || !containsString(response.LiveFiles, liveHysteria) {
 		t.Fatalf("expected live files in response: %+v", response)
 	}
@@ -328,11 +328,11 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 		t.Fatalf("decode response: %v", err)
 	}
 	expectedNaive := []string{"systemctl", "reload", "veil-naive.service"}
-	expectedHy2 := []string{"systemctl", "reload", "veil-hysteria2.service"}
+	expectedHy2 := []string{"systemctl", "reload", "veil-hysteria2@hysteria2.service"}
 	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 2 {
 		t.Fatalf("expected two service actions: response=%+v calls=%+v", response, serviceCalls)
 	}
-	if !stringSlicesEqual(serviceCalls[0], expectedNaive) || !stringSlicesEqual(serviceCalls[1], expectedHy2) {
+	if !stringSlicesEqual(serviceCalls[0], expectedHy2) || !stringSlicesEqual(serviceCalls[1], expectedNaive) {
 		t.Fatalf("unexpected service calls: %+v", serviceCalls)
 	}
 	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success {

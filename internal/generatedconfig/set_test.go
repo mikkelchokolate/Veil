@@ -6,8 +6,8 @@ func TestSetBuilderCombinesProtocolPanelFallbackAndWarpArtifacts(t *testing.T) {
 	paths := NewPaths("/etc/veil")
 	builder := NewSetBuilder(SetInput{
 		ApplyRoot: "/etc/veil",
-		Registry: NewProtocolRegistry([]Protocol{{Protocol: "mieru", Render: func(input ProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-			return GeneratedConfigArtifact{Path: input.Paths.Mieru(), Body: "mieru"}, true, nil
+		Registry: NewProtocolRegistry([]Protocol{{Protocol: "mieru", Render: func(input ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error) {
+			return []GeneratedConfigArtifact{{Path: input.Paths.Mieru(), Body: "mieru"}}, true, nil
 		}}}),
 		PanelAccess: func(Paths) (GeneratedConfigArtifact, bool, error) {
 			return GeneratedConfigArtifact{Path: paths.Caddyfile(), Body: "panel-caddy"}, true, nil
@@ -30,8 +30,8 @@ func TestSetBuilderDoesNotOverwriteProtocolCaddyWithPanelFallback(t *testing.T) 
 	paths := NewPaths("/etc/veil")
 	builder := NewSetBuilder(SetInput{
 		ApplyRoot: "/etc/veil",
-		Registry: NewProtocolRegistry([]Protocol{{Protocol: "naiveproxy", Render: func(input ProtocolRenderInput) (GeneratedConfigArtifact, bool, error) {
-			return GeneratedConfigArtifact{Path: input.Paths.Caddyfile(), Body: "naive-caddy"}, true, nil
+		Registry: NewProtocolRegistry([]Protocol{{Protocol: "naiveproxy", Render: func(input ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error) {
+			return []GeneratedConfigArtifact{{Path: input.Paths.Caddyfile(), Body: "naive-caddy"}}, true, nil
 		}}}),
 		PanelAccess: func(Paths) (GeneratedConfigArtifact, bool, error) {
 			return GeneratedConfigArtifact{Path: paths.Caddyfile(), Body: "panel-caddy"}, true, nil

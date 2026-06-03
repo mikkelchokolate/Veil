@@ -42,7 +42,7 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"Remove files:",
 		"Remove systemd units:",
 		"/etc/systemd/system/veil.service",
-		"/etc/systemd/system/veil-olcrtc.service",
+		"/etc/systemd/system/veil-olcrtc@.service",
 		"/etc/systemd/system/veil-mieru.service",
 		"Remove binary:",
 	} {
@@ -113,7 +113,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 
 	// Verify services are stopped
-	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2.service", "veil-olcrtc.service", "veil-warp.service", "veil-mieru.service"} {
+	for _, svc := range []string{"veil.service", "veil-naive.service", "veil-hysteria2@.service", "veil-olcrtc@.service", "veil-warp.service", "veil-mieru.service"} {
 		found := false
 		for _, s := range stopped {
 			if s == svc {
@@ -127,7 +127,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 
 	// Verify files/dirs are removed
-	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
+	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
 		found := false
 		for _, r := range removed {
 			if filepath.ToSlash(r) == filepath.ToSlash(path) {

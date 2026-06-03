@@ -13,7 +13,7 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		settingsError          bool
 	}{
 		{"naiveproxy", "/etc/veil/generated/caddy/Caddyfile", "reload veil-naive.service", true, true, true},
-		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "reload veil-hysteria2.service", true, true, false},
+		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "reload veil-hysteria2@.service", true, true, false},
 		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
 	}
 	for _, tc := range cases {

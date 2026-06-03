@@ -1,11 +1,11 @@
 [Unit]
-Description=Veil managed olcRTC
+Description=Veil managed Hysteria2 (%i)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/olcrtc --config /etc/veil/generated/olcrtc/server.yaml
+ExecStart=/usr/local/bin/hysteria server --config /etc/veil/generated/hysteria2/%i.yaml
 Restart=on-failure
 RestartSec=3
 

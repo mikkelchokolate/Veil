@@ -97,7 +97,7 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2.service") {
+	if !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2@.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
 }

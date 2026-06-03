@@ -17,7 +17,7 @@ type Protocol struct {
 	Protocol               string
 	MaxEnabled             int
 	RequiresRenderSettings bool
-	Render                 func(ProtocolRenderInput) (GeneratedConfigArtifact, bool, error)
+	Render                 func(ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error)
 }
 
 type ProtocolRenderInput struct {
@@ -60,12 +60,14 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicy().HasRenderSettings(input.Settings) {
 			continue
 		}
-		artifact, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
+		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			configs[artifact.Path] = artifact.Body
+			for _, artifact := range artifacts {
+				configs[artifact.Path] = artifact.Body
+			}
 		}
 	}
 	return configs, nil
@@ -76,7 +78,11 @@ func (r ProtocolRegistry) RenderInbound(settings Settings, paths Paths, inbound 
 	if !ok {
 		return GeneratedConfigArtifact{}, false, nil
 	}
-	return protocol.Render(ProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}, Warp: warp})
+	arts, ok, err := protocol.Render(ProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}, Warp: warp})
+	if err != nil || !ok || len(arts) == 0 {
+		return GeneratedConfigArtifact{}, ok, err
+	}
+	return arts[0], true, nil
 }
 
 func (r ProtocolRegistry) protocol(protocol string) (Protocol, bool) {
