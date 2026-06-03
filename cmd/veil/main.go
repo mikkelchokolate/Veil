@@ -24,6 +24,14 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	if os.Getenv("VEIL_SHUTDOWN_ON_STDIN_CLOSE") == "1" {
+		go func() {
+			buf := make([]byte, 1)
+			_, _ = os.Stdin.Read(buf)
+			cancel()
+		}()
+	}
+
 	cmd := cli.NewRootCommand(version)
 	cmd.SetContext(ctx)
 

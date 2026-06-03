@@ -72,10 +72,13 @@ func TestServeAuthGate(t *testing.T) {
 // TestServeAuthDisabled verifies that with no token configured, /api/* is
 // reachable without credentials and the startup log says auth is disabled.
 func TestServeAuthDisabled(t *testing.T) {
-	srv := startServer(t, serverOptions{})
+	srv := startServer(t, serverOptions{
+		seedState: `{"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"}}`,
+	})
 
 	resp := srv.doNoAuth(http.MethodGet, "/api/status")
 	if resp.StatusCode != http.StatusOK {
+		t.Logf("Server logs:\n%s", srv.logBuf.String())
 		drain(resp)
 		t.Fatalf("expected 200 with auth disabled, got %d", resp.StatusCode)
 	}

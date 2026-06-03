@@ -57,9 +57,11 @@ func newManagementState(info ServerInfo) *managementState {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
 	}
 
-	// Generate default admin account if no users are present, no static AuthToken is set,
-	// we have a persistent database, and we are not in dev mode.
-	if len(state.users) == 0 && info.AuthToken == "" && info.StatePath != "" && info.KeyPath != "" && info.Mode != "dev" {
+	effectiveMode := state.settings.Mode
+	if effectiveMode == "" {
+		effectiveMode = info.Mode
+	}
+	if len(state.users) == 0 && info.AuthToken == "" && info.StatePath != "" && info.KeyPath != "" && effectiveMode != "dev" {
 		username, password, err := generateRandomAdminAuth()
 		if err == nil {
 			hashed, bcryptErr := bcrypt.GenerateFromPassword([]byte(password), 10)

@@ -86,7 +86,18 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--panel-access", "caddy", "--domain", "panel.example.com", "--email", "admin@example.com", "--panel-port", "2096", "--yes"})
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	cmd.SetArgs([]string{
+		"install",
+		"--panel-access", "caddy",
+		"--domain", "panel.example.com",
+		"--email", "admin@example.com",
+		"--panel-port", "2096",
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--yes",
+	})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install panel caddy: %v\n%s", err, out.String())
