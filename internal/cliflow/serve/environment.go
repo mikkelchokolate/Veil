@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -75,6 +77,13 @@ func (Environment) StatePath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH")); path != "" {
 		return path, "VEIL_STATE_PATH"
 	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil", "state.json"), "default"
+	}
 	return "/var/lib/veil/state.json", "default"
 }
 
@@ -85,6 +94,13 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_APPLY_ROOT")); path != "" {
 		return path, "VEIL_APPLY_ROOT"
 	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil"), "default"
+	}
 	return "/etc/veil", "default"
 }
 
@@ -94,6 +110,13 @@ func (Environment) KeyPath(flagValue string) (path string, source string) {
 	}
 	if path := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH")); path != "" {
 		return path, "VEIL_KEY_PATH"
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil", "state.key"), "default"
 	}
 	return "/etc/veil/state.key", "default"
 }
@@ -154,7 +177,15 @@ func (e Environment) AutoTLS(autoTLS bool, autoTLSDir string, statePath string, 
 		autoTLSDir = strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS_DIR"))
 	}
 	if autoTLSDir == "" {
-		autoTLSDir = "/var/lib/veil/autocert"
+		if runtime.GOOS == "windows" {
+			pd := os.Getenv("ProgramData")
+			if pd == "" {
+				pd = `C:\ProgramData`
+			}
+			autoTLSDir = filepath.Join(pd, "Veil", "autocert")
+		} else {
+			autoTLSDir = "/var/lib/veil/autocert"
+		}
 	}
 	return AutoTLSConfig{Enabled: true, Domain: domain, Email: email, CacheDir: autoTLSDir}, nil
 }
