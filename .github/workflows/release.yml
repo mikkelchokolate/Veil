@@ -186,8 +186,7 @@ jobs:
           set -euo pipefail
           for f in dist/checksums.txt dist/veil.sbom.spdx.json; do
             cosign sign-blob --yes \
-              --output-signature "${f}.sig" \
-              --output-certificate "${f}.pem" \
+              --bundle "${f}.bundle" \
               "${f}"
           done
       - name: Attest release artifacts (SLSA provenance)

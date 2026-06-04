@@ -168,12 +168,11 @@ Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](http
 
 ### Verify a release
 
-Each release ships checksums, an SPDX SBOM, keyless cosign signatures, and GitHub provenance attestations. Before installing manually:
+Each release ships checksums, an SPDX SBOM, keyless cosign bundles, and GitHub provenance attestations. Before installing manually:
 
 ```bash
 cosign verify-blob \
-  --certificate checksums.txt.pem \
-  --signature checksums.txt.sig \
+  --bundle checksums.txt.bundle \
   --certificate-identity-regexp 'https://github.com/mikkelchokolate/Veil/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt
