@@ -96,12 +96,12 @@ func (s *managementState) snapshotLocked() managementSnapshot {
 	return NewManagementStateLifecycle(s).SnapshotLocked()
 }
 
-func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) {
-	managementstate.EncryptSnapshot(snapshot, s.cipher)
+func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) error {
+	return managementstate.EncryptSnapshot(snapshot, s.cipher)
 }
 
-func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) {
-	managementstate.DecryptSnapshot(snapshot, s.cipher)
+func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) error {
+	return managementstate.DecryptSnapshot(snapshot, s.cipher)
 }
 
 func (s *managementState) load() error {

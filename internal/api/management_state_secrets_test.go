@@ -62,7 +62,9 @@ func TestEncryptSnapshotEncryptsAllPlaintextFields(t *testing.T) {
 	s := &managementState{cipher: cipher}
 	snapshot := newTestSnapshot()
 
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// All 4 fields should be encrypted (start with "ve1:")
 	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
@@ -117,7 +119,9 @@ func TestEncryptSnapshotSkipsAlreadyEncryptedFields(t *testing.T) {
 		},
 	}
 
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// Already-encrypted fields must remain unchanged
 	if snapshot.Settings.NaivePassword != alreadyEncrypted {
@@ -151,7 +155,9 @@ func TestEncryptSnapshotSkipsEmptyFields(t *testing.T) {
 		},
 	}
 
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// Empty fields must remain empty
 	if snapshot.Settings.NaivePassword != "" {
@@ -172,7 +178,9 @@ func TestEncryptSnapshotNoopWhenCipherIsNil(t *testing.T) {
 	s := &managementState{cipher: nil} // cipher is nil
 	snapshot := newTestSnapshot()
 
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// All fields should remain as plaintext (no-op)
 	if snapshot.Settings.NaivePassword != "naive-password-plain" {
@@ -195,7 +203,9 @@ func TestDecryptSnapshotRestoresPlaintext(t *testing.T) {
 	snapshot := newTestSnapshot()
 
 	// First encrypt
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// Verify they're encrypted
 	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
@@ -203,7 +213,9 @@ func TestDecryptSnapshotRestoresPlaintext(t *testing.T) {
 	}
 
 	// Then decrypt
-	s.decryptSnapshot(&snapshot)
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("decryptSnapshot failed: %v", err)
+	}
 
 	// All fields should be back to plaintext
 	if snapshot.Settings.NaivePassword != "naive-password-plain" {
@@ -224,7 +236,9 @@ func TestDecryptSnapshotNoopWhenCipherIsNil(t *testing.T) {
 	s := &managementState{cipher: nil}
 	snapshot := newTestSnapshot()
 
-	s.decryptSnapshot(&snapshot)
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("decryptSnapshot failed: %v", err)
+	}
 
 	// All fields should remain unchanged
 	if snapshot.Settings.NaivePassword != "naive-password-plain" {
@@ -247,7 +261,9 @@ func TestDecryptSnapshotPassesThroughPlaintext(t *testing.T) {
 	snapshot := newTestSnapshot()
 
 	// decryptSnapshot without encrypting first — plaintext should pass through unchanged
-	s.decryptSnapshot(&snapshot)
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("decryptSnapshot failed: %v", err)
+	}
 
 	// All plaintext fields should remain unchanged (pass through)
 	if snapshot.Settings.NaivePassword != "naive-password-plain" {
@@ -281,7 +297,9 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 	}
 
 	// Encrypt
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("encryptSnapshot failed: %v", err)
+	}
 
 	// Verify all encrypted
 	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
@@ -298,7 +316,9 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 	}
 
 	// Decrypt
-	s.decryptSnapshot(&snapshot)
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		t.Fatalf("decryptSnapshot failed: %v", err)
+	}
 
 	// Verify full roundtrip restores original values
 	if snapshot.Settings.NaivePassword != "super-secret-naive-pass-123" {
