@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1
-# Veil — management panel for NaiveProxy, Hysteria2, and Mieru
+# Veil - management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru
 #
 # Build:
 #   docker build -t veil .
 #
-# Run (local-only panel, no auth):
+# Run (local-only panel, first-run session auth generated in mounted state):
 #   docker run -d --name veil --network host \
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
 #     veil serve
 #
-# Run (public panel with auth and hidden base path):
+# Prepare public panel session auth, then run with token and hidden base path:
+#   docker run --rm \
+#     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+#     veil admin reset
 #   docker run -d --name veil -p 2096:2096 \
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
 #     -v /etc/systemd/system:/host-systemd:ro \

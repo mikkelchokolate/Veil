@@ -4,13 +4,16 @@ DOCKER_IMAGE?=ghcr.io/mikkelchokolate/veil
 GOARCH?=$(shell go env GOARCH)
 MAINTAINER?=Veil Maintainers <veil@users.noreply.github.com>
 
-.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom e2e
+.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom e2e verify-openapi verify-release
 
 test:
 	go test ./...
 
 e2e:
 	go test -tags e2e ./test/e2e/... -count=1
+
+verify-openapi:
+	npx --yes @redocly/cli@1.25.15 lint docs/openapi.yaml
 
 build:
 	mkdir -p bin
@@ -57,6 +60,9 @@ release-check:
 	bash scripts/uninstall.sh --help >/dev/null
 	git diff --check
 	@test -z "$$(git status --short)" || (git status --short && exit 1)
+
+verify-release: release-check verify-openapi
+	@echo "Release verification passed"
 
 docker:
 	docker build -t $(DOCKER_IMAGE):$(VERSION) .
