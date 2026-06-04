@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -214,7 +215,103 @@ func newAdminCommand() *cobra.Command {
 		},
 	}
 
-	for _, subCmd := range []*cobra.Command{resetCmd, setCmd, showCmd} {
+	var newKeyPath string
+	rotateKeyCmd := &cobra.Command{
+		Use:   "rotate-key",
+		Short: "Rotate the AES encryption key and re-encrypt the state file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			env := serveflow.NewEnvironment()
+			resolvedState, _ := env.StatePath(statePath)
+			resolvedKey, _ := env.KeyPath(keyPath)
+
+			targetKeyPath := newKeyPath
+			if targetKeyPath == "" {
+				targetKeyPath = resolvedKey
+			}
+
+			// Read old key bytes
+			oldKeyBytes, err := os.ReadFile(resolvedKey)
+			if err != nil {
+				return fmt.Errorf("read old key file: %w", err)
+			}
+			if len(oldKeyBytes) != secrets.KeySize {
+				return fmt.Errorf("old key file has wrong length: %d bytes (expected %d)", len(oldKeyBytes), secrets.KeySize)
+			}
+			var oldKey [secrets.KeySize]byte
+			copy(oldKey[:], oldKeyBytes)
+
+			// Load snapshot with old key
+			oldCipher, err := secrets.NewCipher(oldKey)
+			if err != nil {
+				return fmt.Errorf("init cipher with old key: %w", err)
+			}
+			store := managementstate.NewStore(resolvedState, oldCipher)
+			snapshot, ok, err := store.Load()
+			if err != nil {
+				return fmt.Errorf("load state snapshot: %w", err)
+			}
+			if !ok {
+				return fmt.Errorf("no state found at %s to rotate", resolvedState)
+			}
+
+			// Generate new key bytes
+			var newKey [secrets.KeySize]byte
+			if _, err := rand.Read(newKey[:]); err != nil {
+				return fmt.Errorf("generate new key: %w", err)
+			}
+
+			// Prepare new cipher and marshal the snapshot using the new key
+			newCipher, err := secrets.NewCipher(newKey)
+			if err != nil {
+				return fmt.Errorf("init cipher with new key: %w", err)
+			}
+			newStore := managementstate.NewStore(resolvedState, newCipher)
+			encryptedBytes, err := newStore.Marshal(snapshot)
+			if err != nil {
+				return fmt.Errorf("encrypt state snapshot: %w", err)
+			}
+
+			// Write new state to temporary file
+			tempStatePath := resolvedState + ".tmp"
+			if err := os.WriteFile(tempStatePath, encryptedBytes, 0o600); err != nil {
+				return fmt.Errorf("write temporary state file: %w", err)
+			}
+
+			// Write new key to temporary file
+			tempKeyPath := targetKeyPath + ".tmp"
+			if err := os.WriteFile(tempKeyPath, newKey[:], 0o600); err != nil {
+				os.Remove(tempStatePath)
+				return fmt.Errorf("write temporary key file: %w", err)
+			}
+
+			// Atomic swap with rollback
+			if err := os.Rename(tempKeyPath, targetKeyPath); err != nil {
+				os.Remove(tempStatePath)
+				os.Remove(tempKeyPath)
+				return fmt.Errorf("rename key file: %w", err)
+			}
+
+			if err := os.Rename(tempStatePath, resolvedState); err != nil {
+				if targetKeyPath == resolvedKey {
+					if rbErr := os.WriteFile(resolvedKey, oldKeyBytes, 0o600); rbErr != nil {
+						return fmt.Errorf("critical failure: state rename failed (%v) and key rollback failed: %w", err, rbErr)
+					}
+				} else {
+					os.Remove(targetKeyPath)
+				}
+				os.Remove(tempStatePath)
+				return fmt.Errorf("rename state file (rolled back key): %w", err)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "New key written to: %s\n", targetKeyPath)
+			return nil
+		},
+	}
+
+	rotateKeyCmd.Flags().StringVar(&newKeyPath, "new-key-path", "", "destination path for the new key (defaults to overwriting the current key)")
+
+	for _, subCmd := range []*cobra.Command{resetCmd, setCmd, showCmd, rotateKeyCmd} {
 		subCmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 		subCmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 		cmd.AddCommand(subCmd)
