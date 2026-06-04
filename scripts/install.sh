@@ -7,7 +7,7 @@ INSTALL_DIR="${VEIL_INSTALL_DIR:-/usr/local/bin}"
 PROFILE="${VEIL_PROFILE:-ru-recommended}"
 DOMAIN=""
 EMAIL=""
-PANEL_ACCESS="local"
+PANEL_ACCESS=""
 PANEL_PORT=""
 YES=""
 DRY_RUN=""
@@ -28,8 +28,8 @@ Options:
   --profile NAME       default or ru-recommended, default ru-recommended
   --domain DOMAIN      Domain used for Panel Caddy access
   --email EMAIL        ACME email for Panel Caddy access
-  --panel-access MODE  local, direct, or caddy, default local
-  --panel-port PORT    Panel TCP port, default 2096; 0 means random high port in veil install
+  --panel-access MODE  local, direct, or caddy; prompted interactively when omitted
+  --panel-port PORT    Panel TCP port; prompted interactively when omitted; 0 means random high port
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
   --force              Force re-install even if veil is already installed
@@ -103,7 +103,8 @@ fi
 if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
   echo "Veil is already installed at ${INSTALL_DIR}/veil"
   echo "Use --force to re-install"
-  args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
+  args=(--profile "${PROFILE}")
+  if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
@@ -176,7 +177,8 @@ else
   echo "Installed ${INSTALL_DIR}/veil"
 fi
 
-args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")
+args=(--profile "${PROFILE}")
+if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi

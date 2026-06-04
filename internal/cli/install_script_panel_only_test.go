@@ -13,8 +13,9 @@ func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T
 	}
 	script := string(body)
 	for _, want := range []string{
-		`PANEL_ACCESS="local"`,
+		`PANEL_ACCESS=""`,
 		`--panel-access`,
+		`prompted interactively when omitted`,
 		`Veil install only installs Panel; configure protocols as Panel Inbounds`,
 	} {
 		if !strings.Contains(script, want) {

@@ -121,6 +121,22 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if strings.Contains(script, `PANEL_ACCESS="local"`) || strings.Contains(script, `args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")`) {
+		t.Fatalf("install.sh should let interactive veil install ask for panel access mode by default:\n%s", script)
+	}
+	for _, want := range []string{`PANEL_ACCESS=""`, `args=(--profile "${PROFILE}")`, `if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi`} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh missing panel access passthrough %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {

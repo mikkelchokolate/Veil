@@ -25,7 +25,7 @@ Veil offers three Panel access modes, in increasing order of exposure:
 
 Guidance:
 
-- **Prefer `local` + SSH tunnel.** `ssh -L 2096:127.0.0.1:2096 user@host` keeps
+- **Prefer `local` + SSH tunnel.** `ssh -L <panel-port>:127.0.0.1:<panel-port> user@host` keeps
   the Panel off the public internet entirely.
 - **Use `caddy` for anything public.** It terminates real HTTPS and serves the
   Panel behind a random **Web base path** that acts as an unguessable prefix.
