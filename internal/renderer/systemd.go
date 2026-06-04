@@ -11,6 +11,20 @@ const (
 	UnitMieru     = "veil-mieru.service"
 )
 
+const systemdHardeningBlock = `CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+`
+
 func ManagedSystemdUnitNames() []string {
 	return []string{UnitVeil, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru}
 }
@@ -68,7 +82,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -88,7 +102,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -107,7 +121,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -126,7 +140,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -146,7 +160,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -165,7 +179,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
