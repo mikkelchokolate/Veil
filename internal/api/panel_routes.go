@@ -75,6 +75,10 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				routes.State.mu.Lock()
 				noUsers := len(routes.State.users) == 0
 				routes.State.mu.Unlock()
+				if routes.Info.PublicListen && noUsers {
+					writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
+					return
+				}
 				if !noUsers {
 					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath)))
 					return

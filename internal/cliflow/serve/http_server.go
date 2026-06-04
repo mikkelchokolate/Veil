@@ -10,22 +10,24 @@ import (
 )
 
 type HTTPServerOptions struct {
-	Listen          string
-	Version         string
-	AuthToken       string
-	StatePath       string
-	ApplyRoot       string
-	KeyPath         string
-	TLSEnabled      bool
-	TLSCert         string
-	TLSKey          string
-	AutoTLSDomain   string
-	AutoTLSEmail    string
-	AutoTLSCacheDir string
-	PanelAccess     string
-	Domain          string
-	Email           string
-	WebBasePath     string
+	Listen              string
+	Version             string
+	AuthToken           string
+	PublicListen        bool
+	MetricsAuthRequired bool
+	StatePath           string
+	ApplyRoot           string
+	KeyPath             string
+	TLSEnabled          bool
+	TLSCert             string
+	TLSKey              string
+	AutoTLSDomain       string
+	AutoTLSEmail        string
+	AutoTLSCacheDir     string
+	PanelAccess         string
+	Domain              string
+	Email               string
+	WebBasePath         string
 }
 
 type HTTPServer struct {
@@ -38,7 +40,7 @@ func NewHTTPServer(opts HTTPServerOptions) HTTPServer {
 
 func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath})
+	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, PublicListen: opts.PublicListen, MetricsAuthRequired: opts.MetricsAuthRequired, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath})
 	srv := &http.Server{
 		Addr:              opts.Listen,
 		Handler:           handler,
