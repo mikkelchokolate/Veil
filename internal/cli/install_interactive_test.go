@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {
+func TestInstallInteractivePromptsForAccessModeAndRandomPanelPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("n\n"))
+	cmd.SetIn(strings.NewReader("local\nrandom\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -19,9 +19,12 @@ func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
+		"Panel access mode",
+		"Panel port mode",
 		"Install scope: Panel",
-		"Panel port: 2096",
-		"Panel access: https://127.0.0.1:2096/",
+		"Panel port:",
+		"(random)",
+		"Panel access: https://127.0.0.1:",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
@@ -37,16 +40,16 @@ func TestInstallInteractiveUsesDefaultPanelPortWithoutPrompt(t *testing.T) {
 func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("y\n2096\n"))
+	cmd.SetIn(strings.NewReader("direct\ncustom\n3096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-port", "0", "--interactive", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Panel port: 2096 (user selected)") {
+	if !strings.Contains(got, "Panel port: 3096 (user selected)") || !strings.Contains(got, "Panel access: https://0.0.0.0:3096/") {
 		t.Fatalf("expected custom panel port output:\n%s", got)
 	}
 }
@@ -54,7 +57,7 @@ func TestInstallInteractiveAcceptsCustomPanelPort(t *testing.T) {
 func TestInstallInteractiveRejectsInvalidDomainAndRepromptsForPanelCaddy(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("not-a-domain\nvalid.example.com\nadmin@example.com\nn\n"))
+	cmd.SetIn(strings.NewReader("random\nnot-a-domain\nvalid.example.com\nadmin@example.com\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-access", "caddy", "--interactive", "--dry-run"})
@@ -74,7 +77,7 @@ func TestInstallInteractiveRejectsInvalidDomainAndRepromptsForPanelCaddy(t *test
 func TestInstallInteractiveDoesNotPromptForSharedProxyPort(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("n\n"))
+	cmd.SetIn(strings.NewReader("local\nrandom\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
@@ -90,10 +93,10 @@ func TestInstallInteractiveDoesNotPromptForSharedProxyPort(t *testing.T) {
 func TestInstallInteractiveRejectsInvalidPanelPortAndReprompts(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("y\n0\n99999\nxyz\n2096\n"))
+	cmd.SetIn(strings.NewReader("local\ncustom\n0\n99999\nxyz\n2096\n"))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--panel-port", "0", "--interactive", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--interactive", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())

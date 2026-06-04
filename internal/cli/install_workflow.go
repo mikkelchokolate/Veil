@@ -16,23 +16,24 @@ import (
 const defaultSystemdDir = "/etc/systemd/system"
 
 type ruRecommendedInstallOptions struct {
-	Profile      string
-	Domain       string
-	Email        string
-	DryRun       bool
-	Yes          bool
-	EtcDir       string
-	VarDir       string
-	SystemdDir   string
-	PanelPort    int
-	PanelPortSet bool
-	PanelAccess  string
-	PublicIP     string
-	Interactive  bool
-	AuditLog     string
-	BackupDir    string
-	BackupDirSet bool
-	CaddyBinary  string
+	Profile        string
+	Domain         string
+	Email          string
+	DryRun         bool
+	Yes            bool
+	EtcDir         string
+	VarDir         string
+	SystemdDir     string
+	PanelPort      int
+	PanelPortSet   bool
+	PanelAccess    string
+	PanelAccessSet bool
+	PublicIP       string
+	Interactive    bool
+	AuditLog       string
+	BackupDir      string
+	BackupDirSet   bool
+	CaddyBinary    string
 }
 
 type RURecommendedInstallWorkflow struct {
@@ -73,9 +74,22 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		return fmt.Errorf("profile %q is not implemented yet", opts.Profile)
 	}
 	if opts.Interactive {
-		if err := installflow.NewPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(opts.PanelAccess, &opts.Domain, &opts.Email, &opts.PanelPort); err != nil {
+		promptOpts := installflow.PromptOptions{
+			PanelAccess:    opts.PanelAccess,
+			PanelAccessSet: opts.PanelAccessSet,
+			Domain:         opts.Domain,
+			Email:          opts.Email,
+			PanelPort:      opts.PanelPort,
+			PanelPortSet:   opts.PanelPortSet,
+		}
+		if err := installflow.NewPrompt(cmd.InOrStdin(), cmd.OutOrStdout()).PromptMissingOptions(&promptOpts); err != nil {
 			return err
 		}
+		opts.PanelAccess = promptOpts.PanelAccess
+		opts.Domain = promptOpts.Domain
+		opts.Email = promptOpts.Email
+		opts.PanelPort = promptOpts.PanelPort
+		opts.PanelPortSet = promptOpts.PanelPortSet || promptOpts.PanelPort > 0
 	}
 	if err := validateRURecommendedInstallRequirements(opts); err != nil {
 		return err

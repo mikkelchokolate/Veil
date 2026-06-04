@@ -16,6 +16,10 @@ The easiest way to install Veil is using the official quick-start script. This s
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash
 ```
 
+Interactive installs ask for the Panel exposure mode (`local`, `direct`, or
+`caddy`) and whether Veil should choose a random high Panel port or use a port
+you enter manually. Choose `local` + random port for the safest default.
+
 ### Installation Parameters
 
 You can customize the installer's behavior using options passed to the bash command:
@@ -26,10 +30,10 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
 
 | Option | Default | Description |
 |---|---|---|
-| `--panel-access MODE` | `local` | Panel access mode: `local` (loopback only), `direct` (public interface), or `caddy` (automatic HTTPS on a domain). |
+| `--panel-access MODE` | prompted interactively; `local` with `--yes` | Panel access mode: `local` (loopback only), `direct` (public interface), or `caddy` (automatic HTTPS on a domain). |
 | `--domain DOMAIN` | *(empty)* | Domain name to use (required if `--panel-access` is `caddy`). |
 | `--email EMAIL` | *(empty)* | ACME email for Let's Encrypt certificates (required for `caddy`). |
-| `--panel-port PORT` | `2096` | Port the Panel will listen on. Use `0` to select a random high port. |
+| `--panel-port PORT` | prompted interactively; `2096` with `--yes` | Port the Panel will listen on. Use `0` to select a random high port. |
 | `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. Choices: `default` or `ru-recommended`. |
 | `--version TAG` | `latest` | Specify a targeted release tag to install (e.g. `v0.9.9`). |
 | `--force` | *(false)* | Force binary download and re-installation even if Veil is already present. |
@@ -50,15 +54,15 @@ sudo veil admin reset
 sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
 ```
 
-Direct public `veil serve` listeners require both a configured Panel user and an API token. Local loopback listeners can be reached through SSH and are the default.
+Direct public `veil serve` listeners require both a configured Panel user and an API token. Local loopback listeners can be reached through SSH and are the recommended interactive choice.
 
 ### Local Mode (Highly Recommended)
-Exposes the Panel on the loopback interface (`127.0.0.1:2096`) with a self-signed TLS certificate.
+Exposes the Panel on the loopback interface (`127.0.0.1:<panel-port>`) with a self-signed TLS certificate.
 - **Accessing it:** Run an SSH tunnel from your client machine:
   ```bash
-  ssh -L 2096:127.0.0.1:2096 user@your-server-ip
+  ssh -L <panel-port>:127.0.0.1:<panel-port> user@your-server-ip
   ```
-- **URL:** Open `https://127.0.0.1:2096/` in your browser.
+- **URL:** Open `https://127.0.0.1:<panel-port>/` in your browser.
 - **Why:** Keeps the administration page completely hidden from public port scans and probes.
 
 ### Caddy Mode
@@ -70,7 +74,7 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 
 ### Direct Mode
 Exposes the Panel directly on all interfaces on the configured port using self-signed TLS.
-- **URL:** `https://your-server-ip:2096/`
+- **URL:** `https://your-server-ip:<panel-port>/`
 - **Why:** Convenient for quick staging or internal networks.
 - **Warning:** Direct exposure of self-signed HTTP endpoints is prone to port scanning and certificate bypass dialog warnings. `veil serve` refuses non-loopback direct exposure unless both `VEIL_API_TOKEN` and a Panel user are configured.
 

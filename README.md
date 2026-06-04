@@ -12,12 +12,15 @@ One command, answer a few questions, done:
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash
 ```
 
-By default Veil can be installed as a **panel-only** control plane. You do not need a domain or Caddy unless you choose Caddy Panel access or add a NaiveProxy Inbound.
+The installer asks for the Panel exposure mode (`local`, `direct`, or `caddy`)
+and whether to choose a random high Panel port or use a port you enter. Veil
+still installs as a **panel-only** control plane first; you do not need a domain
+or Caddy unless you choose Caddy Panel access or add a NaiveProxy Inbound later.
 
 After install you'll see either direct/local Panel access over generated self-signed HTTPS:
 
 ```text
-Panel access: https://127.0.0.1:2096/
+Panel access: https://127.0.0.1:<panel-port>/
 ```
 
 or, if you choose Caddy Panel access:
@@ -144,7 +147,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 
 | Mode | Listener | Required auth | Notes |
 |---|---|---|---|
-| Local + SSH tunnel | `127.0.0.1:2096` | Session user recommended; token optional | Default and safest. Use `ssh -L 2096:127.0.0.1:2096 host`. |
+| Local + SSH tunnel | `127.0.0.1:<panel-port>` | Session user recommended; token optional | Recommended and safest. Use `ssh -L <panel-port>:127.0.0.1:<panel-port> host`. |
 | Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS and routes a random Web base path. |
 | Direct public listen | `0.0.0.0:2096` or public IP | Session user and API token | `veil serve` refuses to start without both. Use TLS and authenticated metrics. |
 
