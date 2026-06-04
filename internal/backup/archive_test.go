@@ -2,9 +2,14 @@ package backup
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
@@ -145,5 +150,69 @@ func TestRestoreUnencryptedBackupWithPassphraseErrors(t *testing.T) {
 	err = RestoreBackup(backupData, filepath.Join(dir, "ns.json"), filepath.Join(dir, "nk.key"), "pass")
 	if err == nil {
 		t.Fatal("expected error when trying to decrypt unencrypted backup")
+	}
+}
+
+func TestRestoreLegacyVersion1Backup(t *testing.T) {
+	// Let's manually construct a Version 1 backup payload
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+
+	stateContent := []byte(`{"secure": true, "version": 1}`)
+	keyContent := bytes.Repeat([]byte{0x77}, 32)
+
+	if err := os.WriteFile(statePath, stateContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, keyContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tarball, err := createTarball(statePath, keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	passphrase := "legacy-passphrase"
+	salt := bytes.Repeat([]byte{0x12}, 16)
+	nonce := bytes.Repeat([]byte{0x34}, 12)
+
+	// In version 1, iterations was 10000
+	key := pbkdf2.Key([]byte(passphrase), salt, 10000, 32, sha256.New)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Version 1 uses nil for AAD
+	ciphertext := aead.Seal(nil, nonce, tarball, nil)
+
+	var buf bytes.Buffer
+	buf.Write(magicHeader)
+	buf.WriteByte(1) // version 1
+	buf.Write(salt)
+	buf.Write(nonce)
+	buf.Write(ciphertext)
+
+	backupData := buf.Bytes()
+
+	// Restore it
+	newStatePath := filepath.Join(dir, "new_state.json")
+	newKeyPath := filepath.Join(dir, "new_state.key")
+	err = RestoreBackup(backupData, newStatePath, newKeyPath, passphrase)
+	if err != nil {
+		t.Fatalf("failed to restore legacy version 1 backup: %v", err)
+	}
+
+	// Verify content
+	restoredState, _ := os.ReadFile(newStatePath)
+	restoredKey, _ := os.ReadFile(newKeyPath)
+	if !bytes.Equal(restoredState, stateContent) || !bytes.Equal(restoredKey, keyContent) {
+		t.Fatalf("restored content mismatch")
 	}
 }
