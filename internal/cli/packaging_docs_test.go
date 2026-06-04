@@ -37,7 +37,8 @@ func TestReleaseWorkflowBuildsSignedPackagesAndSBOM(t *testing.T) {
 }
 
 func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
-	unpinnedAction := regexp.MustCompile(`uses:\s+[^#\n]+@v[0-9]`)
+	actionUseLine := regexp.MustCompile(`(?m)^\s*uses:\s+[^\s#]+`)
+	pinnedAction := regexp.MustCompile(`@[0-9a-f]{40}(?:\s|$|#)`)
 	for _, workflowPath := range []string{
 		"../../.github/workflows/ci.yml",
 		"../../.github/workflows/release.yml",
@@ -48,8 +49,10 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 			t.Fatal(err)
 		}
 		workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-		if match := unpinnedAction.FindString(workflow); match != "" {
-			t.Fatalf("%s contains unpinned GitHub Action reference %q", workflowPath, match)
+		for _, line := range actionUseLine.FindAllString(workflow, -1) {
+			if !pinnedAction.MatchString(line) {
+				t.Fatalf("%s contains unpinned GitHub Action reference %q", workflowPath, line)
+			}
 		}
 	}
 
@@ -57,9 +60,27 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(codeql), "github/codeql-action/init@411bbbe57033eedfc1a82d68c01345aa96c737d7") ||
-		!strings.Contains(string(codeql), "github/codeql-action/analyze@411bbbe57033eedfc1a82d68c01345aa96c737d7") {
-		t.Fatalf("CodeQL workflow must pin init/analyze actions by commit SHA")
+	codeqlConfig := strings.ReplaceAll(string(codeql), "\r\n", "\n")
+	codeqlPinnedAction := regexp.MustCompile(`github/codeql-action/(init|analyze)@[0-9a-f]{40}`)
+	codeqlActions := map[string]bool{}
+	for _, match := range codeqlPinnedAction.FindAllStringSubmatch(codeqlConfig, -1) {
+		codeqlActions[match[1]] = true
+	}
+	for _, action := range []string{"init", "analyze"} {
+		if !codeqlActions[action] {
+			t.Fatalf("CodeQL workflow must pin %s action by commit SHA", action)
+		}
+	}
+
+	ci, err := os.ReadFile("../../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciWorkflow := strings.ReplaceAll(string(ci), "\r\n", "\n")
+	for _, want := range []string{"docker-build:", "Docker image build", "docker build --pull --tag veil:ci ."} {
+		if !strings.Contains(ciWorkflow, want) {
+			t.Fatalf("ci.yml missing Docker build verification %q", want)
+		}
 	}
 
 	dependabot, err := os.ReadFile("../../.github/dependabot.yml")
