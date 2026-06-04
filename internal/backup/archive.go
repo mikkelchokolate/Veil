@@ -20,8 +20,12 @@ import (
 // Magic header for encrypted backups
 var magicHeader = []byte("VEILBACK")
 
-func deriveKey(passphrase string, salt []byte) []byte {
-	return pbkdf2.Key([]byte(passphrase), salt, 10000, 32, sha256.New)
+func deriveKey(passphrase string, salt []byte, version byte) []byte {
+	iterations := 600000 // OWASP recommendation for PBKDF2-HMAC-SHA256
+	if version == 1 {
+		iterations = 10000 // Legacy version
+	}
+	return pbkdf2.Key([]byte(passphrase), salt, iterations, 32, sha256.New)
 }
 
 func createTarball(statePath, keyPath string) ([]byte, error) {
@@ -92,7 +96,7 @@ func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 
-	key := deriveKey(passphrase, salt)
+	key := deriveKey(passphrase, salt, 2)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -102,13 +106,14 @@ func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
 		return nil, err
 	}
 
-	ciphertext := aead.Seal(nil, nonce, tarball, nil)
-
 	var out bytes.Buffer
 	out.Write(magicHeader)
-	out.WriteByte(1) // version
+	out.WriteByte(2) // version 2 uses 600k iterations and authenticated header (AAD)
 	out.Write(salt)
 	out.Write(nonce)
+
+	headerBytes := out.Bytes()
+	ciphertext := aead.Seal(nil, nonce, tarball, headerBytes)
 	out.Write(ciphertext)
 
 	return out.Bytes(), nil
@@ -128,14 +133,14 @@ func RestoreBackup(data []byte, statePath, keyPath, passphrase string) error {
 			return errors.New("invalid or corrupted encrypted backup file (too short)")
 		}
 		version := data[len(magicHeader)]
-		if version != 1 {
+		if version != 1 && version != 2 {
 			return fmt.Errorf("unsupported backup format version: %d", version)
 		}
 		salt := data[len(magicHeader)+1 : len(magicHeader)+1+16]
 		nonce := data[len(magicHeader)+1+16 : headerLen]
 		ciphertext := data[headerLen:]
 
-		key := deriveKey(passphrase, salt)
+		key := deriveKey(passphrase, salt, version)
 		block, err := aes.NewCipher(key)
 		if err != nil {
 			return err
@@ -145,7 +150,12 @@ func RestoreBackup(data []byte, statePath, keyPath, passphrase string) error {
 			return err
 		}
 
-		decrypted, err := aead.Open(nil, nonce, ciphertext, nil)
+		var aad []byte
+		if version >= 2 {
+			aad = data[:headerLen]
+		}
+
+		decrypted, err := aead.Open(nil, nonce, ciphertext, aad)
 		if err != nil {
 			return errors.New("failed to decrypt backup: incorrect passphrase or corrupted data")
 		}
