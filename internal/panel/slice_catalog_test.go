@@ -21,14 +21,19 @@ func TestSliceCatalogContainsApplyDiagnosticsAndServiceSlots(t *testing.T) {
 	}
 	bindings := catalog.EventBindings()
 	for id, handler := range map[string]string{
-		"load-client-links":      "loadClientLinks",
-		"inbound-form":           "saveInbound",
-		"routing-rule-form":      "saveRoutingRule",
-		"warp-form":              "saveWarpConfig",
-		"load-warp-config":       "loadWarpIntoForm",
-		"download-mieru-configs": "downloadMieruConfigs",
-		"load-service-status":    "loadServiceStatus",
-		"inbound-protocol":       "syncInboundTransportOptions",
+		"load-client-links":            "loadClientLinks",
+		"open-client-links-modal":      "openClientLinksModal",
+		"download-client-links-json":   "downloadClientLinksJSON",
+		"inbound-form":                 "saveInbound",
+		"routing-rule-form":            "saveRoutingRule",
+		"warp-form":                    "saveWarpConfig",
+		"load-warp-config":             "loadWarpIntoForm",
+		"download-mieru-configs":       "downloadMieruConfigs",
+		"load-service-status":          "loadServiceStatus",
+		"inbound-protocol":             "syncInboundTransportOptions",
+		"btn-load-sessions":            "loadSessions",
+		"btn-generate-api-token":       "generateReplacementAPIToken",
+		"btn-copy-generated-api-token": "copyGeneratedAPIToken",
 	} {
 		if got := bindingHandler(bindings, id); got != handler {
 			t.Fatalf("binding %q = %q, want %q; all=%+v", id, got, handler, bindings)

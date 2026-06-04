@@ -12,7 +12,7 @@ func panelInboundFormHTML() string {
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <h2>Inbounds</h2>
-          <button type="button" onclick="openAddInboundModal()" style="display: flex; align-items: center; gap: 8px;">
+          <button id="add-inbound-btn" type="button" data-admin-only="true" onclick="openAddInboundModal()" style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 1.2rem; font-weight: bold;">+</span> Add Inbound
           </button>
         </div>

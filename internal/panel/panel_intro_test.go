@@ -10,6 +10,10 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 	for _, want := range []string{
 		`veil_api_token`,
 		`function authHeaders()`,
+		`function currentUserRole()`,
+		`function applyViewerRoleGuard()`,
+		`adminOnlyControlIds`,
+		`/api/auth/status`,
 		`async function loadJSON(path, outputId, options)`,
 		`profile-preview-form`,
 		`/api/profiles/ru-recommended/preview`,

@@ -61,6 +61,129 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       output.textContent = runtimes.length === 0 ? 'Runtime units: none required' : 'Runtime units: ' + runtimes.join(', ');
     }
 
+    function applyPlanFromResponse(data) {
+      if (!data) {
+        return {};
+      }
+      if (data.plan) {
+        return data.plan;
+      }
+      return data;
+    }
+
+    function appendApplyPreviewRows(rows, stage, values, note) {
+      if (!Array.isArray(values)) {
+        return;
+      }
+      values.forEach((value) => {
+        if (value === undefined || value === null || value === '') {
+          return;
+        }
+        rows.push({ stage: stage, name: String(value), note: note });
+      });
+    }
+
+    function applyFilesFromResponse(data) {
+      const plan = applyPlanFromResponse(data);
+      const rows = [];
+      appendApplyPreviewRows(rows, 'generated', plan.configs, 'Generated managed config. No file content is shown.');
+      appendApplyPreviewRows(rows, 'runtime plan', plan.actions, 'Planned service or runtime action.');
+      appendApplyPreviewRows(rows, 'staged write', data && data.writtenFiles, 'Validated file written to the staged config set.');
+      appendApplyPreviewRows(rows, 'live promote', data && data.liveFiles, 'Staged file promoted to the live runtime path.');
+      appendApplyPreviewRows(rows, 'backup', data && data.backupFiles, 'Existing live file preserved before promotion.');
+      appendApplyPreviewRows(rows, 'rollback', data && data.rollbackFiles, 'Rollback file available if reload or health checks fail.');
+      return rows;
+    }
+
+    function applyPreviewMetadata(data) {
+      const chunks = [];
+      const add = (value) => {
+        if (!value) {
+          return;
+        }
+        if (Array.isArray(value)) {
+          value.forEach(add);
+          return;
+        }
+        if (typeof value === 'object') {
+          chunks.push(JSON.stringify(value));
+          return;
+        }
+        chunks.push(String(value));
+      };
+      const plan = applyPlanFromResponse(data);
+      add(plan.configs);
+      add(plan.actions);
+      add(plan.runtimes);
+      if (data) {
+        add(data.writtenFiles);
+        add(data.liveFiles);
+        add(data.validations);
+        add(data.serviceActions);
+        add(data.healthChecks);
+      }
+      return chunks.join(' ').toLowerCase();
+    }
+
+    function applyWarningsFromResponse(data) {
+      const plan = applyPlanFromResponse(data);
+      const warnings = [];
+      const metadata = applyPreviewMetadata(data);
+      if (plan.valid === false) {
+        warnings.push('Plan is invalid; fix validation errors before applying.');
+      }
+      if (Array.isArray(plan.errors) && plan.errors.length > 0) {
+        warnings.push('Plan errors are present in the raw output.');
+      }
+      if (metadata.includes('firewall') || metadata.includes('ufw') || metadata.includes('iptables') || metadata.includes('nft')) {
+        warnings.push('Firewall changes can lock out remote access; verify SSH and provider console access before applying.');
+      }
+      if (metadata.includes('dns') || metadata.includes('domain')) {
+        warnings.push('DNS changes depend on public records and propagation before client links work.');
+      }
+      if (metadata.includes('tls') || metadata.includes('caddy') || metadata.includes('acme') || metadata.includes('cert') || metadata.includes(':443') || metadata.includes(' 443')) {
+        warnings.push('TLS changes require valid domain reachability and certificate issuance.');
+      }
+      if (applyRuntimesFromResponse(data).length > 0 || metadata.includes('systemctl') || metadata.includes('reload') || metadata.includes('restart') || metadata.includes('service')) {
+        warnings.push('Service reload or restart can interrupt active proxy sessions.');
+      }
+      if (warnings.length === 0) {
+        warnings.push('No DNS/TLS/firewall/service warnings detected in plan metadata.');
+      }
+      return warnings;
+    }
+
+    function renderApplySafePreview(data) {
+      const warningsOutput = document.getElementById('apply-safety-warnings');
+      if (warningsOutput) {
+        warningsOutput.textContent = 'Safety warnings: ' + applyWarningsFromResponse(data).join(' ');
+      }
+      const body = document.getElementById('apply-file-diff-preview-body');
+      if (!body) {
+        return;
+      }
+      const rows = applyFilesFromResponse(data);
+      body.textContent = '';
+      if (rows.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 3;
+        cell.textContent = 'No managed files or runtime actions were reported.';
+        row.appendChild(cell);
+        body.appendChild(row);
+        return;
+      }
+      rows.forEach((entry) => {
+        const row = document.createElement('tr');
+        ['stage', 'name', 'note'].forEach((field) => {
+          const cell = document.createElement('td');
+          cell.textContent = entry[field];
+          row.appendChild(cell);
+        });
+        body.appendChild(row);
+      });
+    }
+
     async function runApplyWorkflowCommand(command) {
       const options = { method: 'POST' };
       if (command.request && Object.keys(command.request).length > 0) {
@@ -69,6 +192,7 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       }
       const result = await loadJSON(command.path, 'apply-plan-output', options);
       renderApplyRuntimes(result);
+      renderApplySafePreview(result);
     }
 
 `)

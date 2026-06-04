@@ -108,7 +108,7 @@ func panelInboundActionsJS() string {
             '<td><span class="badge badge-success" style="background: rgba(16, 185, 129, 0.1); color: #34d399;">' + clientCount + ' users</span></td>' +
             '<td>' +
               '<label class="switch">' +
-                '<input type="checkbox" ' + statusChecked + ' onchange="toggleInboundActive(\'' + inbound.name + '\', this.checked)">' +
+                '<input type="checkbox" data-admin-only="true" ' + statusChecked + ' onchange="toggleInboundActive(\'' + inbound.name + '\', this.checked)">' +
                 '<span class="slider"></span>' +
               '</label>' +
             '</td>' +
@@ -116,14 +116,15 @@ func panelInboundActionsJS() string {
               '<div class="dropdown">' +
                 '<button type="button" class="dropdown-btn" style="padding: 6px 12px; font-size: 0.8rem;">Actions ▾</button>' +
                 '<div class="dropdown-content">' +
-                  '<button type="button" onclick="openEditInboundModal(\'' + inbound.name + '\')">Edit Inbound</button>' +
+                  '<button type="button" data-admin-only="true" onclick="openEditInboundModal(\'' + inbound.name + '\')">Edit Inbound</button>' +
                   '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\')">Client Links</button>' +
-                  '<button type="button" onclick="directDeleteInbound(\'' + inbound.name + '\')" style="color: var(--accent-danger);">Delete</button>' +
+                  '<button type="button" data-admin-only="true" onclick="directDeleteInbound(\'' + inbound.name + '\')" style="color: var(--accent-danger);">Delete</button>' +
                 '</div>' +
               '</div>' +
             '</td>';
           tbody.appendChild(row);
         });
+        applyViewerRoleGuard();
       }
     }
 

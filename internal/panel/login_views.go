@@ -252,6 +252,7 @@ const loginHTMLTemplate = `<!doctype html>
         }
         localStorage.setItem('veil_csrf_token', data.csrfToken);
         localStorage.setItem('veil_username', data.username);
+        localStorage.setItem('veil_user_role', data.role || '');
         localStorage.removeItem('veil_api_token');
         window.location.reload();
       } catch (err) {

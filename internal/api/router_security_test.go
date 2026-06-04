@@ -63,6 +63,34 @@ func TestSessionRegistry(t *testing.T) {
 	}
 }
 
+func TestSessionRegistryListsAndDeletesByStableID(t *testing.T) {
+	registry := &SessionRegistry{
+		sessions: make(map[string]Session),
+	}
+	alice := registry.NewSession("alice", "admin")
+	bob := registry.NewSession("bob", "viewer")
+
+	list := registry.List(alice.Token)
+	if len(list) != 2 {
+		t.Fatalf("expected two sessions, got %+v", list)
+	}
+	if !list[0].Current || list[0].Username != "alice" || list[0].ID == "" {
+		t.Fatalf("current session should be listed first with stable id: %+v", list)
+	}
+	if list[1].Username != "bob" || list[1].Current {
+		t.Fatalf("unexpected second session: %+v", list[1])
+	}
+	if !registry.DeleteByID(sessionID(bob.Token)) {
+		t.Fatalf("expected DeleteByID to delete bob session")
+	}
+	if _, ok := registry.Get(bob.Token); ok {
+		t.Fatalf("bob session should be deleted")
+	}
+	if registry.DeleteByID("missing") {
+		t.Fatalf("missing session id should not delete")
+	}
+}
+
 func TestAuthMiddleware(t *testing.T) {
 	// Create mock management state
 	state := &managementState{}
@@ -172,6 +200,69 @@ func TestAuthMiddleware(t *testing.T) {
 	handler.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("viewer executing mutation expected 403, got %d", w.Code)
+	}
+}
+
+func TestRouterUsersEndpointAcceptsStaticAdminToken(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.Header.Set("X-Veil-Token", "secret-token")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected static admin token to access users, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
+	state := &managementState{}
+	admin := globalSessions.NewSession("alice", "admin")
+	viewer := globalSessions.NewSession("bob", "viewer")
+	defer globalSessions.Delete(admin.Token)
+	defer globalSessions.Delete(viewer.Token)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: admin.Token})
+	w := httptest.NewRecorder()
+	state.handleAuthSessions(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected admin session list 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var sessions []SessionInfo
+	if err := json.NewDecoder(w.Body).Decode(&sessions); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if len(sessions) < 2 || !sessions[0].Current || sessions[0].Username != "alice" {
+		t.Fatalf("unexpected sessions list: %+v", sessions)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/auth/sessions", strings.NewReader(`{"id":"`+sessionID(viewer.Token)+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: admin.Token})
+	w = httptest.NewRecorder()
+	state.handleAuthSessions(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected revoke 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, ok := globalSessions.Get(viewer.Token); ok {
+		t.Fatalf("viewer session should be revoked")
+	}
+}
+
+func TestAuthSessionsEndpointRejectsViewer(t *testing.T) {
+	state := &managementState{}
+	viewer := globalSessions.NewSession("bob", "viewer")
+	defer globalSessions.Delete(viewer.Token)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: viewer.Token})
+	w := httptest.NewRecorder()
+	state.handleAuthSessions(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected viewer sessions endpoint 403, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

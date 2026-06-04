@@ -28,6 +28,42 @@ func panelUsersCardHTML() string {
 </div>
 
 <div class="card">
+  <h2>Active Sessions</h2>
+  <p class="hint" style="margin-bottom: 20px;">Review browser sessions and revoke stale operator access. The current session is marked so it is harder to lock yourself out accidentally.</p>
+  <div class="actions">
+    <button type="button" id="btn-load-sessions">Load sessions</button>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Expires</th>
+          <th>Current</th>
+          <th style="width: 120px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-table-body">
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted);">Not loaded</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>API Token Rotation</h2>
+  <p class="hint">Generate a replacement API token, update <code>VEIL_API_TOKEN</code> in your service environment or restart command, then restart the Panel. Existing browser sessions are managed above.</p>
+  <div class="actions">
+    <button type="button" id="btn-generate-api-token">Generate token</button>
+    <button type="button" id="btn-copy-generated-api-token" class="secondary">Copy generated token</button>
+  </div>
+  <pre id="token-rotation-output">No generated token</pre>
+</div>
+
+<div class="card">
   <h2 id="user-form-title">Add New User</h2>
   <form id="user-form">
     <input type="hidden" id="user-is-edit" value="false">
@@ -100,6 +136,7 @@ func panelUsersActionsJS() string {
           const editBtn = document.createElement('button');
           editBtn.textContent = 'Edit';
           editBtn.className = 'secondary';
+          editBtn.dataset.adminOnly = 'true';
           editBtn.style.padding = '6px 12px';
           editBtn.style.fontSize = '0.75rem';
           editBtn.style.marginRight = '8px';
@@ -110,6 +147,7 @@ func panelUsersActionsJS() string {
           const deleteBtn = document.createElement('button');
           deleteBtn.textContent = 'Delete';
           deleteBtn.className = 'danger';
+          deleteBtn.dataset.adminOnly = 'true';
           deleteBtn.style.padding = '6px 12px';
           deleteBtn.style.fontSize = '0.75rem';
           deleteBtn.addEventListener('click', () => deleteUser(u.username));
@@ -120,6 +158,105 @@ func panelUsersActionsJS() string {
         });
       } catch (err) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
+      }
+    }
+
+    async function loadSessions() {
+      const tbody = document.getElementById('sessions-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>';
+      try {
+        const response = await fetch('/api/auth/sessions', { headers: authHeaders() });
+        const text = await response.text();
+        if (!response.ok) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-danger);">' + (text || ('HTTP ' + response.status)) + '</td></tr>';
+          return;
+        }
+        const sessions = text ? JSON.parse(text) : [];
+        if (!sessions.length) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No active sessions</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '';
+        sessions.forEach((session) => {
+          const tr = document.createElement('tr');
+          const user = document.createElement('td');
+          user.textContent = session.username;
+          tr.appendChild(user);
+          const role = document.createElement('td');
+          role.innerHTML = '<span class="badge">' + session.role + '</span>';
+          tr.appendChild(role);
+          const expires = document.createElement('td');
+          expires.textContent = session.expiresAt || '';
+          tr.appendChild(expires);
+          const current = document.createElement('td');
+          current.textContent = session.current ? 'yes' : 'no';
+          tr.appendChild(current);
+          const actions = document.createElement('td');
+          const revoke = document.createElement('button');
+          revoke.type = 'button';
+          revoke.className = session.current ? 'secondary' : 'danger';
+          revoke.dataset.adminOnly = 'true';
+          revoke.style.padding = '6px 12px';
+          revoke.style.fontSize = '0.75rem';
+          revoke.textContent = session.current ? 'Revoke self' : 'Revoke';
+          revoke.addEventListener('click', () => revokeSession(session.id, Boolean(session.current)));
+          actions.appendChild(revoke);
+          tr.appendChild(actions);
+          tbody.appendChild(tr);
+        });
+        applyViewerRoleGuard();
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
+      }
+    }
+
+    async function revokeSession(id, isCurrent) {
+      if (!confirm(isCurrent ? 'Revoke the current browser session? You will need to sign in again.' : 'Revoke this browser session?')) {
+        return;
+      }
+      try {
+        const response = await fetch('/api/auth/sessions', {
+          method: 'DELETE',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ id })
+        });
+        if (!response.ok) {
+          alert(await response.text());
+          return;
+        }
+        if (isCurrent) {
+          localStorage.removeItem('veil_csrf_token');
+          window.location.reload();
+          return;
+        }
+        await loadSessions();
+      } catch (err) {
+        alert('Session revoke failed: ' + String(err));
+      }
+    }
+
+    function generateReplacementAPIToken() {
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      const token = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      const output = document.getElementById('token-rotation-output');
+      output.dataset.token = token;
+      output.textContent = 'Generated replacement token:\n' + token + '\n\nUpdate VEIL_API_TOKEN in /etc/veil/veil.env or the --auth-token value, restart veil.service, then update API clients and this browser token field.';
+    }
+
+    async function copyGeneratedAPIToken() {
+      const output = document.getElementById('token-rotation-output');
+      const token = output.dataset.token || '';
+      if (!token) {
+        output.textContent = 'Generate a token first';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(token);
+        output.textContent = output.textContent + '\n\nCopied generated token to clipboard';
+      } catch (err) {
+        output.textContent = output.textContent + '\n\nCopy failed: ' + String(err);
       }
     }
 

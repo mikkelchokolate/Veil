@@ -1,7 +1,10 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +20,14 @@ type Session struct {
 	Role      string
 	CSRFToken string
 	ExpiresAt time.Time
+}
+
+type SessionInfo struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	ExpiresAt string `json:"expiresAt"`
+	Current   bool   `json:"current"`
 }
 
 type SessionRegistry struct {
@@ -69,6 +80,53 @@ func (r *SessionRegistry) Delete(token string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.sessions, token)
+}
+
+func (r *SessionRegistry) List(currentToken string) []SessionInfo {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	sessions := make([]SessionInfo, 0, len(r.sessions))
+	for token, session := range r.sessions {
+		if now.After(session.ExpiresAt) {
+			delete(r.sessions, token)
+			continue
+		}
+		sessions = append(sessions, SessionInfo{
+			ID:        sessionID(token),
+			Username:  session.Username,
+			Role:      session.Role,
+			ExpiresAt: session.ExpiresAt.UTC().Format(time.RFC3339),
+			Current:   token == currentToken,
+		})
+	}
+	sort.Slice(sessions, func(i, j int) bool {
+		if sessions[i].Current != sessions[j].Current {
+			return sessions[i].Current
+		}
+		if sessions[i].Username != sessions[j].Username {
+			return sessions[i].Username < sessions[j].Username
+		}
+		return sessions[i].ExpiresAt < sessions[j].ExpiresAt
+	})
+	return sessions
+}
+
+func (r *SessionRegistry) DeleteByID(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for token := range r.sessions {
+		if sessionID(token) == id {
+			delete(r.sessions, token)
+			return true
+		}
+	}
+	return false
+}
+
+func sessionID(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -184,14 +242,39 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Request) {
+	if !requestHasAdminRole(r) {
+		writeError(w, "forbidden: admin role required", http.StatusForbidden)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, globalSessions.List(currentSessionToken(r)))
+	case http.MethodDelete:
+		var req struct {
+			ID string `json:"id"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		if strings.TrimSpace(req.ID) == "" {
+			writeError(w, "session id is required", http.StatusBadRequest)
+			return
+		}
+		if !globalSessions.DeleteByID(req.ID) {
+			writeNotFound(w)
+			return
+		}
+		writeJSON(w, map[string]any{"success": true})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodDelete)
+	}
+}
+
 func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Request) {
 	// Only accessible if role is admin. Verified in middleware, but double check.
-	cookie, err := r.Cookie("veil_session")
-	var activeSession Session
-	if err == nil {
-		activeSession, _ = globalSessions.Get(cookie.Value)
-	}
-	if activeSession.Role != "admin" {
+	if !requestHasAdminRole(r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
@@ -250,112 +333,135 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		})
 
 	default:
-		// PUT and DELETE on /api/users/<username>
-		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if len(pathParts) != 3 {
-			methodNotAllowed(w, http.MethodGet, http.MethodPost)
+		s.handleUserByNameRoute(w, r)
+	}
+}
+
+func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) != 3 {
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+		return
+	}
+	username := pathParts[2]
+
+	if r.Method == http.MethodPut {
+		var req struct {
+			Password string `json:"password,omitempty"`
+			Role     string `json:"role"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
 			return
 		}
-		username := pathParts[2]
-
-		if r.Method == http.MethodPut {
-			var req struct {
-				Password string `json:"password,omitempty"`
-				Role     string `json:"role"`
-			}
-			if !decodeJSONRequest(w, r, &req) {
-				return
-			}
-			if req.Role != "admin" && req.Role != "viewer" {
-				writeError(w, "valid role (admin/viewer) is required", http.StatusBadRequest)
-				return
-			}
-
-			s.mu.Lock()
-			var targetUser *User
-			for _, u := range s.users {
-				if u.Username == username {
-					targetUser = &u
-					break
-				}
-			}
-			s.mu.Unlock()
-
-			if targetUser == nil {
-				writeNotFound(w)
-				return
-			}
-
-			hash := targetUser.PasswordHash
-			if req.Password != "" {
-				hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
-				if err != nil {
-					writeError(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				hash = string(hashed)
-			}
-
-			update := model.User{
-				Username:     username,
-				PasswordHash: hash,
-				Role:         req.Role,
-			}
-
-			_ = s.withMutation(func(mutation managementstate.Mutation) error {
-				updated, mErr := mutation.UpdateUser(username, update)
-				if mErr != nil {
-					writeError(w, mErr.Error(), http.StatusInternalServerError)
-					return nil
-				}
-				writeJSON(w, map[string]any{
-					"username": updated.Username,
-					"role":     updated.Role,
-				})
-				return nil
-			})
-
-		} else if r.Method == http.MethodDelete {
-			s.mu.Lock()
-			exists := false
-			for _, u := range s.users {
-				if u.Username == username {
-					exists = true
-					break
-				}
-			}
-			s.mu.Unlock()
-
-			if !exists {
-				writeNotFound(w)
-				return
-			}
-
-			// Prevent deleting the last admin
-			s.mu.Lock()
-			adminCount := 0
-			for _, u := range s.users {
-				if u.Role == "admin" {
-					adminCount++
-				}
-			}
-			s.mu.Unlock()
-
-			if adminCount <= 1 {
-				writeError(w, "cannot delete the last administrator", http.StatusBadRequest)
-				return
-			}
-
-			_ = s.withMutation(func(mutation managementstate.Mutation) error {
-				if mErr := mutation.DeleteUser(username); mErr != nil {
-					writeError(w, mErr.Error(), http.StatusInternalServerError)
-					return nil
-				}
-				w.WriteHeader(http.StatusNoContent)
-				return nil
-			})
-		} else {
-			methodNotAllowed(w, http.MethodPut, http.MethodDelete)
+		if req.Role != "admin" && req.Role != "viewer" {
+			writeError(w, "valid role (admin/viewer) is required", http.StatusBadRequest)
+			return
 		}
+
+		s.mu.Lock()
+		var targetUser *User
+		for _, u := range s.users {
+			if u.Username == username {
+				targetUser = &u
+				break
+			}
+		}
+		s.mu.Unlock()
+
+		if targetUser == nil {
+			writeNotFound(w)
+			return
+		}
+
+		hash := targetUser.PasswordHash
+		if req.Password != "" {
+			hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
+			if err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			hash = string(hashed)
+		}
+
+		update := model.User{
+			Username:     username,
+			PasswordHash: hash,
+			Role:         req.Role,
+		}
+
+		_ = s.withMutation(func(mutation managementstate.Mutation) error {
+			updated, mErr := mutation.UpdateUser(username, update)
+			if mErr != nil {
+				writeError(w, mErr.Error(), http.StatusInternalServerError)
+				return nil
+			}
+			writeJSON(w, map[string]any{
+				"username": updated.Username,
+				"role":     updated.Role,
+			})
+			return nil
+		})
+
+	} else if r.Method == http.MethodDelete {
+		s.mu.Lock()
+		exists := false
+		for _, u := range s.users {
+			if u.Username == username {
+				exists = true
+				break
+			}
+		}
+		s.mu.Unlock()
+
+		if !exists {
+			writeNotFound(w)
+			return
+		}
+
+		// Prevent deleting the last admin
+		s.mu.Lock()
+		adminCount := 0
+		for _, u := range s.users {
+			if u.Role == "admin" {
+				adminCount++
+			}
+		}
+		s.mu.Unlock()
+
+		if adminCount <= 1 {
+			writeError(w, "cannot delete the last administrator", http.StatusBadRequest)
+			return
+		}
+
+		_ = s.withMutation(func(mutation managementstate.Mutation) error {
+			if mErr := mutation.DeleteUser(username); mErr != nil {
+				writeError(w, mErr.Error(), http.StatusInternalServerError)
+				return nil
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		})
+	} else {
+		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 	}
+}
+
+func requestHasAdminRole(r *http.Request) bool {
+	if role, _ := r.Context().Value(contextKeyRole).(string); role == "admin" {
+		return true
+	}
+	cookie, err := r.Cookie("veil_session")
+	var activeSession Session
+	if err == nil {
+		activeSession, _ = globalSessions.Get(cookie.Value)
+	}
+	return activeSession.Role == "admin"
+}
+
+func currentSessionToken(r *http.Request) string {
+	cookie, err := r.Cookie("veil_session")
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }

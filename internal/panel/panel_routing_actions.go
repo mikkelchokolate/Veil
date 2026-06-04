@@ -118,6 +118,7 @@ func panelRoutingActionsJS() string {
         labelSwitch.className = 'switch small-switch';
         const inputSwitch = document.createElement('input');
         inputSwitch.type = 'checkbox';
+        inputSwitch.dataset.adminOnly = 'true';
         inputSwitch.checked = Boolean(rule.enabled);
         inputSwitch.addEventListener('change', async () => {
           const payload = {
@@ -144,6 +145,7 @@ func panelRoutingActionsJS() string {
         const btnEdit = document.createElement('button');
         btnEdit.type = 'button';
         btnEdit.className = 'btn-action-edit';
+        btnEdit.dataset.adminOnly = 'true';
         btnEdit.textContent = 'Edit';
         btnEdit.addEventListener('click', () => {
           openRoutingModal(rule);
@@ -157,6 +159,7 @@ func panelRoutingActionsJS() string {
         tr.appendChild(tdActions);
         tbody.appendChild(tr);
       });
+      applyViewerRoleGuard();
     }
 
     async function loadRoutingRules() {

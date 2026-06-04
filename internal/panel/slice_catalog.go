@@ -44,8 +44,10 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksCardHTML}, {Placeholder: panelClientLinksActionsPlaceholder, Render: panelClientLinksActionsJS}},
 			EventBindings: []EventBinding{
 				{ElementID: "load-client-links", Handler: "loadClientLinks", Event: "click"},
+				{ElementID: "open-client-links-modal", Handler: "openClientLinksModal", Event: "click"},
 				{ElementID: "load-client-subscription", Handler: "loadClientSubscription", Event: "click"},
 				{ElementID: "load-client-subscription-raw", Handler: "loadRawClientSubscription", Event: "click"},
+				{ElementID: "download-client-links-json", Handler: "downloadClientLinksJSON", Event: "click"},
 				{ElementID: "download-mieru-configs", Handler: "downloadMieruConfigs", Event: "click"},
 				{ElementID: "copy-client-links", Handler: "copyClientLinksOutput", Event: "click"},
 			},
@@ -103,6 +105,9 @@ func (c SliceCatalog) Slices() []Slice {
 			EventBindings: []EventBinding{
 				{ElementID: "user-form", Handler: "saveUser", Event: "submit"},
 				{ElementID: "btn-cancel-user-edit", Handler: "cancelUserEdit", Event: "click"},
+				{ElementID: "btn-load-sessions", Handler: "loadSessions", Event: "click"},
+				{ElementID: "btn-generate-api-token", Handler: "generateReplacementAPIToken", Event: "click"},
+				{ElementID: "btn-copy-generated-api-token", Handler: "copyGeneratedAPIToken", Event: "click"},
 			},
 		},
 		{

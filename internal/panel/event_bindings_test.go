@@ -17,6 +17,8 @@ func TestEventBindingsJSRendersCrossModuleBindings(t *testing.T) {
 	for _, want := range []string{
 		`document.querySelectorAll('[data-load]')`,
 		`load-client-links`,
+		`open-client-links-modal`,
+		`download-client-links-json`,
 		`inbound-form`,
 		`routing-rule-form`,
 		`warp-form`,

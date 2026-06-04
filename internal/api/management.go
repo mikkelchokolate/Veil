@@ -36,6 +36,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
+	mux.HandleFunc("/api/client-links/qr", s.handleClientLinkQR)
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
 	mux.HandleFunc("/api/firewall", s.handleFirewall)
@@ -45,6 +46,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/sessions", s.handleAuthSessions)
 	mux.HandleFunc("/api/users", s.handleUsersRoute)
 	mux.HandleFunc("/api/users/", s.handleUsersRoute)
 }
