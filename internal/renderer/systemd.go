@@ -4,7 +4,7 @@ import "path"
 
 const (
 	UnitVeil      = "veil.service"
-	UnitNaive     = "veil-naive.service"
+	UnitCaddy     = "veil-caddy@.service"
 	UnitHysteria2 = "veil-hysteria2@.service"
 	UnitOlcrtc    = "veil-olcrtc@.service"
 	UnitWarp      = "veil-warp.service"
@@ -12,7 +12,7 @@ const (
 )
 
 func ManagedSystemdUnitNames() []string {
-	return []string{UnitVeil, UnitNaive, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru}
+	return []string{UnitVeil, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru}
 }
 
 type SystemdConfig struct {
@@ -47,7 +47,7 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.EtcDir == "" {
 		cfg.EtcDir = "/etc/veil"
 	}
-	caddyfile := path.Join(cfg.EtcDir, "generated", "caddy", "Caddyfile")
+	caddyfile := path.Join(cfg.EtcDir, "generated", "caddy", "%i.Caddyfile")
 	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")
 	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")
 	warpConfig := path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
@@ -73,8 +73,8 @@ ReadWritePaths=/etc/veil /var/lib/veil
 [Install]
 WantedBy=multi-user.target
 `,
-		UnitNaive: `[Unit]
-Description=Veil managed NaiveProxy/Caddy
+		UnitCaddy: `[Unit]
+Description=Veil managed NaiveProxy/Caddy (%i)
 After=network-online.target
 Wants=network-online.target
 
