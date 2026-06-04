@@ -3,40 +3,46 @@ package serve
 import "fmt"
 
 type SecurityOptions struct {
-	Listen      string
-	AuthToken   string
-	StatePath   string
-	ApplyRoot   string
-	KeyPath     string
-	TLSCert     string
-	TLSKey      string
-	WebBasePath string
-	AutoTLS     bool
-	AutoTLSDir  string
+	Listen        string
+	AuthToken     string
+	MetricsAccess string
+	StatePath     string
+	ApplyRoot     string
+	KeyPath       string
+	TLSCert       string
+	TLSKey        string
+	WebBasePath   string
+	AutoTLS       bool
+	AutoTLSDir    string
 }
 
 type Config struct {
-	Listen          string
-	ListenSource    string
-	Token           string
-	TokenSource     string
-	StatePath       string
-	StateSource     string
-	ApplyRoot       string
-	ApplyRootSource string
-	KeyPath         string
-	KeySource       string
-	PanelAccess     string
-	Domain          string
-	Email           string
-	WebBasePath     string
-	TLSEnabled      bool
-	TLSSource       string
-	TLSCert         string
-	TLSKey          string
-	AutoTLSDomain   string
-	AutoTLSEmail    string
-	AutoTLSCacheDir string
+	Listen                string
+	ListenSource          string
+	Token                 string
+	TokenSource           string
+	PublicListen          bool
+	SessionAuthConfigured bool
+	MetricsAccess         string
+	MetricsAccessSource   string
+	MetricsAuthRequired   bool
+	StatePath             string
+	StateSource           string
+	ApplyRoot             string
+	ApplyRootSource       string
+	KeyPath               string
+	KeySource             string
+	PanelAccess           string
+	Domain                string
+	Email                 string
+	WebBasePath           string
+	TLSEnabled            bool
+	TLSSource             string
+	TLSCert               string
+	TLSKey                string
+	AutoTLSDomain         string
+	AutoTLSEmail          string
+	AutoTLSCacheDir       string
 }
 
 type Security struct {
@@ -54,13 +60,30 @@ func (s Security) Resolve() (Config, error) {
 	if err := env.ValidateListen(listen); err != nil {
 		return Config{}, err
 	}
-	token, tokenSource := env.AuthToken(opts.AuthToken)
-	if err := env.ValidateAuthBinding(listen, tokenSource); err != nil {
+	publicListen, err := env.IsPublicListen(listen)
+	if err != nil {
 		return Config{}, err
 	}
+	token, tokenSource := env.AuthToken(opts.AuthToken)
 	statePath, stateSource := env.StatePath(opts.StatePath)
 	applyRoot, applyRootSource := env.ApplyRoot(opts.ApplyRoot)
 	keyPath, keySource := env.KeyPath(opts.KeyPath)
+	sessionAuthConfigured := false
+	if publicListen {
+		var sessionErr error
+		sessionAuthConfigured, sessionErr = env.SessionAuthConfigured(statePath)
+		if sessionErr != nil {
+			return Config{}, fmt.Errorf("session auth check: %w", sessionErr)
+		}
+	}
+	if err := env.ValidatePublicExposure(listen, tokenSource, sessionAuthConfigured); err != nil {
+		return Config{}, err
+	}
+	metricsAccess, metricsAccessSource := env.MetricsAccess(opts.MetricsAccess)
+	metricsAuthRequired, err := env.MetricsAuthRequired(metricsAccess, publicListen, tokenSource, sessionAuthConfigured)
+	if err != nil {
+		return Config{}, err
+	}
 	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
 	tlsEnabled, tlsSource, tlsCert, tlsKey := env.TLSFiles(opts.TLSCert, opts.TLSKey)
 	autoTLSConfig := AutoTLSConfig{}
@@ -76,26 +99,31 @@ func (s Security) Resolve() (Config, error) {
 		tlsKey = ""
 	}
 	return Config{
-		Listen:          listen,
-		ListenSource:    listenSource,
-		Token:           token,
-		TokenSource:     tokenSource,
-		StatePath:       statePath,
-		StateSource:     stateSource,
-		ApplyRoot:       applyRoot,
-		ApplyRootSource: applyRootSource,
-		KeyPath:         keyPath,
-		KeySource:       keySource,
-		PanelAccess:     env.PanelAccess(),
-		Domain:          env.Domain(),
-		Email:           env.Email(),
-		WebBasePath:     webBasePath,
-		TLSEnabled:      tlsEnabled,
-		TLSSource:       tlsSource,
-		TLSCert:         tlsCert,
-		TLSKey:          tlsKey,
-		AutoTLSDomain:   autoTLSConfig.Domain,
-		AutoTLSEmail:    autoTLSConfig.Email,
-		AutoTLSCacheDir: autoTLSConfig.CacheDir,
+		Listen:                listen,
+		ListenSource:          listenSource,
+		Token:                 token,
+		TokenSource:           tokenSource,
+		PublicListen:          publicListen,
+		SessionAuthConfigured: sessionAuthConfigured,
+		MetricsAccess:         metricsAccess,
+		MetricsAccessSource:   metricsAccessSource,
+		MetricsAuthRequired:   metricsAuthRequired,
+		StatePath:             statePath,
+		StateSource:           stateSource,
+		ApplyRoot:             applyRoot,
+		ApplyRootSource:       applyRootSource,
+		KeyPath:               keyPath,
+		KeySource:             keySource,
+		PanelAccess:           env.PanelAccess(),
+		Domain:                env.Domain(),
+		Email:                 env.Email(),
+		WebBasePath:           webBasePath,
+		TLSEnabled:            tlsEnabled,
+		TLSSource:             tlsSource,
+		TLSCert:               tlsCert,
+		TLSKey:                tlsKey,
+		AutoTLSDomain:         autoTLSConfig.Domain,
+		AutoTLSEmail:          autoTLSConfig.Email,
+		AutoTLSCacheDir:       autoTLSConfig.CacheDir,
 	}, nil
 }

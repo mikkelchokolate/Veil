@@ -15,6 +15,7 @@ const serveDrainTimeout = 5 * time.Second
 func newServeCommand(version string) *cobra.Command {
 	var listen string
 	var authToken string
+	var metricsAccess string
 	var statePath string
 	var applyRoot string
 	var keyPath string
@@ -28,22 +29,24 @@ func newServeCommand(version string) *cobra.Command {
 		Short: "Run Veil HTTP API and web panel",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServeWorkflow(cmd, serveWorkflowOptions{
-				Version:     version,
-				Listen:      listen,
-				AuthToken:   authToken,
-				StatePath:   statePath,
-				ApplyRoot:   applyRoot,
-				KeyPath:     keyPath,
-				TLSCert:     tlsCert,
-				TLSKey:      tlsKey,
-				WebBasePath: webBasePath,
-				AutoTLS:     autoTLS,
-				AutoTLSDir:  autoTLSDir,
+				Version:       version,
+				Listen:        listen,
+				AuthToken:     authToken,
+				MetricsAccess: metricsAccess,
+				StatePath:     statePath,
+				ApplyRoot:     applyRoot,
+				KeyPath:       keyPath,
+				TLSCert:       tlsCert,
+				TLSKey:        tlsKey,
+				WebBasePath:   webBasePath,
+				AutoTLS:       autoTLS,
+				AutoTLSDir:    autoTLSDir,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", "", "HTTP/HTTPS listen address; defaults to VEIL_LISTEN or 127.0.0.1:2096")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
+	cmd.Flags().StringVar(&metricsAccess, "metrics-access", "", "metrics exposure policy: auto, authenticated, or public; defaults to VEIL_METRICS_ACCESS or auto")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
 	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
@@ -56,41 +59,44 @@ func newServeCommand(version string) *cobra.Command {
 }
 
 type serveWorkflowOptions struct {
-	Version     string
-	Listen      string
-	AuthToken   string
-	StatePath   string
-	ApplyRoot   string
-	KeyPath     string
-	TLSCert     string
-	TLSKey      string
-	WebBasePath string
-	AutoTLS     bool
-	AutoTLSDir  string
+	Version       string
+	Listen        string
+	AuthToken     string
+	MetricsAccess string
+	StatePath     string
+	ApplyRoot     string
+	KeyPath       string
+	TLSCert       string
+	TLSKey        string
+	WebBasePath   string
+	AutoTLS       bool
+	AutoTLSDir    string
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir}).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, MetricsAccess: opts.MetricsAccess, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir}).Resolve()
 	if err != nil {
 		return err
 	}
 	server, stateReloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
-		Listen:          cfg.Listen,
-		Version:         opts.Version,
-		AuthToken:       cfg.Token,
-		StatePath:       cfg.StatePath,
-		ApplyRoot:       cfg.ApplyRoot,
-		KeyPath:         cfg.KeyPath,
-		TLSEnabled:      cfg.TLSEnabled,
-		TLSCert:         cfg.TLSCert,
-		TLSKey:          cfg.TLSKey,
-		AutoTLSDomain:   cfg.AutoTLSDomain,
-		AutoTLSEmail:    cfg.AutoTLSEmail,
-		AutoTLSCacheDir: cfg.AutoTLSCacheDir,
-		PanelAccess:     cfg.PanelAccess,
-		Domain:          cfg.Domain,
-		Email:           cfg.Email,
-		WebBasePath:     cfg.WebBasePath,
+		Listen:              cfg.Listen,
+		Version:             opts.Version,
+		AuthToken:           cfg.Token,
+		PublicListen:        cfg.PublicListen,
+		MetricsAuthRequired: cfg.MetricsAuthRequired,
+		StatePath:           cfg.StatePath,
+		ApplyRoot:           cfg.ApplyRoot,
+		KeyPath:             cfg.KeyPath,
+		TLSEnabled:          cfg.TLSEnabled,
+		TLSCert:             cfg.TLSCert,
+		TLSKey:              cfg.TLSKey,
+		AutoTLSDomain:       cfg.AutoTLSDomain,
+		AutoTLSEmail:        cfg.AutoTLSEmail,
+		AutoTLSCacheDir:     cfg.AutoTLSCacheDir,
+		PanelAccess:         cfg.PanelAccess,
+		Domain:              cfg.Domain,
+		Email:               cfg.Email,
+		WebBasePath:         cfg.WebBasePath,
 	}).Build()
 	tlsLabel := "http"
 	if cfg.TLSEnabled {
@@ -112,6 +118,16 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "API auth: disabled")
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "API auth: enabled (%s)\n", cfg.TokenSource)
+	}
+	if cfg.SessionAuthConfigured {
+		fmt.Fprintln(cmd.OutOrStdout(), "Session auth: configured")
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Session auth: not configured")
+	}
+	if cfg.MetricsAuthRequired {
+		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: authenticated (%s)\n", cfg.MetricsAccessSource)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: public (%s)\n", cfg.MetricsAccessSource)
 	}
 
 	// Output red ANSI warning if listening publicly without TLS

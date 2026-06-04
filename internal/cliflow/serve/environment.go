@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
@@ -53,21 +54,83 @@ func (Environment) ValidateListen(listen string) error {
 }
 
 func (Environment) ValidateAuthBinding(listen string, tokenSource string) error {
-	if tokenSource != "disabled" {
-		return nil
-	}
-	host, port, err := net.SplitHostPort(listen)
+	public, err := Environment{}.IsPublicListen(listen)
 	if err != nil {
-		return fmt.Errorf("listen address must be host:port: %w", err)
+		return err
 	}
-	if err := validatePort(port); err != nil {
-		return fmt.Errorf("listen address has invalid port %q: %w", port, err)
-	}
-	ip := net.ParseIP(host)
-	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
+	if !public || tokenSource != "disabled" {
 		return nil
 	}
 	return fmt.Errorf("API auth token is required when listening on non-loopback address %s; set --auth-token or VEIL_API_TOKEN", listen)
+}
+
+func (Environment) ValidatePublicExposure(listen string, tokenSource string, sessionAuthConfigured bool) error {
+	public, err := Environment{}.IsPublicListen(listen)
+	if err != nil {
+		return err
+	}
+	if !public {
+		return nil
+	}
+	missingToken := tokenSource == "disabled"
+	missingSession := !sessionAuthConfigured
+	if !missingToken && !missingSession {
+		return nil
+	}
+	return fmt.Errorf("public Panel listen %s requires both API token auth (--auth-token or VEIL_API_TOKEN) and user/session auth (run `veil admin reset` or `veil admin set --username admin --password <password>` before first public start)", listen)
+}
+
+func (Environment) IsPublicListen(listen string) (bool, error) {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return false, fmt.Errorf("listen address must be host:port: %w", err)
+	}
+	if err := validatePort(port); err != nil {
+		return false, fmt.Errorf("listen address has invalid port %q: %w", port, err)
+	}
+	return !isLoopbackHost(host), nil
+}
+
+func isLoopbackHost(host string) bool {
+	ip := net.ParseIP(host)
+	return strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
+}
+
+func (Environment) SessionAuthConfigured(statePath string) (bool, error) {
+	snapshot, ok, err := managementstate.NewStore(statePath, nil).Load()
+	if err != nil {
+		return false, fmt.Errorf("read management state users from %s: %w", statePath, err)
+	}
+	if !ok {
+		return false, nil
+	}
+	return len(snapshot.Users) > 0, nil
+}
+
+func (Environment) MetricsAccess(flagValue string) (access string, source string) {
+	if access := strings.ToLower(strings.TrimSpace(flagValue)); access != "" {
+		return access, "--metrics-access"
+	}
+	if access := strings.ToLower(strings.TrimSpace(os.Getenv("VEIL_METRICS_ACCESS"))); access != "" {
+		return access, "VEIL_METRICS_ACCESS"
+	}
+	return "auto", "default"
+}
+
+func (Environment) MetricsAuthRequired(access string, publicListen bool, tokenSource string, sessionAuthConfigured bool) (bool, error) {
+	switch access {
+	case "auto":
+		return publicListen || tokenSource != "disabled" || sessionAuthConfigured, nil
+	case "authenticated":
+		return true, nil
+	case "public":
+		if publicListen {
+			return false, fmt.Errorf("/metrics cannot be public on non-loopback Panel listen; use --metrics-access authenticated")
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("--metrics-access must be one of auto, authenticated, or public")
+	}
 }
 
 func (Environment) StatePath(flagValue string) (path string, source string) {

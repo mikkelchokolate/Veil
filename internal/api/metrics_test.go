@@ -45,6 +45,25 @@ func TestMetricsEndpointReturnsPrometheusFormat(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpointRequiresAuthWhenPolicyEnabled(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token", MetricsAuthRequired: true})
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated metrics to return 401, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("X-Veil-Token", "secret-token")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected authenticated metrics to return 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestMetricsEndpointHEADReturnsNoBody(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodHead, "/metrics", nil)
