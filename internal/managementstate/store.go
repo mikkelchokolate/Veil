@@ -39,7 +39,9 @@ func (s Store) Load() (model.ManagementSnapshot, bool, error) {
 	if err != nil {
 		return model.ManagementSnapshot{}, false, err
 	}
-	s.decryptSnapshot(&snapshot)
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		return model.ManagementSnapshot{}, false, err
+	}
 	return snapshot, true, nil
 }
 
@@ -62,46 +64,45 @@ func (s Store) Save(snapshot model.ManagementSnapshot) error {
 }
 
 func (s Store) Marshal(snapshot model.ManagementSnapshot) ([]byte, error) {
-	s.encryptSnapshot(&snapshot)
+	if err := s.encryptSnapshot(&snapshot); err != nil {
+		return nil, err
+	}
 	return NewManagementStateCodec().Encode(snapshot)
 }
 
-func (s Store) encryptSnapshot(snapshot *model.ManagementSnapshot) {
+func (s Store) encryptSnapshot(snapshot *model.ManagementSnapshot) error {
 	if s.cipher == nil {
-		return
+		return nil
 	}
-	encrypt := func(v string) string {
+	encrypt := func(v string) (string, error) {
 		if v == "" || secrets.IsEncrypted(v) {
-			return v
+			return v, nil
 		}
-		if enc, err := s.cipher.Encrypt(v); err == nil {
-			return enc
-		}
-		return v
+		return s.cipher.Encrypt(v)
 	}
-	SecretPolicy{}.Transform(snapshot, encrypt)
+	return SecretPolicy{}.Transform(snapshot, encrypt)
 }
 
-func (s Store) decryptSnapshot(snapshot *model.ManagementSnapshot) {
+func (s Store) decryptSnapshot(snapshot *model.ManagementSnapshot) error {
 	if s.cipher == nil {
-		return
+		return nil
 	}
-	decrypt := func(v string) string {
+	decrypt := func(v string) (string, error) {
 		if v == "" {
-			return v
+			return v, nil
 		}
-		if dec, err := s.cipher.Decrypt(v); err == nil {
-			return dec
+		if !secrets.IsEncrypted(v) {
+			return v, nil
 		}
-		return v
+		return s.cipher.Decrypt(v)
 	}
-	SecretPolicy{}.Transform(snapshot, decrypt)
+	return SecretPolicy{}.Transform(snapshot, decrypt)
 }
 
-func EncryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) {
-	NewStore("", cipher).encryptSnapshot(snapshot)
+func EncryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) error {
+	return NewStore("", cipher).encryptSnapshot(snapshot)
 }
 
-func DecryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) {
-	NewStore("", cipher).decryptSnapshot(snapshot)
+func DecryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) error {
+	return NewStore("", cipher).decryptSnapshot(snapshot)
 }
