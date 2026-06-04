@@ -11,6 +11,25 @@ func panelApplyCardHTML() string {
       <button id="apply-staged-files" type="button">Apply staged files</button>
       <button id="apply-live-configs" type="button">Apply live configs</button>
       <button id="reload-services" type="button">Reload and health check services</button>
+      <h3>Safe apply preview</h3>
+      <p class="hint">Shows file-level config changes, runtime actions, and DNS/TLS/firewall warnings without exposing generated config contents or secrets.</p>
+      <p id="apply-safety-warnings" class="hint">Safety warnings: build a plan first</p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>File or action</th>
+              <th>Safety note</th>
+            </tr>
+          </thead>
+          <tbody id="apply-file-diff-preview-body">
+            <tr>
+              <td colspan="3">Build a plan to preview managed files and runtime actions.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="form-grid">
         <div>
           <label for="apply-history-stage">History stage</label>

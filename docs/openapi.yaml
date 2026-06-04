@@ -176,6 +176,74 @@ paths:
                 anonymous:
                   value:
                     authenticated: false
+  /api/auth/sessions:
+    get:
+      tags: [auth]
+      summary: List active browser sessions
+      description: Requires an admin token or admin session.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Active sessions with stable revocation IDs. The current session is sorted first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionInfo"
+              examples:
+                sessions:
+                  value:
+                    - id: 0123456789abcdef
+                      username: admin
+                      role: admin
+                      expiresAt: "2026-06-04T18:30:00Z"
+                      current: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [auth]
+      summary: Revoke an active browser session
+      description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionDeleteRequest"
+            examples:
+              revoke:
+                value:
+                  id: 0123456789abcdef
+      responses:
+        "200":
+          description: Session was revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+              examples:
+                ok:
+                  value:
+                    success: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/users:
     get:
       tags: [auth]
@@ -686,6 +754,44 @@ paths:
               schema:
                 type: string
                 contentEncoding: base64
+  /api/client-links/qr:
+    post:
+      tags: [client-links]
+      summary: Render a client URI as a local QR PNG
+      description: Generates the QR image inside Veil so client URIs are not sent to a third-party QR service.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientLinkQRRequest"
+            examples:
+              hysteria2:
+                value:
+                  uri: hysteria2://example-secret@example.com:443/?sni=example.com#veil
+      responses:
+        "200":
+          description: QR image for the submitted client URI.
+          content:
+            image/png:
+              schema:
+                type: string
+                contentEncoding: base64
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: Submitted URI is too large for QR export.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/ErrorText"
   /api/firewall:
     get:
       tags: [status]
@@ -1116,6 +1222,34 @@ components:
           $ref: "#/components/schemas/UserRole"
         csrfToken:
           type: string
+    SessionInfo:
+      type: object
+      required: [id, username, role, expiresAt, current]
+      properties:
+        id:
+          type: string
+          description: Stable short hash used for session revocation; the raw bearer cookie is never returned.
+          minLength: 16
+          maxLength: 16
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        expiresAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: True when this entry matches the caller's `veil_session` cookie.
+    SessionDeleteRequest:
+      type: object
+      required: [id]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 16
+          maxLength: 16
     UserRole:
       type: string
       enum: [admin, viewer]
@@ -1408,6 +1542,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClientArtifact"
+    ClientLinkQRRequest:
+      type: object
+      required: [uri]
+      additionalProperties: false
+      properties:
+        uri:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Client connection URI or config export string to encode as a QR image.
     FirewallRule:
       type: object
       required: [port, protocol, service]

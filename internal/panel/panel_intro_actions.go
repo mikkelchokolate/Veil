@@ -38,6 +38,120 @@ func panelIntroActionsJS() string {
       return Object.assign({}, extra || {}, authHeaders());
     }
 
+    function currentUserRole() {
+      return window.veil_user_role || localStorage.getItem('veil_user_role') || '';
+    }
+
+    function setCurrentUserRole(role) {
+      window.veil_user_role = role || '';
+      if (role) {
+        localStorage.setItem('veil_user_role', role);
+      } else {
+        localStorage.removeItem('veil_user_role');
+      }
+    }
+
+    function isViewerRole() {
+      return currentUserRole() === 'viewer';
+    }
+
+    const adminOnlyControlIds = [
+      'update-version',
+      'add-inbound-btn',
+      'save-settings',
+      'save-inbound',
+      'delete-inbound',
+      'add-routing-rule-btn',
+      'apply-routing-preset',
+      'save-routing-rule',
+      'delete-routing-rule',
+      'save-warp-config',
+      'apply-staged-files',
+      'apply-live-configs',
+      'reload-services',
+      'btn-save-user',
+      'btn-cancel-user-edit',
+      'btn-load-sessions',
+      'btn-generate-api-token',
+      'btn-copy-generated-api-token'
+    ];
+
+    const adminOnlyFormIds = [
+      'settings-form',
+      'inbound-form',
+      'routing-rule-form',
+      'warp-form',
+      'user-form'
+    ];
+
+    function blockViewerAdminAction(event) {
+      if (!isViewerRole()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      alert('Viewer role is read-only. Admin role is required for this action.');
+    }
+
+    function wireViewerGuard(el) {
+      if (!el || el.dataset.viewerGuardBound === 'true') {
+        return;
+      }
+      el.addEventListener('click', blockViewerAdminAction, true);
+      el.dataset.viewerGuardBound = 'true';
+    }
+
+    function applyViewerRoleGuard() {
+      const viewer = isViewerRole();
+      const controls = [];
+      adminOnlyControlIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+          controls.push(el);
+        }
+      });
+      document.querySelectorAll('[data-admin-only="true"], button[id^="restart-"]').forEach((el) => controls.push(el));
+      controls.forEach((el) => {
+        wireViewerGuard(el);
+        el.disabled = viewer;
+        el.title = viewer ? 'Viewer role is read-only; admin required.' : '';
+      });
+      adminOnlyFormIds.forEach((id) => {
+        const form = document.getElementById(id);
+        if (!form || form.dataset.viewerGuardSubmitBound === 'true') {
+          return;
+        }
+        form.addEventListener('submit', blockViewerAdminAction, true);
+        form.dataset.viewerGuardSubmitBound = 'true';
+      });
+      document.body.dataset.veilRole = currentUserRole();
+    }
+
+    async function refreshCurrentUserRole() {
+      try {
+        const response = await fetch('/api/auth/status', { headers: authHeaders() });
+        if (!response.ok) {
+          applyViewerRoleGuard();
+          return;
+        }
+        const data = await response.json();
+        if (data && data.authenticated) {
+          setCurrentUserRole(data.role || '');
+        } else if (localStorage.getItem('veil_api_token')) {
+          setCurrentUserRole('admin');
+        } else {
+          setCurrentUserRole('');
+        }
+      } catch (_) {
+      }
+      applyViewerRoleGuard();
+    }
+
+    const viewerGuardObserver = new MutationObserver(() => applyViewerRoleGuard());
+    viewerGuardObserver.observe(document.body, { childList: true, subtree: true });
+    applyViewerRoleGuard();
+    refreshCurrentUserRole();
+
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = 'Loading ' + path + '...';
@@ -147,6 +261,7 @@ func panelIntroActionsJS() string {
         } catch (_) {}
         localStorage.removeItem('veil_csrf_token');
         localStorage.removeItem('veil_username');
+        localStorage.removeItem('veil_user_role');
         window.location.reload();
       });
     }`

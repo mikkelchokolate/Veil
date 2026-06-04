@@ -230,3 +230,49 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidatio
 		t.Fatalf("unexpected unsupported query error: %q", w.Body.String())
 	}
 }
+
+func TestClientLinkQREndpointReturnsLocalPNG(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	req := httptest.NewRequest(http.MethodPost, "/api/client-links/qr", strings.NewReader(`{"uri":"hysteria2://secret@example.test:443/#demo"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected no-store cache-control for QR image, got %q", cc)
+	}
+	if pragma := w.Header().Get("Pragma"); pragma != "no-cache" {
+		t.Fatalf("expected no-cache pragma for QR image, got %q", pragma)
+	}
+	body := w.Body.Bytes()
+	if len(body) < 8 || string(body[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("QR response is not a PNG: %x", body[:min(len(body), 8)])
+	}
+}
+
+func TestClientLinkQREndpointRejectsInvalidPayload(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	for name, body := range map[string]string{
+		"empty":     `{"uri":""}`,
+		"too-large": `{"uri":"` + strings.Repeat("x", maxClientLinkQRBytes+1) + `"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/client-links/qr", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			r.ServeHTTP(w, req)
+
+			if w.Code < 400 {
+				t.Fatalf("expected error status, got %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}

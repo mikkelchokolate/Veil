@@ -105,6 +105,16 @@ veil update --yes --staged
 veil uninstall --yes
 ```
 
+### Panel UX controls
+
+The Panel includes operator-focused controls for production use:
+
+- **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
+- **Users and sessions** - create admin/viewer users, audit active browser sessions, and revoke stale sessions.
+- **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
+- **Safe apply preview** - review generated files, staged/live paths, backups, rollback files, runtime actions, and DNS/TLS/firewall/service warnings before applying.
+- **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
+
 ### Backup, rollback, and audit
 
 Repair can write backups and a JSONL audit log. The backup directory must be writable; audit entries are not written during `--dry-run`.

@@ -19,6 +19,10 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`function renderApplyRuntimes(data)`,
 		`data.plan && Array.isArray(data.plan.runtimes)`,
 		`Runtime units: none required`,
+		`function renderApplySafePreview(data)`,
+		`apply-file-diff-preview-body`,
+		`apply-safety-warnings`,
+		`No file content is shown`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)
@@ -36,6 +40,9 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 		`id="reload-services"`,
 		`id="load-apply-history"`,
 		`id="apply-runtime-output"`,
+		`id="apply-safety-warnings"`,
+		`id="apply-file-diff-preview-body"`,
+		`Safe apply preview`,
 		`Runtime units: not planned`,
 		`id="apply-plan-output"`,
 	} {
