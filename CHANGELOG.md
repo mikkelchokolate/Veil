@@ -4,20 +4,37 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.5.0] — 2026-06-04
+
 ### Security
 
-- Bumped `golang.org/x/net`, `golang.org/x/crypto`, and `golang.org/x/text` and raised the Go toolchain to 1.25 to clear all `govulncheck`-reported vulnerabilities in called code.
+- Public Panel listeners are now fail-closed unless both API token auth and user/session auth are configured.
+- Added browser session authentication, CSRF protection, admin/viewer RBAC, session revocation, and first-admin setup support.
+- Added independent `/metrics` access policy controls and blocked public metrics on public Panel listeners.
+- Shipped hardened systemd units by default with constrained capabilities and read/write paths.
+- Hardened Docker Compose defaults, Docker runtime paths, and release supply-chain verification.
+- Bumped `golang.org/x/net`, `golang.org/x/crypto`, and `golang.org/x/text` and raised the Go toolchain to 1.25.11 to clear known vulnerabilities in called code.
 
 ### Fixed
 
 - Mieru generated config now rejects duplicate usernames across aggregated enabled Inbounds (including generated client profiles) instead of emitting a config the `mieru` server would reject at load time.
+- Fixed key rotation rollback atomicity and propagated secret decryption failures during state load.
+- Fixed cross-platform end-to-end graceful shutdown behavior and dev-mode auth disablement.
+- Fixed olcRTC auth credential encryption/redaction coverage.
 
 ### Added
 
 - Added native `.deb`, `.rpm`, and `.apk` packages (built with nfpm) attached to releases, installing the Panel binary and managed systemd units.
-- Added an SPDX SBOM and keyless cosign signatures for release checksums and SBOM.
-- Added an OpenAPI 3.1 specification for the Panel HTTP API at `docs/openapi.yaml`.
-- Added a hardening guide at `docs/HARDENING.md` and documentation index in the README.
+- Added an SPDX SBOM, keyless cosign signatures, and GitHub provenance attestations for release artifacts.
+- Added CodeQL and Dependabot configuration, pinned GitHub Actions, and a `make verify-release` release gate.
+- Added an OpenAPI 3.1 specification for the Panel HTTP API at `docs/openapi.yaml`, including validation in CI/release checks.
+- Added a hardening guide, disaster recovery guide, troubleshooting guide, install guide, roadmap, documentation index, and release verification instructions.
+- Added encrypted and plaintext backup create/restore commands, backup archive compatibility tests, and restore coverage.
+- Added atomic state key rotation with rollback safety and decryption-error propagation.
+- Added state schema migrations for long-lived management state compatibility.
+- Added Panel UX controls for client exports, local QR rendering, user/session management, token rotation guidance, viewer role behavior, safe apply preview, and DNS/TLS/firewall/service warnings.
+- Added NaiveProxy/Caddy multi-instance support with per-Inbound Caddyfiles and managed runtime catalog coverage.
+- Added port collision and WARP port warning validation.
 - Added a black-box end-to-end test suite (`test/e2e`, behind the `e2e` build tag) that compiles the real `veil` binary, runs `serve` over a live socket, and verifies health/readiness, bearer-auth gating, the full inbound→client-link→apply flow with on-disk generated config, duplicate-username rejection, state persistence across restarts, graceful shutdown, and the `config validate`/`version`/`doctor` CLIs.
 - Expanded CI and release quality gates to enforce gofmt, `go mod tidy`, staticcheck, govulncheck, shellcheck, the race detector, and coverage reporting.
 - Added end-to-end Mieru Inbounds, generated config, client artifacts, managed runtime metadata, firewall planning, apply validation, live promotion, repair, and uninstall coverage.
@@ -27,6 +44,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Changed
 
+- Interactive `veil install` now asks for Panel exposure mode (`local`, `direct`, or `caddy`) and random/custom Panel port selection.
+- The curl installer no longer forces `--panel-access local` during interactive installs, allowing the CLI wizard to collect exposure mode and port choices.
+- Direct/local Panel docs now treat random Panel ports as the safe interactive default instead of assuming `2096`.
+- NaiveProxy/Caddy runtime management now uses `veil-caddy@<inbound>.service` style instances instead of a single aggregate Caddy runtime.
+- Apply, repair, uninstall, status, service actions, and Panel previews now understand multi-instance managed runtimes.
+- Orphaned managed systemd instances are stopped and disabled during apply/promotion cleanup.
+- Docker builds and release verification now run through stronger CI gates and container publishing checks.
+- The Go module path is now `github.com/mikkelchokolate/Veil`.
+- Windows/default path handling and interactive passphrase prompting were made more portable.
 - Veil install is Panel-only; protocols are configured later as Panel Inbounds.
 - Veil install writes systemd units by default, defaults direct/local Panel access to port 2096, requires root in the curl installer only for real applies, avoids binary install side effects during curl `--dry-run`, validates missing installer option values before side effects, requires exactly one exact checksum asset match for release assets, preserves interactive prompts through `/dev/tty`, and runs daemon-reload/enable/restart for installed Panel units.
 - Veil install and repair render systemd units and install plans with the resolved Caddy binary path when Panel Caddy access is used, and packaged systemd unit templates now match the renderer including `veil.env`, WARP, and Mieru units.
@@ -39,6 +65,14 @@ All notable changes to Veil will be documented in this file.
 - RURecommendedProfile, Veil install/repair workflow inputs, the Settings Interface, RU-recommended profile preview Interface, Panel settings actions, Client link responses, and the curl installer parser no longer carry legacy protocol stack/install fields; strict JSON Interfaces now reject removed `stack` input instead of accepting it for compatibility.
 - NaiveProxy client links use the `naive+https://` scheme.
 - Protocol capabilities now drive Inbound options, Generated config set rendering, Client link delivery, Apply actions, managed runtimes, and repair planning.
+
+### Migration Notes
+
+- Public `veil serve` listeners now require both an API token and at least one configured Panel user/session auth account.
+- Interactive installs may choose a random high Panel port; use the printed Panel URL or SSH tunnel command instead of assuming `2096`.
+- NaiveProxy/Caddy managed runtime instances now use `veil-caddy@<inbound>.service`; stale instances are cleaned up during apply/promotion.
+- Go consumers importing the module must use `github.com/mikkelchokolate/Veil`.
+- Operators should verify backup restore and key rotation procedures before upgrading production state.
 
 ## [v0.3.16] — 2026-05-06
 
