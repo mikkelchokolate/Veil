@@ -15,17 +15,19 @@ import (
 )
 
 type ServerInfo struct {
-	Version     string
-	Mode        string
-	AuthToken   string
-	StatePath   string
-	ApplyRoot   string
-	KeyPath     string
-	PanelListen string
-	PanelAccess string
-	Domain      string
-	Email       string
-	WebBasePath string
+	Version             string
+	Mode                string
+	AuthToken           string
+	PublicListen        bool
+	MetricsAuthRequired bool
+	StatePath           string
+	ApplyRoot           string
+	KeyPath             string
+	PanelListen         string
+	PanelAccess         string
+	Domain              string
+	Email               string
+	WebBasePath         string
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

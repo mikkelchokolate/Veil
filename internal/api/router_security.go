@@ -25,14 +25,36 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 }
 
 func authMiddleware(state *managementState, token string, next http.Handler) http.Handler {
+	return authMiddlewareWithOptions(state, authMiddlewareOptions{
+		Token:             token,
+		AllowDevAnonymous: true,
+	}, next)
+}
+
+type authMiddlewareOptions struct {
+	Token             string
+	ProtectHealthz    bool
+	ProtectMetrics    bool
+	AllowDevAnonymous bool
+}
+
+func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Exclude public endpoints and auth endpoints
-		if !strings.HasPrefix(path, "/api/") ||
-			path == "/api/auth/login" ||
+		requiresAuth := strings.HasPrefix(path, "/api/")
+		if path == "/api/auth/login" ||
 			path == "/api/auth/logout" ||
 			path == "/api/auth/status" {
+			requiresAuth = false
+		}
+		if path == "/healthz" && opts.ProtectHealthz {
+			requiresAuth = true
+		}
+		if path == "/metrics" && opts.ProtectMetrics {
+			requiresAuth = true
+		}
+		if !requiresAuth {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -44,7 +66,7 @@ func authMiddleware(state *managementState, token string, next http.Handler) htt
 
 		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
 		hasStaticToken := false
-		if token != "" && validAuthToken(r, token) {
+		if opts.Token != "" && validAuthToken(r, opts.Token) {
 			username = "api-token"
 			role = "admin"
 			hasStaticToken = true
@@ -68,7 +90,7 @@ func authMiddleware(state *managementState, token string, next http.Handler) htt
 			state.mu.Lock()
 			noUsers := len(state.users) == 0
 			state.mu.Unlock()
-			if noUsers && token == "" {
+			if opts.AllowDevAnonymous && noUsers && opts.Token == "" {
 				username = "dev-anonymous"
 				role = "admin"
 			}

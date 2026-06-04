@@ -86,10 +86,14 @@ This command restores the state file, stages the generated files, restarts the a
 - **Resolution:** Identify the colliding process using `ss -tulpn` or change the Inbound port in the Panel. Note that TCP and UDP bindings on the same numeric port do not conflict.
 
 ### Panel Access Forbidden (401 Unauthorized)
-- **Symptom:** `/api/*` requests or UI loading fails with `401 Unauthorized`.
-- **Cause:** The Authorization token sent by the client does not match `VEIL_API_TOKEN` defined in `/etc/veil/veil.env`.
-- **Resolution:** View the correct token in `/etc/veil/veil.env` under `VEIL_API_TOKEN` and ensure your API calls attach the header:
-  `Authorization: Bearer <token>`
+- **Symptom:** `/api/*`, `/healthz` on a public listener, or `/metrics` with authenticated metrics returns `401 Unauthorized`.
+- **Cause:** The request has no valid `VEIL_API_TOKEN`, bearer token, or `veil_session` cookie. Cookie-backed mutating requests may also be missing `X-CSRF-Token`.
+- **Resolution:** For API clients, view the correct token in `/etc/veil/veil.env` under `VEIL_API_TOKEN` and attach `Authorization: Bearer <token>` or `X-Veil-Token: <token>`. For browser access, sign in through the Panel login page. If no user exists, run `sudo veil admin reset` or `sudo veil admin set --username admin --password '...' --role admin`.
+
+### Public Serve Refuses to Start
+- **Symptom:** `veil serve --listen 0.0.0.0:2096` exits before binding.
+- **Cause:** Public listeners are fail-closed and require both token auth and user/session auth.
+- **Resolution:** Set `VEIL_API_TOKEN` or pass `--auth-token`, then initialize a Panel admin user with `veil admin reset` or `veil admin set`.
 
 ### "Apply Live" Failures on systemd Runtimes
 - **Symptom:** Staging works, but applying changes fails on systemd operations.

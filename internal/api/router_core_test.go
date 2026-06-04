@@ -111,6 +111,52 @@ func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRouterProtectsHealthzWhenPublicListenIsProtected(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token", PublicListen: true})
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated healthz to return 401, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected authenticated healthz to return 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRouterDisablesAnonymousDevFallbackOnPublicListen(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", PublicListen: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected public router without token or session to return 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRouterDoesNotRenderPanelOnPublicListenWithoutSessionUsers(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", PublicListen: true})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected public panel without first-run users to return 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "<html") {
+		t.Fatalf("expected setup error instead of panel HTML, got %s", w.Body.String())
+	}
+}
+
 func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)

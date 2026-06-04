@@ -42,6 +42,16 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
 
 Veil provides three exposure profiles for the management Panel:
 
+Before any public exposure, create Panel credentials explicitly:
+
+```bash
+sudo veil admin reset
+# or
+sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
+```
+
+Direct public `veil serve` listeners require both a configured Panel user and an API token. Local loopback listeners can be reached through SSH and are the default.
+
 ### Local Mode (Highly Recommended)
 Exposes the Panel on the loopback interface (`127.0.0.1:2096`) with a self-signed TLS certificate.
 - **Accessing it:** Run an SSH tunnel from your client machine:
@@ -56,12 +66,13 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 - **Accessing it:** Caddy terminates TLS and proxies the traffic under a randomly-generated secret Web base path prefix.
 - **URL:** `https://your-domain.com/a1b2c3d4e5f6/` (the path is outputted at the end of the installation).
 - **Why:** Safely exposes the panel publicly without exposing raw ports, using standard reverse proxy hardening.
+- **Auth:** Use a Panel user/session for browser access. Keep `VEIL_API_TOKEN` set for API clients and automation.
 
 ### Direct Mode
 Exposes the Panel directly on all interfaces on the configured port using self-signed TLS.
 - **URL:** `https://your-server-ip:2096/`
 - **Why:** Convenient for quick staging or internal networks.
-- **Warning:** Direct exposure of self-signed HTTP endpoints is prone to port scanning and certificate bypass dialog warnings.
+- **Warning:** Direct exposure of self-signed HTTP endpoints is prone to port scanning and certificate bypass dialog warnings. `veil serve` refuses non-loopback direct exposure unless both `VEIL_API_TOKEN` and a Panel user are configured.
 
 ---
 

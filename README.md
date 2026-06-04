@@ -48,7 +48,19 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
   --yes
 ```
 
-Protocol runtimes are not selected during install. Open the Panel after install and add NaiveProxy, Hysteria2, or Mieru as Inbounds.
+Protocol runtimes are not selected during install. Open the Panel after install and add NaiveProxy, Hysteria2, olcRTC, or Mieru as Inbounds.
+
+### First-run admin setup
+
+Veil expects Panel user/session authentication before any public exposure. For local installs, the first server start can generate one-time admin credentials and print them to the service log. For planned public exposure, initialize credentials explicitly before switching the listener to a public interface:
+
+```bash
+sudo veil admin reset
+# or set your own account
+sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
+```
+
+When `veil serve` listens on a non-loopback address, it refuses to start unless both an API token and at least one Panel user are configured.
 
 ## Inbounds
 
@@ -106,7 +118,10 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 
 ## Security
 
-- **API token** — required for all management operations when exposed
+- **Fail-closed public listen** - non-loopback `veil serve` requires both `VEIL_API_TOKEN`/`--auth-token` and user/session auth
+- **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
+- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role
+- **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
 - **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
 - **TLS 1.2+** — when HTTPS is enabled
@@ -115,12 +130,20 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 
 See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-chain verification (signed releases, SBOM), and systemd hardening.
 
+### Safe exposure modes
+
+| Mode | Listener | Required auth | Notes |
+|---|---|---|---|
+| Local + SSH tunnel | `127.0.0.1:2096` | Session user recommended; token optional | Default and safest. Use `ssh -L 2096:127.0.0.1:2096 host`. |
+| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS and routes a random Web base path. |
+| Direct public listen | `0.0.0.0:2096` or public IP | Session user and API token | `veil serve` refuses to start without both. Use TLS and authenticated metrics. |
+
 ## Documentation
 
 - [Installation guide](docs/install.md) — setup options, access modes, and compiling from source
 - [Troubleshooting guide](docs/troubleshooting.md) — diagnostics, logs, and state rollback
 - [Hardening guide](docs/HARDENING.md) — secure deployment and operations
-- [Known limitations](docs/known-limitations.md) — same-protocol inbound overwrites and platform limits
+- [Known limitations](docs/known-limitations.md) — multi-inbound behavior and platform limits
 - [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
 - [Security policy](SECURITY.md) — vulnerability reporting
 - [Changelog](CHANGELOG.md) — release history
@@ -129,6 +152,25 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 ## Native packages
 
 Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary and managed systemd units; run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
+
+### Verify a release
+
+Each release ships checksums, an SPDX SBOM, keyless cosign signatures, and GitHub provenance attestations. Before installing manually:
+
+```bash
+cosign verify-blob \
+  --certificate checksums.txt.pem \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp 'https://github.com/mikkelchokolate/Veil/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+sha256sum -c checksums.txt
+gh attestation verify dist/veil_linux_amd64.tar.gz \
+  --repo mikkelchokolate/Veil
+```
+
+Maintainers can run `make verify-release` before tagging to execute tests, e2e checks, shell validation, build validation, and OpenAPI lint.
 
 ## Docker
 
@@ -143,7 +185,7 @@ Copy `.env.example` to `.env` and set a secure `VEIL_API_TOKEN`.
   ```
 
 - **Production Exposure:**
-  If exposing the panel publicly (e.g. via direct binding or reverse proxy), ensure `VEIL_API_TOKEN` is populated with a strong token, and configure TLS/HTTPS. The CLI server will refuse to start if listening publicly without an authentication token configured.
+  If exposing the panel publicly (e.g. via direct binding or reverse proxy), initialize a Panel admin user first, populate `VEIL_API_TOKEN` with a strong token, and configure TLS/HTTPS. The CLI server refuses to start on non-loopback listeners unless both token auth and user/session auth are configured.
 
 ### Single Container Run
 
@@ -152,6 +194,19 @@ To run a single container locally on the host network:
 docker run -d --name veil --network host \
   -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
   ghcr.io/mikkelchokolate/veil:latest serve
+```
+
+For direct public container exposure, create the first admin account in the mounted state before starting the public listener:
+
+```bash
+docker run --rm \
+  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+  ghcr.io/mikkelchokolate/veil:latest admin reset
+
+docker run -d --name veil -p 2096:2096 \
+  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
+  -e VEIL_API_TOKEN='use-a-long-random-token' \
+  ghcr.io/mikkelchokolate/veil:latest serve --listen 0.0.0.0:2096
 ```
 
 ## Testing

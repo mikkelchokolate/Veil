@@ -34,17 +34,28 @@ Guidance:
 
 ## 2. API authentication
 
-All `/api/*` routes are gated by a bearer token when one is configured
-(`authMiddleware`). The token is compared in constant time and accepted via
-either header:
+Public listeners are fail-closed. `veil serve --listen 0.0.0.0:...` (or any
+other non-loopback address) requires both:
+
+1. API token auth from `--auth-token` or `VEIL_API_TOKEN`.
+2. User/session auth already present in Management state (`veil admin reset` or
+   `veil admin set --username admin --password ...`).
+
+The bearer token is compared in constant time and accepted via either header:
 
 ```
 Authorization: Bearer <token>
 X-Veil-Token: <token>
 ```
 
-- **Always set a token** for `direct`/`caddy` modes. An empty token disables
-  the gate and is only acceptable for loopback-only deployments fronted by SSH.
+- **Always set a token** for direct public listeners and API clients. Empty
+  token mode is only acceptable for loopback-only deployments fronted by SSH.
+- Browser access uses `/api/auth/login`, an HTTP-only `veil_session` cookie,
+  CSRF headers for mutating requests, and admin/viewer RBAC. Viewer sessions
+  cannot mutate state.
+- `/metrics` has an independent policy: `--metrics-access auto` (default),
+  `authenticated`, or `public`. `public` is rejected on non-loopback Panel
+  listeners.
 - Tokens should be ≥ 32 random bytes. Rotate by restarting `veil serve` with a
   new token and updating any API clients.
 - The Panel sets baseline security headers on every response
@@ -82,25 +93,46 @@ X-Veil-Token: <token>
 
 - **SBOM:** every release ships an SPDX SBOM (`veil.sbom.spdx.json`) describing
   all module dependencies. Use it to audit for known-vulnerable components.
+- **Provenance attestations:** release archives and native packages are covered
+  by GitHub build provenance attestations. Verify them with:
+
+  ```sh
+  gh attestation verify dist/veil_linux_amd64.tar.gz \
+    --repo mikkelchokolate/Veil
+  ```
+
+- **Pinned CI actions and dependency automation:** GitHub Actions are pinned by
+  commit SHA, CodeQL scans Go code, and Dependabot watches Go modules, Docker,
+  and workflow dependencies.
 - **Routing source material** (route-dat files) is checksum-verified before it
   is staged, so a tampered routing mirror cannot inject rules.
 
 ## 5. Host and runtime hardening
 
-- **Run as a dedicated user where possible.** The container image already runs
-  as the non-root `veil` user. On bare-metal systemd installs, the Panel needs
-  root to manage units; restrict shell access to the host accordingly.
+- **Shipped systemd hardening is the baseline.** Packaged units include
+  `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp`,
+  restricted address families, native system-call architecture, and explicit
+  `ReadWritePaths` for Veil-managed state. Treat local drop-ins as further
+  tightening, not as the first hardening layer.
+- **Root surface.** On bare-metal systemd installs, the Panel process still
+  needs root-equivalent access to write `/etc/veil`, write `/var/lib/veil`, and
+  call `systemctl` for managed units. The privileged operations are: install
+  and repair managed unit files, promote generated configs, restart/reload
+  managed units, read bounded journald logs, and rotate the state key.
+- **Containers run as a dedicated user.** The container image runs as the
+  non-root `veil` user and relies on mounted state directories. Do not mount the
+  host systemd tree read-write unless you are intentionally delegating host
+  service orchestration to the container.
 - **Firewall.** Only expose the ports you actually use. The Panel-facing
   firewall material plans rules from enabled Inbounds and Panel access — review
   `GET /api/firewall` output and apply the minimum.
 - **Keep the toolchain current.** CI builds and releases on the latest Go and
   fails on any `govulncheck` finding, so staying on tagged releases keeps you
   ahead of stdlib and dependency CVEs.
-- **systemd unit hardening (optional).** For defense in depth you can layer a
-  drop-in (`/etc/systemd/system/veil.service.d/hardening.conf`) adding
-  `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`,
-  `PrivateTmp=yes`, and a `ReadWritePaths=/etc/veil`. Validate carefully — the
-  Panel needs to write managed material and reload units.
+- **Capability envelope.** Units bound to potentially privileged ports keep
+  `CAP_NET_BIND_SERVICE` and drop broader ambient capabilities. If your local
+  deployment does not bind low ports directly, you can remove that capability in
+  a drop-in after validating apply, diagnostics, and restart flows.
 
 ## 6. Updates and rollback
 
