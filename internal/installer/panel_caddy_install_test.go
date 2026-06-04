@@ -40,7 +40,7 @@ func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-caddy@panel.service"}, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
 	if !strings.Contains(string(body), "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("unexpected panel Caddyfile:\n%s", string(body))
 	}
-	if _, err := os.Stat(filepath.Join(dir, "systemd", "veil-naive.service")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "systemd", "veil-caddy@.service")); err != nil {
 		t.Fatalf("Caddy runtime unit should be written for panel Caddy access: %v", err)
 	}
 }

@@ -90,10 +90,10 @@ func naiveProxyCapability() Capability {
 		FirewallService:        "Veil NaiveProxy",
 		RequiresCaddy:          true,
 		GeneratedConfig:        generatedconfig.ArtifactSpec{Subpath: generatedconfig.CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
-		ApplyAction:            "reload " + renderer.UnitNaive,
-		RuntimeName:            "naive",
+		ApplyAction:            "reload " + renderer.UnitCaddy,
+		RuntimeName:            "caddy",
 		RuntimeActionName:      "caddy",
-		RuntimeUnit:            renderer.UnitNaive,
+		RuntimeUnit:            renderer.UnitCaddy,
 		RuntimeTransport:       "tcp",
 		RuntimeOrder:           10,
 		PromotedVerb:           "reload",
@@ -103,10 +103,45 @@ func naiveProxyCapability() Capability {
 		MaxEnabled:             0,
 		RenderGeneratedConfig: func(input generatedconfig.ProtocolRenderInput) ([]generatedconfig.GeneratedConfigArtifact, bool, error) {
 			if len(input.Inbounds) == 0 {
+				if input.Settings.PanelAccess == "caddy" {
+					body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderPanelStandalone()
+					if err != nil {
+						return nil, false, err
+					}
+					if body != "" {
+						return []generatedconfig.GeneratedConfigArtifact{{Path: input.Paths.Generated("caddy/panel.Caddyfile"), Body: body}}, true, nil
+					}
+				}
 				return nil, false, nil
 			}
-			body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderNaiveSet(input.Inbounds)
-			return []generatedconfig.GeneratedConfigArtifact{{Path: input.Paths.Generated(generatedconfig.CaddyfileSubpath), Body: body}}, true, err
+
+			hasInboundOn443 := false
+			for _, inbound := range input.Inbounds {
+				if inbound.Port == 443 {
+					hasInboundOn443 = true
+					break
+				}
+			}
+
+			var artifacts []generatedconfig.GeneratedConfigArtifact
+			for i, inbound := range input.Inbounds {
+				includePanel := false
+				if input.Settings.PanelAccess == "caddy" {
+					if inbound.Port == 443 || (!hasInboundOn443 && i == 0) {
+						includePanel = true
+					}
+				}
+				body, err := generatedconfig.NewInboundRenderer(input.Settings, input.Paths, input.Warp).RenderNaive(inbound, includePanel)
+				if err != nil {
+					return nil, false, err
+				}
+				subpath := "caddy/" + inbound.Name + ".Caddyfile"
+				artifacts = append(artifacts, generatedconfig.GeneratedConfigArtifact{
+					Path: input.Paths.Generated(subpath),
+					Body: body,
+				})
+			}
+			return artifacts, true, nil
 		},
 	}
 }

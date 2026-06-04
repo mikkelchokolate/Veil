@@ -101,7 +101,7 @@ func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read plan file: %v", err)
 	}
-	if strings.Contains(string(planBody), "reload veil-naive.service") || strings.Contains(string(planBody), "reload veil-hysteria2.service") {
+	if strings.Contains(string(planBody), "reload veil-caddy@panel.service") || strings.Contains(string(planBody), "reload veil-hysteria2@.service") {
 		t.Fatalf("fresh Panel without Inbounds should not stage proxy reloads: %s", string(planBody))
 	}
 	stateBody, err := os.ReadFile(statePath)
@@ -149,7 +149,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")
 	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml")
 	if !containsString(response.WrittenFiles, caddyPath) || !containsString(response.WrittenFiles, hy2Path) {
 		t.Fatalf("apply response missing rendered configs: %+v", response.WrittenFiles)
@@ -253,7 +253,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	defer func() { stagedConfigValidator = old }()
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{
-			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")}, Valid: true},
+			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")}, Valid: true},
 			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), "--check"}, Valid: true},
 		}
 	}

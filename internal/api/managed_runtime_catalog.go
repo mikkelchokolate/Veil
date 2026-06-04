@@ -54,19 +54,38 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 		hasOlcrtc = true
 	}
 
-	// 1. naiveproxy (aggregated in Caddy)
+	// 1. naiveproxy (template-unit per inbound)
 	if hasNaive {
-		runtimes = append(runtimes, ManagedRuntime{
-			Name:             "naive",
-			ActionName:       "caddy",
-			Protocol:         "naiveproxy",
-			Transport:        "tcp",
-			Unit:             renderer.UnitNaive,
-			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
-			PromotedVerb:     "reload",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
+		naiveCount := 0
+		for _, inbound := range inbounds {
+			if inbound.Enabled && inbound.Protocol == "naiveproxy" {
+				naiveCount++
+				runtimes = append(runtimes, ManagedRuntime{
+					Name:             "caddy-" + inbound.Name,
+					ActionName:       "caddy-" + inbound.Name,
+					Protocol:         "naiveproxy",
+					Transport:        "tcp",
+					Unit:             "veil-caddy@" + inbound.Name + ".service",
+					PromotedSubpath:  "caddy/" + inbound.Name + ".Caddyfile",
+					PromotedVerb:     "reload",
+					ManualRestart:    true,
+					HealthCheckAfter: true,
+				})
+			}
+		}
+		if naiveCount == 0 {
+			runtimes = append(runtimes, ManagedRuntime{
+				Name:             "caddy-panel",
+				ActionName:       "caddy-panel",
+				Protocol:         "naiveproxy",
+				Transport:        "tcp",
+				Unit:             "veil-caddy@panel.service",
+				PromotedSubpath:  "caddy/panel.Caddyfile",
+				PromotedVerb:     "reload",
+				ManualRestart:    true,
+				HealthCheckAfter: true,
+			})
+		}
 	}
 
 	// 2. hysteria2 (template-unit per inbound)

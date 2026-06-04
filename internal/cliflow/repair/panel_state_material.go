@@ -2,6 +2,7 @@ package repair
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -61,8 +62,16 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")})
 	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
 	if snapshot.Settings.PanelAccess == "caddy" {
-		unitNames = appendRepairUnit(unitNames, renderer.UnitNaive)
+		unitNames = appendRepairUnit(unitNames, renderer.UnitCaddy)
 	}
+	// ensure templates are included if instances are present
+	for _, instance := range unitNames {
+		if strings.Contains(instance, "@") {
+			templateName := strings.Split(instance, "@")[0] + "@.service"
+			unitNames = appendRepairUnit(unitNames, templateName)
+		}
+	}
+
 	for _, unitName := range unitNames {
 		body := units[unitName]
 		if body == "" {

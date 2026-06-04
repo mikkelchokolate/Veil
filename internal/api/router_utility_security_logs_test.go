@@ -78,7 +78,7 @@ func TestIsAllowedHealthService(t *testing.T) {
 		service string
 		want    bool
 	}{
-		{"veil-naive.service", true},
+		{"veil-caddy@panel.service", true},
 		{"veil-hysteria2@default.service", true},
 		{"veil-hysteria2@.service", true},
 		{"veil-warp.service", true},
@@ -86,8 +86,8 @@ func TestIsAllowedHealthService(t *testing.T) {
 		{"caddy.service", false},
 		{"hysteria2.service", false},
 		{"", false},
-		{"veil-naive", false},
-		{"veil-naive.service.evil", false},
+		{"veil-caddy@panel", false},
+		{"veil-caddy@panel.service.evil", false},
 	}
 	for _, tt := range tests {
 		got := service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsHealth(tt.service)
@@ -105,7 +105,7 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 	}{
 		{
 			name:    "reload naive",
-			command: []string{"systemctl", "reload", "veil-naive.service"},
+			command: []string{"systemctl", "reload", "veil-caddy@panel.service"},
 			want:    true,
 		},
 		{
@@ -125,12 +125,12 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		},
 		{
 			name:    "non-systemctl",
-			command: []string{"bash", "reload", "veil-naive.service"},
+			command: []string{"bash", "reload", "veil-caddy@panel.service"},
 			want:    false,
 		},
 		{
 			name:    "non-reload",
-			command: []string{"systemctl", "restart", "veil-naive.service"},
+			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
 			want:    false,
 		},
 		{
@@ -140,7 +140,7 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		},
 		{
 			name:    "too many args",
-			command: []string{"systemctl", "reload", "veil-naive.service", "extra"},
+			command: []string{"systemctl", "reload", "veil-caddy@panel.service", "extra"},
 			want:    false,
 		},
 		{
@@ -517,7 +517,7 @@ func TestValidLogUnit(t *testing.T) {
 		{"caddy", true},
 		{"hysteria2", true},
 		{"sing-box", true},
-		{"veil-naive", true},
+		{"veil-caddy@panel", true},
 		{"my_service@1", true},
 		{"foo.bar", true},
 		{"", false},

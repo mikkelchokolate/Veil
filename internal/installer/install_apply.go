@@ -40,7 +40,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	result := ApplyResult{
-		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "Caddyfile"),
+		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "panel.Caddyfile"),
 		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(a.paths.VarDir, "www", "index.html"),
 	}

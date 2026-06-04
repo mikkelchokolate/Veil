@@ -32,7 +32,7 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	oldCaddyPath := filepath.Join(caddyfileDir, "Caddyfile")
+	oldCaddyPath := filepath.Join(caddyfileDir, "panel.Caddyfile")
 	if err := os.WriteFile(oldCaddyPath, []byte("old caddy content"), 0o600); err != nil {
 		t.Fatalf("write old caddy: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	}
 
 	// Verify backup contains old Caddyfile
-	backupPath := filepath.Join(backupDir, result.BackupID, "Caddyfile")
+	backupPath := filepath.Join(backupDir, result.BackupID, "panel.Caddyfile")
 	body, err := os.ReadFile(backupPath)
 	if err != nil {
 		t.Fatalf("read backup caddyfile: %v", err)
@@ -115,7 +115,7 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	oldCaddyPath := filepath.Join(caddyfileDir, "Caddyfile")
+	oldCaddyPath := filepath.Join(caddyfileDir, "panel.Caddyfile")
 	if err := os.WriteFile(oldCaddyPath, []byte("pre-apply content"), 0o600); err != nil {
 		t.Fatalf("write old caddy: %v", err)
 	}

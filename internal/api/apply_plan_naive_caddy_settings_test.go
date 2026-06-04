@@ -31,7 +31,7 @@ func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T)
 	if !plan.Valid {
 		t.Fatalf("Panel Caddy access plan should be valid: %+v", plan)
 	}
-	if !containsString(plan.Configs, "/etc/veil/generated/caddy/Caddyfile") || !containsString(plan.Actions, "reload veil-naive.service") || !containsString(plan.Runtimes, "veil-naive.service") {
+	if !containsString(plan.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !containsString(plan.Actions, "reload veil-caddy@panel.service") || !containsString(plan.Runtimes, "veil-caddy@panel.service") {
 		t.Fatalf("Panel Caddy access plan missing config/action/runtime: %+v", plan)
 	}
 }

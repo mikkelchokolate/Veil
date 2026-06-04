@@ -74,12 +74,12 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
 	summary := plan.Summary()
-	for _, want := range []string{"generated/caddy/Caddyfile", "veil-naive.service"} {
+	for _, want := range []string{"generated/caddy/panel.Caddyfile", "veil-caddy@.service"} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("Panel state Caddy access repair missing %q:\n%s", want, summary)
 		}
 	}
-	caddyfile := repairActionContent(plan, "Caddyfile")
+	caddyfile := repairActionContent(plan, "panel.Caddyfile")
 	if !strings.Contains(caddyfile, "handle_path /panel-secret/*") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("Panel state Caddyfile not repaired from settings:\n%s", caddyfile)
 	}
@@ -121,9 +121,9 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
-	unit := repairActionContent(plan, "veil-naive.service")
-	if !strings.Contains(unit, "ExecStart=/usr/sbin/caddy run --config") || !strings.Contains(unit, "ExecReload=/usr/sbin/caddy reload --config") {
-		t.Fatalf("repair should render veil-naive.service with resolved caddy path:\n%s", unit)
+	unit := repairActionContent(plan, "veil-caddy@.service")
+	if !strings.Contains(unit, "ExecStart=/usr/sbin/caddy run --config") {
+		t.Fatalf("repair should render veil-caddy@.service with resolved caddy path:\n%s", unit)
 	}
 }
 

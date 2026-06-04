@@ -62,7 +62,7 @@ func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
 	assertFileMissing(t, result.Hysteria2Path)
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-naive.service"), "caddy")
+	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-caddy@.service"), "caddy")
 	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"))
 	if len(result.WrittenFiles) != 5 {
 		t.Fatalf("expected 5 written files, got %+v", result.WrittenFiles)

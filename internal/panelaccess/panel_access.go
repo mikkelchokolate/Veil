@@ -76,9 +76,37 @@ func (p PanelAccess) ApplyIntent(inbounds []model.Inbound) ApplyIntent {
 	} else if _, _, err := p.CaddyRoute(); err != nil {
 		intent.Errors = append(intent.Errors, err.Error())
 	} else {
-		intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/Caddyfile")
-		intent.Actions = append(intent.Actions, "reload "+renderer.UnitNaive)
-		intent.Runtimes = append(intent.Runtimes, renderer.UnitNaive)
+		var panelInbound *model.Inbound
+		hasInboundOn443 := false
+		for _, inbound := range inbounds {
+			if inbound.Enabled && p.protocolRequiresCaddy(inbound.Protocol) {
+				if inbound.Port == 443 {
+					hasInboundOn443 = true
+					break
+				}
+			}
+		}
+		for _, inbound := range inbounds {
+			if inbound.Enabled && p.protocolRequiresCaddy(inbound.Protocol) {
+				if inbound.Port == 443 || (!hasInboundOn443 && panelInbound == nil) {
+					copied := inbound
+					panelInbound = &copied
+					if inbound.Port == 443 {
+						break
+					}
+				}
+			}
+		}
+
+		if panelInbound != nil {
+			intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/"+panelInbound.Name+".Caddyfile")
+			intent.Actions = append(intent.Actions, "reload veil-caddy@"+panelInbound.Name+".service")
+			intent.Runtimes = append(intent.Runtimes, "veil-caddy@"+panelInbound.Name+".service")
+		} else {
+			intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile")
+			intent.Actions = append(intent.Actions, "reload veil-caddy@panel.service")
+			intent.Runtimes = append(intent.Runtimes, "veil-caddy@panel.service")
+		}
 	}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled {
