@@ -16,7 +16,7 @@ func TestInboundRendererRendersNaiveWithClientProfilesAndPanelCaddyRoute(t *test
 		NaivePassword: "global-secret",
 		FallbackRoot:  "/var/lib/veil/www",
 	}, NewPaths("/etc/veil"), WarpConfig{})
-	body, err := renderer.RenderNaive(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}}})
+	body, err := renderer.RenderNaive(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}}}, true)
 	if err != nil {
 		t.Fatalf("RenderNaive: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestInboundRendererRendersUpstreamSocksWhenWarpEnabled(t *testing.T) {
 		NaiveUsername: "veil",
 		NaivePassword: "global-secret",
 	}, NewPaths("/etc/veil"), warp)
-	naiveBody, err := naiveRenderer.RenderNaive(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true})
+	naiveBody, err := naiveRenderer.RenderNaive(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}, false)
 	if err != nil {
 		t.Fatalf("RenderNaive: %v", err)
 	}

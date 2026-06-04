@@ -23,97 +23,87 @@ func NewInboundRenderer(settings Settings, paths Paths, warp WarpConfig) Inbound
 	return InboundRenderer{settings: settings, paths: paths, warp: warp}
 }
 
-func (r InboundRenderer) RenderNaive(inbound Inbound) (string, error) {
-	return r.RenderNaiveSet([]Inbound{inbound})
+func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string, error) {
+	var buf strings.Builder
+	buf.WriteString("{\n  order forward_proxy before file_server\n  servers {\n    protocols h1 h2\n  }\n}\n\n")
+
+	password := inbound.Password
+	if password == "" {
+		password = inbound.NaivePassword
+		if password == "" {
+			password = r.settings.NaivePassword
+		}
+	}
+	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
+	if err != nil {
+		return "", err
+	}
+	username := inbound.NaiveUsername
+	if username == "" {
+		username = r.settings.NaiveUsername
+	}
+	fallbackRoot := inbound.FallbackRoot
+	if fallbackRoot == "" {
+		fallbackRoot = r.settings.FallbackRoot
+	}
+	naiveConfig := renderer.NaiveConfig{
+		Domain:       r.settings.Domain,
+		Email:        r.settings.Email,
+		ListenPort:   inbound.Port,
+		Username:     username,
+		Password:     password,
+		Users:        access.NaiveUsers(),
+		FallbackRoot: fallbackRoot,
+	}
+	if r.warp.Enabled {
+		socksPort := r.warp.SocksPort
+		if socksPort == 0 {
+			socksPort = 40000
+		}
+		naiveConfig.Upstream = fmt.Sprintf("socks5://127.0.0.1:%d", socksPort)
+	}
+	if includePanel && r.settings.PanelAccess == "caddy" {
+		if route, ok, err := panelCaddyRoute(r.settings); err == nil && ok {
+			naiveConfig.PanelPort = route.Port
+			naiveConfig.WebBasePath = route.WebBasePath
+		}
+	}
+	block, err := renderer.RenderNaiveCaddyfile(naiveConfig)
+	if err != nil {
+		return "", err
+	}
+	if idx := strings.Index(block, "\n:"); idx != -1 {
+		block = block[idx+1:]
+	} else if idx := strings.Index(block, "\n"+r.settings.Domain); idx != -1 {
+		block = block[idx+1:]
+	}
+	buf.WriteString(block)
+	buf.WriteString("\n")
+	return buf.String(), nil
 }
 
-func (r InboundRenderer) RenderNaiveSet(inbounds []Inbound) (string, error) {
-	if len(inbounds) == 0 {
+func (r InboundRenderer) RenderPanelStandalone() (string, error) {
+	if r.settings.PanelAccess != "caddy" {
 		return "", nil
+	}
+	route, ok, err := panelCaddyRoute(r.settings)
+	if err != nil || !ok {
+		return "", err
 	}
 	var buf strings.Builder
 	buf.WriteString("{\n  order forward_proxy before file_server\n  servers {\n    protocols h1 h2\n  }\n}\n\n")
 
-	hasInboundOn443 := false
-	for _, inbound := range inbounds {
-		if inbound.Port == 443 {
-			hasInboundOn443 = true
-			break
-		}
+	panelBlock, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{
+		Domain:      r.settings.Domain,
+		Email:       r.settings.Email,
+		PanelPort:   route.Port,
+		WebBasePath: route.WebBasePath,
+	})
+	if err != nil {
+		return "", err
 	}
-
-	for _, inbound := range inbounds {
-		password := inbound.Password
-		if password == "" {
-			password = inbound.NaivePassword
-			if password == "" {
-				password = r.settings.NaivePassword
-			}
-		}
-		access, err := clientaccess.BuildClientAccess(r.settings, inbound)
-		if err != nil {
-			return "", err
-		}
-		username := inbound.NaiveUsername
-		if username == "" {
-			username = r.settings.NaiveUsername
-		}
-		fallbackRoot := inbound.FallbackRoot
-		if fallbackRoot == "" {
-			fallbackRoot = r.settings.FallbackRoot
-		}
-		naiveConfig := renderer.NaiveConfig{
-			Domain:       r.settings.Domain,
-			Email:        r.settings.Email,
-			ListenPort:   inbound.Port,
-			Username:     username,
-			Password:     password,
-			Users:        access.NaiveUsers(),
-			FallbackRoot: fallbackRoot,
-		}
-		if r.warp.Enabled {
-			socksPort := r.warp.SocksPort
-			if socksPort == 0 {
-				socksPort = 40000
-			}
-			naiveConfig.Upstream = fmt.Sprintf("socks5://127.0.0.1:%d", socksPort)
-		}
-		if r.settings.PanelAccess == "caddy" {
-			if inbound.Port == 443 || (!hasInboundOn443 && buf.Len() <= 75) {
-				if route, ok, err := panelCaddyRoute(r.settings); err == nil && ok {
-					naiveConfig.PanelPort = route.Port
-					naiveConfig.WebBasePath = route.WebBasePath
-				}
-			}
-		}
-		block, err := renderer.RenderNaiveCaddyfile(naiveConfig)
-		if err != nil {
-			return "", err
-		}
-		if idx := strings.Index(block, "\n:"); idx != -1 {
-			block = block[idx+1:]
-		} else if idx := strings.Index(block, "\n"+r.settings.Domain); idx != -1 {
-			block = block[idx+1:]
-		}
-		buf.WriteString(block)
-		buf.WriteString("\n")
-	}
-
-	if r.settings.PanelAccess == "caddy" && !hasInboundOn443 {
-		if route, ok, err := panelCaddyRoute(r.settings); err == nil && ok {
-			panelBlock, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{
-				Domain:      r.settings.Domain,
-				Email:       r.settings.Email,
-				PanelPort:   route.Port,
-				WebBasePath: route.WebBasePath,
-			})
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(panelBlock)
-			buf.WriteString("\n")
-		}
-	}
+	buf.WriteString(panelBlock)
+	buf.WriteString("\n")
 	return buf.String(), nil
 }
 
@@ -183,8 +173,8 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 	})
 }
 
-func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
-	return NewInboundRenderer(settings, Paths{}, warp).RenderNaive(inbound)
+func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig, includePanel bool) (string, error) {
+	return NewInboundRenderer(settings, Paths{}, warp).RenderNaive(inbound, includePanel)
 }
 
 func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
