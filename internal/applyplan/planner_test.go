@@ -10,7 +10,7 @@ import (
 
 func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *testing.T) {
 	plan := Build(Input{
-		PanelAccess: Material{Configs: []string{"/etc/veil/generated/caddy/Caddyfile"}, Actions: []string{"reload veil-naive.service"}, Runtimes: []string{"veil-naive.service"}},
+		PanelAccess: Material{Configs: []string{"/etc/veil/generated/caddy/panel.Caddyfile"}, Actions: []string{"reload veil-caddy@panel.service"}, Runtimes: []string{"veil-caddy@panel.service"}},
 		Settings:    model.Settings{Domain: "vpn.example.com"},
 		Inbounds: []model.Inbound{
 			{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true},
@@ -30,17 +30,17 @@ func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *t
 	if !plan.Valid {
 		t.Fatalf("plan errors = %+v", plan.Errors)
 	}
-	for _, want := range []string{"/etc/veil/generated/caddy/Caddyfile", "/etc/veil/generated/mieru/server_config.json", "/etc/veil/generated/sing-box/warp.json", "/etc/veil/generated/rules/geoip.dat"} {
+	for _, want := range []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/etc/veil/generated/mieru/server_config.json", "/etc/veil/generated/sing-box/warp.json", "/etc/veil/generated/rules/geoip.dat"} {
 		if !contains(plan.Configs, want) {
 			t.Fatalf("configs missing %q: %+v", want, plan.Configs)
 		}
 	}
-	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-naive.service", "restart veil-mieru.service", "reload veil-warp.service"} {
+	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-caddy@panel.service", "restart veil-mieru.service", "reload veil-warp.service"} {
 		if !contains(plan.Actions, want) {
 			t.Fatalf("actions missing %q: %+v", want, plan.Actions)
 		}
 	}
-	for _, want := range []string{"veil-naive.service", "veil-mieru.service", "veil-warp.service"} {
+	for _, want := range []string{"veil-caddy@panel.service", "veil-mieru.service", "veil-warp.service"} {
 		if !contains(plan.Runtimes, want) {
 			t.Fatalf("runtimes missing %q: %+v", want, plan.Runtimes)
 		}

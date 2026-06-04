@@ -7,7 +7,6 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
-	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestPanelAccessBuildsCaddyRouteConfigAndApplyIntent(t *testing.T) {
@@ -24,12 +23,12 @@ func TestPanelAccessBuildsCaddyRouteConfigAndApplyIntent(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("GeneratedConfig ok=%v err=%v", ok, err)
 	}
-	expectedPath := filepath.FromSlash("/etc/veil/generated/caddy/Caddyfile")
+	expectedPath := filepath.FromSlash("/etc/veil/generated/caddy/panel.Caddyfile")
 	if artifact.Path != expectedPath || !strings.Contains(artifact.Body, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("artifact = %+v", artifact)
 	}
 	intent := access.ApplyIntent([]model.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}})
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/Caddyfile") || !contains(intent.Actions, "reload "+renderer.UnitNaive) || !contains(intent.Runtimes, renderer.UnitNaive) {
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !contains(intent.Actions, "reload veil-caddy@panel.service") || !contains(intent.Runtimes, "veil-caddy@panel.service") {
 		t.Fatalf("intent = %+v", intent)
 	}
 	if len(intent.Errors) != 1 || !strings.Contains(intent.Errors[0], "panel caddy access uses 443/tcp") {

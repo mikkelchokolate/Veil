@@ -94,7 +94,7 @@ func (m ManagedMaterial) Files() ([]File, error) {
 	}
 	files := []File{}
 	if input.InstallPanelCaddy {
-		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"), Content: input.Caddyfile, Mode: 0o600})
+		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "panel.Caddyfile"), Content: input.Caddyfile, Mode: 0o600})
 		files = append(files, File{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(input.Domain), Mode: 0o644})
 	}
 	if input.PanelTLSEnabled {
@@ -110,7 +110,7 @@ func (m ManagedMaterial) Files() ([]File, error) {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
 		unitNames := []string{renderer.UnitVeil}
 		if input.InstallPanelCaddy {
-			unitNames = append(unitNames, renderer.UnitNaive)
+			unitNames = append(unitNames, renderer.UnitCaddy)
 		}
 		for _, name := range unitNames {
 			files = append(files, File{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})

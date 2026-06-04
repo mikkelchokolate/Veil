@@ -30,9 +30,9 @@ func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desiredFiles: %v", err)
 	}
-	unit := managedFileContent(files, "veil-naive.service")
+	unit := managedFileContent(files, "veil-caddy@.service")
 	if !strings.Contains(unit, "ExecStart=/usr/bin/caddy run --config") || !strings.Contains(unit, "ExecReload=/usr/bin/caddy reload --config") {
-		t.Fatalf("veil-naive.service should use resolved Caddy binary path:\n%s", unit)
+		t.Fatalf("veil-caddy@.service should use resolved Caddy binary path:\n%s", unit)
 	}
 }
 

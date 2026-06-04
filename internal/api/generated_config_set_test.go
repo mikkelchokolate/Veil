@@ -55,7 +55,7 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")]
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")]
 	for _, want := range []string{"basic_auth alice alice-pass", "basic_auth bob bob-pass"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("Caddyfile missing %q:\n%s", want, caddy)
@@ -90,7 +90,7 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "Caddyfile")]
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive-vip.Caddyfile")]
 	if !strings.Contains(caddy, "basic_auth veil vip-naive") {
 		t.Fatalf("Caddyfile should use per-inbound naive password:\n%s", caddy)
 	}

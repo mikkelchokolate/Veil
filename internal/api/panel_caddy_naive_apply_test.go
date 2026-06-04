@@ -22,7 +22,7 @@ func TestGeneratedConfigSetRendersPanelCaddyAccessWithoutNaiveInbound(t *testing
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddyfile := configs[filepath.Join(root, "generated", "caddy", "Caddyfile")]
+	caddyfile := configs[filepath.Join(root, "generated", "caddy", "panel.Caddyfile")]
 	for _, want := range []string{"panel.example.com", "tls admin@example.com", "handle_path /panel-secret/*", "reverse_proxy 127.0.0.1:2096"} {
 		if !strings.Contains(caddyfile, want) {
 			t.Fatalf("Panel Caddyfile missing %q:\n%s", want, caddyfile)
@@ -53,7 +53,7 @@ func TestNaiveGeneratedConfigPreservesPanelCaddyAccessRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddyfile := configs[filepath.Join(root, "generated", "caddy", "Caddyfile")]
+	caddyfile := configs[filepath.Join(root, "generated", "caddy", "naive.Caddyfile")]
 	for _, want := range []string{"forward_proxy", "basic_auth veil naive-secret", "handle_path /panel-secret/*", "reverse_proxy 127.0.0.1:2096"} {
 		if !strings.Contains(caddyfile, want) {
 			t.Fatalf("Caddyfile missing %q:\n%s", want, caddyfile)
@@ -71,7 +71,7 @@ func TestNaiveGeneratedConfigWithoutPanelCaddyDoesNotExposePanelRoute(t *testing
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddyfile := configs[filepath.Join(root, "generated", "caddy", "Caddyfile")]
+	caddyfile := configs[filepath.Join(root, "generated", "caddy", "naive.Caddyfile")]
 	if strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") || strings.Contains(caddyfile, "handle_path /panel-secret/*") {
 		t.Fatalf("Caddyfile should not include Panel Caddy access route:\n%s", caddyfile)
 	}

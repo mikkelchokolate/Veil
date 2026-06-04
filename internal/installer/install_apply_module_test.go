@@ -18,7 +18,7 @@ func TestInstallApplyModuleWritesManagedFiles(t *testing.T) {
 	if len(result.WrittenFiles) != 2 {
 		t.Fatalf("written files = %+v", result.WrittenFiles)
 	}
-	body, err := os.ReadFile(filepath.Join(paths.EtcDir, "generated", "caddy", "Caddyfile"))
+	body, err := os.ReadFile(filepath.Join(paths.EtcDir, "generated", "caddy", "panel.Caddyfile"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -47,7 +47,7 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	for _, want := range []string{"/etc/veil/generated/caddy/Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-naive.service"} {
+	for _, want := range []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-caddy@.service"} {
 		wantSlash := filepath.FromSlash(want)
 		if !hasFile(files, wantSlash) {
 			t.Fatalf("files missing %q (native: %q): %+v", want, wantSlash, files)

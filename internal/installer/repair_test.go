@@ -28,13 +28,13 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should detect: Caddyfile missing, fallback index missing, veil.service missing, veil-naive.service missing
+	// Should detect: Caddyfile missing, fallback index missing, veil.service missing, veil-caddy@.service missing
 	if !plan.HasChanges() {
 		t.Fatalf("expected repair plan to have changes for missing files, got none")
 	}
 
 	if len(plan.Actions) != 4 {
-		t.Fatalf("expected 4 repair actions (caddy, fallback, veil.service, veil-naive.service), got %d: %+v", len(plan.Actions), plan.Actions)
+		t.Fatalf("expected 4 repair actions (caddy, fallback, veil.service, veil-caddy@.service), got %d: %+v", len(plan.Actions), plan.Actions)
 	}
 
 	for _, action := range plan.Actions {
@@ -70,7 +70,7 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 	}
 
 	// Pre-create Caddyfile with stale content
-	caddyPath := filepath.Join(etcDir, "generated", "caddy", "Caddyfile")
+	caddyPath := filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 	}
 
 	// Pre-create Caddyfile with matching content
-	caddyPath := filepath.Join(etcDir, "generated", "caddy", "Caddyfile")
+	caddyPath := filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

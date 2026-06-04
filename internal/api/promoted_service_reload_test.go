@@ -16,16 +16,16 @@ func TestPromotedServiceReloaderRunsExpectedReloads(t *testing.T) {
 	})
 
 	results := reloader.Reload([]string{
-		filepath.Join(root, "live", "caddy", "Caddyfile"),
+		filepath.Join(root, "live", "caddy", "panel.Caddyfile"),
 		filepath.Join(root, "live", "hysteria2", "server.yaml"),
 	})
 	if len(results) != 2 || len(commands) != 2 {
 		t.Fatalf("results=%+v commands=%+v", results, commands)
 	}
-	if commands[0][2] != "veil-hysteria2@.service" || commands[1][2] != "veil-naive.service" {
+	if commands[0][2] != "veil-caddy@panel.service" || commands[1][2] != "veil-hysteria2@.service" {
 		t.Fatalf("commands = %+v", commands)
 	}
-	if results[0].Name != "veil-hysteria2@.service" || results[1].Name != "veil-naive.service" {
+	if results[0].Name != "veil-caddy@panel.service" || results[1].Name != "veil-hysteria2@.service" {
 		t.Fatalf("result names = %+v", results)
 	}
 }

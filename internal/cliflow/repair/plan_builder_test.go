@@ -101,11 +101,11 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 	if _, err := installer.ApplyRURecommendedProfile(profile, installer.ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir}); err != nil {
 		t.Fatalf("ApplyRURecommendedProfile: %v", err)
 	}
-	if err := os.Remove(filepath.Join(etcDir, "generated", "caddy", "Caddyfile")); err != nil {
-		t.Fatalf("remove Caddyfile: %v", err)
+	if err := os.Remove(filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")); err != nil {
+		t.Fatalf("remove panel.Caddyfile: %v", err)
 	}
-	if err := os.Remove(filepath.Join(systemdDir, "veil-naive.service")); err != nil {
-		t.Fatalf("remove veil-naive.service: %v", err)
+	if err := os.Remove(filepath.Join(systemdDir, "veil-caddy@.service")); err != nil {
+		t.Fatalf("remove veil-caddy@.service: %v", err)
 	}
 
 	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir})
@@ -113,7 +113,7 @@ func TestBuildRepairPlanFromOptionsRepairsExistingPanelCaddyAccess(t *testing.T)
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
 	summary := plan.Summary()
-	for _, want := range []string{"generated/caddy/Caddyfile", "veil-naive.service"} {
+	for _, want := range []string{"generated/caddy/panel.Caddyfile", "veil-caddy@.service"} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("Panel Caddy repair summary missing %q:\n%s", want, summary)
 		}

@@ -93,15 +93,22 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 		t.Errorf("missing config for hy2-b at %s", hy2BPath)
 	}
 
-	// Verify naiveproxy configs are aggregated in a single Caddyfile
-	caddyPath := filepath.Join(root, "generated", "caddy", "Caddyfile")
-	caddyContent, ok := configs[caddyPath]
+	// Verify naiveproxy configs are rendered as separate files
+	naiveAPath := filepath.Join(root, "generated", "caddy", "naive-a.Caddyfile")
+	naiveBPath := filepath.Join(root, "generated", "caddy", "naive-b.Caddyfile")
+	caddyContentA, ok := configs[naiveAPath]
 	if !ok {
-		t.Fatalf("missing caddy config at %s", caddyPath)
+		t.Fatalf("missing caddy config at %s", naiveAPath)
+	}
+	caddyContentB, ok := configs[naiveBPath]
+	if !ok {
+		t.Fatalf("missing caddy config at %s", naiveBPath)
 	}
 
-	// Verify that both naive proxy settings exist in the Caddyfile
-	if !strings.Contains(caddyContent, "usera") || !strings.Contains(caddyContent, "userb") {
-		t.Errorf("Caddyfile does not contain both naive proxy definitions: %s", caddyContent)
+	if !strings.Contains(caddyContentA, "usera") {
+		t.Errorf("Caddyfile does not contain naive proxy definition for usera: %s", caddyContentA)
+	}
+	if !strings.Contains(caddyContentB, "userb") {
+		t.Errorf("Caddyfile does not contain naive proxy definition for userb: %s", caddyContentB)
 	}
 }

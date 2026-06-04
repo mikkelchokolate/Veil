@@ -25,7 +25,7 @@ func CaddyPanelBuildHint(binaryPath string) BuildHint {
 func PanelSystemdUnits(profile RURecommendedProfile) []string {
 	units := []string{renderer.UnitVeil}
 	if profile.InstallPanelCaddy {
-		units = append(units, renderer.UnitNaive)
+		units = append(units, "veil-caddy@panel.service")
 	}
 	return units
 }

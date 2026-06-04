@@ -28,9 +28,9 @@ func TestPanelStateRepairMaterialAddsGeneratedConfigsAndRuntimeUnits(t *testing.
 	}
 	for _, want := range []string{
 		filepath.Join(opts.EtcDir, "veil.env"),
-		filepath.Join(opts.EtcDir, "generated", "caddy", "Caddyfile"),
+		filepath.Join(opts.EtcDir, "generated", "caddy", "panel.Caddyfile"),
 		filepath.Join(opts.EtcDir, "generated", "mieru", "server_config.json"),
-		filepath.Join(opts.SystemdDir, renderer.UnitNaive),
+		filepath.Join(opts.SystemdDir, renderer.UnitCaddy),
 		filepath.Join(opts.SystemdDir, renderer.UnitMieru),
 	} {
 		if !repairPlanHasAction(plan, want) {

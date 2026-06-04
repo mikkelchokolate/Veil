@@ -33,7 +33,7 @@ func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 	if len(response.Configs) != 0 {
 		t.Fatalf("fresh Panel without Inbounds should not plan generated proxy configs: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-naive.service") || containsString(response.Actions, "reload veil-hysteria2.service") {
+	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-caddy@panel.service") || containsString(response.Actions, "reload veil-hysteria2@.service") {
 		t.Fatalf("expected only management validation action for fresh Panel: %+v", response.Actions)
 	}
 }
@@ -94,10 +94,10 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "reload veil-naive.service") || !containsString(response.Actions, "reload veil-hysteria2@.service") {
+	if !containsString(response.Actions, "reload veil-caddy@.service") || !containsString(response.Actions, "reload veil-hysteria2@.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
 }
