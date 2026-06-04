@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -200,11 +202,27 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 func loadSnapshotFromState() ([]Inbound, WarpConfig) {
 	statePath := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
 	if statePath == "" {
-		statePath = "/var/lib/veil/state.json"
+		if runtime.GOOS == "windows" {
+			pd := os.Getenv("ProgramData")
+			if pd == "" {
+				pd = `C:\ProgramData`
+			}
+			statePath = filepath.Join(pd, "Veil", "state.json")
+		} else {
+			statePath = "/var/lib/veil/state.json"
+		}
 	}
 	keyPath := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH"))
 	if keyPath == "" {
-		keyPath = "/etc/veil/state.key"
+		if runtime.GOOS == "windows" {
+			pd := os.Getenv("ProgramData")
+			if pd == "" {
+				pd = `C:\ProgramData`
+			}
+			keyPath = filepath.Join(pd, "Veil", "state.key")
+		} else {
+			keyPath = "/etc/veil/state.key"
+		}
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil {
