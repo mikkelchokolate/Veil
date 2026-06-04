@@ -155,3 +155,63 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 		t.Fatalf("doctor --json missing readiness field: %s", out)
 	}
 }
+
+// TestRejectsDuplicatePortsEndToEnd confirms the safeguard against
+// multiple inbounds trying to listen on the same port surfaces as
+// an apply/plan error over the HTTP surface.
+func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
+	srv := startServer(t, serverOptions{token: "tok"})
+
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
+	drain(resp)
+
+	// First NaiveProxy inbound on port 20001
+	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-1","protocol":"naiveproxy","transport":"tcp","port":20001,"enabled":true,"naiveUsername":"u1","naivePassword":"p1"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	// Second NaiveProxy inbound on DIFFERENT port 20002
+	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-2","protocol":"naiveproxy","transport":"tcp","port":20002,"enabled":true,"naiveUsername":"u2","naivePassword":"p2"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("inbound 2 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	// This should successfully plan
+	planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
+	if planResp.StatusCode != http.StatusOK {
+		t.Fatalf("apply plan for different ports expected 200, got %d: %v", planResp.StatusCode, readJSON(t, planResp))
+	}
+	planBody := readJSON(t, planResp)
+	if valid, ok := planBody["valid"].(bool); !ok || !valid {
+		t.Fatalf("expected valid plan for different ports, got false: %v", planBody)
+	}
+	drain(planResp)
+
+	// Third inbound on SAME port as naive-2 (20002)
+	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"dup-port","protocol":"naiveproxy","transport":"tcp","port":20002,"enabled":true,"naiveUsername":"u3","naivePassword":"p3"}`)
+
+	if resp.StatusCode == http.StatusCreated {
+		drain(resp)
+		planResp = srv.do(http.MethodPost, "/api/apply/plan", "")
+		planBody = readJSON(t, planResp)
+		if planResp.StatusCode == http.StatusOK {
+			if valid, ok := planBody["valid"].(bool); ok && valid {
+				t.Fatalf("expected duplicate port to be rejected during plan, but it was valid: %v", planBody)
+			}
+			// If plan is OK (but invalid), apply must fail with 400
+			applyResp := srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+			if applyResp.StatusCode == http.StatusOK {
+				t.Fatalf("expected duplicate port to be rejected, but apply succeeded: %v", readJSON(t, applyResp))
+			}
+			drain(applyResp)
+		}
+		return
+	}
+	if resp.StatusCode < 400 {
+		t.Fatalf("expected duplicate port inbound to be rejected, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+}
