@@ -33,4 +33,14 @@ This document outlines key technical milestones, feature proposals, and architec
 ### 5. UI/UX Evolution
 - Internationalization (i18n) support.
 - Interactive setup wizard for first-time deployments.
-- Visual configuration previews highlighting files changed before applying updates.
+- Client configuration export flows, including QR codes and copyable links for
+  supported protocol profiles.
+- Token rotation from the Panel UI, with clear cutover guidance for API clients
+  and automation.
+- User/session management screens for creating, disabling, and auditing Panel
+  users and active sessions.
+- A read-only viewer role in the UI so operators can inspect status,
+  diagnostics, logs, and generated previews without mutation permissions.
+- Safe apply preview with a file-level diff of generated config, unit, firewall,
+  DNS, and TLS changes before the operator confirms the apply.
+- Clear pre-apply warnings for DNS, TLS, firewall, and port-collision risks.
