@@ -203,6 +203,7 @@ type User struct {
 }
 
 type ManagementSnapshot struct {
+	SchemaVersion int           `json:"schemaVersion,omitempty"`
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`
 	Rules         []RoutingRule `json:"routingRules"`
