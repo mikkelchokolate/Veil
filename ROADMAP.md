@@ -23,8 +23,8 @@ This document outlines key technical milestones, feature proposals, and architec
 - Standardize multi-user profiles across all supported protocols (matching Hysteria2 and Mieru capability).
 
 ### 4. Backup & DR Orchestration
-- Build CLI support for automated encrypted state backups (`veil backup create / restore`).
-- Introduce automated rotation of the AES encryption key store (`/etc/veil/state.key`).
+- Add scheduled backup retention policies around the shipped `veil backup create / restore` commands.
+- Add operator-facing restore drills and compatibility fixtures for long-lived production archives.
 
 ---
 

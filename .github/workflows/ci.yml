@@ -12,8 +12,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.25.11'
       - name: Verify go.mod is tidy
@@ -29,6 +29,8 @@ jobs:
             exit 1
           fi
       - run: go vet ./...
+      - name: Validate OpenAPI
+        run: make verify-openapi
       - run: make build
       - name: Test with race detector and coverage
         run: go test ./... -race -count=1 -coverprofile=coverage.out
@@ -38,7 +40,7 @@ jobs:
           echo "Total statement coverage is $total_coverage%"
           awk -v cov="$total_coverage" 'BEGIN { if (cov < 70.0) { print "Error: coverage " cov "% is below threshold (70.0%)"; exit 1 } }'
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: code-coverage-report
           path: coverage.out
@@ -50,12 +52,12 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.25.11'
       - name: staticcheck
-        uses: dominikh/staticcheck-action@v1
+        uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
           version: latest
           install-go: false
@@ -72,8 +74,8 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.25.11'
       - name: End-to-end tests (real binary over a socket)

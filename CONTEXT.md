@@ -276,7 +276,6 @@ _Avoid_: logging, masking
 - "profile" was used for install presets, proxy entries, and user credentials — resolved: use **Veil install** for setup presets, **Inbound** for proxy entries, and **Client profile** for user credentials.
 - "webBasePath" appears as Go field naming; in prose use **Web base path**.
 - "service" may mean systemd unit or domain module — in architecture reviews use **Module** for code structure and name systemd units explicitly.
-- Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**, but NaiveProxy and Hysteria2 are not yet renderable into one **Generated config set**; apply plan must reject those instead of silently overwriting generated files.
-- Mieru **Inbounds** are expected to aggregate into one **Generated config set** so TCP and UDP **Transport bindings** can share a numeric port.
+- Multiple enabled **Inbounds** of the same protocol can produce multiple **Client links**. Hysteria2, olcRTC, and NaiveProxy are rendered as isolated per-Inbound Generated config artifacts and managed through systemd template units. Mieru **Inbounds** aggregate into one **Generated config set** so TCP and UDP **Transport bindings** can share a numeric port.
 - Protocol-specific metadata should live in the **Inbound protocol catalog** package, and protocol-specific behavior should live behind **Inbound protocol catalog** Adapters so adding another protocol does not require editing Panel copy, Inbound form options, firewall planning, Generated config set rendering, Client link delivery, and Apply workflow logic separately.
 - `both` is not a valid product concept now that Veil has more than two protocols. Do not introduce new user-facing stack choices.

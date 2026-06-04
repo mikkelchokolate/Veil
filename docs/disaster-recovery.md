@@ -37,7 +37,7 @@ Or read the passphrase from a file:
 ```bash
 veil backup create --passphrase-file /etc/veil/backup_pass.txt -o /path/to/backup.enc
 ```
-When a passphrase is provided, the backup is encrypted using PBKDF2 (10,000 iterations of SHA-256) and AES-256-GCM.
+When a passphrase is provided, the backup is encrypted using PBKDF2-SHA256 (600,000 iterations in the current archive format) and AES-256-GCM with authenticated archive metadata.
 
 ### Automating Backups with Cron
 
@@ -72,6 +72,30 @@ veil backup restore /path/to/backup.tar.gz
 > [!NOTE]
 > By default, the `restore` command will prompt you for confirmation if run interactively. If you are scripting the restoration, add the `-y` or `--yes` flag to bypass this confirmation.
 
+### Restoring on a New Host
+
+1. Install the same or newer Veil release on the new host.
+2. Stop the Panel while restoring:
+   ```bash
+   sudo systemctl stop veil.service
+   ```
+3. Restore the archive to the target state and key paths:
+   ```bash
+   sudo veil backup restore /path/to/veil_backup.enc \
+     --passphrase-file /path/to/passphrase.txt \
+     --state /var/lib/veil/state.json \
+     --key-path /etc/veil/state.key \
+     --yes
+   ```
+4. Repair managed material and restart:
+   ```bash
+   sudo veil repair --yes
+   sudo systemctl start veil.service
+   veil status
+   ```
+
+Run `veil admin rotate-key` after a cross-host restore if the old host might be compromised.
+
 ---
 
 ## 4. Key Rotation
@@ -95,3 +119,21 @@ The key rotation mechanism is atomic:
 - It creates temporary files (`state.json.tmp` and `state.key.tmp`) to ensure all writes complete successfully.
 - It renames files to target paths sequentially.
 - If writing the rotated files or renaming the state file fails, it automatically rolls back the key file to the original bytes to prevent locking you out of the system.
+
+---
+
+## 5. Recovery Test Cadence
+
+Test backups before relying on them:
+
+```bash
+tmpdir="$(mktemp -d)"
+veil backup restore /path/to/veil_backup.enc \
+  --passphrase-file /path/to/passphrase.txt \
+  --state "$tmpdir/state.json" \
+  --key-path "$tmpdir/state.key" \
+  --yes
+veil admin show --state "$tmpdir/state.json" --key-path "$tmpdir/state.key"
+```
+
+The project test suite includes encrypted archive, restore, safety-backup, and key-rotation coverage so release validation exercises backup compatibility between versions.
