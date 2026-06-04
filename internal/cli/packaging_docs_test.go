@@ -71,6 +71,15 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 			t.Fatalf("dependabot.yml missing ecosystem %q", want)
 		}
 	}
+	dependabotConfig := strings.ReplaceAll(string(dependabot), "\r\n", "\n")
+	for _, want := range []string{"go-modules:", "container-images:", "github-actions-updates:"} {
+		if !strings.Contains(dependabotConfig, want) {
+			t.Fatalf("dependabot.yml missing grouped updates policy %q", want)
+		}
+	}
+	if got := strings.Count(dependabotConfig, "open-pull-requests-limit: 1"); got != 3 {
+		t.Fatalf("dependabot.yml should cap each ecosystem at one grouped PR, got %d limits", got)
+	}
 
 	makefile, err := os.ReadFile("../../Makefile")
 	if err != nil {
