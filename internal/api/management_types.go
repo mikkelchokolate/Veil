@@ -47,4 +47,5 @@ type managementState struct {
 	routingSource RoutingSource
 	warp          WarpConfig
 	users         []User
+	orphanedUnits []string
 }

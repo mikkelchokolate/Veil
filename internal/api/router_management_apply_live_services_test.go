@@ -585,3 +585,166 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 		t.Fatalf("expected rollback history entry: %+v", history)
 	}
 }
+
+func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+
+	// Write the orphan config files to the live directories
+	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.Caddyfile")
+	orphanHysteria2 := filepath.Join(applyRoot, "live", "hysteria2", "orphan.yaml")
+	if err := atomicfile.Write(orphanCaddy, []byte("caddy config"), 0o600, 0o700); err != nil {
+		t.Fatalf("write orphan caddy: %v", err)
+	}
+	if err := atomicfile.Write(orphanHysteria2, []byte("hysteria2 config"), 0o600, 0o700); err != nil {
+		t.Fatalf("write orphan hysteria2: %v", err)
+	}
+
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
+	}
+
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify that orphans were removed
+	if _, err := os.Stat(orphanCaddy); !os.IsNotExist(err) {
+		t.Fatalf("orphan caddy config should be deleted, stat err: %v", err)
+	}
+	if _, err := os.Stat(orphanHysteria2); !os.IsNotExist(err) {
+		t.Fatalf("orphan hysteria2 config should be deleted, stat err: %v", err)
+	}
+
+	// Verify the service actions (stop/disable for orphans)
+	expectedStopDisableCalls := [][]string{
+		{"systemctl", "stop", "veil-caddy@orphan.service"},
+		{"systemctl", "disable", "veil-caddy@orphan.service"},
+		{"systemctl", "stop", "veil-hysteria2@orphan.service"},
+		{"systemctl", "disable", "veil-hysteria2@orphan.service"},
+	}
+
+	for _, expectedCall := range expectedStopDisableCalls {
+		found := false
+		for _, call := range serviceCalls {
+			if stringSlicesEqual(call, expectedCall) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected service call %v not found in service calls: %+v", expectedCall, serviceCalls)
+		}
+	}
+}
+
+func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "naive-only"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+
+	// Write the orphan config files to the live directories
+	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.Caddyfile")
+	orphanHysteria2 := filepath.Join(applyRoot, "live", "hysteria2", "orphan.yaml")
+	if err := atomicfile.Write(orphanCaddy, []byte("caddy config"), 0o600, 0o700); err != nil {
+		t.Fatalf("write orphan caddy: %v", err)
+	}
+	if err := atomicfile.Write(orphanHysteria2, []byte("hysteria2 config"), 0o600, 0o700); err != nil {
+		t.Fatalf("write orphan hysteria2: %v", err)
+	}
+
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+	}()
+
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+
+	serviceCalls := [][]string{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+
+	// Make the health checker fail to trigger a rollback
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "forced reload failure"}
+	}
+
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify that orphans were restored
+	assertFileBody(t, orphanCaddy, "caddy config")
+	assertFileBody(t, orphanHysteria2, "hysteria2 config")
+
+	// Verify the service actions on rollback (enable/start for orphans)
+	expectedEnableStartCalls := [][]string{
+		{"systemctl", "enable", "veil-caddy@orphan.service"},
+		{"systemctl", "start", "veil-caddy@orphan.service"},
+		{"systemctl", "enable", "veil-hysteria2@orphan.service"},
+		{"systemctl", "start", "veil-hysteria2@orphan.service"},
+	}
+
+	for _, expectedCall := range expectedEnableStartCalls {
+		found := false
+		for _, call := range serviceCalls {
+			if stringSlicesEqual(call, expectedCall) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected rollback call %v not found in service calls: %+v", expectedCall, serviceCalls)
+		}
+	}
+}
