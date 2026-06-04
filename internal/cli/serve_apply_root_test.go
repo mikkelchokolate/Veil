@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
@@ -31,7 +34,16 @@ func TestResolveServeApplyRootDefaultsToEtcVeil(t *testing.T) {
 
 	got, source := serveflow.NewEnvironment().ApplyRoot("")
 
-	if got != "/etc/veil" || source != "default" {
+	expected := "/etc/veil"
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		expected = filepath.Join(pd, "Veil")
+	}
+
+	if got != expected || source != "default" {
 		t.Fatalf("expected default apply root, got %q from %q", got, source)
 	}
 }

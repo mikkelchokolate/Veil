@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
@@ -31,7 +34,16 @@ func TestResolveServeStatePathUsesDefaultWhenUnset(t *testing.T) {
 
 	got, source := serveflow.NewEnvironment().StatePath("")
 
-	if got != "/var/lib/veil/state.json" || source != "default" {
+	expected := "/var/lib/veil/state.json"
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		expected = filepath.Join(pd, "Veil", "state.json")
+	}
+
+	if got != expected || source != "default" {
 		t.Fatalf("expected default state path/source, got path=%q source=%q", got, source)
 	}
 }

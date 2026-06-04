@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -24,7 +26,15 @@ func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycl
 func newManagementState(info ServerInfo) *managementState {
 	keyPath := info.KeyPath
 	if keyPath == "" {
-		keyPath = "/etc/veil/state.key"
+		if runtime.GOOS == "windows" {
+			pd := os.Getenv("ProgramData")
+			if pd == "" {
+				pd = `C:\ProgramData`
+			}
+			keyPath = filepath.Join(pd, "Veil", "state.key")
+		} else {
+			keyPath = "/etc/veil/state.key"
+		}
 	}
 	if info.StatePath != "" {
 		os.Setenv("VEIL_STATE_PATH", info.StatePath)
@@ -175,6 +185,13 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 func defaultApplyRoot(root string) string {
 	if root != "" {
 		return root
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil")
 	}
 	return "/etc/veil"
 }
