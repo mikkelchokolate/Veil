@@ -284,16 +284,32 @@ func newAdminCommand() *cobra.Command {
 				return fmt.Errorf("write temporary key file: %w", err)
 			}
 
-			// Atomic swap with rollback
+			// Rename the old key to a backup name (e.g., key.bak) if targetKeyPath exists
+			backupKeyPath := targetKeyPath + ".bak"
+			hasBackup := false
+			if _, statErr := os.Stat(targetKeyPath); statErr == nil {
+				if err := os.Rename(targetKeyPath, backupKeyPath); err != nil {
+					os.Remove(tempStatePath)
+					os.Remove(tempKeyPath)
+					return fmt.Errorf("backup old key file: %w", err)
+				}
+				hasBackup = true
+			}
+
+			// Rename the new key to the target name
 			if err := os.Rename(tempKeyPath, targetKeyPath); err != nil {
+				if hasBackup {
+					_ = os.Rename(backupKeyPath, targetKeyPath)
+				}
 				os.Remove(tempStatePath)
 				os.Remove(tempKeyPath)
 				return fmt.Errorf("rename key file: %w", err)
 			}
 
+			// Rename the state file
 			if err := os.Rename(tempStatePath, resolvedState); err != nil {
-				if targetKeyPath == resolvedKey {
-					if rbErr := os.WriteFile(resolvedKey, oldKeyBytes, 0o600); rbErr != nil {
+				if hasBackup {
+					if rbErr := os.Rename(backupKeyPath, targetKeyPath); rbErr != nil {
 						return fmt.Errorf("critical failure: state rename failed (%v) and key rollback failed: %w", err, rbErr)
 					}
 				} else {
@@ -301,6 +317,11 @@ func newAdminCommand() *cobra.Command {
 				}
 				os.Remove(tempStatePath)
 				return fmt.Errorf("rename state file (rolled back key): %w", err)
+			}
+
+			// Delete backup files on success
+			if hasBackup {
+				_ = os.Remove(backupKeyPath)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")

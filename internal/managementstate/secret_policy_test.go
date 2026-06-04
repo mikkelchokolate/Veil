@@ -21,7 +21,10 @@ func TestSecretPolicyTransformsAllKnownSecretFields(t *testing.T) {
 		Warp: model.WarpConfig{LicenseKey: "warp-license", PrivateKey: "warp-private"},
 	}
 
-	SecretPolicy{}.Transform(&snapshot, func(value string) string { return "secret:" + value })
+	err := SecretPolicy{}.Transform(&snapshot, func(value string) (string, error) { return "secret:" + value, nil })
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
 
 	assertSecretTransformed(t, snapshot.Settings.NaivePassword, "naive-secret")
 	assertSecretTransformed(t, snapshot.Settings.Hysteria2Password, "hy2-secret")

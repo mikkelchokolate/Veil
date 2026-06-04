@@ -163,3 +163,83 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 		t.Fatal("failed to decrypt state with new key file")
 	}
 }
+
+func TestAdminRotateKeyRollbackOnFailure(t *testing.T) {
+	if !isFailureSimulationSupported() {
+		t.Skip("failure simulation not supported on this platform")
+	}
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+
+	statePath := filepath.Join(tempVar, "state.json")
+	keyPath := filepath.Join(tempEtc, "state.key")
+
+	// Generate initial key and state
+	var initKey [secrets.KeySize]byte
+	for i := range initKey {
+		initKey[i] = byte(i + 5)
+	}
+	if err := os.WriteFile(keyPath, initKey[:], 0o600); err != nil {
+		t.Fatalf("failed to write key: %v", err)
+	}
+
+	cipher, err := secrets.NewCipher(initKey)
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+
+	store := managementstate.NewStore(statePath, cipher)
+	snapshot := model.ManagementSnapshot{
+		Settings: model.Settings{
+			PanelListen: "127.0.0.1:4000",
+			Mode:        "server",
+		},
+	}
+	if err := store.Save(snapshot); err != nil {
+		t.Fatalf("failed to save state: %v", err)
+	}
+
+	// Lock the state file to simulate failure during rename
+	unlock, err := lockStateFileForRenameFailure(statePath)
+	if err != nil {
+		t.Fatalf("failed to lock state file: %v", err)
+	}
+	defer unlock()
+
+	// Run rotate-key command
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"admin", "rotate-key",
+		"--state", statePath,
+		"--key-path", keyPath,
+	})
+
+	err = cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error executing rotate-key due to state rename failure, but got nil")
+	}
+
+	// Verify key file has been rolled back and remains the original initKey
+	rolledBackKeyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("failed to read key file: %v", err)
+	}
+	if !bytes.Equal(rolledBackKeyBytes, initKey[:]) {
+		t.Fatalf("expected key to be rolled back to %v, got %v", initKey[:], rolledBackKeyBytes)
+	}
+
+	// Verify there is no leftover backup file or temp files in tempEtc
+	entries, err := os.ReadDir(tempEtc)
+	if err != nil {
+		t.Fatalf("failed to read etc directory: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != "state.key" {
+			t.Errorf("unexpected file in etc directory: %s", entry.Name())
+		}
+	}
+}
