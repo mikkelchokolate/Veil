@@ -5,14 +5,23 @@ info:
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
-    ## Authentication
-    When the Panel is started with an API token, every `/api/*` request must
-    present it either as `X-Veil-Token: <token>` or
-    `Authorization: Bearer <token>`. Requests without a valid token receive
-    `401 Unauthorized`. Non-API routes (the Panel UI, `/healthz`, `/metrics`)
-    are not token-gated at the application layer. When no token is configured,
-    the API is open at the application layer and must be protected by network
-    controls (local-only bind, SSH tunnel, or Caddy in front).
+    ## Authentication model
+    Veil is fail-closed for public Panel listeners. A non-loopback `--listen`
+    address requires both API token authentication (`--auth-token` or
+    `VEIL_API_TOKEN`) and user/session authentication already configured in
+    Management state (`veil admin reset` or `veil admin set`). Loopback-only
+    listeners may run without credentials for development and SSH-tunnel use.
+
+    `/api/*` routes accept either `X-Veil-Token`, `Authorization: Bearer`, or
+    a `veil_session` cookie created by `/api/auth/login`. Mutating requests
+    made with a cookie session must also send `X-CSRF-Token`, and only `admin`
+    sessions may mutate state. `viewer` sessions are read-only.
+
+    `/healthz`, `/metrics`, and the Panel UI are not treated as proof of
+    authorization. On public listeners `/healthz` is authenticated, `/metrics`
+    follows the separate metrics policy (`--metrics-access` /
+    `VEIL_METRICS_ACCESS`), and the Panel UI renders only the login surface
+    until a valid session exists.
   license:
     name: GPL-3.0-or-later
     url: https://www.gnu.org/licenses/gpl-3.0.html
@@ -21,8 +30,10 @@ servers:
 security:
   - veilToken: []
   - bearerAuth: []
+  - sessionCookie: []
 tags:
   - name: status
+  - name: auth
   - name: settings
   - name: inbounds
   - name: routing
@@ -37,21 +48,228 @@ paths:
   /healthz:
     get:
       tags: [status]
-      summary: Liveness probe
-      security: []
+      summary: Liveness/readiness probe
+      description: Authenticated on public Panel listeners; public on loopback-only development listeners.
       responses:
         "200":
-          description: Panel is serving.
+          description: Panel is serving and state is accessible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: State path is configured but inaccessible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                unhealthy:
+                  value:
+                    status: unhealthy
+                    error: "stat /var/lib/veil/state.json: no such file or directory"
   /metrics:
     get:
       tags: [status]
       summary: Prometheus metrics exposition
-      security: []
+      description: |
+        Exposure is controlled independently with `--metrics-access` /
+        `VEIL_METRICS_ACCESS`.
+        `auto` authenticates metrics on public listeners and whenever auth is
+        configured; `authenticated` always requires auth; `public` is accepted
+        only for loopback listeners.
       responses:
         "200":
           description: Prometheus text exposition format.
           content:
-            text/plain: {}
+            text/plain:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: |
+                    # HELP veil_uptime_seconds Veil process uptime in seconds.
+                    # TYPE veil_uptime_seconds gauge
+                    veil_uptime_seconds 12
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Create a browser session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              admin:
+                value:
+                  username: admin
+                  password: "correct horse battery staple"
+      responses:
+        "200":
+          description: Login succeeded and a `veil_session` cookie was set.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HTTP-only `veil_session` cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+              examples:
+                admin:
+                  value:
+                    success: true
+                    username: admin
+                    role: admin
+                    csrfToken: 0123456789abcdef0123456789abcdef
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Delete the browser session cookie
+      security: []
+      responses:
+        "200":
+          description: Logout response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+              examples:
+                ok:
+                  value:
+                    success: true
+  /api/auth/status:
+    get:
+      tags: [auth]
+      summary: Inspect the current browser session
+      security: []
+      responses:
+        "200":
+          description: Current session status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatusResponse"
+              examples:
+                authenticated:
+                  value:
+                    authenticated: true
+                    username: admin
+                    role: admin
+                    csrfToken: 0123456789abcdef0123456789abcdef
+                anonymous:
+                  value:
+                    authenticated: false
+  /api/users:
+    get:
+      tags: [auth]
+      summary: List registered Panel users
+      responses:
+        "200":
+          description: Registered users and roles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserResponse"
+    post:
+      tags: [auth]
+      summary: Create a Panel user
+      description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreateRequest"
+            examples:
+              viewer:
+                value:
+                  username: operator
+                  password: "change-this-password"
+                  role: viewer
+      responses:
+        "201":
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/users/{username}:
+    parameters:
+      - $ref: "#/components/parameters/Username"
+    put:
+      tags: [auth]
+      summary: Update a Panel user
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateRequest"
+      responses:
+        "200":
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [auth]
+      summary: Delete a Panel user
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "204":
+          description: User deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/status:
     get:
       tags: [status]
@@ -60,46 +278,115 @@ paths:
         "200":
           description: Status snapshot.
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              examples:
+                sample:
+                  value:
+                    schemaVersion: v1
+                    name: Veil
+                    version: v1.2.3
+                    mode: server
+                    services:
+                      - name: veil
+                        managed: true
+                        unit: veil.service
+                        loadState: loaded
+                        activeState: active
+                        subState: running
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/version:
     get:
       tags: [version]
-      summary: Current Veil version and latest release comparison
+      summary: Current Veil version
       responses:
         "200":
           description: Version info.
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/version/update:
     post:
       tags: [version]
-      summary: Trigger a self-update to the latest release
+      summary: Trigger a staged self-update to the latest release
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
       responses:
         "200":
-          description: Update result.
+          description: Update staged successfully.
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          description: Update failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateResponse"
   /api/settings:
     get:
       tags: [settings]
-      summary: Read Panel settings (secrets redacted)
+      summary: Read Panel settings with secrets redacted
       responses:
         "200":
           description: Current settings.
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+              examples:
+                server:
+                  value:
+                    panelListen: 127.0.0.1:2096
+                    panelAccess: local
+                    mode: server
+                    domain: vpn.example.com
+                    email: admin@example.com
+                    naivePassword: "[REDACTED]"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     put:
       tags: [settings]
       summary: Update Panel settings
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
       responses:
         "200":
           description: Updated settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
         "400":
-          description: Validation error.
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/inbounds:
     get:
       tags: [inbounds]
@@ -108,56 +395,103 @@ paths:
         "200":
           description: Inbound list.
           content:
-            application/json: {}
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Inbound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [inbounds]
       summary: Create an inbound
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Inbound"
+            examples:
+              hysteria2:
+                value:
+                  name: hy2-main
+                  protocol: hysteria2
+                  transport: udp
+                  port: 443
+                  enabled: true
       responses:
         "201":
           description: Created inbound.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inbound"
         "400":
-          description: Validation or duplicate transport-binding error.
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/inbounds/{name}:
     parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/Name"
     get:
       tags: [inbounds]
       summary: Read one inbound
       responses:
         "200":
           description: Inbound.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inbound"
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
     put:
       tags: [inbounds]
       summary: Update an inbound
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Inbound"
       responses:
         "200":
           description: Updated inbound.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inbound"
         "400":
-          description: Validation error.
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
     delete:
       tags: [inbounds]
       summary: Delete an inbound
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       responses:
         "204":
           description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
   /api/routing/rules:
     get:
       tags: [routing]
@@ -165,94 +499,160 @@ paths:
       responses:
         "200":
           description: Rule list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RoutingRule"
     post:
       tags: [routing]
       summary: Create a routing rule
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingRule"
+            examples:
+              private:
+                value:
+                  name: private-direct
+                  match: geoip:private
+                  outbound: direct
+                  enabled: true
       responses:
         "201":
           description: Created rule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
         "400":
-          description: Validation error.
+          $ref: "#/components/responses/BadRequest"
   /api/routing/rules/{name}:
     parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/Name"
     get:
       tags: [routing]
       summary: Read a routing rule
       responses:
         "200":
           description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
     put:
       tags: [routing]
       summary: Update a routing rule
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingRule"
       responses:
         "200":
           description: Updated rule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
     delete:
       tags: [routing]
       summary: Delete a routing rule
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       responses:
         "204":
           description: Deleted.
         "404":
-          description: Not found.
+          $ref: "#/components/responses/NotFound"
   /api/routing/presets:
     get:
       tags: [routing]
-      summary: List routing presets
+      summary: List routing presets and source material
       responses:
         "200":
-          description: Preset list.
+          description: Preset response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingPresetResponse"
   /api/routing/presets/{name}:
     parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/Name"
     post:
       tags: [routing]
       summary: Apply a routing preset
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       responses:
         "200":
           description: Applied preset result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingPresetResponse"
         "404":
-          description: Unknown preset.
+          $ref: "#/components/responses/NotFound"
   /api/warp:
     get:
       tags: [warp]
-      summary: Read WARP state (secrets redacted)
+      summary: Read WARP state with secrets redacted
       responses:
         "200":
           description: WARP state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarpConfig"
     put:
       tags: [warp]
       summary: Update WARP state
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
-          application/json: {}
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarpConfig"
       responses:
         "200":
           description: Updated WARP state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarpConfig"
         "400":
-          description: Validation error.
+          $ref: "#/components/responses/BadRequest"
   /api/client-links:
     get:
       tags: [client-links]
@@ -260,13 +660,32 @@ paths:
       responses:
         "200":
           description: Client links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientLinksResponse"
   /api/client-links/subscription:
     get:
       tags: [client-links]
       summary: Subscription-format client links
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [base64, raw]
       responses:
         "200":
           description: Subscription payload.
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                contentEncoding: base64
   /api/firewall:
     get:
       tags: [status]
@@ -274,13 +693,42 @@ paths:
       responses:
         "200":
           description: Firewall material.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FirewallRule"
   /api/apply:
     post:
       tags: [apply]
-      summary: Stage and apply current management state
+      summary: Stage and optionally promote current management state
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyRequest"
+            examples:
+              stage-and-live:
+                value:
+                  confirm: true
+                  applyLive: true
+                  applyServices: true
       responses:
         "200":
           description: Apply workflow result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/apply/plan:
     get:
       tags: [apply]
@@ -288,6 +736,10 @@ paths:
       responses:
         "200":
           description: Apply plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyPlanResponse"
   /api/apply/history:
     get:
       tags: [apply]
@@ -295,6 +747,12 @@ paths:
       responses:
         "200":
           description: Apply history entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApplyHistoryEntry"
   /api/profiles/ru-recommended/preview:
     get:
       tags: [apply]
@@ -303,20 +761,46 @@ paths:
         "200":
           description: Profile preview.
           content:
-            application/json: {}
-  /api/services/{name}:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/services/{name}/restart:
     parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/Name"
     post:
       tags: [services]
-      summary: Control a managed systemd unit (restart, etc.)
+      summary: Restart a managed systemd unit
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceActionRequest"
+            examples:
+              restart:
+                value:
+                  confirm: true
       responses:
         "200":
           description: Service action result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          description: Service action failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceActionResponse"
   /api/system:
     get:
       tags: [runtime]
@@ -324,6 +808,10 @@ paths:
       responses:
         "200":
           description: System runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStats"
   /api/tls:
     get:
       tags: [runtime]
@@ -331,6 +819,10 @@ paths:
       responses:
         "200":
           description: TLS runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TLSCertInfo"
   /api/network:
     get:
       tags: [runtime]
@@ -338,6 +830,10 @@ paths:
       responses:
         "200":
           description: Network runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkStats"
   /api/connections:
     get:
       tags: [runtime]
@@ -345,6 +841,10 @@ paths:
       responses:
         "200":
           description: Connections runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionsStats"
   /api/processes:
     get:
       tags: [runtime]
@@ -352,6 +852,10 @@ paths:
       responses:
         "200":
           description: Processes runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessesStats"
   /api/disk:
     get:
       tags: [runtime]
@@ -359,6 +863,10 @@ paths:
       responses:
         "200":
           description: Disk runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiskStats"
   /api/runtime/observation:
     get:
       tags: [runtime]
@@ -366,34 +874,112 @@ paths:
       responses:
         "200":
           description: Aggregated runtime snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeObservation"
   /api/logs:
     get:
       tags: [runtime]
       summary: Bounded journald reads for managed units
+      parameters:
+        - name: unit
+          in: query
+          required: false
+          schema:
+            type: string
+            default: veil
+        - name: lines
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Log lines.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/tools/dns-lookup:
     post:
       tags: [diagnostics]
       summary: DNS lookup diagnostic
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DNSLookupRequest"
       responses:
         "200":
           description: DNS lookup result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DNSLookupResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/tools/ping:
     post:
       tags: [diagnostics]
       summary: Ping diagnostic
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PingRequest"
       responses:
         "200":
           description: Ping result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PingResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/tools/speedtest:
     post:
       tags: [diagnostics]
       summary: Speedtest diagnostic
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
       responses:
         "200":
           description: Speedtest result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeedtestResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     veilToken:
@@ -403,3 +989,882 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: veil_session
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    Name:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    Username:
+      name: username
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+  responses:
+    BadRequest:
+      description: Request body, query string, or path failed validation.
+      content:
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/ErrorText"
+          examples:
+            invalid:
+              value: "invalid JSON\n"
+    Unauthorized:
+      description: Missing or invalid token/session.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Present on authenticated API challenges.
+      content:
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/ErrorText"
+          examples:
+            missing:
+              value: "missing or invalid API token or session\n"
+    Forbidden:
+      description: Authenticated principal is not allowed to perform the operation.
+      content:
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/ErrorText"
+          examples:
+            csrf:
+              value: "invalid or missing CSRF token\n"
+    NotFound:
+      description: Resource not found.
+      content:
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/ErrorText"
+          examples:
+            not-found:
+              value: "404 page not found\n"
+    ServiceUnavailable:
+      description: Runtime dependency is unavailable.
+      content:
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/ErrorText"
+  schemas:
+    EmptyObject:
+      type: object
+      additionalProperties: false
+    ErrorText:
+      type: string
+      description: Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unhealthy]
+        error:
+          type: string
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      required: [success, username, role, csrfToken]
+      properties:
+        success:
+          type: boolean
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        csrfToken:
+          type: string
+    AuthStatusResponse:
+      type: object
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        csrfToken:
+          type: string
+    UserRole:
+      type: string
+      enum: [admin, viewer]
+    UserResponse:
+      type: object
+      required: [username, role]
+      properties:
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+    UserCreateRequest:
+      type: object
+      required: [username, password, role]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        role:
+          $ref: "#/components/schemas/UserRole"
+    UserUpdateRequest:
+      type: object
+      required: [role]
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+        role:
+          $ref: "#/components/schemas/UserRole"
+    Settings:
+      type: object
+      required: [panelListen, mode]
+      properties:
+        panelListen:
+          type: string
+          examples: [127.0.0.1:2096]
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy, ""]
+        webBasePath:
+          type: string
+          examples: [/a1b2c3d4e5f6/]
+        mode:
+          type: string
+          examples: [server]
+        domain:
+          type: string
+        email:
+          type: string
+          format: email
+        naiveUsername:
+          type: string
+        naivePassword:
+          type: string
+          description: Plain value on write; redacted as `[REDACTED]` on read when present.
+        hysteria2Password:
+          type: string
+        masqueradeURL:
+          type: string
+        fallbackRoot:
+          type: string
+        olcrtcAuth:
+          type: string
+        olcrtcTransport:
+          type: string
+        olcrtcRoomID:
+          type: string
+    ClientProfile:
+      type: object
+      required: [name, enabled]
+      properties:
+        name:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        enabled:
+          type: boolean
+    Inbound:
+      type: object
+      required: [name, protocol, transport, port, enabled]
+      properties:
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [naiveproxy, hysteria2, olcrtc, mieru]
+        transport:
+          type: string
+          enum: [tcp, udp]
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        enabled:
+          type: boolean
+        password:
+          type: string
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientProfile"
+        naiveUsername:
+          type: string
+        naivePassword:
+          type: string
+        hysteria2Password:
+          type: string
+        masqueradeURL:
+          type: string
+        fallbackRoot:
+          type: string
+        olcrtcAuth:
+          type: string
+        olcrtcTransport:
+          type: string
+        olcrtcRoomID:
+          type: string
+    RoutingRule:
+      type: object
+      required: [name, match, outbound, enabled]
+      properties:
+        name:
+          type: string
+        match:
+          type: string
+        outbound:
+          type: string
+          examples: [direct, warp, block]
+        enabled:
+          type: boolean
+    RoutingSourceFile:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        sha256Url:
+          type: string
+          format: uri
+    RoutingSource:
+      type: object
+      properties:
+        repository:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingSourceFile"
+    RoutingPreset:
+      type: object
+      required: [name, description, source, rules]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        source:
+          $ref: "#/components/schemas/RoutingSource"
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingRule"
+    RoutingPresetResponse:
+      type: object
+      required: [source, rules]
+      properties:
+        activePreset:
+          type: string
+        source:
+          $ref: "#/components/schemas/RoutingSource"
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingRule"
+        presets:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingPreset"
+    WarpConfig:
+      type: object
+      required: [enabled, endpoint]
+      properties:
+        enabled:
+          type: boolean
+        licenseKey:
+          type: string
+        endpoint:
+          type: string
+          examples: [engage.cloudflareclient.com:2408]
+        privateKey:
+          type: string
+        localAddress:
+          type: string
+        peerPublicKey:
+          type: string
+        reserved:
+          type: array
+          items:
+            type: integer
+        socksListen:
+          type: string
+        socksPort:
+          type: integer
+        mtu:
+          type: integer
+    ClientLink:
+      type: object
+      required: [name, protocol, transport, port, uri]
+      properties:
+        name:
+          type: string
+        protocol:
+          type: string
+        transport:
+          type: string
+        port:
+          type: integer
+        uri:
+          type: string
+        config:
+          type: string
+    ClientArtifact:
+      type: object
+      required: [name, protocol, kind, filename, content]
+      properties:
+        name:
+          type: string
+        protocol:
+          type: string
+        kind:
+          type: string
+        filename:
+          type: string
+        content:
+          type: string
+    ClientLinksResponse:
+      type: object
+      required:
+        - schemaVersion
+        - domain
+        - subscriptionUrl
+        - base64SubscriptionUrl
+        - rawSubscriptionUrl
+        - defaultSubscriptionFormat
+        - base64SubscriptionFilename
+        - rawSubscriptionFilename
+        - subscriptionContentType
+        - subscriptionFormats
+        - count
+        - links
+      properties:
+        schemaVersion:
+          type: string
+        domain:
+          type: string
+        subscriptionUrl:
+          type: string
+        base64SubscriptionUrl:
+          type: string
+        rawSubscriptionUrl:
+          type: string
+        defaultSubscriptionFormat:
+          type: string
+        base64SubscriptionFilename:
+          type: string
+        rawSubscriptionFilename:
+          type: string
+        subscriptionContentType:
+          type: string
+        subscriptionFormats:
+          type: array
+          items:
+            type: string
+        count:
+          type: integer
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientLink"
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientArtifact"
+    FirewallRule:
+      type: object
+      required: [port, protocol, service]
+      properties:
+        port:
+          type: integer
+        protocol:
+          type: string
+          enum: [tcp, udp]
+        service:
+          type: string
+    ApplyPlanResponse:
+      type: object
+      required: [valid, configs, actions]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        configs:
+          type: array
+          items:
+            type: string
+        actions:
+          type: array
+          items:
+            type: string
+        runtimes:
+          type: array
+          items:
+            type: string
+    ApplyRequest:
+      type: object
+      required: [confirm, applyLive, applyServices]
+      additionalProperties: false
+      properties:
+        confirm:
+          type: boolean
+        applyLive:
+          type: boolean
+        applyServices:
+          type: boolean
+    ConfigValidationResult:
+      type: object
+      required: [name, config, command, valid]
+      properties:
+        name:
+          type: string
+        config:
+          type: string
+        command:
+          type: array
+          items:
+            type: string
+        valid:
+          type: boolean
+        skipped:
+          type: boolean
+        output:
+          type: string
+        error:
+          type: string
+    ServiceActionResult:
+      type: object
+      required: [name, command, success]
+      properties:
+        name:
+          type: string
+        command:
+          type: array
+          items:
+            type: string
+        success:
+          type: boolean
+        output:
+          type: string
+        error:
+          type: string
+    ServiceHealthResult:
+      type: object
+      required: [name, command, healthy]
+      properties:
+        name:
+          type: string
+        command:
+          type: array
+          items:
+            type: string
+        healthy:
+          type: boolean
+        output:
+          type: string
+        error:
+          type: string
+    ApplyResponse:
+      type: object
+      required: [applied, liveApplied, servicesApplied, plan, writtenFiles]
+      properties:
+        applied:
+          type: boolean
+        liveApplied:
+          type: boolean
+        servicesApplied:
+          type: boolean
+        rolledBack:
+          type: boolean
+        plan:
+          $ref: "#/components/schemas/ApplyPlanResponse"
+        writtenFiles:
+          type: array
+          items:
+            type: string
+        liveFiles:
+          type: array
+          items:
+            type: string
+        backupFiles:
+          type: array
+          items:
+            type: string
+        rollbackFiles:
+          type: array
+          items:
+            type: string
+        validations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigValidationResult"
+        serviceActions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceActionResult"
+        healthChecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceHealthResult"
+        rollbackActions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceActionResult"
+    ApplyHistoryEntry:
+      allOf:
+        - $ref: "#/components/schemas/ApplyResponse"
+        - type: object
+          required: [id, timestamp, stage, success]
+          properties:
+            id:
+              type: string
+            timestamp:
+              type: string
+            stage:
+              type: string
+            success:
+              type: boolean
+    ServiceActionRequest:
+      type: object
+      required: [confirm]
+      additionalProperties: false
+      properties:
+        confirm:
+          type: boolean
+    ServiceActionResponse:
+      type: object
+      required: [service, action, success]
+      properties:
+        service:
+          type: string
+        action:
+          type: string
+        success:
+          type: boolean
+        output:
+          type: string
+        error:
+          type: string
+    StatusResponse:
+      type: object
+      required: [schemaVersion, name, version, mode, services]
+      properties:
+        schemaVersion:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        mode:
+          type: string
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceStatus"
+    ServiceStatus:
+      type: object
+      required: [name, managed]
+      properties:
+        name:
+          type: string
+        managed:
+          type: boolean
+        transport:
+          type: string
+        unit:
+          type: string
+        loadState:
+          type: string
+        activeState:
+          type: string
+        subState:
+          type: string
+        error:
+          type: string
+    VersionResponse:
+      type: object
+      required: [version, runtime, name]
+      properties:
+        version:
+          type: string
+        runtime:
+          type: string
+        name:
+          type: string
+    UpdateResponse:
+      type: object
+      required: [success, log, message]
+      properties:
+        success:
+          type: boolean
+        log:
+          type: string
+        message:
+          type: string
+    SystemStats:
+      type: object
+      required: [cpuPercent, memoryUsedMB, memoryTotalMB, diskUsedGB, diskTotalGB, uptimeSeconds, loadAvg1, loadAvg5, loadAvg15]
+      properties:
+        cpuPercent:
+          type: number
+        memoryUsedMB:
+          type: integer
+        memoryTotalMB:
+          type: integer
+        diskUsedGB:
+          type: number
+        diskTotalGB:
+          type: number
+        uptimeSeconds:
+          type: integer
+        loadAvg1:
+          type: number
+        loadAvg5:
+          type: number
+        loadAvg15:
+          type: number
+    TLSCertInfo:
+      type: object
+      required: [path, subject, issuer, notBefore, notAfter, daysRemaining, valid]
+      properties:
+        path:
+          type: string
+        subject:
+          type: string
+        issuer:
+          type: string
+        notBefore:
+          type: string
+        notAfter:
+          type: string
+        daysRemaining:
+          type: integer
+        dnsNames:
+          type: array
+          items:
+            type: string
+        valid:
+          type: boolean
+        error:
+          type: string
+    NetworkInterface:
+      type: object
+      required: [name, rxBytes, txBytes, rxPackets, txPackets]
+      properties:
+        name:
+          type: string
+        rxBytes:
+          type: integer
+        txBytes:
+          type: integer
+        rxPackets:
+          type: integer
+        txPackets:
+          type: integer
+    NetworkStats:
+      type: object
+      required: [interfaces]
+      properties:
+        interfaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkInterface"
+    ConnectionListener:
+      type: object
+      required: [proto, address, port]
+      properties:
+        proto:
+          type: string
+        address:
+          type: string
+        port:
+          type: integer
+        process:
+          type: string
+    ConnectionsStats:
+      type: object
+      required: [listeners]
+      properties:
+        listeners:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectionListener"
+    ProcessInfo:
+      type: object
+      required: [pid, name, cpuPercent, memoryMB, uptimeSeconds]
+      properties:
+        pid:
+          type: integer
+        name:
+          type: string
+        cpuPercent:
+          type: number
+        memoryMB:
+          type: integer
+        uptimeSeconds:
+          type: integer
+    ProcessesStats:
+      type: object
+      required: [processes]
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcessInfo"
+    DirSizeInfo:
+      type: object
+      required: [path, sizeBytes, sizeHuman]
+      properties:
+        path:
+          type: string
+        sizeBytes:
+          type: integer
+        sizeHuman:
+          type: string
+    DiskStats:
+      type: object
+      required: [dirs]
+      properties:
+        dirs:
+          type: array
+          items:
+            $ref: "#/components/schemas/DirSizeInfo"
+    RuntimeObservation:
+      type: object
+      required: [system, tls, network, connections, processes, disk]
+      properties:
+        system:
+          $ref: "#/components/schemas/SystemStats"
+        tls:
+          $ref: "#/components/schemas/TLSCertInfo"
+        network:
+          $ref: "#/components/schemas/NetworkStats"
+        connections:
+          $ref: "#/components/schemas/ConnectionsStats"
+        processes:
+          $ref: "#/components/schemas/ProcessesStats"
+        disk:
+          $ref: "#/components/schemas/DiskStats"
+        errors:
+          type: object
+          additionalProperties:
+            type: string
+    LogResult:
+      type: object
+      required: [unit, output]
+      properties:
+        unit:
+          type: string
+        output:
+          type: string
+    DNSLookupRequest:
+      type: object
+      required: [hostname]
+      additionalProperties: false
+      properties:
+        hostname:
+          type: string
+          examples: [example.com]
+    DNSLookupResult:
+      type: object
+      required: [hostname, addresses]
+      properties:
+        hostname:
+          type: string
+        addresses:
+          type: array
+          items:
+            type: string
+        cname:
+          type: string
+        error:
+          type: string
+    PingRequest:
+      type: object
+      required: [host]
+      additionalProperties: false
+      properties:
+        host:
+          type: string
+          examples: [1.1.1.1]
+        count:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+    PingResult:
+      type: object
+      required: [host, transmitted, received, lossPct]
+      properties:
+        host:
+          type: string
+        transmitted:
+          type: integer
+        received:
+          type: integer
+        lossPct:
+          type: number
+        minMs:
+          type: number
+        avgMs:
+          type: number
+        maxMs:
+          type: number
+        stddevMs:
+          type: number
+        error:
+          type: string
+    SpeedtestResult:
+      type: object
+      required: [pingMs, downloadMbps, uploadMbps]
+      properties:
+        server:
+          type: string
+        pingMs:
+          type: number
+        downloadMbps:
+          type: number
+        uploadMbps:
+          type: number
+        raw:
+          type: string

@@ -38,7 +38,12 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		handler = stripBasePathMiddleware(basePath, mux)
 	}
 	rateLimited := rateLimitMiddleware(metrics, handler)
-	authenticated := authMiddleware(state, info.AuthToken, rateLimited)
+	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
+		Token:             info.AuthToken,
+		ProtectHealthz:    info.PublicListen,
+		ProtectMetrics:    info.MetricsAuthRequired,
+		AllowDevAnonymous: !info.PublicListen,
+	}, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	return metrics.MetricsMiddleware(secured), state
 }
