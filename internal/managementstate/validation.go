@@ -2,6 +2,8 @@ package managementstate
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -34,9 +36,15 @@ func (v Validation) ValidateBytes(body []byte) (ValidationResult, error) {
 
 func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map[string]json.RawMessage) []string {
 	var errs []string
+	seenPorts := map[string]string{}
+
 	if _, ok := fields["settings"]; ok {
 		if snapshot.Settings.PanelListen == "" {
 			errs = append(errs, "settings.panelListen is required")
+		} else if _, portStr, err := net.SplitHostPort(snapshot.Settings.PanelListen); err == nil {
+			if port, err := strconv.Atoi(portStr); err == nil {
+				seenPorts["tcp:"+itoa(port)] = "panel"
+			}
 		}
 		if snapshot.Settings.Mode == "" {
 			errs = append(errs, "settings.mode is required")
@@ -44,8 +52,17 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 	} else {
 		errs = append(errs, "settings is missing")
 	}
+
+	if _, ok := fields["warp"]; ok && snapshot.Warp.Enabled {
+		port := snapshot.Warp.SocksPort
+		if port == 0 {
+			port = 40000
+		}
+		seenPorts["tcp:"+itoa(port)] = "warp"
+		seenPorts["udp:"+itoa(port)] = "warp"
+	}
+
 	if _, ok := fields["inbounds"]; ok {
-		seenPorts := map[string]bool{}
 		for i, inbound := range snapshot.Inbounds {
 			if inbound.Name == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].name is required")
@@ -60,10 +77,14 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 				errs = append(errs, "inbounds["+itoa(i)+"].port must be 1-65535, got: "+itoa(inbound.Port))
 			}
 			key := inbound.Transport + ":" + itoa(inbound.Port)
-			if seenPorts[key] {
-				errs = append(errs, "inbounds["+itoa(i)+"]: duplicate transport/port "+key)
+			if owner, exists := seenPorts[key]; exists {
+				if owner == "panel" || owner == "warp" {
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: port %d conflicts with %s", i, inbound.Port, owner))
+				} else {
+					errs = append(errs, "inbounds["+itoa(i)+"]: duplicate transport/port "+key)
+				}
 			}
-			seenPorts[key] = true
+			seenPorts[key] = "inbounds[" + itoa(i) + "]"
 		}
 	}
 	if _, ok := fields["routingRules"]; ok {
