@@ -54,10 +54,106 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		liveFiles = append(liveFiles, livePath)
 		records = append(records, record)
 	}
+
+	orphans, err := p.scanOrphans(liveFiles)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, orphanPath := range orphans {
+		body, err := os.ReadFile(orphanPath)
+		if err != nil {
+			continue
+		}
+		relPath := strings.TrimPrefix(orphanPath, filepath.VolumeName(orphanPath))
+		backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
+		if err := atomicfile.Write(backupPath, body, 0o600, 0o700); err != nil {
+			return nil, nil, nil, err
+		}
+		if err := os.Remove(orphanPath); err != nil && !os.IsNotExist(err) {
+			return nil, nil, nil, err
+		}
+		record := livePromotionRecord{
+			LivePath:    orphanPath,
+			BackupPath:  backupPath,
+			HadPrevious: true,
+		}
+		backupFiles = append(backupFiles, backupPath)
+		records = append(records, record)
+	}
+
 	sort.Strings(liveFiles)
 	sort.Strings(backupFiles)
 	sort.Slice(records, func(i, j int) bool { return records[i].LivePath < records[j].LivePath })
 	return liveFiles, backupFiles, records, nil
+}
+
+func (p LiveConfigPromotion) scanOrphans(liveFiles []string) ([]string, error) {
+	orphaned := []string{}
+	activeMap := make(map[string]bool)
+	for _, f := range liveFiles {
+		activeMap[filepath.Clean(f)] = true
+	}
+
+	dirs := []struct {
+		subpath string
+		ext     string
+		exclude string
+	}{
+		{subpath: "caddy", ext: ".Caddyfile", exclude: "panel.Caddyfile"},
+		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
+		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
+	}
+
+	for _, d := range dirs {
+		dirPath := filepath.Join(p.applyRoot, "live", d.subpath)
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(name, d.ext) {
+				continue
+			}
+			if name == d.exclude {
+				continue
+			}
+			absPath := filepath.Join(dirPath, name)
+			if !activeMap[filepath.Clean(absPath)] {
+				orphaned = append(orphaned, absPath)
+			}
+		}
+	}
+	return orphaned, nil
+}
+
+func UnitForLiveConfig(livePath string) (string, bool) {
+	slashPath := filepath.ToSlash(livePath)
+	if idx := strings.Index(slashPath, "/live/caddy/"); idx != -1 {
+		name := strings.TrimSuffix(slashPath[idx+len("/live/caddy/"):], ".Caddyfile")
+		if name != "panel" {
+			return "veil-caddy@" + name + ".service", true
+		}
+	}
+	if idx := strings.Index(slashPath, "/live/hysteria2/"); idx != -1 {
+		name := strings.TrimSuffix(slashPath[idx+len("/live/hysteria2/"):], ".yaml")
+		if name != "server" {
+			return "veil-hysteria2@" + name + ".service", true
+		}
+	}
+	if idx := strings.Index(slashPath, "/live/olcrtc/"); idx != -1 {
+		name := strings.TrimSuffix(slashPath[idx+len("/live/olcrtc/"):], ".yaml")
+		if name != "server" {
+			return "veil-olcrtc@" + name + ".service", true
+		}
+	}
+	return "", false
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {
