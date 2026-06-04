@@ -77,9 +77,9 @@ When you add and apply Inbounds, Veil can also manage:
 
 | Service | What |
 |---|---|
-| `veil-naive.service` | NaiveProxy via Caddy |
-| `veil-hysteria2.service` | Hysteria2 |
-| `veil-olcrtc.service` | olcRTC |
+| `veil-caddy@.service` | NaiveProxy via Caddy |
+| `veil-hysteria2@.service` | Hysteria2 |
+| `veil-olcrtc@.service` | olcRTC |
 | `veil-mieru.service` | Mieru |
 
 All secrets are stored encrypted at rest.
