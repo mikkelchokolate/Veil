@@ -28,7 +28,7 @@
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
