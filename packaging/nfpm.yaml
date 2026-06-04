@@ -33,8 +33,8 @@ contents:
   - src: packaging/systemd/veil.service
     dst: /lib/systemd/system/veil.service
     type: config
-  - src: packaging/systemd/veil-naive.service
-    dst: /lib/systemd/system/veil-naive.service
+  - src: packaging/systemd/veil-caddy@.service
+    dst: /lib/systemd/system/veil-caddy@.service
     type: config
   - src: packaging/systemd/veil-hysteria2@.service
     dst: /lib/systemd/system/veil-hysteria2@.service

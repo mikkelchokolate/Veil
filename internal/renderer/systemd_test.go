@@ -57,8 +57,8 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil.service"], "EnvironmentFile=-/etc/veil/veil.env") {
 		t.Fatalf("expected veil env file in unit:\n%s", units["veil.service"])
 	}
-	if !strings.Contains(units["veil-naive.service"], "/etc/veil/generated/caddy/Caddyfile") {
-		t.Fatalf("bad naive unit:\n%s", units["veil-naive.service"])
+	if !strings.Contains(units["veil-caddy@.service"], "/etc/veil/generated/caddy/%i.Caddyfile") {
+		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy@.service"])
 	}
 	if !strings.Contains(units["veil-hysteria2@.service"], "/etc/veil/generated/hysteria2/%i.yaml") {
 		t.Fatalf("bad hysteria2 unit:\n%s", units["veil-hysteria2@.service"])
@@ -93,13 +93,13 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 		t.Fatalf("veil.service: expected default EtcDir env file, got:\n%s", veilUnit)
 	}
 
-	// veil-naive.service: default CaddyBinary and EtcDir config path
-	naiveUnit := units["veil-naive.service"]
-	if !strings.Contains(naiveUnit, "ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/Caddyfile") {
-		t.Fatalf("veil-naive.service: expected default CaddyBinary and EtcDir, got:\n%s", naiveUnit)
+	// veil-caddy@.service: default CaddyBinary and EtcDir config path
+	naiveUnit := units["veil-caddy@.service"]
+	if !strings.Contains(naiveUnit, "ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/%i.Caddyfile") {
+		t.Fatalf("veil-caddy@.service: expected default CaddyBinary and EtcDir, got:\n%s", naiveUnit)
 	}
-	if !strings.Contains(naiveUnit, "ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/Caddyfile") {
-		t.Fatalf("veil-naive.service: expected default CaddyBinary reload, got:\n%s", naiveUnit)
+	if !strings.Contains(naiveUnit, "ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/%i.Caddyfile") {
+		t.Fatalf("veil-caddy@.service: expected default CaddyBinary reload, got:\n%s", naiveUnit)
 	}
 
 	// veil-hysteria2@.service: default HysteriaBinary and EtcDir config path
