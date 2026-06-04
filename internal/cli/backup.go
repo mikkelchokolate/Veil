@@ -11,6 +11,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newBackupCommand() *cobra.Command {
@@ -146,6 +147,15 @@ func resolvePassphrase(pass, file string) (string, error) {
 		}
 		// Trim standard newlines and whitespace
 		return strings.TrimRight(string(data), "\r\n"), nil
+	}
+	if pass == "" && term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprint(os.Stderr, "Enter passphrase: ")
+		pwd, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return "", fmt.Errorf("read passphrase interactively: %w", err)
+		}
+		fmt.Fprintln(os.Stderr)
+		return string(pwd), nil
 	}
 	return pass, nil
 }

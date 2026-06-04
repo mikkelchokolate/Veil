@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -380,7 +382,15 @@ func TestResolveServeKeyPathFromEnv(t *testing.T) {
 func TestResolveServeKeyPathDefault(t *testing.T) {
 	t.Setenv("VEIL_KEY_PATH", "")
 	path, source := serveflow.NewEnvironment().KeyPath("")
-	if path != "/etc/veil/state.key" {
+	expected := "/etc/veil/state.key"
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		expected = filepath.Join(pd, "Veil", "state.key")
+	}
+	if path != expected {
 		t.Fatalf("expected default key path, got: %s", path)
 	}
 	if source != "default" {
