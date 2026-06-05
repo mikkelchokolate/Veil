@@ -124,13 +124,15 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
 	}
-	if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
-		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-		return fmt.Errorf("prepare panel service account and permissions: %w", err)
-	}
-	if err := installSystemdRunFunc(service.SystemdApplyPlan(installer.PanelSystemdUnits(profile))); err != nil {
-		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-		return err
+	if shouldPrepareInstallHost(systemdDir) {
+		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+			return fmt.Errorf("prepare panel service account and permissions: %w", err)
+		}
+		if err := installSystemdRunFunc(service.SystemdApplyPlan(installer.PanelSystemdUnits(profile))); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+			return err
+		}
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
 	for _, path := range result.WrittenFiles {
@@ -143,4 +145,8 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		return fmt.Errorf("audit log write failed after successful install: %w", err)
 	}
 	return nil
+}
+
+func shouldPrepareInstallHost(systemdDir string) bool {
+	return filepath.Clean(systemdDir) == filepath.Clean(defaultSystemdDir)
 }
