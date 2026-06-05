@@ -55,7 +55,13 @@ Protocol runtimes are not selected during install. Open the Panel after install 
 
 ### First-run admin setup
 
-Veil expects Panel user/session authentication before any public exposure. For local installs, the first server start can generate one-time admin credentials and print them to the service log. For planned public exposure, initialize credentials explicitly before switching the listener to a public interface:
+Veil expects Panel user/session authentication before any public exposure. An
+unconfigured `local` install opens a loopback-only first-run page where you
+create the initial administrator and confirm backup responsibilities. The
+setup API is disabled for `direct`, `caddy`, and non-loopback listeners.
+
+For planned public exposure, initialize credentials before changing the access
+mode:
 
 ```bash
 sudo veil admin reset
@@ -63,7 +69,10 @@ sudo veil admin reset
 sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
 ```
 
-When `veil serve` listens on a non-loopback address, it refuses to start unless both an API token and at least one Panel user are configured.
+When `veil serve` listens on a non-loopback address, it refuses to start unless
+an API token, at least one Panel user, authenticated metrics, and TLS are
+configured. Caddy exposure also requires a Panel user and authenticated metrics
+before the reverse proxy is allowed to expose the loopback listener.
 
 ## Inbounds
 
@@ -131,7 +140,7 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 
 ## Security
 
-- **Fail-closed public listen** - non-loopback `veil serve` requires both `VEIL_API_TOKEN`/`--auth-token` and user/session auth
+- **Fail-closed public exposure** - direct listeners require TLS, `VEIL_API_TOKEN`/`--auth-token`, user/session auth, and authenticated metrics; Caddy exposure requires user/session auth and authenticated metrics
 - **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
 - **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
@@ -148,8 +157,8 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 | Mode | Listener | Required auth | Notes |
 |---|---|---|---|
 | Local + SSH tunnel | `127.0.0.1:<panel-port>` | Session user recommended; token optional | Recommended and safest. Use `ssh -L <panel-port>:127.0.0.1:<panel-port> host`. |
-| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS and routes a random Web base path. |
-| Direct public listen | `0.0.0.0:2096` or public IP | Session user and API token | `veil serve` refuses to start without both. Use TLS and authenticated metrics. |
+| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS, routes a random Web base path, and forces authenticated metrics. |
+| Direct public listen | `0.0.0.0:<panel-port>` or public IP | Session user and API token | `veil serve` refuses to start without TLS, both auth layers, and authenticated metrics. |
 
 ## Documentation
 
