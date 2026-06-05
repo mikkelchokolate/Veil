@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,23 +12,35 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/observability"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
+type ConfigurationValidator interface {
+	Validate(context.Context, livevalidation.Request) livevalidation.Response
+}
+
 type ServerInfo struct {
-	Version             string
-	Mode                string
-	AuthToken           string
-	PublicListen        bool
-	MetricsAuthRequired bool
-	StatePath           string
-	ApplyRoot           string
-	KeyPath             string
-	PanelListen         string
-	PanelAccess         string
-	Domain              string
-	Email               string
-	WebBasePath         string
+	Version                 string
+	Mode                    string
+	AuthToken               string
+	PublicListen            bool
+	MetricsAuthRequired     bool
+	StatePath               string
+	ApplyRoot               string
+	LiveRoot                string
+	KeyPath                 string
+	PanelListen             string
+	PanelAccess             string
+	Domain                  string
+	Email                   string
+	WebBasePath             string
+	SetupAllowed            bool
+	ConfigurationValidator  ConfigurationValidator
+	Privileged              privileged.Client
+	RequirePrivilegedHelper bool
+	UpdateStager            func(context.Context) (string, error)
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {
@@ -128,6 +141,36 @@ func writeError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.Error(w, msg, code)
+}
+
+func writePrivilegedError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	code := privileged.ErrorOperationFailed
+	message := "privileged operation failed"
+	var operationError *privileged.Error
+	if errors.As(err, &operationError) {
+		code = operationError.Code
+		message = operationError.Message
+		switch operationError.Code {
+		case privileged.ErrorInvalidRequest:
+			status = http.StatusBadRequest
+		case privileged.ErrorForbiddenOperation:
+			status = http.StatusForbidden
+		case privileged.ErrorNotFound:
+			status = http.StatusNotFound
+		case privileged.ErrorConflict:
+			status = http.StatusConflict
+		}
+	}
+	if strings.Contains(strings.ToLower(message), "backup passphrase") {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSONStatus(w, status, map[string]any{
+		"error": map[string]string{
+			"code":    string(code),
+			"message": message,
+		},
+	})
 }
 
 func writeNotFound(w http.ResponseWriter) {

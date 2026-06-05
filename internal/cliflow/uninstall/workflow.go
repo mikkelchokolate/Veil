@@ -12,6 +12,7 @@ import (
 type Options struct {
 	DryRun     bool
 	Yes        bool
+	Purge      bool
 	EtcDir     string
 	VarDir     string
 	SystemdDir string
@@ -62,9 +63,15 @@ func Plan(opts Options) string {
 		b.WriteString(fmt.Sprintf("  - %s\n", svc))
 	}
 	opts = opts.WithDefaults()
-	b.WriteString("Remove files:\n")
-	for _, path := range []string{opts.EtcDir, opts.VarDir} {
-		b.WriteString(fmt.Sprintf("  - %s\n", path))
+	if opts.Purge {
+		b.WriteString("Remove configuration and state:\n")
+		for _, path := range []string{opts.EtcDir, opts.VarDir} {
+			b.WriteString(fmt.Sprintf("  - %s\n", path))
+		}
+	} else {
+		b.WriteString("Preserved state:\n")
+		b.WriteString(fmt.Sprintf("  - %s\n", opts.EtcDir))
+		b.WriteString(fmt.Sprintf("  - %s\n", opts.VarDir))
 	}
 	b.WriteString("Remove systemd units:\n")
 	for _, path := range SystemdUnitPaths(opts) {
@@ -97,7 +104,10 @@ func (opts Options) WithDefaults() Options {
 
 func Paths(opts Options) []string {
 	opts = opts.WithDefaults()
-	paths := []string{filepath.ToSlash(opts.EtcDir), filepath.ToSlash(opts.VarDir)}
+	paths := []string{}
+	if opts.Purge {
+		paths = append(paths, filepath.ToSlash(opts.EtcDir), filepath.ToSlash(opts.VarDir))
+	}
 	paths = append(paths, SystemdUnitPaths(opts)...)
 	paths = append(paths, BinaryPath(opts))
 	return paths

@@ -38,6 +38,58 @@ func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing
 	}
 }
 
+func TestPanelInboundFormRendersAccessibleLiveValidation(t *testing.T) {
+	form := panelInboundFormHTML()
+	for _, want := range []string{
+		`id="inbound-validation-summary"`,
+		`role="status"`,
+		`aria-live="polite"`,
+		`aria-invalid="false"`,
+		`aria-describedby="inbound-name-validation"`,
+		`id="inbound-name-validation"`,
+		`aria-describedby="inbound-port-validation"`,
+		`id="inbound-port-validation"`,
+	} {
+		if !strings.Contains(form, want) {
+			t.Fatalf("Inbound validation form missing %q", want)
+		}
+	}
+}
+
+func TestPanelInboundActionsDebounceAndCancelLiveValidation(t *testing.T) {
+	actions := panelInboundActionsJS()
+	for _, want := range []string{
+		`const inboundValidationDebounceMs = 300`,
+		`new AbortController()`,
+		`inboundValidationSequence`,
+		`function scheduleInboundValidation()`,
+		`async function validateInboundCandidate()`,
+		`fetch('/api/validation'`,
+		`aria-invalid`,
+		`veilValidationIssueText(issue)`,
+		`saveButton.disabled`,
+		`form.addEventListener('input', scheduleInboundValidation)`,
+		`form.addEventListener('change', scheduleInboundValidation)`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Inbound validation actions missing %q", want)
+		}
+	}
+}
+
+func TestViewerRoleGuardPreservesValidationDisabledState(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`el.dataset.viewerGuardWasDisabled = el.disabled ? 'true' : 'false'`,
+		`el.disabled = el.dataset.viewerGuardWasDisabled === 'true'`,
+		`delete el.dataset.viewerGuardWasDisabled`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Viewer role guard must preserve validation-controlled disabled state; missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 	controls := panelClientProfileControlsHTML()
 	for _, want := range []string{
@@ -57,7 +109,7 @@ func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 		`function genClientProfilePassword()`,
 		`function addClientProfile()`,
 		`function generateAndAddProfile()`,
-		`Client profile name is required`,
+		`veilT('inbounds.profileNameRequired')`,
 		`name: name`,
 		`password: password`,
 		`enabled: true`,

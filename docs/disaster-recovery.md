@@ -1,139 +1,177 @@
-# Disaster Recovery and Key Lifecycle Guide
+# Disaster Recovery And Key Lifecycle
 
-This guide details the procedures and best practices for backing up, restoring, and managing the encryption key lifecycle of a Veil panel installation.
+Veil disaster recovery protects the Management state and the key required to
+decrypt it. Treat every archive as a root credential for the host.
 
----
+## Protected Material
 
-## 1. Critical Components and Files
+A complete recovery set contains:
 
-A complete Veil panel configuration and state are stored in exactly two files. To successfully back up, restore, or migrate Veil, both files must be preserved:
+- `/var/lib/veil/state.json`: Management state, users, Inbounds, routing, and
+  encrypted secrets.
+- `/etc/veil/state.key`: the 32-byte AES-256-GCM state encryption key.
 
-1. **State File (`/var/lib/veil/state.json`)**: Contains all configured inbounds, clients, routing rules, users, and masquerading rules. This file is encrypted at rest using AES-256-GCM.
-2. **State Key (`/etc/veil/state.key`)**: A 32-byte (256-bit) cryptographically secure random key used to decrypt the state file.
+New archives also contain an encrypted manifest with the creation time, Veil
+version, Management schema version, file sizes, and SHA-256 checksums.
 
-> [!CAUTION]
-> If you lose the State Key (`state.key`), you will NOT be able to read or restore the State File (`state.json`). Keep the key secure and separated from the state files in your offline archives.
+Losing `state.key` makes `state.json` unrecoverable. Store encrypted archives
+off-host and keep the archive passphrase outside the backup destination.
 
----
+## Create And Verify
 
-## 2. State Backups
-
-Veil provides built-in commands to package and encrypt your configuration state.
-
-### Creating a Backup
-
-To create a backup, run:
-```bash
-veil backup create
-```
-By default, this will package `/var/lib/veil/state.json` and `/etc/veil/state.key` into a gzipped tarball in your current directory, named `veil_backup_YYYYMMDD_HHMMSS.tar.gz`.
-
-#### Passphrase-Based Encryption (Recommended)
-You should encrypt backups containing private keys and configuration details using a passphrase:
-```bash
-veil backup create --passphrase "your-secure-passphrase" --output /path/to/backup.enc
-```
-Or read the passphrase from a file:
-```bash
-veil backup create --passphrase-file /etc/veil/backup_pass.txt -o /path/to/backup.enc
-```
-When a passphrase is provided, the backup is encrypted using PBKDF2-SHA256 (600,000 iterations in the current archive format) and AES-256-GCM with authenticated archive metadata.
-
-### Automating Backups with Cron
-
-To schedule a daily encrypted backup, add the following cron job (e.g. via `crontab -e` as `root`):
-```cron
-0 2 * * * /usr/local/bin/veil backup create --passphrase-file /etc/veil/backup_pass.txt -o /var/backups/veil/veil_backup_$(date +\%F).enc
-```
-
----
-
-## 3. State Restoration
-
-To restore your state from a backup (unencrypted or encrypted), use the `veil backup restore` command.
-
-> [!WARNING]
-> Restoring a backup will overwrite any existing `/var/lib/veil/state.json` and `/etc/veil/state.key` files.
-
-### Restoring an Encrypted Backup
-```bash
-veil backup restore /path/to/backup.enc --passphrase "your-secure-passphrase"
-```
-Or using a passphrase file:
-```bash
-veil backup restore /path/to/backup.enc --passphrase-file /etc/veil/backup_pass.txt
-```
-
-### Restoring an Unencrypted Backup
-```bash
-veil backup restore /path/to/backup.tar.gz
-```
-
-> [!NOTE]
-> By default, the `restore` command will prompt you for confirmation if run interactively. If you are scripting the restoration, add the `-y` or `--yes` flag to bypass this confirmation.
-
-### Restoring on a New Host
-
-1. Install the same or newer Veil release on the new host.
-2. Stop the Panel while restoring:
-   ```bash
-   sudo systemctl stop veil.service
-   ```
-3. Restore the archive to the target state and key paths:
-   ```bash
-   sudo veil backup restore /path/to/veil_backup.enc \
-     --passphrase-file /path/to/passphrase.txt \
-     --state /var/lib/veil/state.json \
-     --key-path /etc/veil/state.key \
-     --yes
-   ```
-4. Repair managed material and restart:
-   ```bash
-   sudo veil repair --yes
-   sudo systemctl start veil.service
-   veil status
-   ```
-
-Run `veil admin rotate-key` after a cross-host restore if the old host might be compromised.
-
----
-
-## 4. Key Rotation
-
-Rotating the state key regularly limits the impact of key exposure and updates the encryption layer on the state database file.
-
-### In-Place Key Rotation
-To rotate the key file in-place (regenerating the key, decrypting the current state file, re-encrypting it with the new key, and updating the key and state files atomically):
-```bash
-veil admin rotate-key
-```
-
-### Rotating Key to a New Destination
-To rotate the key and save it to a new location (for example, if you are migrating paths or externalizing the key store):
-```bash
-veil admin rotate-key --new-key-path /etc/veil/rotated_state.key
-```
-
-### Key Rotation Safeguards
-The key rotation mechanism is atomic:
-- It creates temporary files (`state.json.tmp` and `state.key.tmp`) to ensure all writes complete successfully.
-- It renames files to target paths sequentially.
-- If writing the rotated files or renaming the state file fails, it automatically rolls back the key file to the original bytes to prevent locking you out of the system.
-
----
-
-## 5. Recovery Test Cadence
-
-Test backups before relying on them:
+CLI backup creation is fail-closed: encryption is required unless
+`--allow-unencrypted` is supplied explicitly.
 
 ```bash
-tmpdir="$(mktemp -d)"
-veil backup restore /path/to/veil_backup.enc \
-  --passphrase-file /path/to/passphrase.txt \
-  --state "$tmpdir/state.json" \
-  --key-path "$tmpdir/state.key" \
+sudo veil backup create \
+  --passphrase-file /root/veil-backup-passphrase \
+  --output-dir /var/lib/veil/backups \
+  --prune \
+  --daily 7 \
+  --weekly 4 \
+  --monthly 12
+```
+
+Avoid `--passphrase` on shared systems because shell history and process
+inspection can expose it. Verify an archive before copying or restoring it:
+
+```bash
+sudo veil backup verify \
+  /var/lib/veil/backups/veil_backup_20260605_020000.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase
+```
+
+List managed archives and preview retention:
+
+```bash
+sudo veil backup list --dir /var/lib/veil/backups
+sudo veil backup prune --dir /var/lib/veil/backups \
+  --daily 7 --weekly 4 --monthly 12 --dry-run
+```
+
+## Scheduled Backups
+
+Native packages ship `veil-backup.service` and `veil-backup.timer`. Enable the
+daily encrypted schedule with a passphrase of at least 16 characters:
+
+```bash
+sudo veil backup schedule enable \
+  --passphrase-file /root/veil-backup-passphrase
+systemctl list-timers veil-backup.timer
+```
+
+The command installs the root-owned passphrase at
+`/etc/veil/backup.passphrase` with mode `0600`. The timer writes verified
+archives to `/var/lib/veil/backups` and applies the default 7 daily, 4 weekly,
+and 12 monthly retention policy.
+
+The Panel backup screen uses the same server-side passphrase. The browser never
+receives it. Disable the timer and optionally remove the stored passphrase:
+
+```bash
+sudo veil backup schedule disable --remove-passphrase
+```
+
+Copy retained archives to an independent host or object store. A timer on the
+same machine protects against operator error, not total host loss.
+
+## Restore Check
+
+Run a no-write compatibility check first:
+
+```bash
+sudo veil backup restore \
+  /path/to/veil_backup_20260605_020000.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase \
+  --check-only
+```
+
+The check decrypts the archive, validates checksums, validates the state/key
+pair, and rejects a state schema newer than the running Veil release.
+
+## Restore On The Current Host
+
+Stop the Panel so no process writes state during recovery:
+
+```bash
+sudo systemctl stop veil.service
+sudo veil backup restore \
+  /path/to/veil_backup_20260605_020000.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase \
+  --state /var/lib/veil/state.json \
+  --key-path /etc/veil/state.key \
   --yes
-veil admin show --state "$tmpdir/state.json" --key-path "$tmpdir/state.key"
+sudo veil repair --yes
+sudo systemctl start veil.service
+veil status
 ```
 
-The project test suite includes encrypted archive, restore, safety-backup, and key-rotation coverage so release validation exercises backup compatibility between versions.
+Before replacement, Veil preserves existing files as timestamped
+`.pre-restore-*` safety copies. Keep them until the restored Panel and all
+managed protocols have been validated.
+
+Panel restores are queued, admin-only jobs. A successful restore revokes all
+browser sessions, including the initiating session after it receives the final
+job result.
+
+## Restore On A New Host
+
+1. Install the same or a newer Veil release.
+2. Transfer the encrypted archive and passphrase through separate channels.
+3. Run `veil backup restore --check-only`.
+4. Stop `veil.service` and perform the restore command shown above.
+5. Run `veil repair --yes` to regenerate managed files and units for the new
+   host.
+6. Start Veil, inspect `veil status`, and test every enabled Inbound.
+7. Rotate the state key if the old host or its key may be compromised.
+8. Create and export a fresh backup from the new host.
+
+Do not copy generated runtime files instead of using `veil repair`; host paths,
+service availability, firewall state, and installed runtime versions may
+differ.
+
+## State Key Rotation
+
+Rotate the key in place:
+
+```bash
+sudo veil admin rotate-key
+```
+
+Or write the replacement key to another path:
+
+```bash
+sudo veil admin rotate-key \
+  --new-key-path /etc/veil/rotated-state.key
+```
+
+Rotation re-encrypts Management state atomically and rolls back failed file
+replacement. Existing archives remain self-contained because each archive
+includes the state key used by its state file. Create a fresh encrypted backup
+after every rotation.
+
+## Compatibility Policy
+
+Veil restores:
+
+- legacy encrypted envelope v1;
+- authenticated encrypted envelope v2;
+- current manifest format v1;
+- older supported Management state schemas.
+
+Committed v1 and v0.5.0-v2 archive fixtures are restored by the test suite on
+every CI run. Archives with a newer Management schema are rejected before any
+write.
+
+## Recovery Drill
+
+At least quarterly:
+
+1. Copy a recent archive to an isolated host.
+2. Verify it and run `restore --check-only`.
+3. Restore to temporary state/key paths.
+4. Start a disposable Veil instance on loopback.
+5. Confirm users, Inbounds, routing, exports, and apply preview.
+6. Record the archive date, Veil versions, duration, and remediation found.
+
+An untested backup is only a hopeful file.

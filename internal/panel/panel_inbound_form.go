@@ -43,43 +43,48 @@ func panelInboundFormHTML() string {
           <button class="secondary" id="load-inbounds" type="button">Refresh List</button>
           <button class="secondary" onclick="toggleRawView('inbounds-output')" type="button">Raw JSON</button>
         </div>
-        <pre id="inbounds-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="inbounds-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
       </div>
 
       <!-- Add/Edit Inbound Overlay Modal -->
-      <div id="inbound-modal-overlay" class="modal-overlay">
-        <div class="modal-content">
+      <div id="inbound-modal-overlay" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="inbound-modal-title" tabindex="-1">
           <div class="modal-header">
             <h2 id="inbound-modal-title">Add Inbound</h2>
-            <button type="button" class="modal-close" onclick="closeInboundModal()">&times;</button>
+            <button type="button" class="modal-close" aria-label="Close dialog" onclick="closeInboundModal()">&times;</button>
           </div>
           
           <form id="inbound-form">
             <div class="form-grid">
               <div>
                 <label for="inbound-name">Name</label>
-                <input id="inbound-name" autocomplete="off" placeholder="naive">
+                <input id="inbound-name" autocomplete="off" placeholder="naive" aria-invalid="false" aria-describedby="inbound-name-validation">
+                <p id="inbound-name-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-protocol">Protocol</label>
-                <select id="inbound-protocol">
+                <select id="inbound-protocol" aria-invalid="false" aria-describedby="inbound-protocol-validation">
 ` + panelInboundProtocolOptionsHTML() + `                </select>
+                <p id="inbound-protocol-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-transport">Transport</label>
-                <select id="inbound-transport">
+                <select id="inbound-transport" aria-invalid="false" aria-describedby="inbound-transport-validation">
 ` + panelInboundTransportOptionsHTML() + `                </select>
+                <p id="inbound-transport-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-port">Port</label>
-                <input id="inbound-port" type="number" min="1" max="65535" placeholder="443">
+                <input id="inbound-port" type="number" min="1" max="65535" placeholder="443" aria-invalid="false" aria-describedby="inbound-port-validation">
+                <p id="inbound-port-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-password">Password</label>
                 <div style="display:flex;gap:8px">
-                  <input id="inbound-password" type="text" autocomplete="off" placeholder="password" style="flex:1">
+                  <input id="inbound-password" type="text" autocomplete="off" placeholder="password" style="flex:1" aria-invalid="false" aria-describedby="inbound-password-validation">
                   <button type="button" class="secondary" onclick="genInboundPassword()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>
                 </div>
+                <p id="inbound-password-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-enabled">Status</label>
@@ -94,6 +99,10 @@ func panelInboundFormHTML() string {
               <div id="inbound-protocol-fields" style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 16px; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;"></div>
               <div style="grid-column: 1 / -1">
 ` + panelClientProfileControlsPlaceholder + `              </div>
+            </div>
+
+            <div id="inbound-validation-summary" class="validation-summary" role="status" aria-live="polite">
+              Validation runs as fields change.
             </div>
             
             <div class="actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;">

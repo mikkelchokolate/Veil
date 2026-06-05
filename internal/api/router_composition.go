@@ -29,9 +29,9 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	state.register(mux)
 	PanelRoutes{Info: info, BasePath: basePath, State: state}.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
-	StatusRoutes{Info: info}.Register(mux)
+	StatusRoutes{Info: info, State: state}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)
-	LogRoutes{}.Register(mux)
+	LogRoutes{State: state}.Register(mux)
 
 	var handler http.Handler = mux
 	if basePath != "/" {
@@ -43,6 +43,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		ProtectHealthz:    info.PublicListen,
 		ProtectMetrics:    info.MetricsAuthRequired,
 		AllowDevAnonymous: !info.PublicListen,
+		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	return metrics.MetricsMiddleware(secured), state

@@ -4,6 +4,69 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.0] - 2026-06-05
+
+### Security
+
+- Public Panel exposure is fail-closed across direct and Caddy modes: user
+  authentication and protected metrics are required, while direct exposure
+  additionally requires TLS and an API token.
+- The HTTP Panel now runs as the locked `veil` user with no capabilities.
+  Allowlisted host mutations are delegated to a peer-credential-checked,
+  socket-activated root helper.
+- Browser sessions persist only hashed cookie and CSRF material, enforce idle
+  and absolute expiry, and are revoked when user authority changes.
+- Authentication and mutation events are written to a structured, redacted,
+  rotated audit log.
+
+### Added
+
+- Added a loopback-only first-run setup flow for creating the initial
+  administrator and acknowledging backup responsibilities.
+- Added encrypted backup verification, compatibility metadata, scheduled
+  systemd backups, daily/weekly/monthly retention, Panel backup controls, and
+  cross-version restore fixtures.
+- Added real-time port, DNS, runtime, and managed-unit validation plus richer
+  secret-free apply previews with file operations, affected units,
+  interruption risk, and rollback availability.
+- Added complete English and Russian Panel catalogs with per-user locale
+  persistence and a session-only locale API.
+- Added skip navigation, keyboard-contained dialogs, screen-reader status
+  regions, reduced-motion support, and responsive mobile layouts.
+- Added a generated Go SDK and contract tests for the OpenAPI specification.
+
+### Changed
+
+- OpenAPI now documents the complete session, CSRF, RBAC, locale, error, and
+  privileged-helper contracts with request/response schemas and examples.
+- Native packages ship hardened Panel/helper units, a protected helper socket,
+  scoped ownership migration, and permission-boundary tests by default.
+- Viewer users may update only their own display locale; all management
+  mutations remain admin-only.
+
+### Fixed
+
+- Backup restore jobs publish a terminal success state only after the matching
+  audit record has been finalized.
+- Panel HTML injects active CSRF material before placeholder cleanup, restoring
+  cookie-session mutations such as persisted locale changes.
+- Russian localization now covers dynamic operator actions and stable
+  validation issue messages in addition to the static Panel shell.
+- Installs targeting an alternative systemd directory now stage files without
+  creating accounts, changing ownership, or invoking systemctl on the build
+  host.
+- Privileged backup archive names reject both Unix and Windows path separators
+  consistently on every host platform.
+
+### Migration Notes
+
+- Native-package upgrades migrate Panel state to the `veil` account and enable
+  `veil-helper.socket`; review custom filesystem ownership and systemd
+  overrides before upgrading.
+- Existing users default to English until they select another Panel language.
+- Direct public listeners must provide TLS, API-token auth, user/session auth,
+  and authenticated metrics or the server refuses to start.
+
 ## [v0.5.0] — 2026-06-04
 
 ### Security

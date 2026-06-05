@@ -2,6 +2,9 @@ package applyplan
 
 import (
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -36,13 +39,17 @@ type Input struct {
 	WarpAction              string
 	ValidateInboundRender   func(model.Inbound) error
 	ValidateWarpRender      func() error
+	GeneratedRoot           string
+	LiveRoot                string
 }
 
 func Build(input Input) model.ApplyPlanResponse {
 	plan := model.ApplyPlanResponse{
-		Valid:   true,
-		Configs: []string{},
-		Actions: []string{"validate management state"},
+		Valid:      true,
+		Configs:    []string{},
+		Actions:    []string{"validate management state"},
+		Issues:     []model.ValidationIssue{},
+		Operations: []model.ApplyOperation{},
 	}
 	appendMaterial(&plan, input.PanelAccess)
 	seen := map[string]bool{}
@@ -132,7 +139,97 @@ func Build(input Input) model.ApplyPlanResponse {
 	if len(plan.Errors) > 0 {
 		plan.Valid = false
 	}
+	plan.Operations = buildOperations(plan.Configs, plan.Actions, plan.Runtimes, input.GeneratedRoot, input.LiveRoot)
 	return plan
+}
+
+func buildOperations(configs, actions, runtimes []string, generatedRoot, liveRoot string) []model.ApplyOperation {
+	var operations []model.ApplyOperation
+	sortedConfigs := append([]string(nil), configs...)
+	sort.Strings(sortedConfigs)
+	for _, config := range sortedConfigs {
+		relative := generatedRelativePath(config)
+		source := config
+		if generatedRoot != "" {
+			source = filepath.ToSlash(filepath.Join(generatedRoot, filepath.FromSlash(relative)))
+		}
+		destination := config
+		if liveRoot != "" {
+			destination = filepath.ToSlash(filepath.Join(liveRoot, filepath.FromSlash(relative)))
+		}
+		operations = append(operations, model.ApplyOperation{
+			Type:              "promote_file",
+			Source:            filepath.ToSlash(source),
+			Destination:       filepath.ToSlash(destination),
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "render-and-live-host",
+		})
+	}
+
+	serviceVerbs := serviceActionVerbs(actions)
+	units := append([]string(nil), runtimes...)
+	for unit := range serviceVerbs {
+		units = appendUnique(units, unit)
+	}
+	sort.Strings(units)
+	for _, unit := range units {
+		verb := serviceVerbForUnit(unit, serviceVerbs)
+		if verb != "reload" && verb != "restart" {
+			continue
+		}
+		risk := "reload"
+		if verb == "restart" {
+			risk = "connection-drop"
+		}
+		operations = append(operations, model.ApplyOperation{
+			Type:              verb + "_service",
+			Unit:              unit,
+			InterruptionRisk:  risk,
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		})
+	}
+	return operations
+}
+
+func generatedRelativePath(config string) string {
+	slashPath := filepath.ToSlash(config)
+	if index := strings.Index(slashPath, "/generated/"); index >= 0 {
+		return strings.TrimPrefix(slashPath[index+len("/generated/"):], "/")
+	}
+	return filepath.ToSlash(filepath.Base(config))
+}
+
+func serviceActionVerbs(actions []string) map[string]string {
+	verbs := map[string]string{}
+	for _, action := range actions {
+		fields := strings.Fields(action)
+		if len(fields) != 2 {
+			continue
+		}
+		if fields[0] != "reload" && fields[0] != "restart" {
+			continue
+		}
+		verbs[fields[1]] = fields[0]
+	}
+	return verbs
+}
+
+func serviceVerbForUnit(unit string, verbs map[string]string) string {
+	if verb := verbs[unit]; verb != "" {
+		return verb
+	}
+	for actionUnit, verb := range verbs {
+		if !strings.Contains(actionUnit, "@.service") {
+			continue
+		}
+		prefix := strings.TrimSuffix(actionUnit, "@.service") + "@"
+		if strings.HasPrefix(unit, prefix) && strings.HasSuffix(unit, ".service") {
+			return verb
+		}
+	}
+	return ""
 }
 
 func appendMaterial(plan *model.ApplyPlanResponse, material Material) {

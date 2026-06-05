@@ -97,6 +97,18 @@ func (c SliceCatalog) Slices() []Slice {
 			},
 		},
 		{
+			Name: "backups",
+			RenderSlots: []RenderSlot{
+				{Placeholder: BackupsCardPlaceholder, Render: BackupsCardHTML},
+				{Placeholder: BackupsActionsPlaceholder, Render: BackupsActionsJS},
+			},
+			EventBindings: []EventBinding{
+				{ElementID: "btn-create-backup", Handler: "createBackup", Event: "click"},
+				{ElementID: "btn-load-backups", Handler: "loadBackups", Event: "click"},
+				{ElementID: "btn-prune-backups", Handler: "pruneBackups", Event: "click"},
+			},
+		},
+		{
 			Name: "users",
 			RenderSlots: []RenderSlot{
 				{Placeholder: UsersCardPlaceholder, Render: UsersCardHTML},

@@ -1,6 +1,42 @@
 package api
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
+
+func TestBuildApplyPlanUsesApplyRootForStructuredOperations(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		ApplyRoot: "/srv/veil",
+		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
+		Inbounds: []Inbound{{
+			Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret",
+		}},
+	})
+
+	want := []model.ApplyOperation{
+		{
+			Type:              "promote_file",
+			Source:            "/srv/veil/generated/mieru/server_config.json",
+			Destination:       "/srv/veil/live/mieru/server_config.json",
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "render-and-live-host",
+		},
+		{
+			Type:              "restart_service",
+			Unit:              "veil-mieru.service",
+			InterruptionRisk:  "connection-drop",
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		},
+	}
+	if !reflect.DeepEqual(plan.Operations, want) {
+		t.Fatalf("operations:\n got: %#v\nwant: %#v", plan.Operations, want)
+	}
+}
 
 func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{

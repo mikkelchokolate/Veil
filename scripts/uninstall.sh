@@ -7,6 +7,7 @@ VAR_DIR="${VEIL_VAR_DIR:-/var/lib/veil}"
 SYSTEMD_DIR="${VEIL_SYSTEMD_DIR:-/etc/systemd/system}"
 YES=""
 DRY_RUN=""
+PURGE=""
 
 usage() {
   cat <<USAGE
@@ -23,6 +24,7 @@ Options:
   --systemd-dir DIR    systemd unit directory, default /etc/systemd/system
   --yes                Confirm uninstall without prompt
   --dry-run            Preview what will be removed
+  --purge              Also remove configuration and state; preserves the veil system account
   -h, --help           Show this help
 USAGE
 }
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --systemd-dir) require_value "$1" "${2:-}"; SYSTEMD_DIR="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
+    --purge) PURGE="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -57,6 +60,7 @@ fi
 
 VEIL_BIN="${INSTALL_DIR}/veil"
 args=(--install-dir "${INSTALL_DIR}" --etc-dir "${ETC_DIR}" --var-dir "${VAR_DIR}" --systemd-dir "${SYSTEMD_DIR}")
+if [[ -n "${PURGE}" ]]; then args+=(--purge); fi
 
 if [[ -x "${VEIL_BIN}" ]]; then
   if [[ -n "${DRY_RUN}" ]]; then

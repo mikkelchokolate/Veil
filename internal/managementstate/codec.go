@@ -10,7 +10,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-const CurrentSchemaVersion = 2
+const CurrentSchemaVersion = 3
 
 // migrations maps a starting version to a function that upgrades the raw state map to the next version.
 var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, error){
@@ -18,6 +18,20 @@ var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, e
 		// Migration from version 1 to 2.
 		// Removes legacy obsolete fields if they exist to prevent DisallowUnknownFields from failing.
 		delete(raw, "legacyField")
+		return raw, nil
+	},
+	2: func(raw map[string]interface{}) (map[string]interface{}, error) {
+		completed := false
+		if users, ok := raw["users"].([]interface{}); ok {
+			for _, entry := range users {
+				user, ok := entry.(map[string]interface{})
+				if ok && user["role"] == "admin" {
+					completed = true
+					break
+				}
+			}
+		}
+		raw["setup"] = map[string]interface{}{"completed": completed}
 		return raw, nil
 	},
 }

@@ -120,12 +120,34 @@ type ClientArtifact struct {
 	Content  string `json:"content"`
 }
 
+type ValidationIssue struct {
+	Code        string `json:"code"`
+	Severity    string `json:"severity"`
+	Field       string `json:"field,omitempty"`
+	InboundID   string `json:"inboundId,omitempty"`
+	Message     string `json:"message"`
+	Remediation string `json:"remediation,omitempty"`
+	Source      string `json:"source"`
+}
+
+type ApplyOperation struct {
+	Type              string `json:"type"`
+	Source            string `json:"source,omitempty"`
+	Destination       string `json:"destination,omitempty"`
+	Unit              string `json:"unit,omitempty"`
+	InterruptionRisk  string `json:"interruptionRisk"`
+	RollbackAvailable bool   `json:"rollbackAvailable"`
+	ValidationSource  string `json:"validationSource"`
+}
+
 type ApplyPlanResponse struct {
-	Valid    bool     `json:"valid"`
-	Errors   []string `json:"errors,omitempty"`
-	Configs  []string `json:"configs"`
-	Actions  []string `json:"actions"`
-	Runtimes []string `json:"runtimes,omitempty"`
+	Valid      bool              `json:"valid"`
+	Errors     []string          `json:"errors,omitempty"`
+	Configs    []string          `json:"configs"`
+	Actions    []string          `json:"actions"`
+	Runtimes   []string          `json:"runtimes,omitempty"`
+	Issues     []ValidationIssue `json:"issues"`
+	Operations []ApplyOperation  `json:"operations"`
 }
 
 type ApplyRequest struct {
@@ -200,10 +222,17 @@ type User struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"passwordHash"`
 	Role         string `json:"role"` // "admin" or "viewer"
+	Locale       string `json:"locale,omitempty"`
+}
+
+type SetupState struct {
+	Completed   bool   `json:"completed"`
+	CompletedAt string `json:"completedAt,omitempty"`
 }
 
 type ManagementSnapshot struct {
 	SchemaVersion int           `json:"schemaVersion,omitempty"`
+	Setup         SetupState    `json:"setup"`
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`
 	Rules         []RoutingRule `json:"routingRules"`

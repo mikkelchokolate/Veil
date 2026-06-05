@@ -18,7 +18,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`"applyServices":true`,
 		`function renderApplyRuntimes(data)`,
 		`data.plan && Array.isArray(data.plan.runtimes)`,
-		`Runtime units: none required`,
+		`veilT('apply.runtimeNone')`,
 		`function renderApplySafePreview(data)`,
 		`apply-file-diff-preview-body`,
 		`apply-safety-warnings`,
@@ -48,6 +48,36 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("Apply card missing %q", want)
+		}
+	}
+}
+
+func TestPanelApplyPreviewUsesStructuredOperationsWithCompatibilityFallback(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`Array.isArray(plan.operations)`,
+		`operation.interruptionRisk`,
+		`operation.rollbackAvailable`,
+		`operation.validationSource`,
+		`Structured operation`,
+		`appendApplyPreviewRows`,
+		`veilT('apply.warningInvalid')`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Structured apply preview missing %q", want)
+		}
+	}
+	card := panelApplyCardHTML()
+	for _, want := range []string{
+		`<th>Operation</th>`,
+		`<th>Target</th>`,
+		`<th>Interruption risk</th>`,
+		`<th>Rollback</th>`,
+		`<th>Validated by</th>`,
+		`aria-live="polite"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Structured apply card missing %q", want)
 		}
 	}
 }

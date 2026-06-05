@@ -13,7 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultSystemdDir = "/etc/systemd/system"
+const (
+	defaultEtcDir     = "/etc/veil"
+	defaultVarDir     = "/var/lib/veil"
+	defaultSystemdDir = "/etc/systemd/system"
+)
 
 type ruRecommendedInstallOptions struct {
 	Profile        string

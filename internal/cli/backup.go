@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,13 +16,29 @@ import (
 	"golang.org/x/term"
 )
 
-func newBackupCommand() *cobra.Command {
+var backupSystemctlRun = func(args ...string) error {
+	return exec.Command("systemctl", args...).Run()
+}
+
+func newBackupCommand(version string) *cobra.Command {
 	var statePath string
 	var keyPath string
 	var outputPath string
+	var outputDir string
+	var backupDir string
 	var passphrase string
 	var passphraseFile string
 	var yes bool
+	var checkOnly bool
+	var allowUnencrypted bool
+	var pruneAfterCreate bool
+	var dryRun bool
+	var schedulePassphrasePath string
+	var removeSchedulePassphrase bool
+	defaultRetention := backup.DefaultRetentionPolicy()
+	var daily = defaultRetention.Daily
+	var weekly = defaultRetention.Weekly
+	var monthly = defaultRetention.Monthly
 
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -41,30 +59,57 @@ func newBackupCommand() *cobra.Command {
 				return err
 			}
 
-			if resolvedPass == "" {
-				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: Creating an unencrypted backup. This contains your sensitive state data and encryption keys in plaintext. Use -p or --passphrase to encrypt the backup.")
+			if resolvedPass == "" && !allowUnencrypted {
+				return errors.New("backup encryption is required; provide --passphrase/--passphrase-file or explicitly use --allow-unencrypted")
 			}
 
-			backupData, err := backup.CreateBackup(resolvedState, resolvedKey, resolvedPass)
+			backupData, err := backup.CreateBackupWithOptions(resolvedState, resolvedKey, resolvedPass, backup.ArchiveOptions{
+				VeilVersion: version,
+			})
 			if err != nil {
 				return fmt.Errorf("create backup failed: %w", err)
 			}
+			if _, err := backup.VerifyBackup(backupData, resolvedPass); err != nil {
+				return fmt.Errorf("verify generated backup failed: %w", err)
+			}
 
 			targetOutput := outputPath
+			if targetOutput != "" && outputDir != "" {
+				return errors.New("--output and --output-dir are mutually exclusive")
+			}
 			if targetOutput == "" {
-				ts := time.Now().Format("20060102_150405")
+				ts := time.Now().UTC().Format("20060102_150405")
+				filename := ""
 				if resolvedPass != "" {
-					targetOutput = fmt.Sprintf("veil_backup_%s.tar.gz.enc", ts)
+					filename = fmt.Sprintf("veil_backup_%s.tar.gz.enc", ts)
 				} else {
-					targetOutput = fmt.Sprintf("veil_backup_%s.tar.gz", ts)
+					filename = fmt.Sprintf("veil_backup_%s.tar.gz", ts)
+				}
+				if outputDir != "" {
+					targetOutput = filepath.Join(outputDir, filename)
+				} else {
+					targetOutput = filename
 				}
 			}
 
-			if err := os.WriteFile(targetOutput, backupData, 0o600); err != nil {
+			if err := writeBackupArchive(targetOutput, backupData); err != nil {
 				return fmt.Errorf("write backup file: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Backup successfully created: %s\n", targetOutput)
+			if pruneAfterCreate {
+				dir := outputDir
+				if dir == "" {
+					dir = filepath.Dir(targetOutput)
+				}
+				result, err := backup.PruneArchives(dir, backup.RetentionPolicy{
+					Daily: daily, Weekly: weekly, Monthly: monthly,
+				}, false)
+				if err != nil {
+					return fmt.Errorf("prune backups after create: %w", err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Retention: kept %d, deleted %d\n", len(result.Kept), len(result.Deleted))
+			}
 			return nil
 		},
 	}
@@ -92,8 +137,7 @@ func newBackupCommand() *cobra.Command {
 				return fmt.Errorf("read backup file %s: %w", backupFile, err)
 			}
 
-			// Confirm overwrite
-			if !yes {
+			if !checkOnly && !yes {
 				stat, err := os.Stdin.Stat()
 				if err != nil || (stat.Mode()&os.ModeCharDevice) == 0 {
 					return errors.New("stdin is not a terminal; use --yes to bypass confirmation")
@@ -112,17 +156,157 @@ func newBackupCommand() *cobra.Command {
 				}
 			}
 
-			err = backup.RestoreBackup(backupData, resolvedState, resolvedKey, resolvedPass)
+			result, err := backup.RestoreBackupWithOptions(
+				backupData,
+				resolvedState,
+				resolvedKey,
+				resolvedPass,
+				backup.RestoreOptions{CheckOnly: checkOnly},
+			)
 			if err != nil {
 				return fmt.Errorf("restore backup failed: %w", err)
 			}
 
+			if checkOnly {
+				fmt.Fprintln(cmd.OutOrStdout(), "Restore check passed; no files were changed.")
+				printBackupVerification(cmd, result.Verification)
+				return nil
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
+			if result.SafetyStatePath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Previous state preserved at: %s\n", result.SafetyStatePath)
+			}
+			if result.SafetyKeyPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Previous key preserved at: %s\n", result.SafetyKeyPath)
+			}
 			return nil
 		},
 	}
 
-	for _, subCmd := range []*cobra.Command{createCmd, restoreCmd} {
+	verifyCmd := &cobra.Command{
+		Use:   "verify <backup-file>",
+		Short: "Decrypt and verify a backup without writing state",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("read backup file %s: %w", args[0], err)
+			}
+			report, err := backup.VerifyBackup(data, resolvedPass)
+			if err != nil {
+				return fmt.Errorf("verify backup failed: %w", err)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Backup verified.")
+			printBackupVerification(cmd, report)
+			return nil
+		},
+	}
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List managed backup archives",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			entries, err := backup.ListArchives(backupDir)
+			if err != nil {
+				return err
+			}
+			if len(entries) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No backup archives found.")
+				return nil
+			}
+			for _, entry := range entries {
+				fmt.Fprintf(
+					cmd.OutOrStdout(),
+					"%s\t%s\t%d bytes\tencrypted=%t\n",
+					entry.CreatedAt.Format(time.RFC3339),
+					entry.Name,
+					entry.Size,
+					entry.Encrypted,
+				)
+			}
+			return nil
+		},
+	}
+
+	pruneCmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Apply daily, weekly, and monthly backup retention",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := backup.PruneArchives(backupDir, backup.RetentionPolicy{
+				Daily: daily, Weekly: weekly, Monthly: monthly,
+			}, dryRun)
+			if err != nil {
+				return err
+			}
+			for _, name := range result.Deleted {
+				action := "Deleted"
+				if dryRun {
+					action = "Would delete"
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", action, name)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Retention: kept %d, deleted %d, dry-run=%t\n", len(result.Kept), len(result.Deleted), dryRun)
+			return nil
+		},
+	}
+
+	scheduleCmd := &cobra.Command{
+		Use:   "schedule",
+		Short: "Manage the encrypted systemd backup timer",
+	}
+	scheduleEnableCmd := &cobra.Command{
+		Use:   "enable",
+		Short: "Store the backup passphrase and enable the daily timer",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
+			if err != nil {
+				return err
+			}
+			if len(resolvedPass) < 16 {
+				return errors.New("scheduled backup passphrase must be at least 16 characters")
+			}
+			if err := writeBackupArchive(schedulePassphrasePath, []byte(resolvedPass+"\n")); err != nil {
+				return fmt.Errorf("write scheduled backup passphrase: %w", err)
+			}
+			if err := backupSystemctlRun("daemon-reload"); err != nil {
+				return fmt.Errorf("systemctl daemon-reload: %w", err)
+			}
+			if err := backupSystemctlRun("enable", "--now", "veil-backup.timer"); err != nil {
+				return fmt.Errorf("enable veil-backup.timer: %w", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Encrypted backup schedule enabled; passphrase stored at %s\n", schedulePassphrasePath)
+			return nil
+		},
+	}
+	scheduleDisableCmd := &cobra.Command{
+		Use:   "disable",
+		Short: "Disable the daily backup timer",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := backupSystemctlRun("disable", "--now", "veil-backup.timer"); err != nil {
+				return fmt.Errorf("disable veil-backup.timer: %w", err)
+			}
+			if removeSchedulePassphrase {
+				if err := os.Remove(schedulePassphrasePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("remove scheduled backup passphrase: %w", err)
+				}
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Encrypted backup schedule disabled.")
+			return nil
+		},
+	}
+	scheduleEnableCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "backup encryption passphrase")
+	scheduleEnableCmd.Flags().StringVar(&passphraseFile, "passphrase-file", "", "file containing the backup encryption passphrase")
+	scheduleEnableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "root-owned passphrase destination used by the systemd service")
+	scheduleDisableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "scheduled backup passphrase path")
+	scheduleDisableCmd.Flags().BoolVar(&removeSchedulePassphrase, "remove-passphrase", false, "remove the stored passphrase after disabling the timer")
+	scheduleCmd.AddCommand(scheduleEnableCmd, scheduleDisableCmd)
+	cmd.AddCommand(scheduleCmd)
+
+	for _, subCmd := range []*cobra.Command{createCmd, restoreCmd, verifyCmd} {
 		subCmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 		subCmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 		subCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "encryption/decryption passphrase")
@@ -131,9 +315,96 @@ func newBackupCommand() *cobra.Command {
 	}
 
 	createCmd.Flags().StringVarP(&outputPath, "output", "o", "", "output backup file path (defaults to veil_backup_YYYYMMDD_HHMMSS.tar.gz[.enc])")
+	createCmd.Flags().StringVar(&outputDir, "output-dir", "", "directory for timestamped backup archives")
+	createCmd.Flags().BoolVar(&allowUnencrypted, "allow-unencrypted", false, "explicitly allow a plaintext archive containing state and key material")
+	createCmd.Flags().BoolVar(&pruneAfterCreate, "prune", false, "apply retention after a successful verified backup")
+	addRetentionFlags(createCmd, &daily, &weekly, &monthly)
 	restoreCmd.Flags().BoolVarP(&yes, "yes", "y", false, "confirm restore operation without prompting")
+	restoreCmd.Flags().BoolVar(&checkOnly, "check-only", false, "verify compatibility without writing state or key files")
+	for _, subCmd := range []*cobra.Command{listCmd, pruneCmd} {
+		subCmd.Flags().StringVar(&backupDir, "dir", "/var/lib/veil/backups", "managed backup archive directory")
+		cmd.AddCommand(subCmd)
+	}
+	addRetentionFlags(pruneCmd, &daily, &weekly, &monthly)
+	pruneCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show deletions without removing archives")
 
 	return cmd
+}
+
+func addRetentionFlags(cmd *cobra.Command, daily, weekly, monthly *int) {
+	cmd.Flags().IntVar(daily, "daily", 7, "number of latest UTC days to retain")
+	cmd.Flags().IntVar(weekly, "weekly", 4, "number of latest ISO weeks to retain")
+	cmd.Flags().IntVar(monthly, "monthly", 12, "number of latest UTC months to retain")
+}
+
+func writeBackupArchive(path string, body []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(dir, ".veil-backup-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	if _, err := temp.Write(body); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := os.Chmod(tempPath, 0o600); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	backupPath := path + ".replace-backup"
+	hadExisting := false
+	if _, err := os.Stat(path); err == nil {
+		if err := os.Remove(backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = os.Remove(tempPath)
+			return err
+		}
+		if err := os.Rename(path, backupPath); err != nil {
+			_ = os.Remove(tempPath)
+			return err
+		}
+		hadExisting = true
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		if hadExisting {
+			_ = os.Rename(backupPath, path)
+		}
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if hadExisting {
+		_ = os.Remove(backupPath)
+	}
+	return nil
+}
+
+func printBackupVerification(cmd *cobra.Command, report backup.VerificationReport) {
+	format := fmt.Sprintf("%d", report.FormatVersion)
+	if report.Legacy {
+		format = "legacy"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Archive format: %s\n", format)
+	fmt.Fprintf(cmd.OutOrStdout(), "Encrypted: %t\n", report.Encrypted)
+	if report.VeilVersion != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Veil version: %s\n", report.VeilVersion)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "State schema: %d\n", report.StateSchemaVersion)
+	for _, file := range report.Files {
+		fmt.Fprintf(cmd.OutOrStdout(), "- %s: %d bytes sha256:%s\n", file.Name, file.Size, file.SHA256)
+	}
 }
 
 func resolvePassphrase(pass, file string) (string, error) {

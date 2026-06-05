@@ -1,0 +1,14 @@
+[Unit]
+Description=Veil privileged helper socket
+
+[Socket]
+ListenStream=/run/veil/helper.sock
+Accept=no
+SocketUser=root
+SocketGroup=veil
+SocketMode=0660
+DirectoryMode=0750
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target

@@ -77,7 +77,7 @@ func panelRuntimeStatsCardsHTML() string {
         <button id="load-system-stats" type="button">Refresh telemetry</button>
         <button onclick="toggleRawView('system-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
-      <pre id="system-stats-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="system-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
 
     <div class="card">
@@ -102,7 +102,7 @@ func panelRuntimeStatsCardsHTML() string {
         <button id="load-network-stats" type="button">Load network stats</button>
         <button onclick="toggleRawView('network-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
-      <pre id="network-stats-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="network-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
 
     <div class="card">
@@ -113,7 +113,7 @@ func panelRuntimeStatsCardsHTML() string {
         <button id="load-connections-stats" type="button">Load connections</button>
         <button onclick="toggleRawView('connections-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
-      <pre id="connections-stats-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="connections-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
 
     <div class="card">
@@ -139,7 +139,7 @@ func panelRuntimeStatsCardsHTML() string {
         <button id="load-processes-stats" type="button">Load processes</button>
         <button onclick="toggleRawView('processes-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
-      <pre id="processes-stats-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="processes-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
 
     <div class="card">
@@ -150,6 +150,6 @@ func panelRuntimeStatsCardsHTML() string {
         <button id="load-disk-stats" type="button">Load disk usage</button>
         <button onclick="toggleRawView('disk-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
-      <pre id="disk-stats-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="disk-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>`
 }

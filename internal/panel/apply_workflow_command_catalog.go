@@ -58,7 +58,9 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         return;
       }
       const runtimes = applyRuntimesFromResponse(data);
-      output.textContent = runtimes.length === 0 ? 'Runtime units: none required' : 'Runtime units: ' + runtimes.join(', ');
+      output.textContent = runtimes.length === 0
+        ? veilT('apply.runtimeNone')
+        : veilT('apply.runtimeList', { runtimes: runtimes.join(', ') });
     }
 
     function applyPlanFromResponse(data) {
@@ -85,6 +87,16 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 
     function applyFilesFromResponse(data) {
       const plan = applyPlanFromResponse(data);
+      if (Array.isArray(plan.operations)) {
+        return plan.operations.map((operation) => ({
+          operation: String(operation.type || 'operation').replace(/_/g, ' '),
+          target: operation.destination || operation.unit || operation.source || 'managed target',
+          risk: operation.interruptionRisk || 'none',
+          rollback: operation.rollbackAvailable ? 'available' : 'not available',
+          validatedBy: operation.validationSource || 'not reported',
+          note: 'Structured operation'
+        }));
+      }
       const rows = [];
       appendApplyPreviewRows(rows, 'generated', plan.configs, 'Generated managed config. No file content is shown.');
       appendApplyPreviewRows(rows, 'runtime plan', plan.actions, 'Planned service or runtime action.');
@@ -92,7 +104,14 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       appendApplyPreviewRows(rows, 'live promote', data && data.liveFiles, 'Staged file promoted to the live runtime path.');
       appendApplyPreviewRows(rows, 'backup', data && data.backupFiles, 'Existing live file preserved before promotion.');
       appendApplyPreviewRows(rows, 'rollback', data && data.rollbackFiles, 'Rollback file available if reload or health checks fail.');
-      return rows;
+      return rows.map((entry) => ({
+        operation: entry.stage,
+        target: entry.name,
+        risk: entry.stage === 'runtime plan' ? 'review action' : 'reload',
+        rollback: entry.stage === 'backup' || entry.stage === 'rollback' ? 'available' : 'not reported',
+        validatedBy: 'legacy plan fields',
+        note: entry.note
+      }));
     }
 
     function applyPreviewMetadata(data) {
@@ -130,25 +149,35 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       const warnings = [];
       const metadata = applyPreviewMetadata(data);
       if (plan.valid === false) {
-        warnings.push('Plan is invalid; fix validation errors before applying.');
+        warnings.push(veilT('apply.warningInvalid'));
       }
       if (Array.isArray(plan.errors) && plan.errors.length > 0) {
-        warnings.push('Plan errors are present in the raw output.');
+        warnings.push(veilT('apply.warningErrors'));
+      }
+      if (Array.isArray(plan.issues)) {
+        plan.issues.forEach((issue) => {
+          if (issue && issue.severity !== 'info') {
+            warnings.push(veilValidationIssueText(issue));
+          }
+        });
+      }
+      if (Array.isArray(plan.operations) && plan.operations.some((operation) => operation.interruptionRisk === 'connection-drop')) {
+        warnings.push(veilT('apply.warningConnectionDrop'));
       }
       if (metadata.includes('firewall') || metadata.includes('ufw') || metadata.includes('iptables') || metadata.includes('nft')) {
-        warnings.push('Firewall changes can lock out remote access; verify SSH and provider console access before applying.');
+        warnings.push(veilT('apply.warningFirewall'));
       }
       if (metadata.includes('dns') || metadata.includes('domain')) {
-        warnings.push('DNS changes depend on public records and propagation before client links work.');
+        warnings.push(veilT('apply.warningDNS'));
       }
       if (metadata.includes('tls') || metadata.includes('caddy') || metadata.includes('acme') || metadata.includes('cert') || metadata.includes(':443') || metadata.includes(' 443')) {
-        warnings.push('TLS changes require valid domain reachability and certificate issuance.');
+        warnings.push(veilT('apply.warningTLS'));
       }
       if (applyRuntimesFromResponse(data).length > 0 || metadata.includes('systemctl') || metadata.includes('reload') || metadata.includes('restart') || metadata.includes('service')) {
-        warnings.push('Service reload or restart can interrupt active proxy sessions.');
+        warnings.push(veilT('apply.warningServiceRestart'));
       }
       if (warnings.length === 0) {
-        warnings.push('No DNS/TLS/firewall/service warnings detected in plan metadata.');
+        warnings.push(veilT('apply.warningNone'));
       }
       return warnings;
     }
@@ -156,7 +185,9 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
     function renderApplySafePreview(data) {
       const warningsOutput = document.getElementById('apply-safety-warnings');
       if (warningsOutput) {
-        warningsOutput.textContent = 'Safety warnings: ' + applyWarningsFromResponse(data).join(' ');
+        warningsOutput.textContent = veilT('apply.warningSummary', {
+          warnings: applyWarningsFromResponse(data).join(' ')
+        });
       }
       const body = document.getElementById('apply-file-diff-preview-body');
       if (!body) {
@@ -164,18 +195,25 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       }
       const rows = applyFilesFromResponse(data);
       body.textContent = '';
+      const plan = applyPlanFromResponse(data);
+      ['apply-staged-files', 'apply-live-configs', 'reload-services'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.disabled = plan.valid === false || isViewerRole();
+        }
+      });
       if (rows.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 3;
-        cell.textContent = 'No managed files or runtime actions were reported.';
+        cell.colSpan = 5;
+        cell.textContent = veilT('apply.noOperations');
         row.appendChild(cell);
         body.appendChild(row);
         return;
       }
       rows.forEach((entry) => {
         const row = document.createElement('tr');
-        ['stage', 'name', 'note'].forEach((field) => {
+        ['operation', 'target', 'risk', 'rollback', 'validatedBy'].forEach((field) => {
           const cell = document.createElement('td');
           cell.textContent = entry[field];
           row.appendChild(cell);

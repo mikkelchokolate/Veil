@@ -1,0 +1,28 @@
+[Unit]
+Description=Veil encrypted state backup
+Documentation=https://github.com/mikkelchokolate/Veil/blob/main/docs/disaster-recovery.md
+ConditionPathExists=/etc/veil/backup.passphrase
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/veil backup create --state /var/lib/veil/state.json --key-path /etc/veil/state.key --passphrase-file /etc/veil/backup.passphrase --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12
+User=root
+Group=root
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+ReadWritePaths=/var/lib/veil/backups

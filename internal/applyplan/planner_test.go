@@ -1,12 +1,98 @@
 package applyplan
 
 import (
+	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
+
+func TestPlannerBuildsStructuredOperationsDeterministically(t *testing.T) {
+	plan := Build(Input{
+		GeneratedRoot: "/var/lib/veil/staging",
+		LiveRoot:      "/etc/veil/generated",
+		PanelAccess: Material{
+			Configs: []string{"/etc/veil/generated/caddy/edge.Caddyfile"},
+			Actions: []string{"reload veil-caddy@edge.service"},
+		},
+		Inbounds: []model.Inbound{{
+			Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true,
+		}},
+		Capabilities: []ProtocolCapability{{
+			Protocol: "mieru",
+			Config:   "/etc/veil/generated/mieru/server_config.json",
+			Action:   "restart veil-mieru.service",
+		}},
+		RuntimeUnits: []string{"veil-mieru.service"},
+	})
+
+	want := []model.ApplyOperation{
+		{
+			Type:              "promote_file",
+			Source:            "/var/lib/veil/staging/caddy/edge.Caddyfile",
+			Destination:       "/etc/veil/generated/caddy/edge.Caddyfile",
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "render-and-live-host",
+		},
+		{
+			Type:              "promote_file",
+			Source:            "/var/lib/veil/staging/mieru/server_config.json",
+			Destination:       "/etc/veil/generated/mieru/server_config.json",
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "render-and-live-host",
+		},
+		{
+			Type:              "reload_service",
+			Unit:              "veil-caddy@edge.service",
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		},
+		{
+			Type:              "restart_service",
+			Unit:              "veil-mieru.service",
+			InterruptionRisk:  "connection-drop",
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		},
+	}
+	if !reflect.DeepEqual(plan.Operations, want) {
+		t.Fatalf("operations:\n got: %#v\nwant: %#v", plan.Operations, want)
+	}
+}
+
+func TestPlannerStructuredPreviewDoesNotContainSecrets(t *testing.T) {
+	plan := Build(Input{
+		GeneratedRoot: "/var/lib/veil/staging",
+		LiveRoot:      "/etc/veil/generated",
+		Settings: model.Settings{
+			NaivePassword:     "naive-super-secret",
+			Hysteria2Password: "hy2-super-secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "inbound-super-secret",
+		}},
+		Capabilities: []ProtocolCapability{{
+			Protocol: "mieru",
+			Config:   "/etc/veil/generated/mieru/server_config.json",
+			Action:   "restart veil-mieru.service",
+		}},
+	})
+	body, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"naive-super-secret", "hy2-super-secret", "inbound-super-secret"} {
+		if strings.Contains(string(body), secret) {
+			t.Fatalf("structured preview leaked %q: %s", secret, body)
+		}
+	}
+}
 
 func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *testing.T) {
 	plan := Build(Input{

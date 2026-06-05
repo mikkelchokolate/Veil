@@ -33,6 +33,18 @@ contents:
   - src: packaging/systemd/veil.service
     dst: /lib/systemd/system/veil.service
     type: config
+  - src: packaging/systemd/veil-helper.service
+    dst: /lib/systemd/system/veil-helper.service
+    type: config
+  - src: packaging/systemd/veil-helper.socket
+    dst: /lib/systemd/system/veil-helper.socket
+    type: config
+  - src: packaging/systemd/veil-backup.service
+    dst: /lib/systemd/system/veil-backup.service
+    type: config
+  - src: packaging/systemd/veil-backup.timer
+    dst: /lib/systemd/system/veil-backup.timer
+    type: config
   - src: packaging/systemd/veil-caddy@.service
     dst: /lib/systemd/system/veil-caddy@.service
     type: config

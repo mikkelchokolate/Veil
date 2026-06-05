@@ -23,11 +23,17 @@ func NewApplyWorkflow(state applyWorkflowState) ApplyWorkflow {
 }
 
 func (w ApplyWorkflow) RunLocked(req ApplyRequest) (ApplyResponse, int, error) {
-	return applyflow.NewWorkflow(applyWorkflowStateAdapter(w), func(actions []ServiceActionResult) []ServiceHealthResult {
+	checkHealth := func(actions []ServiceActionResult) []ServiceHealthResult {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
 		}).Check(actions)
-	}).RunLocked(req)
+	}
+	if state, ok := w.state.(interface {
+		checkServiceHealthLocked([]ServiceActionResult) []ServiceHealthResult
+	}); ok {
+		checkHealth = state.checkServiceHealthLocked
+	}
+	return applyflow.NewWorkflow(applyWorkflowStateAdapter(w), checkHealth).RunLocked(req)
 }
 
 type applyWorkflowStateAdapter struct {

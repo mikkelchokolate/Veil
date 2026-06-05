@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -18,8 +19,10 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
 	var gotPaths installer.ApplyPaths
 	var gotActions []service.SystemdAction
+	var gotHostPaths hostaccess.Paths
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
 		gotPaths = paths
 		return installer.ApplyResult{BackupID: "backup-1", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
@@ -29,10 +32,15 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 		return nil
 	}
 	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error {
+		gotHostPaths = paths
+		return nil
+	}
 	t.Cleanup(func() {
 		installApplyFunc = oldApply
 		installSystemdRunFunc = oldSystemd
 		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
 	})
 
 	cmd := NewRootCommand("test")
@@ -61,8 +69,14 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	if filepath.ToSlash(gotPaths.VeilBinary) != "/opt/veil/bin/veil" {
 		t.Fatalf("VeilBinary = %q", gotPaths.VeilBinary)
 	}
+	if gotHostPaths.EtcDir != tempEtc || gotHostPaths.VarDir != tempVar {
+		t.Fatalf("host paths=%+v", gotHostPaths)
+	}
 	if len(gotActions) == 0 || gotActions[0].Command != "systemctl" || gotActions[0].Args[0] != "daemon-reload" {
 		t.Fatalf("systemd actions not run: %+v", gotActions)
+	}
+	if len(gotActions) < 2 || strings.Join(gotActions[1].Args, " ") != "enable veil-helper.socket" {
+		t.Fatalf("helper socket must be enabled before panel: %+v", gotActions)
 	}
 	for _, want := range []string{"Written files:", "/etc/veil/veil.env", "Panel: https://example.com/panel/"} {
 		if !strings.Contains(out.String(), want) {
@@ -81,6 +95,15 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	}
 	if _, err := os.Stat(filepath.Join(tempVar, "state.json")); err != nil {
 		t.Fatalf("state.json missing: %v", err)
+	}
+}
+
+func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
+	if !shouldPrepareInstallHost(defaultSystemdDir) {
+		t.Fatal("canonical native install must prepare the service account and permissions")
+	}
+	if shouldPrepareInstallHost(t.TempDir()) {
+		t.Fatal("staging install must not mutate current-host accounts or ownership")
 	}
 }
 

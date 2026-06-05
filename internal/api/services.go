@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -14,8 +15,6 @@ type ServiceActionRequest struct {
 
 // ServiceActionResponse is the result of a service control operation.
 type ServiceActionResponse = service.ManualActionResponse
-
-var serviceControlRunner = runServiceControl
 
 func (s *managementState) handleServiceActionRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -37,7 +36,8 @@ func (s *managementState) handleServiceActionRoute(w http.ResponseWriter, r *htt
 }
 
 func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
-	if !service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Allows(name) {
+	runtime, ok := managedRuntimeByActionName(name)
+	if !ok || !runtime.ManualRestart {
 		writeError(w, "unknown service: "+name, http.StatusBadRequest)
 		return
 	}
@@ -51,15 +51,23 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp := serviceControlRunner(name, action)
-	status := http.StatusOK
-	if !resp.Success {
-		status = http.StatusInternalServerError
+	resp := ServiceActionResponse{Service: name, Action: action}
+	if s.privileged == nil {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
+		})
+		return
 	}
-	s.logUserAction(r, "service_"+action, name, resp.Success, "")
-	writeJSONStatus(w, status, resp)
-}
-
-func runServiceControl(name, action string) ServiceActionResponse {
-	return service.NewManualServiceControl(NewManagedRuntimeCatalog(), nil).Run(name, action)
+	err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
+		Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+	})
+	resp.Success = err == nil
+	if err != nil {
+		resp.Error = err.Error()
+		s.logUserAction(r, "service_"+action, name, false, err.Error())
+		writePrivilegedError(w, err)
+		return
+	}
+	s.logUserAction(r, "service_"+action, name, true, "")
+	writeJSON(w, resp)
 }

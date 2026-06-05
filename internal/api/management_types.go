@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"sync"
 
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -29,23 +32,41 @@ type ServiceActionResult = model.ServiceActionResult
 type ServiceHealthResult = model.ServiceHealthResult
 
 type User = model.User
+type SetupState = model.SetupState
 
 type livePromotionRecord = applyflow.PromotionRecord
 
 type managementSnapshot = model.ManagementSnapshot
 
 type managementState struct {
-	mu            sync.Mutex
-	statePath     string
-	applyRoot     string
-	keyPath       string
-	cipher        *secrets.Cipher
-	settings      Settings
-	inbounds      []Inbound
-	rules         []RoutingRule
-	routingPreset string
-	routingSource RoutingSource
-	warp          WarpConfig
-	users         []User
-	orphanedUnits []string
+	mu                             sync.Mutex
+	statePath                      string
+	applyRoot                      string
+	liveRoot                       string
+	keyPath                        string
+	cipher                         *secrets.Cipher
+	setupAllowed                   bool
+	setup                          SetupState
+	settings                       Settings
+	inbounds                       []Inbound
+	rules                          []RoutingRule
+	routingPreset                  string
+	routingSource                  RoutingSource
+	warp                           WarpConfig
+	users                          []User
+	orphanedUnits                  []string
+	sessions                       *SessionRegistry
+	audit                          *audit.Recorder
+	version                        string
+	backupDir                      string
+	backupPassphrasePath           string
+	backupJobsMu                   sync.Mutex
+	backupJobs                     map[string]BackupRestoreJob
+	backupRestoreAudit             func(audit.Record) error
+	updateMu                       sync.Mutex
+	updateStager                   func(context.Context) (string, error)
+	configurationValidator         ConfigurationValidator
+	enforceConfigurationValidation bool
+	privileged                     privileged.Client
+	privilegedLocal                bool
 }

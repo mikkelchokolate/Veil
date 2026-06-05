@@ -20,9 +20,8 @@ func NewRenderer(slots []RenderSlot) Renderer {
 	return Renderer{slots: append([]RenderSlot(nil), slots...)}
 }
 
-func (r Renderer) HTML(basePath string, csrfToken string) string {
-	html := r.BaseHTML()
-	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
+func (r Renderer) HTML(basePath string, csrfToken string, locale string) string {
+	html := r.baseHTML(locale, csrfToken)
 	if basePath == "" || basePath == "/" {
 		return html
 	}
@@ -39,8 +38,15 @@ func (r Renderer) HTML(basePath string, csrfToken string) string {
 }
 
 func (r Renderer) BaseHTML() string {
+	return r.baseHTML(LocaleEnglish, "")
+}
+
+func (r Renderer) baseHTML(locale string, csrfToken string) string {
 	html := panelHTMLBase
 	html = strings.ReplaceAll(html, "__PROMETHEUS_BG_BASE64__", prometheusBgBase64)
+	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
+	html = strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
+	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
 	for _, slot := range r.slots {
 		if slot.Render == nil {
 			continue
@@ -56,7 +62,7 @@ func (r Renderer) BaseHTML() string {
 // panelHTMLBase is the raw panel HTML. Paths in JS strings are all /-prefixed
 // (e.g., "/api/status"). At serve time, a replacer injects the web base path.
 const panelHTMLBase = `<!doctype html>
-<html lang="en">
+<html lang="__VEIL_LOCALE__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -96,6 +102,24 @@ const panelHTMLBase = `<!doctype html>
       display: flex;
       min-height: 100vh;
       overflow-x: hidden;
+    }
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 1000000;
+      padding: 10px 14px;
+      background: var(--primary);
+      color: var(--canvas);
+      text-decoration: none;
+      transform: translateY(-160%);
+    }
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+    :focus-visible {
+      outline: 3px solid var(--accent-warning) !important;
+      outline-offset: 3px;
     }
 
     /* Global Noise/Grain Overlay */
@@ -214,6 +238,15 @@ const panelHTMLBase = `<!doctype html>
       background: var(--bg-hover);
       border-left: 3px solid var(--primary);
     }
+    button.nav-item {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      border-left: 0;
+      border-right: 0;
+      border-top: 0;
+      border-radius: 0;
+    }
 
     /* Content Wrapper */
     .content-wrapper {
@@ -247,6 +280,25 @@ const panelHTMLBase = `<!doctype html>
     .breadcrumb span {
       color: #fff;
       mix-blend-mode: plus-lighter;
+    }
+    .top-bar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 16px;
+      min-width: 0;
+    }
+    .locale-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .locale-control select {
+      width: auto;
+      min-width: 76px;
+      padding: 8px 30px 8px 10px !important;
     }
     
     main {
@@ -331,6 +383,32 @@ const panelHTMLBase = `<!doctype html>
       outline: none;
       border-color: var(--primary);
     }
+    input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+      border-color: var(--accent-danger);
+    }
+    .field-validation {
+      margin: 6px 0 0;
+      color: var(--accent-danger);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    .validation-summary {
+      border-left: 3px solid var(--border-hover);
+      padding: 12px 14px;
+      margin-top: 16px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+    .validation-summary.validation-error {
+      border-left-color: var(--accent-danger);
+      color: color-mix(in srgb, var(--accent-danger) 78%, white);
+    }
+    .validation-summary.validation-ok {
+      border-left-color: var(--accent-success);
+      color: color-mix(in srgb, var(--accent-success) 78%, white);
+    }
     select {
       appearance: none !important;
       -webkit-appearance: none !important;
@@ -384,6 +462,11 @@ const panelHTMLBase = `<!doctype html>
     }
     button:active {
       transform: scale(0.98);
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+      transform: none;
     }
     button.secondary {
       border-color: var(--border);
@@ -566,7 +649,7 @@ const panelHTMLBase = `<!doctype html>
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border);
       border-radius: 0;
-      width: 90%;
+      width: min(600px, calc(100vw - 32px));
       max-width: 600px;
       max-height: 85vh;
       overflow-y: auto;
@@ -791,9 +874,132 @@ const panelHTMLBase = `<!doctype html>
       max-height: 400px;
       white-space: pre-wrap;
     }
+
+    @media (max-width: 760px) {
+      body {
+        display: block;
+        min-width: 0;
+      }
+      .sidebar {
+        position: static;
+        width: 100%;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        padding: 16px;
+      }
+      .nav-menu {
+        flex-direction: row;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+      }
+      .nav-item {
+        flex: 0 0 auto;
+        padding: 12px 16px;
+        white-space: nowrap;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+      }
+      .nav-item.active {
+        border-left: 0;
+        border-bottom: 3px solid var(--primary);
+      }
+      .content-wrapper {
+        margin-left: 0;
+        width: 100%;
+      }
+      .top-bar {
+        height: auto;
+        min-height: 58px;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 16px;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+      }
+      .top-bar-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: space-between;
+      }
+      .breadcrumb,
+      .status-indicator {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      main {
+        padding: 16px;
+      }
+      .card {
+        padding: 16px;
+      }
+      .grid,
+      .form-grid,
+      .telemetry-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .actions button {
+        width: 100%;
+      }
+      button {
+        max-width: 100%;
+        white-space: normal;
+        text-align: center;
+        overflow-wrap: anywhere;
+      }
+      p,
+      code,
+      pre {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .table-container {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .table-container table {
+        min-width: 720px;
+      }
+      .modal-content {
+        box-sizing: border-box;
+        padding: 20px;
+      }
+    }
+    @media (max-width: 420px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+      .actions {
+        flex-direction: column;
+      }
+      button,
+      .nav-item,
+      input,
+      select,
+      textarea {
+        min-height: 44px;
+      }
+      .modal-content {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+        padding: 16px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- Fixed background overlay -->
   <div class="bg-overlay-container">
     <div class="bg-image"></div>
@@ -804,8 +1010,8 @@ const panelHTMLBase = `<!doctype html>
     <div class="logo">
       Veil Panel
     </div>
-    <nav class="nav-menu">
-      <a href="#dashboard" class="nav-item active" onclick="switchTab('dashboard')">
+    <nav class="nav-menu" aria-label="Primary navigation">
+      <a href="#dashboard" class="nav-item active" aria-current="page" onclick="switchTab('dashboard')">
         Dashboard
       </a>
       <a href="#inbounds" class="nav-item" onclick="switchTab('inbounds')">
@@ -820,12 +1026,15 @@ const panelHTMLBase = `<!doctype html>
       <a href="#diagnostics" class="nav-item" onclick="switchTab('diagnostics')">
         System Tools
       </a>
+      <a href="#backups" class="nav-item" onclick="switchTab('backups')">
+        Backups
+      </a>
       <a href="#users" class="nav-item" onclick="switchTab('users')">
         Users
       </a>
-      <a id="btn-logout" class="nav-item" style="margin-top: auto; border-top: 1px solid var(--border); border-bottom: 0;">
+      <button type="button" id="btn-logout" class="nav-item" style="margin-top: auto; border-top: 1px solid var(--border); border-bottom: 0;">
         Log Out
-      </a>
+      </button>
     </nav>
   </aside>
 
@@ -833,12 +1042,21 @@ const panelHTMLBase = `<!doctype html>
   <div class="content-wrapper">
     <header class="top-bar">
       <div class="breadcrumb">Veil Panel / <span id="current-page-title">Dashboard</span></div>
-      <div class="status-indicator">
-        API Service: <span class="badge badge-success"><span class="pulse-static"></span> ONLINE</span>
+      <div class="top-bar-actions">
+        <label class="locale-control">
+          <span>Language</span>
+          <select data-veil-locale-select aria-label="Language">
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+        </label>
+        <div class="status-indicator">
+          API Service: <span class="badge badge-success"><span class="pulse-static"></span> ONLINE</span>
+        </div>
       </div>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
       <!-- Section: Dashboard -->
       <div id="dashboard" class="tab-content active">
 __VEIL_PANEL_INTRO_CARDS__
@@ -868,6 +1086,11 @@ __VEIL_PANEL_APPLY_CARD__
 __VEIL_PANEL_DIAGNOSTICS_CARDS__
       </div>
 
+      <!-- Section: Backups -->
+      <div id="backups" class="tab-content">
+__VEIL_PANEL_BACKUPS_CARD__
+      </div>
+
       <!-- Section: Users -->
       <div id="users" class="tab-content">
 __VEIL_PANEL_USERS_CARD__
@@ -876,27 +1099,39 @@ __VEIL_PANEL_USERS_CARD__
   </div>
 
   <script>
+    window.veilLocale = "__VEIL_LOCALE__";
     window.veil_csrf_token = '__VEIL_CSRF_TOKEN__';
+__VEIL_LOCALIZATION_RUNTIME__
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       const activeTab = document.getElementById(tabId);
       if (activeTab) activeTab.classList.add('active');
       
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item[href]').forEach((el) => {
+        el.classList.remove('active');
+        el.removeAttribute('aria-current');
+      });
       const activeLink = document.querySelector('.nav-item[href="#' + tabId + '"]');
-      if (activeLink) activeLink.classList.add('active');
+      if (activeLink) {
+        activeLink.classList.add('active');
+        activeLink.setAttribute('aria-current', 'page');
+      }
       
       const pageNames = {
-        'dashboard': 'Dashboard',
-        'inbounds': 'Inbounds',
-        'routing': 'Routing Rules',
-        'warp': 'WARP',
-        'diagnostics': 'System Tools',
-        'users': 'Users'
+        'dashboard': veilT('nav.dashboard'),
+        'inbounds': veilT('nav.inbounds'),
+        'routing': veilT('nav.routing'),
+        'warp': veilT('nav.warp'),
+        'diagnostics': veilT('nav.diagnostics'),
+        'backups': veilT('nav.backups'),
+        'users': veilT('nav.users')
       };
-      document.getElementById('current-page-title').innerText = pageNames[tabId] || 'Dashboard';
+      document.getElementById('current-page-title').innerText = pageNames[tabId] || veilT('nav.dashboard');
       if (tabId === 'users' && typeof loadUsers === 'function') {
         loadUsers();
+      }
+      if (tabId === 'backups' && typeof loadBackups === 'function') {
+        loadBackups();
       }
       window.scrollTo(0, 0);
     }
@@ -904,7 +1139,7 @@ __VEIL_PANEL_USERS_CARD__
     // Handle hash reload
     window.addEventListener('DOMContentLoaded', () => {
       const hash = window.location.hash.substring(1);
-      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics', 'users'].includes(hash)) {
+      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics', 'backups', 'users'].includes(hash)) {
         switchTab(hash);
       }
     });
@@ -929,6 +1164,7 @@ __VEIL_PANEL_SERVICE_RESTART_ACTIONS__
 __VEIL_PANEL_RUNTIME_STATS_ACTIONS__
 __VEIL_PANEL_APPLY_ACTIONS__
 __VEIL_PANEL_DIAGNOSTICS_ACTIONS__
+__VEIL_PANEL_BACKUPS_ACTIONS__
 __VEIL_PANEL_USERS_ACTIONS__
 __VEIL_PANEL_EVENT_BINDINGS__
   </script>

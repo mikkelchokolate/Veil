@@ -1,9 +1,9 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -14,7 +14,8 @@ type ServiceRuntimeStatus = service.RuntimeStatus
 var serviceStatusReader = readSystemdServiceStatus
 
 type StatusRoutes struct {
-	Info ServerInfo
+	Info  ServerInfo
+	State *managementState
 }
 
 func (routes StatusRoutes) Register(mux *http.ServeMux) {
@@ -29,10 +30,36 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
 		info := service.StatusInfo{Version: routes.Info.Version, Mode: routes.Info.Mode}
-		statuses := func() []ServiceStatus {
-			return service.NewManagedServiceStatusCatalog(NewManagedRuntimeCatalog(), service.RuntimeStatusReader(serviceStatusReader)).List()
+		catalog := NewManagedRuntimeCatalog()
+		runtimes := catalog.Runtimes()
+		units := make([]string, 0, len(runtimes))
+		for _, runtime := range runtimes {
+			units = append(units, runtime.Unit)
 		}
-		_ = json.NewEncoder(w).Encode(service.NewStatusResponseBuilder(info, statuses).Build())
+		if routes.State == nil || routes.State.privileged == nil {
+			writePrivilegedError(w, &privileged.Error{
+				Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
+			})
+			return
+		}
+		result, err := routes.State.privileged.ServiceStatus(r.Context(), privileged.ServiceStatusRequest{Units: units})
+		if err != nil {
+			writePrivilegedError(w, err)
+			return
+		}
+		byUnit := make(map[string]privileged.ServiceStatus, len(result.Services))
+		for _, status := range result.Services {
+			byUnit[status.Unit] = status
+		}
+		statuses := make([]ServiceStatus, 0, len(runtimes))
+		for _, runtime := range runtimes {
+			status := byUnit[runtime.Unit]
+			statuses = append(statuses, ServiceStatus{
+				Name: runtime.Name, Managed: true, Transport: runtime.Transport, Unit: runtime.Unit,
+				LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState, Error: status.Error,
+			})
+		}
+		writeJSON(w, service.NewStatusResponseBuilder(info, func() []ServiceStatus { return statuses }).Build())
 	}
 }
 

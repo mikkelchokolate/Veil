@@ -1,9 +1,45 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
+
+func TestApplyPlanResponseIncludesStructuredPreview(t *testing.T) {
+	value := ApplyPlanResponse{
+		Valid: true,
+		Issues: []ValidationIssue{{
+			Code:     "port_in_use",
+			Severity: "error",
+			Field:    "port",
+			Message:  "TCP port 443 is already in use",
+			Source:   "live-host",
+		}},
+		Operations: []ApplyOperation{{
+			Type:              "promote_file",
+			Destination:       "/etc/veil/generated/caddy/Caddyfile",
+			InterruptionRisk:  "reload",
+			RollbackAvailable: true,
+			ValidationSource:  "live-host",
+		}},
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{
+		`"issues"`,
+		`"operations"`,
+		`"interruptionRisk"`,
+		`"rollbackAvailable"`,
+		`"validationSource"`,
+	} {
+		if !bytes.Contains(data, []byte(key)) {
+			t.Fatalf("missing %s in %s", key, data)
+		}
+	}
+}
 
 func TestManagementStateModelTypesKeepJSONShape(t *testing.T) {
 	state := ManagementSnapshot{
