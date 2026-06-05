@@ -37,7 +37,7 @@ func TestServeHTTPServerBuildsTLSConfiguredServer(t *testing.T) {
 	}
 }
 
-func TestServeHTTPServerRoutesPrivilegedOperationsToHelperSocket(t *testing.T) {
+func TestServeHTTPServerReportsMissingHelperSocketAsRepairable(t *testing.T) {
 	server, _ := NewHTTPServer(HTTPServerOptions{
 		Listen:       "127.0.0.1:2096",
 		Version:      "test",
@@ -45,7 +45,7 @@ func TestServeHTTPServerRoutesPrivilegedOperationsToHelperSocket(t *testing.T) {
 		StatePath:    filepath.Join(t.TempDir(), "state.json"),
 		ApplyRoot:    filepath.Join(t.TempDir(), "apply"),
 		KeyPath:      filepath.Join(t.TempDir(), "state.key"),
-		HelperSocket: filepath.Join(t.TempDir(), "missing-helper.sock"),
+		HelperSocket: privileged.DefaultSocketPath,
 		WebBasePath:  "/",
 	}).Build()
 	request := httptest.NewRequest(http.MethodPost, "/api/services/veil/restart", strings.NewReader(`{"confirm":true}`))
@@ -53,11 +53,14 @@ func TestServeHTTPServerRoutesPrivilegedOperationsToHelperSocket(t *testing.T) {
 	request.Header.Set("X-Veil-Token", "token")
 	response := httptest.NewRecorder()
 	server.Handler.ServeHTTP(response, request)
-	if response.Code != http.StatusInternalServerError {
+	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), string(privileged.ErrorOperationFailed)) {
 		t.Fatalf("missing helper error envelope: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "veil-helper.socket") {
+		t.Fatalf("missing repair hint: %s", response.Body.String())
 	}
 }
 
