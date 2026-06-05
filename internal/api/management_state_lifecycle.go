@@ -58,6 +58,16 @@ func newManagementState(info ServerInfo) *managementState {
 		rules:        model.Rules,
 		warp:         model.Warp,
 	}
+	sessionPath := ""
+	if info.StatePath != "" {
+		sessionPath = filepath.Join(filepath.Dir(info.StatePath), "sessions.json")
+	}
+	sessionRegistry, err := NewSessionRegistry(sessionPath)
+	if err != nil {
+		log.Printf("error loading Panel sessions from %s: %v", sessionPath, err)
+		sessionRegistry = mustNewSessionRegistry("")
+	}
+	state.sessions = sessionRegistry
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)

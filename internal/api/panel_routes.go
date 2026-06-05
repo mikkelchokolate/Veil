@@ -64,9 +64,9 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 			var authenticated bool
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
-				if sess, ok := globalSessions.Get(cookie.Value); ok {
+				if _, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
 					authenticated = true
-					csrfToken = sess.CSRFToken
+					csrfToken, _, _ = routes.State.sessionRegistry().EnsureCSRF(cookie.Value)
 				}
 			}
 			if !authenticated {

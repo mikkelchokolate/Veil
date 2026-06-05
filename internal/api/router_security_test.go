@@ -28,9 +28,12 @@ func TestRouterSecurityRecognizesBearerToken(t *testing.T) {
 }
 
 func TestSessionRegistry(t *testing.T) {
-	registry := &SessionRegistry{
-		sessions: make(map[string]Session),
+	registry, err := NewSessionRegistry("")
+	if err != nil {
+		t.Fatal(err)
 	}
+	now := time.Now().UTC()
+	registry.now = func() time.Time { return now }
 
 	sess := registry.NewSession("alice", "admin")
 	if sess.Username != "alice" || sess.Role != "admin" {
@@ -45,9 +48,7 @@ func TestSessionRegistry(t *testing.T) {
 		t.Fatalf("failed to retrieve session")
 	}
 
-	// Expiry test
-	sess.ExpiresAt = time.Now().Add(-1 * time.Minute)
-	registry.sessions[sess.Token] = sess
+	now = now.Add(31 * time.Minute)
 
 	_, ok = registry.Get(sess.Token)
 	if ok {
@@ -64,8 +65,9 @@ func TestSessionRegistry(t *testing.T) {
 }
 
 func TestSessionRegistryListsAndDeletesByStableID(t *testing.T) {
-	registry := &SessionRegistry{
-		sessions: make(map[string]Session),
+	registry, err := NewSessionRegistry("")
+	if err != nil {
+		t.Fatal(err)
 	}
 	alice := registry.NewSession("alice", "admin")
 	bob := registry.NewSession("bob", "viewer")
