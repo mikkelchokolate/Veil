@@ -158,7 +158,7 @@ func DiagnosticsActionsJS() string {
     document.getElementById('run-dns-lookup').addEventListener('click', async () => {
       const hostname = document.getElementById('dns-hostname').value.trim();
       if (!hostname) {
-        document.getElementById('dns-lookup-output').textContent = 'Hostname is required';
+        document.getElementById('dns-lookup-output').textContent = veilT('diagnostics.hostnameRequired');
         return;
       }
       await loadJSON('/api/tools/dns-lookup', 'dns-lookup-output', {
@@ -173,7 +173,7 @@ func DiagnosticsActionsJS() string {
       const host = document.getElementById('ping-host').value.trim();
       const count = document.getElementById('ping-count').value || '3';
       if (!host) {
-        document.getElementById('ping-output').textContent = 'Host is required';
+        document.getElementById('ping-output').textContent = veilT('diagnostics.hostRequired');
         return;
       }
       await loadJSON('/api/tools/ping', 'ping-output', {

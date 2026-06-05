@@ -66,7 +66,8 @@ func panelBackupsActionsJS() string {
     async function loadBackups() {
       const tbody = document.getElementById('backups-table-body');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading backups...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);"></td></tr>';
+      tbody.firstElementChild.firstElementChild.textContent = veilT('backups.loading');
       try {
         const response = await fetch('/api/backups', { headers: authHeaders() });
         const text = await response.text();
@@ -77,7 +78,8 @@ func panelBackupsActionsJS() string {
         }
         const backups = text ? JSON.parse(text) : [];
         if (!backups.length) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No managed backup archives</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);"></td></tr>';
+          tbody.firstElementChild.firstElementChild.textContent = veilT('backups.empty');
           return;
         }
         tbody.innerHTML = '';
@@ -92,20 +94,20 @@ func panelBackupsActionsJS() string {
           const verify = document.createElement('button');
           verify.type = 'button';
           verify.className = 'secondary';
-          verify.textContent = 'Verify';
+          verify.textContent = veilT('backups.verify');
           verify.addEventListener('click', () => verifyBackup(item.name));
           actions.appendChild(verify);
           const download = document.createElement('button');
           download.type = 'button';
           download.className = 'secondary';
-          download.textContent = 'Download';
+          download.textContent = veilT('action.download');
           download.addEventListener('click', () => downloadBackup(item.name));
           actions.appendChild(download);
           const restore = document.createElement('button');
           restore.type = 'button';
           restore.className = 'danger';
           restore.dataset.adminOnly = 'true';
-          restore.textContent = 'Restore';
+          restore.textContent = veilT('action.restore');
           restore.addEventListener('click', () => restoreBackup(item.name));
           actions.appendChild(restore);
           row.appendChild(actions);
@@ -113,12 +115,12 @@ func panelBackupsActionsJS() string {
         });
         applyViewerRoleGuard();
       } catch (err) {
-        setBackupOutput('Load failed: ' + String(err));
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
       }
     }
 
     async function createBackup() {
-      setBackupOutput('Creating and verifying encrypted backup...');
+      setBackupOutput(veilT('backups.creating'));
       const response = await fetch('/api/backups', {
         method: 'POST',
         headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -146,7 +148,7 @@ func panelBackupsActionsJS() string {
     }
 
     async function verifyBackup(name) {
-      setBackupOutput('Verifying ' + name + '...');
+      setBackupOutput(veilT('backups.verifying', { name }));
       const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/verify', {
         method: 'POST',
         headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -176,7 +178,7 @@ func panelBackupsActionsJS() string {
     async function restoreBackup(name) {
       const typed = prompt(veilT('confirm.restoreBackupPrompt', { name }));
       if (typed !== name) {
-        setBackupOutput('Restore cancelled');
+        setBackupOutput(veilT('status.restoreCancelled'));
         return;
       }
       const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/restore', {
@@ -213,7 +215,7 @@ func panelBackupsActionsJS() string {
         }
         if (job.status === 'failed') return;
       }
-      setBackupOutput('Restore job polling timed out');
+      setBackupOutput(veilT('status.restoreTimedOut'));
     }
 `
 }

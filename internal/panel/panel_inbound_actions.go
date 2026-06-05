@@ -25,7 +25,7 @@ func panelInboundActionsJS() string {
       const summary = document.getElementById('inbound-validation-summary');
       if (summary) {
         summary.className = 'validation-summary';
-        summary.textContent = 'Validation runs as fields change.';
+        summary.textContent = veilT('inbounds.validationPending');
       }
     }
 
@@ -59,15 +59,15 @@ func panelInboundActionsJS() string {
         const message = describedBy ? document.getElementById(describedBy) : null;
         if (message) {
           message.hidden = false;
-          message.textContent = issue.message + (issue.remediation ? ' ' + issue.remediation : '');
+          message.textContent = veilValidationIssueText(issue);
         }
       });
       if (summary) {
         summary.className = errors.length > 0 ? 'validation-summary validation-error' : 'validation-summary validation-ok';
         if (issues.length === 0) {
-          summary.textContent = 'Configuration is ready to save.';
+          summary.textContent = veilT('inbounds.validationReady');
         } else {
-          summary.textContent = issues.map((issue) => issue.message + (issue.remediation ? ' ' + issue.remediation : '')).join(' ');
+          summary.textContent = issues.map(veilValidationIssueText).join(' ');
         }
       }
       inboundValidationValid = !!(response && response.valid);
