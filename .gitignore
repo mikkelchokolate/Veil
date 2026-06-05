@@ -12,4 +12,5 @@ api.test
 /scratch/
 /veil
 .codegraph/
+/.worktrees/
 /coverage
