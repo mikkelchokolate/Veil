@@ -186,7 +186,7 @@ func privilegedHelperSocketUnavailable(err error) bool {
 	if !strings.Contains(message, "helper.sock") {
 		return false
 	}
-	for _, marker := range []string{"no such file or directory", "connection refused", "permission denied"} {
+	for _, marker := range []string{"no such file or directory", "connection refused", "permission denied", "dead network"} {
 		if strings.Contains(message, marker) {
 			return true
 		}

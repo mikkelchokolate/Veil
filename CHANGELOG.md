@@ -4,7 +4,7 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-## [v0.6.2] - 2026-06-05
+## [v0.6.3] - 2026-06-05
 
 ### Fixed
 

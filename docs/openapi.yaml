@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "0.6.2"
+  version: "0.6.3"
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
