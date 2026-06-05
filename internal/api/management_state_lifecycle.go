@@ -58,6 +58,8 @@ func newManagementState(info ServerInfo) *managementState {
 		inbounds:     model.Inbounds,
 		rules:        model.Rules,
 		warp:         model.Warp,
+		version:      info.Version,
+		backupJobs:   make(map[string]BackupRestoreJob),
 	}
 	sessionPath := ""
 	if info.StatePath != "" {
@@ -69,6 +71,10 @@ func newManagementState(info ServerInfo) *managementState {
 		sessionRegistry = mustNewSessionRegistry("")
 	}
 	state.sessions = sessionRegistry
+	if info.StatePath != "" {
+		state.backupDir = filepath.Join(filepath.Dir(info.StatePath), "backups")
+	}
+	state.backupPassphrasePath = filepath.Join(filepath.Dir(keyPath), "backup.passphrase")
 	auditPath := ""
 	if info.StatePath != "" {
 		auditPath = filepath.Join(filepath.Dir(info.StatePath), "audit", "panel.jsonl")
