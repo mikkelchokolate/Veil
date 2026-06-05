@@ -271,6 +271,31 @@ func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 	}
 }
 
+func TestPrivilegedUpdateUnavailableTellsOperatorHowToRepair(t *testing.T) {
+	routes := PanelRoutes{
+		Info: ServerInfo{Version: "0.6.0"},
+		State: newManagementState(ServerInfo{
+			Mode:                    "dev",
+			RequirePrivilegedHelper: true,
+			UpdateStager: func(context.Context) (string, error) {
+				t.Fatal("update should fail before staging when helper is unavailable")
+				return "", nil
+			},
+		}),
+	}
+	response := httptest.NewRecorder()
+	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{"privileged helper is unavailable", "sudo /usr/local/bin/veil repair --yes", "veil-helper.socket", "install.sh --force"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("helper-unavailable response missing %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestRotateKeyRequiresAdminAndRevokesSessions(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	root := t.TempDir()
