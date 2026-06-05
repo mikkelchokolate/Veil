@@ -114,7 +114,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		}
 
 		// 5. RBAC check for mutating operations
-		if role != "admin" && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
 		}
@@ -126,6 +126,14 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isMutatingRequest(r *http.Request) bool {
+	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete
+}
+
+func isSelfServiceMutation(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
 }
 
 type contextKey string

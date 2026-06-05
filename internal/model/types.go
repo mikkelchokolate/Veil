@@ -222,6 +222,7 @@ type User struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"passwordHash"`
 	Role         string `json:"role"` // "admin" or "viewer"
+	Locale       string `json:"locale,omitempty"`
 }
 
 type SetupState struct {

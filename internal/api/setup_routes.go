@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/panel"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -20,6 +21,7 @@ type setupCompleteRequest struct {
 	Username           string `json:"username"`
 	Password           string `json:"password"`
 	BackupAcknowledged bool   `json:"backupAcknowledged"`
+	Locale             string `json:"locale,omitempty"`
 }
 
 func (s *managementState) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,16 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		writeError(w, "backup and recovery acknowledgement is required", http.StatusBadRequest)
 		return
 	}
+	if req.Locale != "" {
+		locale, ok := panel.ParseLocale(req.Locale)
+		if !ok {
+			writeError(w, "locale must be en or ru", http.StatusBadRequest)
+			return
+		}
+		req.Locale = locale
+	} else {
+		req.Locale = panel.ResolveLocale("", r)
+	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		writeError(w, "failed to hash password", http.StatusInternalServerError)
@@ -87,6 +99,7 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		Username:     req.Username,
 		PasswordHash: string(hashed),
 		Role:         "admin",
+		Locale:       req.Locale,
 	}}
 	if err := s.saveLocked(); err != nil {
 		s.setup = previousSetup
@@ -106,6 +119,7 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		"completed": true,
 		"username":  req.Username,
 		"role":      "admin",
+		"locale":    req.Locale,
 	})
 }
 

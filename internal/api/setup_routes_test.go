@@ -43,7 +43,7 @@ func TestSetupCompleteCreatesFirstAdminOnLocalListener(t *testing.T) {
 	if !state.setup.Completed || state.setup.CompletedAt == "" || len(state.users) != 1 {
 		t.Fatalf("setup=%+v users=%+v", state.setup, state.users)
 	}
-	if state.users[0].Username != "admin" || state.users[0].Role != "admin" {
+	if state.users[0].Username != "admin" || state.users[0].Role != "admin" || state.users[0].Locale != "ru" {
 		t.Fatalf("user=%+v", state.users[0])
 	}
 	snapshot, ok, err := managementstate.NewStore(state.statePath, nil).Load()
@@ -157,7 +157,7 @@ func newTestSetupState(t *testing.T, allowed bool) *managementState {
 
 func newSetupCompleteRequest() *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/api/setup/complete", strings.NewReader(
-		`{"username":"admin","password":"a-long-secure-password","backupAcknowledged":true}`,
+		`{"username":"admin","password":"a-long-secure-password","backupAcknowledged":true,"locale":"ru"}`,
 	))
 	req.Header.Set("Content-Type", "application/json")
 	return req
