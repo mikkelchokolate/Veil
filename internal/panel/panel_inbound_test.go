@@ -77,6 +77,19 @@ func TestPanelInboundActionsDebounceAndCancelLiveValidation(t *testing.T) {
 	}
 }
 
+func TestViewerRoleGuardPreservesValidationDisabledState(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`el.dataset.viewerGuardWasDisabled = el.disabled ? 'true' : 'false'`,
+		`el.disabled = el.dataset.viewerGuardWasDisabled === 'true'`,
+		`delete el.dataset.viewerGuardWasDisabled`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Viewer role guard must preserve validation-controlled disabled state; missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 	controls := panelClientProfileControlsHTML()
 	for _, want := range []string{
