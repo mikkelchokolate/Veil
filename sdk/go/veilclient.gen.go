@@ -90,6 +90,12 @@ const (
 	InboundTransportUdp InboundTransport = "udp"
 )
 
+// Defines values for Locale.
+const (
+	En Locale = "en"
+	Ru Locale = "ru"
+)
+
 // Defines values for RURecommendedPreviewRequestPanelAccess.
 const (
 	RURecommendedPreviewRequestPanelAccessCaddy  RURecommendedPreviewRequestPanelAccess = "caddy"
@@ -243,10 +249,13 @@ type AuditRecord struct {
 
 // AuthStatusResponse defines model for AuthStatusResponse.
 type AuthStatusResponse struct {
-	Authenticated bool      `json:"authenticated"`
-	CsrfToken     *string   `json:"csrfToken,omitempty"`
-	Role          *UserRole `json:"role,omitempty"`
-	Username      *string   `json:"username,omitempty"`
+	Authenticated bool    `json:"authenticated"`
+	CsrfToken     *string `json:"csrfToken,omitempty"`
+
+	// Locale Persisted Panel display language.
+	Locale   *Locale   `json:"locale,omitempty"`
+	Role     *UserRole `json:"role,omitempty"`
+	Username *string   `json:"username,omitempty"`
 }
 
 // BackupArchive defines model for BackupArchive.
@@ -500,6 +509,21 @@ type KeyRotationResponse struct {
 	Success         bool `json:"success"`
 }
 
+// Locale Persisted Panel display language.
+type Locale string
+
+// LocaleResponse defines model for LocaleResponse.
+type LocaleResponse struct {
+	// Locale Persisted Panel display language.
+	Locale Locale `json:"locale"`
+}
+
+// LocaleUpdateRequest defines model for LocaleUpdateRequest.
+type LocaleUpdateRequest struct {
+	// Locale Persisted Panel display language.
+	Locale Locale `json:"locale"`
+}
+
 // LogResult defines model for LogResult.
 type LogResult struct {
 	Output string `json:"output"`
@@ -514,10 +538,13 @@ type LoginRequest struct {
 
 // LoginResponse defines model for LoginResponse.
 type LoginResponse struct {
-	CsrfToken string   `json:"csrfToken"`
-	Role      UserRole `json:"role"`
-	Success   bool     `json:"success"`
-	Username  string   `json:"username"`
+	CsrfToken string `json:"csrfToken"`
+
+	// Locale Persisted Panel display language.
+	Locale   Locale   `json:"locale"`
+	Role     UserRole `json:"role"`
+	Success  bool     `json:"success"`
+	Username string   `json:"username"`
 }
 
 // NetworkInterface defines model for NetworkInterface.
@@ -734,16 +761,22 @@ type SettingsPanelAccess string
 
 // SetupCompleteRequest defines model for SetupCompleteRequest.
 type SetupCompleteRequest struct {
-	BackupAcknowledged bool   `json:"backupAcknowledged"`
-	Password           string `json:"password"`
-	Username           string `json:"username"`
+	BackupAcknowledged bool `json:"backupAcknowledged"`
+
+	// Locale Persisted Panel display language.
+	Locale   *Locale `json:"locale,omitempty"`
+	Password string  `json:"password"`
+	Username string  `json:"username"`
 }
 
 // SetupCompleteResponse defines model for SetupCompleteResponse.
 type SetupCompleteResponse struct {
-	Completed bool     `json:"completed"`
-	Role      UserRole `json:"role"`
-	Username  string   `json:"username"`
+	Completed bool `json:"completed"`
+
+	// Locale Persisted Panel display language.
+	Locale   Locale   `json:"locale"`
+	Role     UserRole `json:"role"`
+	Username string   `json:"username"`
 }
 
 // SetupStatusResponse defines model for SetupStatusResponse.
@@ -816,6 +849,8 @@ type UpdateResponse struct {
 
 // UserCreateRequest defines model for UserCreateRequest.
 type UserCreateRequest struct {
+	// Locale Persisted Panel display language.
+	Locale   *Locale  `json:"locale,omitempty"`
 	Password string   `json:"password"`
 	Role     UserRole `json:"role"`
 	Username string   `json:"username"`
@@ -823,6 +858,8 @@ type UserCreateRequest struct {
 
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
+	// Locale Persisted Panel display language.
+	Locale   Locale   `json:"locale"`
 	Role     UserRole `json:"role"`
 	Username string   `json:"username"`
 }
@@ -832,6 +869,8 @@ type UserRole string
 
 // UserUpdateRequest defines model for UserUpdateRequest.
 type UserUpdateRequest struct {
+	// Locale Persisted Panel display language.
+	Locale   *Locale  `json:"locale,omitempty"`
 	Password *string  `json:"password,omitempty"`
 	Role     UserRole `json:"role"`
 }
@@ -939,6 +978,9 @@ type PostApiAdminRotateKeyJSONRequestBody = EmptyObject
 
 // PostApiApplyJSONRequestBody defines body for PostApiApply for application/json ContentType.
 type PostApiApplyJSONRequestBody = ApplyRequest
+
+// PostApiAuthLocaleJSONRequestBody defines body for PostApiAuthLocale for application/json ContentType.
+type PostApiAuthLocaleJSONRequestBody = LocaleUpdateRequest
 
 // PostApiAuthLoginJSONRequestBody defines body for PostApiAuthLogin for application/json ContentType.
 type PostApiAuthLoginJSONRequestBody = LoginRequest
@@ -1100,6 +1142,11 @@ type ClientInterface interface {
 
 	// GetApiAudit request
 	GetApiAudit(ctx context.Context, params *GetApiAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiAuthLocaleWithBody request with any body
+	PostApiAuthLocaleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiAuthLocale(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiAuthLoginWithBody request with any body
 	PostApiAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1393,6 +1440,30 @@ func (c *Client) PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEdit
 
 func (c *Client) GetApiAudit(ctx context.Context, params *GetApiAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiAuditRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiAuthLocaleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAuthLocaleRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiAuthLocale(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAuthLocaleRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2558,6 +2629,46 @@ func NewGetApiAuditRequest(server string, params *GetApiAuditParams) (*http.Requ
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostApiAuthLocaleRequest calls the generic PostApiAuthLocale builder with application/json body
+func NewPostApiAuthLocaleRequest(server string, body PostApiAuthLocaleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiAuthLocaleRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiAuthLocaleRequestWithBody generates requests for PostApiAuthLocale with any type of body
+func NewPostApiAuthLocaleRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/auth/locale")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -4620,6 +4731,11 @@ type ClientWithResponsesInterface interface {
 	// GetApiAuditWithResponse request
 	GetApiAuditWithResponse(ctx context.Context, params *GetApiAuditParams, reqEditors ...RequestEditorFn) (*GetApiAuditResponse, error)
 
+	// PostApiAuthLocaleWithBodyWithResponse request with any body
+	PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
+
+	PostApiAuthLocaleWithResponse(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
+
 	// PostApiAuthLoginWithBodyWithResponse request with any body
 	PostApiAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLoginResponse, error)
 
@@ -4944,6 +5060,28 @@ func (r GetApiAuditResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiAuditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiAuthLocaleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LocaleResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiAuthLocaleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiAuthLocaleResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6261,6 +6399,23 @@ func (c *ClientWithResponses) GetApiAuditWithResponse(ctx context.Context, param
 	return ParseGetApiAuditResponse(rsp)
 }
 
+// PostApiAuthLocaleWithBodyWithResponse request with arbitrary body returning *PostApiAuthLocaleResponse
+func (c *ClientWithResponses) PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
+	rsp, err := c.PostApiAuthLocaleWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiAuthLocaleResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiAuthLocaleWithResponse(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
+	rsp, err := c.PostApiAuthLocale(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiAuthLocaleResponse(rsp)
+}
+
 // PostApiAuthLoginWithBodyWithResponse request with arbitrary body returning *PostApiAuthLoginResponse
 func (c *ClientWithResponses) PostApiAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLoginResponse, error) {
 	rsp, err := c.PostApiAuthLoginWithBody(ctx, contentType, body, reqEditors...)
@@ -7092,6 +7247,32 @@ func ParseGetApiAuditResponse(rsp *http.Response) (*GetApiAuditResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest AuditListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiAuthLocaleResponse parses an HTTP response from a PostApiAuthLocaleWithResponse call
+func ParsePostApiAuthLocaleResponse(rsp *http.Response) (*PostApiAuthLocaleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiAuthLocaleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LocaleResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

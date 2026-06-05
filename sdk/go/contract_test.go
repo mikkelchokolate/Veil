@@ -26,6 +26,19 @@ func TestGeneratedClientCoversAdminAndPreviewRoutes(t *testing.T) {
 	}
 }
 
+func TestGeneratedClientCoversSessionLocaleRoute(t *testing.T) {
+	request, err := NewPostApiAuthLocaleRequest(
+		"https://veil.example/base/",
+		LocaleUpdateRequest{Locale: "ru"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Method != http.MethodPost || request.URL.Path != "/base/api/auth/locale" {
+		t.Fatalf("locale request=%s %s", request.Method, request.URL.Path)
+	}
+}
+
 func TestGeneratedClientSupportsTokenRequestEditor(t *testing.T) {
 	client, err := NewClient("https://veil.example", WithRequestEditorFn(func(_ context.Context, request *http.Request) error {
 		request.Header.Set("X-Veil-Token", "test-token")
