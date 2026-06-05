@@ -372,6 +372,28 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 	}
 }
 
+func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{
+		"installed_veil_version()",
+		"resolve_target_version()",
+		"Installed Veil ${current_version} is older than target ${target_version}; upgrading.",
+		"Installed Veil ${current_version} differs from target ${target_version}; installing requested release.",
+		"already up to date",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install.sh missing existing-version upgrade logic %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "Use --force to re-install\n  args=(--profile") {
+		t.Fatalf("install.sh should not unconditionally skip download when a binary already exists:\n%s", script)
+	}
+}
+
 func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {

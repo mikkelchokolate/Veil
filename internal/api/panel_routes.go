@@ -146,9 +146,7 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 	}
 
 	if routes.State == nil || routes.State.privileged == nil {
-		writePrivilegedError(w, &privileged.Error{
-			Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
-		})
+		writePrivilegedHelperUnavailable(w)
 		return
 	}
 	routes.State.updateMu.Lock()
@@ -188,5 +186,14 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		"installed": result.Installed,
 		"version":   result.Version,
 		"message":   "Update staged successfully. Restarting panel service...",
+	})
+}
+
+func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
+	writeJSONStatus(w, http.StatusServiceUnavailable, map[string]any{
+		"error": map[string]string{
+			"code":    string(privileged.ErrorOperationFailed),
+			"message": "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`.",
+		},
 	})
 }

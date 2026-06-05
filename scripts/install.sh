@@ -69,6 +69,50 @@ require_value() {
   fi
 }
 
+installed_veil_version() {
+  if [[ ! -x "${INSTALL_DIR}/veil" ]]; then
+    return 1
+  fi
+  "${INSTALL_DIR}/veil" version 2>/dev/null | head -n 1 | tr -d '\r'
+}
+
+resolve_target_version() {
+  if [[ "${VERSION}" != "latest" ]]; then
+    printf '%s\n' "${VERSION}"
+    return 0
+  fi
+  local release_json
+  release_json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")" || return 1
+  local tag
+  tag="$(printf '%s\n' "${release_json}" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  if [[ -z "${tag}" ]]; then
+    return 1
+  fi
+  printf '%s\n' "${tag}"
+}
+
+version_is_newer() {
+  local candidate="${1#v}"
+  local current="${2#v}"
+  local candidate_major candidate_minor candidate_patch current_major current_minor current_patch
+  IFS=. read -r candidate_major candidate_minor candidate_patch _ <<< "${candidate}"
+  IFS=. read -r current_major current_minor current_patch _ <<< "${current}"
+  candidate_minor="${candidate_minor:-0}"
+  candidate_patch="${candidate_patch:-0}"
+  current_minor="${current_minor:-0}"
+  current_patch="${current_patch:-0}"
+  for part in "${candidate_major}" "${candidate_minor}" "${candidate_patch}" "${current_major}" "${current_minor}" "${current_patch}"; do
+    if [[ ! "${part}" =~ ^[0-9]+$ ]]; then
+      return 1
+    fi
+  done
+  if (( candidate_major > current_major )); then return 0; fi
+  if (( candidate_major < current_major )); then return 1; fi
+  if (( candidate_minor > current_minor )); then return 0; fi
+  if (( candidate_minor < current_minor )); then return 1; fi
+  (( candidate_patch > current_patch ))
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
@@ -99,19 +143,33 @@ if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
   exit 1
 fi
 
-# Idempotency: skip download if veil is already installed and --force not set
+# Idempotency: skip download only when the installed binary already matches the target.
 if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; then
-  echo "Veil is already installed at ${INSTALL_DIR}/veil"
-  echo "Use --force to re-install"
-  args=(--profile "${PROFILE}")
-  if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
-  if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
-  if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
-  if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-  if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
-  if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
-  run_veil_install
-  exit $?
+  current_version="$(installed_veil_version || true)"
+  target_version="$(resolve_target_version || true)"
+  if [[ -n "${current_version}" && -n "${target_version}" && "${current_version}" == "${target_version}" ]]; then
+    echo "Veil is already installed at ${INSTALL_DIR}/veil"
+    echo "Installed Veil ${current_version} is already up to date."
+    echo "Use --force to re-install"
+    args=(--profile "${PROFILE}")
+    if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
+    if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
+    if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
+    if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+    if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
+    if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
+    run_veil_install
+    exit $?
+  fi
+  if [[ -n "${current_version}" && -n "${target_version}" ]]; then
+    if version_is_newer "${target_version}" "${current_version}"; then
+      echo "Installed Veil ${current_version} is older than target ${target_version}; upgrading."
+    else
+      echo "Installed Veil ${current_version} differs from target ${target_version}; installing requested release."
+    fi
+  else
+    echo "Veil is already installed at ${INSTALL_DIR}/veil, but its target version could not be determined; downloading ${VERSION}."
+  fi
 fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
