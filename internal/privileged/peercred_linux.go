@@ -39,6 +39,10 @@ func (s *Server) ServeUnix(ctx context.Context, path string, allowedUID uint32, 
 	if err := os.Chmod(path, 0o660); err != nil {
 		return err
 	}
+	return s.serveUnixListener(ctx, listener, allowedUID, allowRoot)
+}
+
+func (s *Server) serveUnixListener(ctx context.Context, listener *net.UnixListener, allowedUID uint32, allowRoot bool) error {
 	go func() {
 		<-ctx.Done()
 		_ = listener.Close()

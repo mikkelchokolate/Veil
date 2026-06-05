@@ -165,7 +165,7 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil"), "default"
 	}
-	return "/etc/veil", "default"
+	return "/var/lib/veil/staging", "default"
 }
 
 func (Environment) LiveRoot(flagValue string) (path string, source string) {

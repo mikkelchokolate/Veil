@@ -1,0 +1,33 @@
+[Unit]
+Description=Veil privileged helper
+Requires=veil-helper.socket
+After=veil-helper.socket
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation
+NoNewPrivileges=true
+PrivateNetwork=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+ReadOnlyPaths=/etc/veil
+ReadWritePaths=/etc/veil/generated /etc/veil/state.key /var/lib/veil /usr/local/bin

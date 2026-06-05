@@ -29,12 +29,12 @@ func TestResolveServeApplyRootFallsBackToEnvironment(t *testing.T) {
 	}
 }
 
-func TestResolveServeApplyRootDefaultsToEtcVeil(t *testing.T) {
+func TestResolveServeApplyRootDefaultsToStagingDirectory(t *testing.T) {
 	t.Setenv("VEIL_APPLY_ROOT", "")
 
 	got, source := serveflow.NewEnvironment().ApplyRoot("")
 
-	expected := "/etc/veil"
+	expected := "/var/lib/veil/staging"
 	if runtime.GOOS == "windows" {
 		pd := os.Getenv("ProgramData")
 		if pd == "" {

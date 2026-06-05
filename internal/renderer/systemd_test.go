@@ -123,3 +123,49 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 		t.Fatalf("veil-warp.service: expected default SingBoxBinary reload, got:\n%s", warpUnit)
 	}
 }
+
+func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{})
+	panel := units[UnitVeil]
+	for _, want := range []string{
+		"User=veil",
+		"Group=veil",
+		"Requires=veil-helper.socket",
+		"Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock",
+		"Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging",
+		"Environment=VEIL_LIVE_ROOT=/etc/veil/generated",
+		"CapabilityBoundingSet=\n",
+		"AmbientCapabilities=\n",
+		"ReadOnlyPaths=/etc/veil",
+		"ReadWritePaths=/var/lib/veil",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("veil.service missing %q:\n%s", want, panel)
+		}
+	}
+	helper := units[UnitHelperService]
+	for _, want := range []string{
+		"User=root",
+		"ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation",
+		"PrivateNetwork=true",
+		"RestrictAddressFamilies=AF_UNIX",
+		"CapabilityBoundingSet=\n",
+		"ReadWritePaths=/etc/veil/generated /etc/veil/state.key /var/lib/veil /usr/local/bin",
+	} {
+		if !strings.Contains(helper, want) {
+			t.Fatalf("veil-helper.service missing %q:\n%s", want, helper)
+		}
+	}
+	socket := units[UnitHelperSocket]
+	for _, want := range []string{
+		"ListenStream=/run/veil/helper.sock",
+		"SocketUser=root",
+		"SocketGroup=veil",
+		"SocketMode=0660",
+		"RemoveOnStop=true",
+	} {
+		if !strings.Contains(socket, want) {
+			t.Fatalf("veil-helper.socket missing %q:\n%s", want, socket)
+		}
+	}
+}
