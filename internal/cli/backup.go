@@ -14,13 +14,14 @@ import (
 	"golang.org/x/term"
 )
 
-func newBackupCommand() *cobra.Command {
+func newBackupCommand(version string) *cobra.Command {
 	var statePath string
 	var keyPath string
 	var outputPath string
 	var passphrase string
 	var passphraseFile string
 	var yes bool
+	var checkOnly bool
 
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -45,7 +46,9 @@ func newBackupCommand() *cobra.Command {
 				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: Creating an unencrypted backup. This contains your sensitive state data and encryption keys in plaintext. Use -p or --passphrase to encrypt the backup.")
 			}
 
-			backupData, err := backup.CreateBackup(resolvedState, resolvedKey, resolvedPass)
+			backupData, err := backup.CreateBackupWithOptions(resolvedState, resolvedKey, resolvedPass, backup.ArchiveOptions{
+				VeilVersion: version,
+			})
 			if err != nil {
 				return fmt.Errorf("create backup failed: %w", err)
 			}
@@ -92,8 +95,7 @@ func newBackupCommand() *cobra.Command {
 				return fmt.Errorf("read backup file %s: %w", backupFile, err)
 			}
 
-			// Confirm overwrite
-			if !yes {
+			if !checkOnly && !yes {
 				stat, err := os.Stdin.Stat()
 				if err != nil || (stat.Mode()&os.ModeCharDevice) == 0 {
 					return errors.New("stdin is not a terminal; use --yes to bypass confirmation")
@@ -112,17 +114,57 @@ func newBackupCommand() *cobra.Command {
 				}
 			}
 
-			err = backup.RestoreBackup(backupData, resolvedState, resolvedKey, resolvedPass)
+			result, err := backup.RestoreBackupWithOptions(
+				backupData,
+				resolvedState,
+				resolvedKey,
+				resolvedPass,
+				backup.RestoreOptions{CheckOnly: checkOnly},
+			)
 			if err != nil {
 				return fmt.Errorf("restore backup failed: %w", err)
 			}
 
+			if checkOnly {
+				fmt.Fprintln(cmd.OutOrStdout(), "Restore check passed; no files were changed.")
+				printBackupVerification(cmd, result.Verification)
+				return nil
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
+			if result.SafetyStatePath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Previous state preserved at: %s\n", result.SafetyStatePath)
+			}
+			if result.SafetyKeyPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Previous key preserved at: %s\n", result.SafetyKeyPath)
+			}
 			return nil
 		},
 	}
 
-	for _, subCmd := range []*cobra.Command{createCmd, restoreCmd} {
+	verifyCmd := &cobra.Command{
+		Use:   "verify <backup-file>",
+		Short: "Decrypt and verify a backup without writing state",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("read backup file %s: %w", args[0], err)
+			}
+			report, err := backup.VerifyBackup(data, resolvedPass)
+			if err != nil {
+				return fmt.Errorf("verify backup failed: %w", err)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Backup verified.")
+			printBackupVerification(cmd, report)
+			return nil
+		},
+	}
+
+	for _, subCmd := range []*cobra.Command{createCmd, restoreCmd, verifyCmd} {
 		subCmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 		subCmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 		subCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "encryption/decryption passphrase")
@@ -132,8 +174,25 @@ func newBackupCommand() *cobra.Command {
 
 	createCmd.Flags().StringVarP(&outputPath, "output", "o", "", "output backup file path (defaults to veil_backup_YYYYMMDD_HHMMSS.tar.gz[.enc])")
 	restoreCmd.Flags().BoolVarP(&yes, "yes", "y", false, "confirm restore operation without prompting")
+	restoreCmd.Flags().BoolVar(&checkOnly, "check-only", false, "verify compatibility without writing state or key files")
 
 	return cmd
+}
+
+func printBackupVerification(cmd *cobra.Command, report backup.VerificationReport) {
+	format := fmt.Sprintf("%d", report.FormatVersion)
+	if report.Legacy {
+		format = "legacy"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Archive format: %s\n", format)
+	fmt.Fprintf(cmd.OutOrStdout(), "Encrypted: %t\n", report.Encrypted)
+	if report.VeilVersion != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Veil version: %s\n", report.VeilVersion)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "State schema: %d\n", report.StateSchemaVersion)
+	for _, file := range report.Files {
+		fmt.Fprintf(cmd.OutOrStdout(), "- %s: %d bytes sha256:%s\n", file.Name, file.Size, file.SHA256)
+	}
 }
 
 func resolvePassphrase(pass, file string) (string, error) {
