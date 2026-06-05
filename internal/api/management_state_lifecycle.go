@@ -58,6 +58,7 @@ func newManagementState(info ServerInfo) *managementState {
 	state := &managementState{
 		statePath:                      info.StatePath,
 		applyRoot:                      defaultApplyRoot(info.ApplyRoot),
+		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,
 		setupAllowed:                   info.SetupAllowed,
 		settings:                       model.Settings,
@@ -68,6 +69,10 @@ func newManagementState(info ServerInfo) *managementState {
 		backupJobs:                     make(map[string]BackupRestoreJob),
 		configurationValidator:         configurationValidator,
 		enforceConfigurationValidation: enforceConfigurationValidation,
+		privileged:                     info.Privileged,
+	}
+	if state.liveRoot == "" {
+		state.liveRoot = filepath.Join(state.applyRoot, "live")
 	}
 	sessionPath := ""
 	if info.StatePath != "" {
@@ -90,6 +95,10 @@ func newManagementState(info ServerInfo) *managementState {
 		auditPath = filepath.Join(defaultApplyRoot(info.ApplyRoot), "generated", "veil", "audit.log")
 	}
 	state.audit = audit.NewRecorder(auditPath, audit.RecorderOptions{})
+	if state.privileged == nil && !info.RequirePrivilegedHelper {
+		state.privileged = newLocalPrivilegedClient(state)
+		state.privilegedLocal = true
+	}
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)

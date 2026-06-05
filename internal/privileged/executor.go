@@ -2,8 +2,10 @@ package privileged
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,8 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
+
+const maxBackupReadBytes int64 = 64 * 1024 * 1024
 
 type Executor struct {
 	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
@@ -174,52 +178,159 @@ func runProductionCommand(ctx context.Context, command []string, timeout time.Du
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
+	if request.RestoreBackupID != "" {
+		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID)
+	}
 	result := PromoteResult{}
 	backupID := now().UTC().Format("20060102T150405.000000000Z")
+	manifest := promotionManifest{BackupID: backupID}
 	for _, artifact := range request.Artifacts {
 		body, err := os.ReadFile(artifact.Source)
 		if err != nil {
 			return PromoteResult{}, err
 		}
-		if err := backupPromotionDestination(backupRoot, backupID, artifact); err != nil {
+		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
+		if err != nil {
 			return PromoteResult{}, err
 		}
 		if err := atomicfile.Write(artifact.Destination, body, 0o600, 0o700); err != nil {
 			return PromoteResult{}, err
 		}
 		result.WrittenArtifacts = append(result.WrittenArtifacts, artifact.ID)
+		manifest.Records = append(manifest.Records, record)
+		if record.BackupPath != "" {
+			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
+		}
 	}
 	for _, artifact := range request.RemoveArtifacts {
-		if err := backupPromotionDestination(backupRoot, backupID, artifact); err != nil {
+		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
+		if err != nil {
 			return PromoteResult{}, err
 		}
 		if err := os.Remove(artifact.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return PromoteResult{}, err
 		}
 		result.RemovedArtifacts = append(result.RemovedArtifacts, artifact.ID)
+		manifest.Records = append(manifest.Records, record)
+		if record.BackupPath != "" {
+			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
+		}
 	}
 	if len(result.WrittenArtifacts) > 0 || len(result.RemovedArtifacts) > 0 {
+		body, err := json.Marshal(manifest)
+		if err != nil {
+			return PromoteResult{}, err
+		}
+		if err := atomicfile.Write(filepath.Join(backupRoot, backupID, "manifest.json"), body, 0o600, 0o700); err != nil {
+			return PromoteResult{}, err
+		}
 		result.BackupID = backupID
 	}
 	return result, nil
 }
 
-func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) error {
+type promotionManifest struct {
+	BackupID string                    `json:"backupId"`
+	Records  []promotionManifestRecord `json:"records"`
+}
+
+type promotionManifestRecord struct {
+	ArtifactID  string `json:"artifactId"`
+	Destination string `json:"destination"`
+	BackupPath  string `json:"backupPath,omitempty"`
+	HadPrevious bool   `json:"hadPrevious"`
+}
+
+func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
+	record := promotionManifestRecord{ArtifactID: artifact.ID, Destination: artifact.Destination}
 	body, err := os.ReadFile(artifact.Destination)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return record, nil
 	}
 	if err != nil {
-		return err
+		return promotionManifestRecord{}, err
 	}
 	if root == "" {
-		return errors.New("promotion backup root is required")
+		return promotionManifestRecord{}, errors.New("promotion backup root is required")
 	}
 	path := filepath.Join(root, backupID, filepath.Clean(artifact.ID))
-	return atomicfile.Write(path, body, 0o600, 0o700)
+	if err := atomicfile.Write(path, body, 0o600, 0o700); err != nil {
+		return promotionManifestRecord{}, err
+	}
+	record.BackupPath = path
+	record.HadPrevious = true
+	return record, nil
+}
+
+func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
+	body, err := os.ReadFile(filepath.Join(root, backupID, "manifest.json"))
+	if err != nil {
+		return PromoteResult{}, err
+	}
+	var manifest promotionManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		return PromoteResult{}, err
+	}
+	if manifest.BackupID != backupID {
+		return PromoteResult{}, errors.New("promotion backup manifest mismatch")
+	}
+	result := PromoteResult{BackupID: backupID}
+	for _, record := range manifest.Records {
+		if record.HadPrevious {
+			previous, err := os.ReadFile(record.BackupPath)
+			if err != nil {
+				return PromoteResult{}, err
+			}
+			if err := atomicfile.Write(record.Destination, previous, 0o600, 0o700); err != nil {
+				return PromoteResult{}, err
+			}
+		} else if err := os.Remove(record.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return PromoteResult{}, err
+		}
+		result.WrittenArtifacts = append(result.WrittenArtifacts, record.ArtifactID)
+	}
+	return result, nil
 }
 
 func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
+	switch request.Action {
+	case BackupActionList:
+		entries, err := backup.ListArchives(request.BackupRoot)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		result := BackupResult{Archives: make([]BackupArchive, 0, len(entries))}
+		for _, entry := range entries {
+			result.Archives = append(result.Archives, BackupArchive{
+				Name: entry.Name, Size: entry.Size, CreatedAt: entry.CreatedAt.Format(time.RFC3339), Encrypted: entry.Encrypted,
+			})
+		}
+		return result, nil
+	case BackupActionRead:
+		file, err := os.Open(request.ArchivePath)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, maxBackupReadBytes+1))
+		if err != nil {
+			return BackupResult{}, err
+		}
+		if int64(len(data)) > maxBackupReadBytes {
+			return BackupResult{}, errors.New("backup archive exceeds helper size limit")
+		}
+		return BackupResult{ArchiveName: request.ArchiveName, Data: data}, nil
+	case BackupActionPrune:
+		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
+		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {
+			policy = backup.DefaultRetentionPolicy()
+		}
+		pruned, err := backup.PruneArchives(request.BackupRoot, policy, false)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
+	}
 	passphraseBody, err := os.ReadFile(request.BackupPassphrasePath)
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("read backup passphrase: %w", err)
@@ -248,18 +359,6 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			return BackupResult{}, err
 		}
 		return BackupResult{ArchiveName: name, Verified: true}, nil
-	case BackupActionList:
-		entries, err := backup.ListArchives(request.BackupRoot)
-		if err != nil {
-			return BackupResult{}, err
-		}
-		result := BackupResult{Archives: make([]BackupArchive, 0, len(entries))}
-		for _, entry := range entries {
-			result.Archives = append(result.Archives, BackupArchive{
-				Name: entry.Name, Size: entry.Size, CreatedAt: entry.CreatedAt.Format(time.RFC3339), Encrypted: entry.Encrypted,
-			})
-		}
-		return result, nil
 	case BackupActionVerify:
 		data, err := os.ReadFile(request.ArchivePath)
 		if err != nil {
@@ -269,16 +368,6 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			return BackupResult{}, err
 		}
 		return BackupResult{ArchiveName: request.ArchiveName, Verified: true}, nil
-	case BackupActionPrune:
-		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
-		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {
-			policy = backup.DefaultRetentionPolicy()
-		}
-		pruned, err := backup.PruneArchives(request.BackupRoot, policy, false)
-		if err != nil {
-			return BackupResult{}, err
-		}
-		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
 	case BackupActionRestore:
 		data, err := os.ReadFile(request.ArchivePath)
 		if err != nil {

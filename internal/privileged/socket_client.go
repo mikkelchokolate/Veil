@@ -95,7 +95,7 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 	if unixConn, ok := conn.(*net.UnixConn); ok {
 		_ = unixConn.CloseWrite()
 	}
-	decoder := json.NewDecoder(io.LimitReader(conn, maxRequestBytes+1))
+	decoder := json.NewDecoder(io.LimitReader(conn, maxResponseBytes+1))
 	decoder.DisallowUnknownFields()
 	var response ResponseEnvelope
 	if err := decoder.Decode(&response); err != nil {
@@ -127,6 +127,8 @@ func operationForBackupAction(action BackupAction) (Operation, error) {
 		return OperationBackupList, nil
 	case BackupActionVerify:
 		return OperationBackupVerify, nil
+	case BackupActionRead:
+		return OperationBackupRead, nil
 	case BackupActionPrune:
 		return OperationBackupPrune, nil
 	case BackupActionRestore:
@@ -135,6 +137,8 @@ func operationForBackupAction(action BackupAction) (Operation, error) {
 		return "", newError(ErrorInvalidRequest, "unsupported backup action")
 	}
 }
+
+const maxResponseBytes int64 = 96 * 1024 * 1024
 
 func newRequestID() string {
 	var raw [16]byte

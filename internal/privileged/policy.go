@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -60,6 +61,7 @@ type ResolvedArtifact struct {
 type ResolvedPromotion struct {
 	Artifacts       []ResolvedArtifact
 	RemoveArtifacts []ResolvedArtifact
+	RestoreBackupID string
 }
 
 type ResolvedJournal struct {
@@ -98,7 +100,7 @@ func (p Policy) ValidateServiceAction(request ServiceActionRequest) error {
 		return newError(ErrorForbiddenOperation, "service unit is not managed")
 	}
 	switch request.Action {
-	case ServiceActionStart, ServiceActionStop, ServiceActionRestart, ServiceActionReload:
+	case ServiceActionStart, ServiceActionStop, ServiceActionRestart, ServiceActionReload, ServiceActionEnable, ServiceActionDisable:
 		return nil
 	default:
 		return newError(ErrorInvalidRequest, "unsupported service action")
@@ -132,6 +134,13 @@ func (p Policy) ResolveJournal(request JournalRequest) (ResolvedJournal, error) 
 }
 
 func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, error) {
+	if request.RestoreBackupID != "" {
+		if len(request.ArtifactIDs) != 0 || len(request.RemoveArtifactIDs) != 0 ||
+			!opaquePromotionIDPattern.MatchString(request.RestoreBackupID) {
+			return ResolvedPromotion{}, newError(ErrorInvalidRequest, "invalid promotion restore request")
+		}
+		return ResolvedPromotion{RestoreBackupID: request.RestoreBackupID}, nil
+	}
 	artifacts, err := p.resolveArtifacts(request.ArtifactIDs)
 	if err != nil {
 		return ResolvedPromotion{}, err
@@ -156,6 +165,9 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 		seen[id] = struct{}{}
 		spec, ok := p.Artifacts[id]
 		if !ok {
+			spec, ok = managedArtifactPath(id)
+		}
+		if !ok {
 			return nil, newError(ErrorNotFound, "unknown artifact id")
 		}
 		source, err := resolveBelow(p.StagingRoot, spec.Staged)
@@ -171,9 +183,48 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 	return resolved, nil
 }
 
+var (
+	opaquePromotionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	artifactNamePattern      = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+)
+
+func managedArtifactPath(id string) (ArtifactPath, bool) {
+	clean := filepath.ToSlash(filepath.Clean(id))
+	if clean != id || strings.Contains(clean, `\`) {
+		return ArtifactPath{}, false
+	}
+	switch clean {
+	case "mieru/server_config.json", "sing-box/warp.json":
+		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+	}
+	parts := strings.Split(clean, "/")
+	if len(parts) != 2 {
+		return ArtifactPath{}, false
+	}
+	name := ""
+	switch parts[0] {
+	case "caddy":
+		name = strings.TrimSuffix(parts[1], ".Caddyfile")
+		if name == parts[1] {
+			return ArtifactPath{}, false
+		}
+	case "hysteria2", "olcrtc":
+		name = strings.TrimSuffix(parts[1], ".yaml")
+		if name == parts[1] {
+			return ArtifactPath{}, false
+		}
+	default:
+		return ArtifactPath{}, false
+	}
+	if !artifactNamePattern.MatchString(name) {
+		return ArtifactPath{}, false
+	}
+	return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+}
+
 func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	switch request.Action {
-	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionPrune, BackupActionRestore:
+	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionRead, BackupActionPrune, BackupActionRestore:
 	default:
 		return ResolvedBackup{}, newError(ErrorInvalidRequest, "unsupported backup action")
 	}
@@ -199,7 +250,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	if resolved.BackupPassphrasePath == "" {
 		resolved.BackupPassphrasePath = filepath.Join(p.StateRoot, "backup.passphrase")
 	}
-	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRestore
+	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRead || request.Action == BackupActionRestore
 	if request.ArchiveName == "" {
 		if requiresArchive {
 			return ResolvedBackup{}, newError(ErrorInvalidRequest, "archiveName is required")

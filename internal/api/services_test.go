@@ -40,11 +40,11 @@ func TestServicesRestartRequiresConfirm(t *testing.T) {
 }
 
 func TestServicesRestartSuccess(t *testing.T) {
-	orig := serviceControlRunner
-	serviceControlRunner = func(name, action string) ServiceActionResponse {
-		return ServiceActionResponse{Service: name, Action: action, Success: true, Output: "restarted"}
+	orig := serviceActionRunner
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[2], Command: command, Success: true, Output: "restarted"}
 	}
-	defer func() { serviceControlRunner = orig }()
+	defer func() { serviceActionRunner = orig }()
 
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/caddy-panel/restart", strings.NewReader(`{"confirm":true}`))
@@ -58,11 +58,11 @@ func TestServicesRestartSuccess(t *testing.T) {
 }
 
 func TestServicesRestartFailure(t *testing.T) {
-	orig := serviceControlRunner
-	serviceControlRunner = func(name, action string) ServiceActionResponse {
-		return ServiceActionResponse{Service: name, Action: action, Success: false, Error: "failed"}
+	orig := serviceActionRunner
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[2], Command: command, Success: false, Error: "failed"}
 	}
-	defer func() { serviceControlRunner = orig }()
+	defer func() { serviceActionRunner = orig }()
 
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/hysteria2/restart", strings.NewReader(`{"confirm":true}`))

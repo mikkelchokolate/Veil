@@ -16,7 +16,9 @@ func newServeCommand(version string) *cobra.Command {
 	var metricsAccess string
 	var statePath string
 	var applyRoot string
+	var liveRoot string
 	var keyPath string
+	var helperSocket string
 	var tlsCert string
 	var tlsKey string
 	var webBasePath string
@@ -34,7 +36,9 @@ func newServeCommand(version string) *cobra.Command {
 				MetricsAccess:         metricsAccess,
 				StatePath:             statePath,
 				ApplyRoot:             applyRoot,
+				LiveRoot:              liveRoot,
 				KeyPath:               keyPath,
+				HelperSocket:          helperSocket,
 				TLSCert:               tlsCert,
 				TLSKey:                tlsKey,
 				WebBasePath:           webBasePath,
@@ -49,7 +53,9 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&metricsAccess, "metrics-access", "", "metrics exposure policy: auto, authenticated, or public; defaults to VEIL_METRICS_ACCESS or auto")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
+	cmd.Flags().StringVar(&liveRoot, "live-root", "", "root for helper-managed live configs; defaults to VEIL_LIVE_ROOT or /etc/veil/generated")
 	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
+	cmd.Flags().StringVar(&helperSocket, "helper-socket", "", "privileged helper Unix socket; defaults to VEIL_HELPER_SOCKET or /run/veil/helper.sock")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file path; enables HTTPS when both --tls-cert and --tls-key are provided")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file path; enables HTTPS when both --tls-cert and --tls-key are provided")
 	cmd.Flags().StringVar(&webBasePath, "web-base-path", "", "base path prefix for the web panel (e.g. /secret/); defaults to VEIL_WEB_BASE_PATH or /")
@@ -66,7 +72,9 @@ type serveWorkflowOptions struct {
 	MetricsAccess         string
 	StatePath             string
 	ApplyRoot             string
+	LiveRoot              string
 	KeyPath               string
+	HelperSocket          string
 	TLSCert               string
 	TLSKey                string
 	WebBasePath           string
@@ -76,7 +84,7 @@ type serveWorkflowOptions struct {
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, MetricsAccess: opts.MetricsAccess, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir, AllowUnsafePublicHTTP: opts.AllowUnsafePublicHTTP}).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, MetricsAccess: opts.MetricsAccess, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, LiveRoot: opts.LiveRoot, KeyPath: opts.KeyPath, HelperSocket: opts.HelperSocket, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir, AllowUnsafePublicHTTP: opts.AllowUnsafePublicHTTP}).Resolve()
 	if err != nil {
 		return err
 	}
@@ -88,7 +96,9 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		MetricsAuthRequired: cfg.MetricsAuthRequired,
 		StatePath:           cfg.StatePath,
 		ApplyRoot:           cfg.ApplyRoot,
+		LiveRoot:            cfg.LiveRoot,
 		KeyPath:             cfg.KeyPath,
+		HelperSocket:        cfg.HelperSocket,
 		TLSEnabled:          cfg.TLSEnabled,
 		TLSCert:             cfg.TLSCert,
 		TLSKey:              cfg.TLSKey,
@@ -108,7 +118,9 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Veil listening on %s://%s\n", tlsLabel, cfg.Listen)
 	fmt.Fprintf(cmd.OutOrStdout(), "State path: %s (%s)\n", cfg.StatePath, cfg.StateSource)
 	fmt.Fprintf(cmd.OutOrStdout(), "Apply root: %s (%s)\n", cfg.ApplyRoot, cfg.ApplyRootSource)
+	fmt.Fprintf(cmd.OutOrStdout(), "Live root: %s (%s)\n", cfg.LiveRoot, cfg.LiveRootSource)
 	fmt.Fprintf(cmd.OutOrStdout(), "Key path: %s (%s)\n", cfg.KeyPath, cfg.KeySource)
+	fmt.Fprintf(cmd.OutOrStdout(), "Helper socket: %s (%s)\n", cfg.HelperSocket, cfg.HelperSocketSource)
 	if cfg.TLSEnabled {
 		fmt.Fprintf(cmd.OutOrStdout(), "TLS: enabled (%s)\n", cfg.TLSSource)
 	} else {

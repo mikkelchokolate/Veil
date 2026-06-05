@@ -6,7 +6,7 @@ const DefaultSocketPath = "/run/veil/helper.sock"
 
 func DefaultPolicy() Policy {
 	return Policy{
-		StagingRoot:          "/var/lib/veil/staging",
+		StagingRoot:          "/var/lib/veil/staging/generated",
 		GeneratedRoot:        "/etc/veil/generated",
 		StateRoot:            "/var/lib/veil",
 		StatePath:            "/var/lib/veil/state.json",

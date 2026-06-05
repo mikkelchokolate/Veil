@@ -46,6 +46,44 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 	}
 }
 
+func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "edge.Caddyfile")
+	destination := filepath.Join(root, "generated", "edge.Caddyfile")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewProductionExecutor(ProductionConfig{
+		PromotionBackupRoot: filepath.Join(root, "backups"),
+		Now:                 func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
+	})
+	promoted, err := executor.Promote(context.Background(), ResolvedPromotion{
+		Artifacts: []ResolvedArtifact{{ID: "caddy/edge.Caddyfile", Source: source, Destination: destination}},
+	})
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{RestoreBackupID: promoted.BackupID}); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	body, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "old" {
+		t.Fatalf("restored destination=%q", body)
+	}
+}
+
 func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	var commands [][]string
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
@@ -125,6 +163,26 @@ func TestProductionExecutorMapsBackupUpdateAndRotationHooks(t *testing.T) {
 	}
 	if gotBackup.ArchiveName != "daily.enc" || gotUpdate.ArtifactID != "veil-linux-amd64" || !rotated {
 		t.Fatalf("workflow mapping failed: backup=%+v update=%+v rotated=%t", gotBackup, gotUpdate, rotated)
+	}
+}
+
+func TestProductionExecutorReadsManagedBackupArchive(t *testing.T) {
+	root := t.TempDir()
+	archive := filepath.Join(root, "daily.enc")
+	if err := os.WriteFile(archive, []byte("VEILBACK-data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewProductionExecutor(ProductionConfig{})
+	result, err := executor.Backup(context.Background(), ResolvedBackup{
+		Action:      BackupActionRead,
+		ArchiveName: "daily.enc",
+		ArchivePath: archive,
+	})
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if string(result.Data) != "VEILBACK-data" {
+		t.Fatalf("backup data = %q", result.Data)
 	}
 }
 

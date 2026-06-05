@@ -19,6 +19,7 @@ const (
 	OperationBackupCreate  Operation = "backup_create"
 	OperationBackupList    Operation = "backup_list"
 	OperationBackupVerify  Operation = "backup_verify"
+	OperationBackupRead    Operation = "backup_read"
 	OperationBackupPrune   Operation = "backup_prune"
 	OperationBackupRestore Operation = "backup_restore"
 	OperationRotateKey     Operation = "rotate_key"
@@ -36,6 +37,7 @@ func (o Operation) Valid() bool {
 		OperationBackupCreate,
 		OperationBackupList,
 		OperationBackupVerify,
+		OperationBackupRead,
 		OperationBackupPrune,
 		OperationBackupRestore,
 		OperationRotateKey,
@@ -55,6 +57,8 @@ const (
 	ServiceActionStop    ServiceAction = "stop"
 	ServiceActionRestart ServiceAction = "restart"
 	ServiceActionReload  ServiceAction = "reload"
+	ServiceActionEnable  ServiceAction = "enable"
+	ServiceActionDisable ServiceAction = "disable"
 )
 
 type BackupAction string
@@ -63,6 +67,7 @@ const (
 	BackupActionCreate  BackupAction = "create"
 	BackupActionList    BackupAction = "list"
 	BackupActionVerify  BackupAction = "verify"
+	BackupActionRead    BackupAction = "read"
 	BackupActionPrune   BackupAction = "prune"
 	BackupActionRestore BackupAction = "restore"
 )
@@ -70,10 +75,12 @@ const (
 type PromoteRequest struct {
 	ArtifactIDs       []string `json:"artifactIds,omitempty"`
 	RemoveArtifactIDs []string `json:"removeArtifactIds,omitempty"`
+	RestoreBackupID   string   `json:"restoreBackupId,omitempty"`
 }
 
 type PromoteResult struct {
 	BackupID         string   `json:"backupId,omitempty"`
+	BackupArtifacts  []string `json:"backupArtifacts,omitempty"`
 	WrittenArtifacts []string `json:"writtenArtifacts,omitempty"`
 	RemovedArtifacts []string `json:"removedArtifacts,omitempty"`
 }
@@ -92,6 +99,7 @@ type ServiceStatus struct {
 	LoadState   string `json:"loadState,omitempty"`
 	ActiveState string `json:"activeState,omitempty"`
 	SubState    string `json:"subState,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type ServiceStatusResult struct {
@@ -134,6 +142,7 @@ type BackupResult struct {
 	Kept            []string        `json:"kept,omitempty"`
 	SafetyStatePath string          `json:"safetyStatePath,omitempty"`
 	SafetyKeyPath   string          `json:"safetyKeyPath,omitempty"`
+	Data            []byte          `json:"data,omitempty"`
 }
 
 type RotateKeyRequest struct{}
@@ -227,7 +236,7 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.ServiceStatus != nil
 	case OperationJournal:
 		return r.Journal != nil
-	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupPrune, OperationBackupRestore:
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
 		return r.Backup != nil
 	case OperationRotateKey:
 		return r.RotateKey != nil
