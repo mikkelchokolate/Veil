@@ -1,54 +1,86 @@
 # Veil Project Roadmap
 
-This document outlines key technical milestones, feature proposals, and architectural improvements planned for Veil.
+This roadmap tracks work that is not yet shipped. Completed capabilities move
+to the release history so this file remains a reliable source of truth.
 
----
+## Completed In v0.5.0
 
-## Short-Term Milestones
+- Fail-closed public listeners require both API token and user/session auth.
+- `/metrics` has an independent access policy and cannot be public on a public
+  Panel listener.
+- The installer supports `local`, `direct`, and `caddy` modes plus random or
+  operator-selected Panel ports.
+- NaiveProxy/Caddy, Hysteria2, and olcRTC support isolated systemd instances.
+- The Panel provides local QR rendering and client JSON/subscription exports.
+- Admin and viewer users, active session listing, and session revocation are
+  available in the Panel.
+- Viewer sessions are read-only in both the UI and API.
+- The Panel includes replacement API token generation guidance.
+- Apply flows include secret-free file, runtime, backup, rollback, and
+  DNS/TLS/firewall/service-impact previews.
+- Encrypted backup create/restore and state-key rotation are available from the
+  CLI.
+- Release artifacts include checksums, SBOM, cosign bundles, and provenance
+  attestations; CI includes pinned actions, Dependabot, CodeQL, and OpenAPI
+  linting.
 
-### 1. Hardening & Safety Controls
-- **TLS Warnings**: Enforce strong warnings or refusal-to-start when listening publicly without active TLS.
-- **Access Logs**: Complete structured log rotation and audit logging for session authentication gates.
+## v0.6.0: Operational Hardening
 
-### 2. Multi-Inbound support for NaiveProxy
-- Support Caddy multi-instance mapping (`veil-caddy@<inbound>.service`) to mirror Hysteria2 and olcRTC template isolation.
-- Add real-time UI/API port collision and conflict warnings prior to staging config updates.
+### Exposure And First Run
 
----
+- Reject public Panel HTTP unless an explicit unsafe override is supplied.
+- Treat Caddy reverse-proxy exposure as public when evaluating auth and metrics
+  policy, even though the Panel listener remains on loopback.
+- Provide a loopback-only first-run setup flow for creating the initial admin
+  and confirming exposure and backup choices.
+- Surface trusted/self-signed TLS state and certificate expiry remediation.
 
-## Medium-Term Goals
+### Authentication And Audit
 
-### 3. Expanded Protocol Integrations
-- Integrate additional transport layers and runtime targets.
-- Standardize multi-user profiles across all supported protocols (matching Hysteria2 and Mieru capability).
+- Persist browser sessions across Panel restarts without storing raw session or
+  CSRF tokens.
+- Enforce idle and absolute session expiry.
+- Revoke user sessions when credentials or roles change.
+- Record structured, redacted authentication and mutation audit events with
+  rotation and retention.
 
-### 4. Current UI/UX Capabilities
-- Client configuration export flows are available from the Panel, including
-  JSON/subscription downloads, copyable links, and local QR rendering that does
-  not send client URIs to third-party services.
-- The Users screen supports admin/viewer accounts, active session audit and
-  revocation, and browser-side replacement API token generation with cutover
-  guidance.
-- Viewer sessions are read-only in the UI and API: status, diagnostics, logs,
-  client exports, and generated previews remain inspectable, while save,
-  delete, restart, apply, and user/session management actions require admin.
-- Apply flows include a safe file-level preview for generated configs,
-  promoted files, backups, rollback files, runtime actions, and DNS/TLS/
-  firewall/service-impact warnings before operators confirm changes.
+### Backup And Disaster Recovery
 
-### 5. Backup & DR Orchestration
-- Add scheduled backup retention policies around the shipped `veil backup create / restore` commands.
-- Add operator-facing restore drills and compatibility fixtures for long-lived production archives.
+- Add archive verification and compatibility metadata.
+- Add scheduled encrypted backups through shipped systemd timer units.
+- Add daily, weekly, and monthly retention policies.
+- Add Panel controls for create, list, download, verify, prune, and queued
+  restore operations.
+- Maintain cross-version restore fixtures in CI.
 
----
+### Validation And Preview
 
-## Long-Term Objectives
+- Add real-time TCP/UDP port collision and availability checks before save.
+- Add protocol-specific DNS, TLS, firewall, and runtime remediation.
+- Expand secret-free apply preview with file operation types, affected units,
+  interruption risk, and rollback availability.
 
-### 6. UI/UX Evolution
-- Internationalization (i18n) support.
-- Interactive setup wizard for first-time deployments.
-- Rich visual configuration previews before apply, while continuing to avoid
-  secret-bearing generated config disclosure in the browser.
-- Real-time UI/API port collision warnings prior to staging config updates.
-- Clearer protocol-specific remediation text for DNS, TLS, firewall, and
-  runtime health failures.
+### Privilege Separation
+
+- Run the HTTP Panel as the dedicated `veil` user.
+- Move allowlisted filesystem, systemd, journald, firewall, update, key, and
+  backup operations to a root helper over a protected Unix socket.
+- Remove root capabilities and broad write paths from the Panel unit.
+- Add package and E2E tests for ownership, socket permissions, managed paths,
+  and helper command/path allowlists.
+
+### API And UX
+
+- Complete request, response, error, auth, and example schemas in OpenAPI.
+- Generate and contract-test a Go client SDK.
+- Add English and Russian UI catalogs with persisted user locale.
+- Complete keyboard, focus, screen-reader, responsive, and mobile verification.
+- Add richer visual configuration and apply-impact previews without exposing
+  generated secrets.
+
+## After v0.6.0
+
+- Additional protocols and transport integrations.
+- Standardized multi-user profiles across every supported runtime.
+- Optional external session and audit stores for clustered deployments.
+- Additional backup destinations and hardware-backed key providers.
