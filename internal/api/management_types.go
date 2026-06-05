@@ -51,4 +51,5 @@ type managementState struct {
 	warp          WarpConfig
 	users         []User
 	orphanedUnits []string
+	sessions      *SessionRegistry
 }

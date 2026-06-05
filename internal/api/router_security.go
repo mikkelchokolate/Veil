@@ -66,7 +66,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var username string
 		var role string
 		var isCookieSession bool
-		var session Session
 
 		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
 		hasStaticToken := false
@@ -80,11 +79,10 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
-				if sess, ok := globalSessions.Get(cookie.Value); ok {
+				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
 					username = sess.Username
 					role = sess.Role
 					isCookieSession = true
-					session = sess
 				}
 			}
 		}
@@ -109,7 +107,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		// 4. CSRF check for mutating cookie sessions
 		if isCookieSession && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
-			if providedCSRF == "" || subtle.ConstantTimeCompare([]byte(providedCSRF), []byte(session.CSRFToken)) != 1 {
+			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
 				writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
 				return
 			}

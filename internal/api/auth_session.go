@@ -1,132 +1,19 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
-	"sort"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Session struct {
-	Token     string
-	Username  string
-	Role      string
-	CSRFToken string
-	ExpiresAt time.Time
-}
-
-type SessionInfo struct {
-	ID        string `json:"id"`
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	ExpiresAt string `json:"expiresAt"`
-	Current   bool   `json:"current"`
-}
-
-type SessionRegistry struct {
-	mu       sync.RWMutex
-	sessions map[string]Session
-}
-
-var globalSessions = &SessionRegistry{
-	sessions: make(map[string]Session),
-}
-
-func (r *SessionRegistry) NewSession(username, role string) Session {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	token, _ := generateRandomHex(32)
-	csrf, _ := generateRandomHex(32)
-
-	session := Session{
-		Token:     token,
-		Username:  username,
-		Role:      role,
-		CSRFToken: csrf,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+func (s *managementState) sessionRegistry() *SessionRegistry {
+	if s != nil && s.sessions != nil {
+		return s.sessions
 	}
-	r.sessions[token] = session
-	return session
-}
-
-func (r *SessionRegistry) Get(token string) (Session, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	s, ok := r.sessions[token]
-	if !ok {
-		return Session{}, false
-	}
-	if time.Now().After(s.ExpiresAt) {
-		r.mu.RUnlock()
-		r.mu.Lock()
-		delete(r.sessions, token)
-		r.mu.Unlock()
-		r.mu.RLock()
-		return Session{}, false
-	}
-	return s, true
-}
-
-func (r *SessionRegistry) Delete(token string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.sessions, token)
-}
-
-func (r *SessionRegistry) List(currentToken string) []SessionInfo {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := time.Now()
-	sessions := make([]SessionInfo, 0, len(r.sessions))
-	for token, session := range r.sessions {
-		if now.After(session.ExpiresAt) {
-			delete(r.sessions, token)
-			continue
-		}
-		sessions = append(sessions, SessionInfo{
-			ID:        sessionID(token),
-			Username:  session.Username,
-			Role:      session.Role,
-			ExpiresAt: session.ExpiresAt.UTC().Format(time.RFC3339),
-			Current:   token == currentToken,
-		})
-	}
-	sort.Slice(sessions, func(i, j int) bool {
-		if sessions[i].Current != sessions[j].Current {
-			return sessions[i].Current
-		}
-		if sessions[i].Username != sessions[j].Username {
-			return sessions[i].Username < sessions[j].Username
-		}
-		return sessions[i].ExpiresAt < sessions[j].ExpiresAt
-	})
-	return sessions
-}
-
-func (r *SessionRegistry) DeleteByID(id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for token := range r.sessions {
-		if sessionID(token) == id {
-			delete(r.sessions, token)
-			return true
-		}
-	}
-	return false
-}
-
-func sessionID(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])[:16]
+	return globalSessions
 }
 
 func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -144,28 +31,29 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Check if matching any stored user
-	var matchedUser *User
+	var matchedUser User
+	foundUser := false
 	for _, u := range s.users {
 		if u.Username == req.Username {
-			matchedUser = &u
+			matchedUser = u
+			foundUser = true
 			break
 		}
 	}
+	userCount := len(s.users)
+	fallbackPassword := s.settings.NaivePassword
+	panelAccess := s.settings.PanelAccess
+	s.mu.Unlock()
 
-	// Validate credentials
 	valid := false
 	role := "viewer"
-	if matchedUser != nil {
+	if foundUser {
 		if err := bcrypt.CompareHashAndPassword([]byte(matchedUser.PasswordHash), []byte(req.Password)); err == nil {
 			valid = true
 			role = matchedUser.Role
 		}
-	} else if len(s.users) == 0 && s.settings.NaivePassword != "" && req.Username == "admin" {
-		// Fallback for static auth token
-		if req.Password == s.settings.NaivePassword {
+	} else if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
+		if req.Password == fallbackPassword {
 			valid = true
 			role = "admin"
 		}
@@ -176,14 +64,23 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := globalSessions.NewSession(req.Username, role)
+	session, err := s.sessionRegistry().Create(SessionCreateInput{
+		Username:   req.Username,
+		Role:       role,
+		UserAgent:  r.UserAgent(),
+		RemoteAddr: clientIP(r),
+	})
+	if err != nil {
+		writeError(w, "failed to persist session", http.StatusInternalServerError)
+		return
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "veil_session",
 		Value:    session.Token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   r.TLS != nil || panelAccess == "caddy",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400,
 	})
@@ -204,7 +101,7 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
-		globalSessions.Delete(cookie.Value)
+		s.sessionRegistry().Delete(cookie.Value)
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -226,12 +123,21 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
-		if sess, ok := globalSessions.Get(cookie.Value); ok {
+		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRF(cookie.Value)
+			if csrfErr != nil {
+				writeError(w, "failed to refresh session", http.StatusInternalServerError)
+				return
+			}
+			if !csrfOK {
+				writeJSON(w, map[string]any{"authenticated": false})
+				return
+			}
 			writeJSON(w, map[string]any{
 				"authenticated": true,
 				"username":      sess.Username,
 				"role":          sess.Role,
-				"csrfToken":     sess.CSRFToken,
+				"csrfToken":     csrf,
 			})
 			return
 		}
@@ -243,14 +149,14 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Request) {
-	if !requestHasAdminRole(r) {
+	if !requestHasAdminRole(s, r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, globalSessions.List(currentSessionToken(r)))
+		writeJSON(w, s.sessionRegistry().List(currentSessionToken(r)))
 	case http.MethodDelete:
 		var req struct {
 			ID string `json:"id"`
@@ -262,7 +168,7 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 			writeError(w, "session id is required", http.StatusBadRequest)
 			return
 		}
-		if !globalSessions.DeleteByID(req.ID) {
+		if !s.sessionRegistry().DeleteByID(req.ID) {
 			writeNotFound(w)
 			return
 		}
@@ -274,7 +180,7 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 
 func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Request) {
 	// Only accessible if role is admin. Verified in middleware, but double check.
-	if !requestHasAdminRole(r) {
+	if !requestHasAdminRole(s, r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
@@ -399,15 +305,18 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				"username": updated.Username,
 				"role":     updated.Role,
 			})
+			_, _ = s.sessionRegistry().DeleteByUsername(username)
 			return nil
 		})
 
 	} else if r.Method == http.MethodDelete {
 		s.mu.Lock()
 		exists := false
+		targetRole := ""
 		for _, u := range s.users {
 			if u.Username == username {
 				exists = true
+				targetRole = u.Role
 				break
 			}
 		}
@@ -428,7 +337,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		}
 		s.mu.Unlock()
 
-		if adminCount <= 1 {
+		if targetRole == "admin" && adminCount <= 1 {
 			writeError(w, "cannot delete the last administrator", http.StatusBadRequest)
 			return
 		}
@@ -438,6 +347,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
+			_, _ = s.sessionRegistry().DeleteByUsername(username)
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		})
@@ -446,14 +356,14 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 	}
 }
 
-func requestHasAdminRole(r *http.Request) bool {
+func requestHasAdminRole(state *managementState, r *http.Request) bool {
 	if role, _ := r.Context().Value(contextKeyRole).(string); role == "admin" {
 		return true
 	}
 	cookie, err := r.Cookie("veil_session")
 	var activeSession Session
 	if err == nil {
-		activeSession, _ = globalSessions.Get(cookie.Value)
+		activeSession, _ = state.sessionRegistry().Get(cookie.Value)
 	}
 	return activeSession.Role == "admin"
 }
@@ -464,4 +374,11 @@ func currentSessionToken(r *http.Request) string {
 		return ""
 	}
 	return cookie.Value
+}
+
+func clientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
+		return forwarded
+	}
+	return r.RemoteAddr
 }
