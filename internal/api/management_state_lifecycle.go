@@ -2,7 +2,6 @@ package api
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ManagementStateLifecycle struct {
@@ -51,13 +49,14 @@ func newManagementState(info ServerInfo) *managementState {
 		Email:       info.Email,
 	})
 	state := &managementState{
-		statePath: info.StatePath,
-		applyRoot: defaultApplyRoot(info.ApplyRoot),
-		keyPath:   keyPath,
-		settings:  model.Settings,
-		inbounds:  model.Inbounds,
-		rules:     model.Rules,
-		warp:      model.Warp,
+		statePath:    info.StatePath,
+		applyRoot:    defaultApplyRoot(info.ApplyRoot),
+		keyPath:      keyPath,
+		setupAllowed: info.SetupAllowed,
+		settings:     model.Settings,
+		inbounds:     model.Inbounds,
+		rules:        model.Rules,
+		warp:         model.Warp,
 	}
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
@@ -65,42 +64,6 @@ func newManagementState(info ServerInfo) *managementState {
 	}
 	if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
-	}
-
-	effectiveMode := state.settings.Mode
-	if effectiveMode == "" {
-		effectiveMode = info.Mode
-	}
-	if len(state.users) == 0 && info.AuthToken == "" && info.StatePath != "" && info.KeyPath != "" && effectiveMode != "dev" {
-		username, password, err := generateRandomAdminAuth()
-		if err == nil {
-			hashed, bcryptErr := bcrypt.GenerateFromPassword([]byte(password), 10)
-			if bcryptErr == nil {
-				state.users = []User{
-					{
-						Username:     username,
-						PasswordHash: string(hashed),
-						Role:         "admin",
-					},
-				}
-				if state.settings.WebBasePath == "" {
-					state.settings.WebBasePath = generateRandomWebBasePath()
-				}
-				if saveErr := lifecycle.SaveLocked(); saveErr == nil {
-					fmt.Printf("\n========================================================================\n")
-					fmt.Printf("VEIL INITIAL ADMIN CREDENTIALS GENERATED\n")
-					fmt.Printf("Username: %s\n", username)
-					fmt.Printf("Password: %s\n", password)
-					fmt.Printf("WebBasePath: %s\n", state.settings.WebBasePath)
-					fmt.Printf("Please record these credentials! You can change them later in the Web UI.\n")
-					fmt.Printf("========================================================================\n\n")
-				} else {
-					log.Printf("error saving generated admin credentials: %v", saveErr)
-				}
-			}
-		} else {
-			log.Printf("error generating random admin credentials: %v", err)
-		}
 	}
 
 	return state
@@ -204,24 +167,4 @@ func generateRandomHex(length int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
-}
-
-func generateRandomAdminAuth() (string, string, error) {
-	suffix, err := generateRandomHex(4)
-	if err != nil {
-		return "", "", err
-	}
-	pass, err := generateRandomHex(16)
-	if err != nil {
-		return "", "", err
-	}
-	return "admin_" + suffix, pass, nil
-}
-
-func generateRandomWebBasePath() string {
-	b := make([]byte, 9)
-	if _, err := rand.Read(b); err != nil {
-		return "/veil-panel/"
-	}
-	return "/" + base64.RawURLEncoding.EncodeToString(b) + "/"
 }

@@ -45,6 +45,7 @@ type Config struct {
 	AutoTLSEmail          string
 	AutoTLSCacheDir       string
 	AllowUnsafePublicHTTP bool
+	SetupAllowed          bool
 }
 
 type Security struct {
@@ -115,6 +116,7 @@ func (s Security) Resolve() (Config, error) {
 	}); err != nil {
 		return Config{}, err
 	}
+	setupAllowed := !exposed && (panelAccess == "" || panelAccess == "local")
 	return Config{
 		Listen:                listen,
 		ListenSource:          listenSource,
@@ -143,5 +145,6 @@ func (s Security) Resolve() (Config, error) {
 		AutoTLSEmail:          autoTLSConfig.Email,
 		AutoTLSCacheDir:       autoTLSConfig.CacheDir,
 		AllowUnsafePublicHTTP: allowUnsafePublicHTTP,
+		SetupAllowed:          setupAllowed,
 	}, nil
 }

@@ -28,6 +28,7 @@ type HTTPServerOptions struct {
 	Domain              string
 	Email               string
 	WebBasePath         string
+	SetupAllowed        bool
 }
 
 type HTTPServer struct {
@@ -40,7 +41,7 @@ func NewHTTPServer(opts HTTPServerOptions) HTTPServer {
 
 func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, PublicListen: opts.PublicListen, MetricsAuthRequired: opts.MetricsAuthRequired, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath})
+	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, PublicListen: opts.PublicListen, MetricsAuthRequired: opts.MetricsAuthRequired, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath, SetupAllowed: opts.SetupAllowed})
 	srv := &http.Server{
 		Addr:              opts.Listen,
 		Handler:           handler,

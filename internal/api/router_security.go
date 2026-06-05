@@ -36,6 +36,7 @@ type authMiddlewareOptions struct {
 	ProtectHealthz    bool
 	ProtectMetrics    bool
 	AllowDevAnonymous bool
+	AllowSetup        bool
 }
 
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
@@ -46,6 +47,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if path == "/api/auth/login" ||
 			path == "/api/auth/logout" ||
 			path == "/api/auth/status" {
+			requiresAuth = false
+		}
+		if opts.AllowSetup && (path == "/api/setup/status" || path == "/api/setup/complete") {
 			requiresAuth = false
 		}
 		if path == "/healthz" && opts.ProtectHealthz {

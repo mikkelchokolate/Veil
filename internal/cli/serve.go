@@ -99,6 +99,7 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		Domain:              cfg.Domain,
 		Email:               cfg.Email,
 		WebBasePath:         cfg.WebBasePath,
+		SetupAllowed:        cfg.SetupAllowed,
 	}).Build()
 	tlsLabel := "http"
 	if cfg.TLSEnabled {

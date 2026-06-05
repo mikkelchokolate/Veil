@@ -28,6 +28,7 @@ type ServerInfo struct {
 	Domain              string
 	Email               string
 	WebBasePath         string
+	SetupAllowed        bool
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

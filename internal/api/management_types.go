@@ -41,6 +41,7 @@ type managementState struct {
 	applyRoot     string
 	keyPath       string
 	cipher        *secrets.Cipher
+	setupAllowed  bool
 	setup         SetupState
 	settings      Settings
 	inbounds      []Inbound
