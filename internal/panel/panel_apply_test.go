@@ -51,3 +51,33 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelApplyPreviewUsesStructuredOperationsWithCompatibilityFallback(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`Array.isArray(plan.operations)`,
+		`operation.interruptionRisk`,
+		`operation.rollbackAvailable`,
+		`operation.validationSource`,
+		`Structured operation`,
+		`appendApplyPreviewRows`,
+		`Plan is invalid`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Structured apply preview missing %q", want)
+		}
+	}
+	card := panelApplyCardHTML()
+	for _, want := range []string{
+		`<th>Operation</th>`,
+		`<th>Target</th>`,
+		`<th>Interruption risk</th>`,
+		`<th>Rollback</th>`,
+		`<th>Validated by</th>`,
+		`aria-live="polite"`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Structured apply card missing %q", want)
+		}
+	}
+}

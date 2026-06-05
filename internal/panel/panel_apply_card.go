@@ -13,19 +13,21 @@ func panelApplyCardHTML() string {
       <button id="reload-services" type="button">Reload and health check services</button>
       <h3>Safe apply preview</h3>
       <p class="hint">Shows file-level config changes, runtime actions, and DNS/TLS/firewall warnings without exposing generated config contents or secrets.</p>
-      <p id="apply-safety-warnings" class="hint">Safety warnings: build a plan first</p>
+      <p id="apply-safety-warnings" class="hint" role="status" aria-live="polite">Safety warnings: build a plan first</p>
       <div class="table-container">
         <table>
           <thead>
             <tr>
-              <th>Stage</th>
-              <th>File or action</th>
-              <th>Safety note</th>
+              <th>Operation</th>
+              <th>Target</th>
+              <th>Interruption risk</th>
+              <th>Rollback</th>
+              <th>Validated by</th>
             </tr>
           </thead>
           <tbody id="apply-file-diff-preview-body">
             <tr>
-              <td colspan="3">Build a plan to preview managed files and runtime actions.</td>
+              <td colspan="5">Build a plan to preview managed files and runtime actions.</td>
             </tr>
           </tbody>
         </table>

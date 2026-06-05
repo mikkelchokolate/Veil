@@ -439,27 +439,27 @@ git commit -m "feat: add live validation interface"
 - Modify: `internal/panel/panel.css`
 - Test: `internal/panel/panel_test.go`
 
-- [ ] **Step 1: Write failing preview-rendering tests**
+- [x] **Step 1: Write failing preview-rendering tests**
 
 Require operation type labels, destination/unit, interruption risk, rollback state, validation source, warning summary, an empty-state message, and compatibility fallback for old string-only responses.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `go test ./internal/panel -run 'ApplyPreview|StructuredOperation' -count=1`
 
 Expected: FAIL because the UI infers metadata from string actions.
 
-- [ ] **Step 3: Render structured operations**
+- [x] **Step 3: Render structured operations**
 
 Render operation rows directly from `plan.operations`; use the existing string catalog only when `operations` is absent. Group file, service, firewall, and removal operations; use text plus icons; announce validation errors; keep the apply button disabled when `valid` is false; and show rollback availability and connection-drop risk before confirmation.
 
-- [ ] **Step 4: Run panel tests**
+- [x] **Step 4: Run panel tests**
 
 Run: `go test ./internal/panel -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit preview UX**
+- [x] **Step 5: Commit preview UX**
 
 ```bash
 git add internal/panel
