@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"net"
-	"strings"
 	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
@@ -24,23 +22,25 @@ func newServeCommand(version string) *cobra.Command {
 	var webBasePath string
 	var autoTLS bool
 	var autoTLSDir string
+	var allowUnsafePublicHTTP bool
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run Veil HTTP API and web panel",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServeWorkflow(cmd, serveWorkflowOptions{
-				Version:       version,
-				Listen:        listen,
-				AuthToken:     authToken,
-				MetricsAccess: metricsAccess,
-				StatePath:     statePath,
-				ApplyRoot:     applyRoot,
-				KeyPath:       keyPath,
-				TLSCert:       tlsCert,
-				TLSKey:        tlsKey,
-				WebBasePath:   webBasePath,
-				AutoTLS:       autoTLS,
-				AutoTLSDir:    autoTLSDir,
+				Version:               version,
+				Listen:                listen,
+				AuthToken:             authToken,
+				MetricsAccess:         metricsAccess,
+				StatePath:             statePath,
+				ApplyRoot:             applyRoot,
+				KeyPath:               keyPath,
+				TLSCert:               tlsCert,
+				TLSKey:                tlsKey,
+				WebBasePath:           webBasePath,
+				AutoTLS:               autoTLS,
+				AutoTLSDir:            autoTLSDir,
+				AllowUnsafePublicHTTP: allowUnsafePublicHTTP,
 			})
 		},
 	}
@@ -55,26 +55,28 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&webBasePath, "web-base-path", "", "base path prefix for the web panel (e.g. /secret/); defaults to VEIL_WEB_BASE_PATH or /")
 	cmd.Flags().BoolVar(&autoTLS, "auto-tls", false, "auto-obtain Let's Encrypt TLS certificate using domain/email from state; requires state with domain and email set")
 	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or /var/lib/veil/autocert")
+	cmd.Flags().BoolVar(&allowUnsafePublicHTTP, "unsafe-allow-public-http", false, "allow unencrypted public Panel HTTP; defaults to VEIL_UNSAFE_ALLOW_PUBLIC_HTTP and is strongly discouraged")
 	return cmd
 }
 
 type serveWorkflowOptions struct {
-	Version       string
-	Listen        string
-	AuthToken     string
-	MetricsAccess string
-	StatePath     string
-	ApplyRoot     string
-	KeyPath       string
-	TLSCert       string
-	TLSKey        string
-	WebBasePath   string
-	AutoTLS       bool
-	AutoTLSDir    string
+	Version               string
+	Listen                string
+	AuthToken             string
+	MetricsAccess         string
+	StatePath             string
+	ApplyRoot             string
+	KeyPath               string
+	TLSCert               string
+	TLSKey                string
+	WebBasePath           string
+	AutoTLS               bool
+	AutoTLSDir            string
+	AllowUnsafePublicHTTP bool
 }
 
 func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
-	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, MetricsAccess: opts.MetricsAccess, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir}).Resolve()
+	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{Listen: opts.Listen, AuthToken: opts.AuthToken, MetricsAccess: opts.MetricsAccess, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, TLSCert: opts.TLSCert, TLSKey: opts.TLSKey, WebBasePath: opts.WebBasePath, AutoTLS: opts.AutoTLS, AutoTLSDir: opts.AutoTLSDir, AllowUnsafePublicHTTP: opts.AllowUnsafePublicHTTP}).Resolve()
 	if err != nil {
 		return err
 	}
@@ -130,15 +132,8 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: public (%s)\n", cfg.MetricsAccessSource)
 	}
 
-	// Output red ANSI warning if listening publicly without TLS
-	isLoopback := false
-	host, _, _ := net.SplitHostPort(cfg.Listen)
-	ip := net.ParseIP(host)
-	if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
-		isLoopback = true
-	}
-	if !cfg.TLSEnabled && !isLoopback {
-		fmt.Fprintln(cmd.OutOrStderr(), "\x1b[31mWARNING: Running on a public interface with TLS disabled! Admin credentials and API token will be sent in PLAIN TEXT.\x1b[0m")
+	if cfg.AllowUnsafePublicHTTP {
+		fmt.Fprintln(cmd.OutOrStderr(), "WARNING: unsafe public HTTP override enabled; credentials and API tokens are not protected in transit")
 	}
 
 	return serveflow.RunLifecycle(serveflow.LifecycleOptions{Context: cmd.Context(), Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr(), Server: server, StateReloader: stateReloader, TLSEnabled: cfg.TLSEnabled, TLSCert: cfg.TLSCert, TLSKey: cfg.TLSKey, DrainTimeout: serveDrainTimeout})
