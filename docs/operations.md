@@ -80,3 +80,30 @@ curl -fsS \
 
 Cookie-authenticated requests also require `X-CSRF-Token`. Viewer sessions are
 read-only and cannot submit validation or apply-plan POST requests.
+
+## Privileged operations
+
+The Panel runs as the locked `veil` account. Operations that modify live host
+state are sent to the socket-activated `veil-helper.socket` over
+`/run/veil/helper.sock`. The helper authenticates the local process credentials,
+accepts only predefined operations and paths, and has no network listener.
+
+Privileged actions include live config promotion and rollback, allowlisted
+service controls and logs, encrypted backup lifecycle, state-key rotation,
+verified binary installation, firewall material, and Panel restart. A rootless
+container cannot perform those host operations.
+
+Ordinary validation and HTTP failures use `text/plain`. Helper failures use the
+OpenAPI `PrivilegedErrorEnvelope` JSON shape:
+
+```json
+{
+  "error": {
+    "code": "operation_failed",
+    "message": "privileged helper is unavailable"
+  }
+}
+```
+
+Clients should branch on the structured `code`; the `message` is intended for
+operators and may contain a bounded underlying system error.

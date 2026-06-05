@@ -288,3 +288,57 @@ func TestHardeningGuideExists(t *testing.T) {
 		}
 	}
 }
+
+func TestPrivilegeBoundaryDocumentation(t *testing.T) {
+	documents := map[string][]string{
+		"../../README.md": {
+			"Privilege separation",
+			"`veil` user",
+			"`veil-helper.socket`",
+		},
+		"../../docs/HARDENING.md": {
+			"`User=veil`",
+			"`/run/veil/helper.sock`",
+			"`SO_PEERCRED`",
+			"`/var/lib/veil/migration-backups`",
+		},
+		"../../docs/install.md": {
+			"`0640 root:veil`",
+			"`0600 veil:veil`",
+			"veil-helper.socket",
+			"veil uninstall --yes --purge",
+		},
+		"../../docs/troubleshooting.md": {
+			"systemctl status veil-helper.socket veil-helper.service",
+			"journalctl -u veil-helper.service",
+			"`/run/veil/helper.sock`",
+		},
+		"../../docs/operations.md": {
+			"`PrivilegedErrorEnvelope`",
+			"`veil-helper.socket`",
+			"`text/plain`",
+		},
+		"../../docs/known-limitations.md": {
+			"bare-metal privileged helper",
+			"not a supported substitute",
+		},
+		"../../CONTEXT.md": {
+			"Privileged helper",
+			"preserves `/etc/veil` and `/var/lib/veil`",
+			"`--purge`",
+		},
+	}
+
+	for path, wants := range documents {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := strings.ReplaceAll(string(body), "\r\n", "\n")
+		for _, want := range wants {
+			if !strings.Contains(content, want) {
+				t.Errorf("%s missing privilege-boundary documentation %q", path, want)
+			}
+		}
+	}
+}

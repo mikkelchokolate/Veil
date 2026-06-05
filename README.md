@@ -167,6 +167,7 @@ restore, safety copies, key rotation, and recovery-drill procedures.
 - **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role. Hashed session state survives Panel restarts, expires after 30 minutes idle or 24 hours absolute, and is revoked when user authority changes
 - **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
+- **Privilege separation** - the Panel runs as the locked `veil` user with no capabilities; root-only operations use the allowlisted, peer-credential-checked `veil-helper.socket`
 - **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
 - **TLS 1.2+** — when HTTPS is enabled
@@ -199,7 +200,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 
 ## Native packages
 
-Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary and managed systemd units; run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
+Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary, create the locked `veil` account, migrate scoped permissions with safety copies, and ship the hardened Panel, `veil-helper.socket`, backup, and runtime units. Run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
 
 ### Verify a release
 
