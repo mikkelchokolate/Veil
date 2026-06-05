@@ -123,9 +123,11 @@ The Panel includes operator-focused controls for production use:
 
 - **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
 - **Users and sessions** - create admin/viewer users, inspect durable browser sessions, and revoke stale sessions.
+- **English and Russian UI** - choose a language during setup, from the Panel header, or per user; authenticated preferences survive logout and restart.
 - **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
 - **Live validation and safe apply preview** - inspect field-level port, DNS, runtime, and unit checks plus structured generated/live file operations, rollback availability, and interruption risk before applying.
 - **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
+- **Accessible operation** - skip navigation, keyboard-contained dialogs, live status announcements, reduced-motion support, and responsive layouts are included.
 
 ### Backup, rollback, and audit
 
@@ -165,6 +167,7 @@ restore, safety copies, key rotation, and recovery-drill procedures.
 - **Fail-closed public exposure** - direct listeners require TLS, `VEIL_API_TOKEN`/`--auth-token`, user/session auth, and authenticated metrics; Caddy exposure requires user/session auth and authenticated metrics
 - **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
 - **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role. Hashed session state survives Panel restarts, expires after 30 minutes idle or 24 hours absolute, and is revoked when user authority changes
+- **Locale preference** - authenticated users, including viewers, may update only their own `en`/`ru` preference through `POST /api/auth/locale`; static API tokens cannot call it
 - **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
 - **Privilege separation** - the Panel runs as the locked `veil` user with no capabilities; root-only operations use the allowlisted, peer-credential-checked `veil-helper.socket`

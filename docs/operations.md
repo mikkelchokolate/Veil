@@ -81,6 +81,28 @@ curl -fsS \
 Cookie-authenticated requests also require `X-CSRF-Token`. Viewer sessions are
 read-only and cannot submit validation or apply-plan POST requests.
 
+## Panel locale and accessibility
+
+The Panel ships English and Russian catalogs. Locale selection uses the
+following precedence:
+
+1. The authenticated user's persisted preference.
+2. The `veil_locale` preference cookie.
+3. The browser `Accept-Language` header.
+4. English.
+
+The setup page and Panel header expose the same locale selector.
+`POST /api/auth/locale` persists the current browser user's own preference and
+sets the locale cookie. It requires a cookie session plus `X-CSRF-Token`;
+viewer sessions may use this self-service endpoint, but static API tokens are
+rejected.
+
+Keyboard users can skip directly to the main content. Dialogs contain Tab focus,
+close on Escape, and return focus to their trigger. Async result regions announce
+updates through polite live regions, and reduced-motion preferences disable
+nonessential animation. The responsive layout keeps primary workflows usable
+at a 360-pixel viewport without horizontal page scrolling.
+
 ## Privileged operations
 
 The Panel runs as the locked `veil` account. Operations that modify live host
