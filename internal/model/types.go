@@ -202,8 +202,14 @@ type User struct {
 	Role         string `json:"role"` // "admin" or "viewer"
 }
 
+type SetupState struct {
+	Completed   bool   `json:"completed"`
+	CompletedAt string `json:"completedAt,omitempty"`
+}
+
 type ManagementSnapshot struct {
 	SchemaVersion int           `json:"schemaVersion,omitempty"`
+	Setup         SetupState    `json:"setup"`
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`
 	Rules         []RoutingRule `json:"routingRules"`

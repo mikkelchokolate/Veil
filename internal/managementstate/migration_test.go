@@ -32,8 +32,8 @@ func TestDecodeWithLegacyFieldMigration(t *testing.T) {
 	}
 
 	// Verify the decoded snapshot has the updated schema version
-	if snapshot.SchemaVersion != 2 {
-		t.Errorf("expected SchemaVersion to be upgraded to 2, got %d", snapshot.SchemaVersion)
+	if snapshot.SchemaVersion != 3 {
+		t.Errorf("expected SchemaVersion to be upgraded to 3, got %d", snapshot.SchemaVersion)
 	}
 
 	// Verify the settings were parsed correctly
@@ -64,8 +64,32 @@ func TestDecodeWithMissingVersionDefaultsToV1(t *testing.T) {
 		t.Fatalf("unexpected error decoding unversioned state: %v", err)
 	}
 
-	if snapshot.SchemaVersion != 2 {
-		t.Errorf("expected SchemaVersion to migrate to 2, got %d", snapshot.SchemaVersion)
+	if snapshot.SchemaVersion != 3 {
+		t.Errorf("expected SchemaVersion to migrate to 3, got %d", snapshot.SchemaVersion)
+	}
+}
+
+func TestDecodeV2MarksExistingAdminSetupComplete(t *testing.T) {
+	inputJSON := `{
+		"schemaVersion": 2,
+		"settings": {
+			"panelListen": "127.0.0.1:2096",
+			"mode": "server"
+		},
+		"inbounds": [],
+		"routingRules": [],
+		"warp": {},
+		"users": [
+			{"username": "admin", "passwordHash": "hash", "role": "admin"}
+		]
+	}`
+
+	snapshot, err := NewManagementStateCodec().Decode([]byte(inputJSON))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if snapshot.SchemaVersion != 3 || !snapshot.Setup.Completed {
+		t.Fatalf("expected migrated setup completion, got %+v", snapshot)
 	}
 }
 

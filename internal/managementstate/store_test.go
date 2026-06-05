@@ -9,6 +9,19 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
+func TestStoreRoundTripsSetupMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	store := NewStore(path, nil)
+	want := model.SetupState{Completed: true, CompletedAt: "2026-06-05T12:00:00Z"}
+	if err := store.Save(model.ManagementSnapshot{Setup: want}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, ok, err := store.Load()
+	if err != nil || !ok || got.Setup != want {
+		t.Fatalf("setup = %+v, ok=%v, err=%v", got.Setup, ok, err)
+	}
+}
+
 func TestStoreSavesAndLoadsManagementStateModel(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	store := NewStore(path, nil)
