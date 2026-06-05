@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,24 +12,30 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 )
 
+type ConfigurationValidator interface {
+	Validate(context.Context, livevalidation.Request) livevalidation.Response
+}
+
 type ServerInfo struct {
-	Version             string
-	Mode                string
-	AuthToken           string
-	PublicListen        bool
-	MetricsAuthRequired bool
-	StatePath           string
-	ApplyRoot           string
-	KeyPath             string
-	PanelListen         string
-	PanelAccess         string
-	Domain              string
-	Email               string
-	WebBasePath         string
-	SetupAllowed        bool
+	Version                string
+	Mode                   string
+	AuthToken              string
+	PublicListen           bool
+	MetricsAuthRequired    bool
+	StatePath              string
+	ApplyRoot              string
+	KeyPath                string
+	PanelListen            string
+	PanelAccess            string
+	Domain                 string
+	Email                  string
+	WebBasePath            string
+	SetupAllowed           bool
+	ConfigurationValidator ConfigurationValidator
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

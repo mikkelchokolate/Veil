@@ -39,6 +39,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
 	mux.HandleFunc("/api/firewall", s.handleFirewall)
+	mux.HandleFunc("/api/validation", s.handleValidation)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -41,7 +42,29 @@ func NewHTTPServer(opts HTTPServerOptions) HTTPServer {
 
 func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
-	handler, reloader := api.NewRouter(api.ServerInfo{Version: opts.Version, Mode: "server", AuthToken: opts.AuthToken, PublicListen: opts.PublicListen, MetricsAuthRequired: opts.MetricsAuthRequired, StatePath: opts.StatePath, ApplyRoot: opts.ApplyRoot, KeyPath: opts.KeyPath, PanelListen: opts.Listen, PanelAccess: opts.PanelAccess, Domain: opts.Domain, Email: opts.Email, WebBasePath: opts.WebBasePath, SetupAllowed: opts.SetupAllowed})
+	validator := livevalidation.Validator{
+		Ports:    livevalidation.HostPortProbe{},
+		DNS:      livevalidation.HostDNSResolver{},
+		Binaries: livevalidation.HostBinaryLookup{},
+		Units:    livevalidation.SystemdUnitInspector{},
+	}
+	handler, reloader := api.NewRouter(api.ServerInfo{
+		Version:                opts.Version,
+		Mode:                   "server",
+		AuthToken:              opts.AuthToken,
+		PublicListen:           opts.PublicListen,
+		MetricsAuthRequired:    opts.MetricsAuthRequired,
+		StatePath:              opts.StatePath,
+		ApplyRoot:              opts.ApplyRoot,
+		KeyPath:                opts.KeyPath,
+		PanelListen:            opts.Listen,
+		PanelAccess:            opts.PanelAccess,
+		Domain:                 opts.Domain,
+		Email:                  opts.Email,
+		WebBasePath:            opts.WebBasePath,
+		SetupAllowed:           opts.SetupAllowed,
+		ConfigurationValidator: validator,
+	})
 	srv := &http.Server{
 		Addr:              opts.Listen,
 		Handler:           handler,
