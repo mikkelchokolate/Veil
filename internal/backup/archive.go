@@ -8,11 +8,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -77,11 +74,10 @@ func createTarball(statePath, keyPath string) ([]byte, error) {
 // CreateBackup packages state.json and state.key into a tar.gz archive.
 // If a non-empty passphrase is provided, the archive is encrypted using PBKDF2 + AES-GCM.
 func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
-	tarball, err := createTarball(statePath, keyPath)
-	if err != nil {
-		return nil, err
-	}
+	return CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{})
+}
 
+func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
 	if passphrase == "" {
 		return tarball, nil
 	}
@@ -122,121 +118,6 @@ func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
 // RestoreBackup restores state.json and state.key from backup data.
 // It decrypts the data first if the backup is encrypted.
 func RestoreBackup(data []byte, statePath, keyPath, passphrase string) error {
-	var tarball []byte
-
-	if len(data) >= len(magicHeader) && bytes.Equal(data[:len(magicHeader)], magicHeader) {
-		if passphrase == "" {
-			return errors.New("passphrase is required to decrypt this backup")
-		}
-		headerLen := len(magicHeader) + 1 + 16 + 12
-		if len(data) < headerLen {
-			return errors.New("invalid or corrupted encrypted backup file (too short)")
-		}
-		version := data[len(magicHeader)]
-		if version != 1 && version != 2 {
-			return fmt.Errorf("unsupported backup format version: %d", version)
-		}
-		salt := data[len(magicHeader)+1 : len(magicHeader)+1+16]
-		nonce := data[len(magicHeader)+1+16 : headerLen]
-		ciphertext := data[headerLen:]
-
-		key := deriveKey(passphrase, salt, version)
-		block, err := aes.NewCipher(key)
-		if err != nil {
-			return err
-		}
-		aead, err := cipher.NewGCM(block)
-		if err != nil {
-			return err
-		}
-
-		var aad []byte
-		if version >= 2 {
-			aad = data[:headerLen]
-		}
-
-		decrypted, err := aead.Open(nil, nonce, ciphertext, aad)
-		if err != nil {
-			return errors.New("failed to decrypt backup: incorrect passphrase or corrupted data")
-		}
-		tarball = decrypted
-	} else {
-		if passphrase != "" {
-			return errors.New("passphrase provided but backup is not encrypted")
-		}
-		tarball = data
-	}
-
-	// Unpack gzip
-	gzr, err := gzip.NewReader(bytes.NewReader(tarball))
-	if err != nil {
-		return fmt.Errorf("initialize gzip reader: %w", err)
-	}
-	defer gzr.Close()
-
-	tr := tar.NewReader(gzr)
-	var stateData, keyData []byte
-	var stateMode, keyMode os.FileMode
-	stateMode = 0o600
-	keyMode = 0o600
-
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("read tar archive: %w", err)
-		}
-
-		var content bytes.Buffer
-		if _, err := io.Copy(&content, tr); err != nil {
-			return fmt.Errorf("extract file %s: %w", hdr.Name, err)
-		}
-
-		switch hdr.Name {
-		case "state.json":
-			stateData = content.Bytes()
-			if hdr.FileInfo().Mode() != 0 {
-				stateMode = hdr.FileInfo().Mode().Perm()
-			}
-		case "state.key":
-			keyData = content.Bytes()
-			if hdr.FileInfo().Mode() != 0 {
-				keyMode = hdr.FileInfo().Mode().Perm()
-			}
-		}
-	}
-
-	if len(stateData) == 0 {
-		return errors.New("invalid backup: missing state.json")
-	}
-	if len(keyData) == 0 {
-		return errors.New("invalid backup: missing state.key")
-	}
-
-	writeAtomic := func(dest string, payload []byte, mode os.FileMode) error {
-		dir := filepath.Dir(dest)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("create directory %s: %w", dir, err)
-		}
-		tmpFile := dest + ".tmp"
-		if err := os.WriteFile(tmpFile, payload, mode); err != nil {
-			return fmt.Errorf("write temp file %s: %w", tmpFile, err)
-		}
-		if err := os.Rename(tmpFile, dest); err != nil {
-			os.Remove(tmpFile)
-			return fmt.Errorf("rename to %s: %w", dest, err)
-		}
-		return nil
-	}
-
-	if err := writeAtomic(statePath, stateData, stateMode); err != nil {
-		return err
-	}
-	if err := writeAtomic(keyPath, keyData, keyMode); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := RestoreBackupWithOptions(data, statePath, keyPath, passphrase, RestoreOptions{})
+	return err
 }
