@@ -15,10 +15,15 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
-const maxBackupReadBytes int64 = 64 * 1024 * 1024
+const (
+	maxBackupReadBytes    int64 = 64 * 1024 * 1024
+	maxUpdateArchiveBytes int64 = 64 * 1024 * 1024
+	maxChecksumsBytes     int64 = 1024 * 1024
+)
 
 type Executor struct {
 	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
@@ -41,6 +46,7 @@ type ProductionConfig struct {
 	BackupPassphrasePath string
 	BackupRoot           string
 	VeilVersion          string
+	BinaryPath           string
 	FirewallCommands     map[string][]string
 	RunCommand           CommandRunner
 	BackupWorkflow       func(context.Context, ResolvedBackup) (BackupResult, error)
@@ -74,14 +80,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	}
 	if config.UpdateWorkflow == nil {
 		config.UpdateWorkflow = func(_ context.Context, request ResolvedUpdate) (UpdateResult, error) {
-			info, err := os.Stat(request.Path)
-			if err != nil {
-				return UpdateResult{}, err
-			}
-			if !info.Mode().IsRegular() {
-				return UpdateResult{}, errors.New("update artifact is not a regular file")
-			}
-			return UpdateResult{ArtifactID: request.ArtifactID, Staged: true}, nil
+			return runProductionUpdate(config, request)
 		}
 	}
 	if config.RotateKeyWorkflow == nil {
@@ -154,6 +153,61 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			return err
 		},
 	}
+}
+
+func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (UpdateResult, error) {
+	archive, err := readBoundedRegularFile(request.Path, maxUpdateArchiveBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged update archive: %w", err)
+	}
+	checksums, err := readBoundedRegularFile(request.ChecksumsPath, maxChecksumsBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged checksums: %w", err)
+	}
+	if err := updateflow.VerifyAssetChecksum(archive, updateflow.AssetName(), string(checksums)); err != nil {
+		return UpdateResult{}, fmt.Errorf("verify staged update: %w", err)
+	}
+	binaryPath := config.BinaryPath
+	if binaryPath == "" {
+		binaryPath, err = os.Executable()
+		if err != nil {
+			return UpdateResult{}, fmt.Errorf("resolve current executable: %w", err)
+		}
+	}
+	if _, err := updateflow.ReplaceBinaryFromArchive(binaryPath, archive, true); err != nil {
+		return UpdateResult{}, fmt.Errorf("install staged update: %w", err)
+	}
+	_ = os.Remove(request.Path)
+	_ = os.Remove(request.ChecksumsPath)
+	return UpdateResult{
+		ArtifactID: request.ArtifactID,
+		Staged:     true,
+		Installed:  true,
+		Version:    request.Version,
+	}, nil
+}
+
+func readBoundedRegularFile(path string, maxBytes int64) ([]byte, error) {
+	file, err := openRegularNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("managed file is not a regular file")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, errors.New("managed file exceeds size limit")
+	}
+	return data, nil
 }
 
 func runProductionCommand(ctx context.Context, command []string, timeout time.Duration) (string, error) {

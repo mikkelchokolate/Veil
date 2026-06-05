@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"sync"
 
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
@@ -61,6 +62,8 @@ type managementState struct {
 	backupPassphrasePath           string
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
+	updateMu                       sync.Mutex
+	updateStager                   func(context.Context) (string, error)
 	configurationValidator         ConfigurationValidator
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client

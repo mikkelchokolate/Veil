@@ -1,13 +1,21 @@
 package privileged
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 )
 
 func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T) {
@@ -196,4 +204,100 @@ func TestProductionExecutorPropagatesWorkflowErrors(t *testing.T) {
 	if err := executor.ServiceAction(context.Background(), ServiceActionRequest{Unit: "veil.service", Action: ServiceActionRestart}); !errors.Is(err, expected) {
 		t.Fatalf("want %v, got %v", expected, err)
 	}
+}
+
+func TestProductionExecutorVerifiesAndInstallsStagedUpdate(t *testing.T) {
+	root := t.TempDir()
+	currentPath := filepath.Join(root, "veil")
+	archivePath := filepath.Join(root, "updates", "veil-update.tar.gz")
+	checksumsPath := filepath.Join(root, "updates", "checksums.txt")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(currentPath, []byte("old-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	archive := privilegedTestArchive(t, []byte("new-binary"))
+	hash := sha256.Sum256(archive)
+	checksums := fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), updateflow.AssetName())
+	if err := os.WriteFile(archivePath, archive, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(checksumsPath, []byte(checksums), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{BinaryPath: currentPath})
+	result, err := executor.Update(context.Background(), ResolvedUpdate{
+		ArtifactID:    "veil-update",
+		Version:       "v0.6.0",
+		Path:          archivePath,
+		ChecksumsPath: checksumsPath,
+	})
+	if err != nil {
+		t.Fatalf("install staged update: %v", err)
+	}
+	body, err := os.ReadFile(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "new-binary" || !result.Installed || result.Version != "v0.6.0" {
+		t.Fatalf("result=%+v binary=%q", result, body)
+	}
+}
+
+func TestProductionExecutorRejectsStagedUpdateChecksumMismatch(t *testing.T) {
+	root := t.TempDir()
+	currentPath := filepath.Join(root, "veil")
+	archivePath := filepath.Join(root, "updates", "veil-update.tar.gz")
+	checksumsPath := filepath.Join(root, "updates", "checksums.txt")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(currentPath, []byte("old-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archivePath, privilegedTestArchive(t, []byte("new-binary")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(checksumsPath, []byte(fmt.Sprintf("%064s  %s\n", "0", updateflow.AssetName())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{BinaryPath: currentPath})
+	if _, err := executor.Update(context.Background(), ResolvedUpdate{
+		ArtifactID:    "veil-update",
+		Version:       "v0.6.0",
+		Path:          archivePath,
+		ChecksumsPath: checksumsPath,
+	}); err == nil {
+		t.Fatal("expected checksum mismatch")
+	}
+	body, err := os.ReadFile(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "old-binary" {
+		t.Fatalf("binary changed after rejected update: %q", body)
+	}
+}
+
+func privilegedTestArchive(t *testing.T, binary []byte) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buffer)
+	tarWriter := tar.NewWriter(gzipWriter)
+	if err := tarWriter.WriteHeader(&tar.Header{Name: "veil", Mode: 0o755, Size: int64(len(binary))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tarWriter.Write(binary); err != nil {
+		t.Fatal(err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
 }

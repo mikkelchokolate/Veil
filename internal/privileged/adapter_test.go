@@ -57,7 +57,7 @@ func TestAdapterCallsExecutorWithResolvedValues(t *testing.T) {
 	if _, err := adapter.Backup(context.Background(), BackupRequest{Action: BackupActionVerify, ArchiveName: "daily.enc"}); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
-	if _, err := adapter.StageUpdate(context.Background(), UpdateRequest{ArtifactID: "veil-linux-amd64"}); err != nil {
+	if _, err := adapter.StageUpdate(context.Background(), UpdateRequest{ArtifactID: "veil-linux-amd64", Version: "v0.6.0"}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 

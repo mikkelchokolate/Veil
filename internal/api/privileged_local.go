@@ -75,7 +75,9 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		return privileged.JournalResult{Unit: request.Unit, Lines: lines}, nil
 	}
 	production.Update = func(_ context.Context, request privileged.ResolvedUpdate) (privileged.UpdateResult, error) {
-		return privileged.UpdateResult{ArtifactID: request.ArtifactID, Staged: true}, nil
+		return privileged.UpdateResult{
+			ArtifactID: request.ArtifactID, Staged: true, Installed: true, Version: request.Version,
+		}, nil
 	}
 	return privileged.NewLocalAdapter(policy, production)
 }

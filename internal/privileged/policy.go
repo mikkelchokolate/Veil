@@ -90,9 +90,10 @@ type ResolvedFirewall struct {
 }
 
 type ResolvedUpdate struct {
-	ArtifactID string
-	Version    string
-	Path       string
+	ArtifactID    string
+	Version       string
+	Path          string
+	ChecksumsPath string
 }
 
 func (p Policy) ValidateServiceAction(request ServiceActionRequest) error {
@@ -186,6 +187,7 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 var (
 	opaquePromotionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	artifactNamePattern      = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
 )
 
 func managedArtifactPath(id string) (ArtifactPath, bool) {
@@ -289,11 +291,20 @@ func (p Policy) ResolveUpdate(request UpdateRequest) (ResolvedUpdate, error) {
 	if !ok {
 		return ResolvedUpdate{}, newError(ErrorNotFound, "unknown update artifact id")
 	}
+	if request.Version == "" || len(request.Version) > 64 || !updateVersionPattern.MatchString(request.Version) {
+		return ResolvedUpdate{}, newError(ErrorInvalidRequest, "invalid update version")
+	}
 	path, err := resolveBelow(p.UpdateRoot, relative)
 	if err != nil {
 		return ResolvedUpdate{}, err
 	}
-	return ResolvedUpdate{ArtifactID: request.ArtifactID, Version: request.Version, Path: path}, nil
+	checksumsPath, err := resolveBelow(p.UpdateRoot, "checksums.txt")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	return ResolvedUpdate{
+		ArtifactID: request.ArtifactID, Version: request.Version, Path: path, ChecksumsPath: checksumsPath,
+	}, nil
 }
 
 func (p Policy) allowsUnit(unit string) bool {

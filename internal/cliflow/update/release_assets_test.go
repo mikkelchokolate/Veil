@@ -34,7 +34,7 @@ func TestReleaseAssetsDownloadsVerifiedArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DownloadVerifiedArchive: %v", err)
 	}
-	if got.Name != assetName || string(got.Body) != string(archive) {
+	if got.Name != assetName || string(got.Body) != string(archive) || string(got.Checksums) != string(checksums) {
 		t.Fatalf("archive = %+v", got)
 	}
 	if fmt.Sprint(downloaded) != "[https://example.com/archive https://example.com/checksums]" {

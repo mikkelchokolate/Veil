@@ -160,7 +160,9 @@ func (c *recordingPrivilegedClient) FirewallApply(context.Context, privileged.Fi
 
 func (c *recordingPrivilegedClient) StageUpdate(_ context.Context, request privileged.UpdateRequest) (privileged.UpdateResult, error) {
 	c.updates = append(c.updates, request)
-	return privileged.UpdateResult{ArtifactID: request.ArtifactID, Staged: c.err == nil}, c.err
+	return privileged.UpdateResult{
+		ArtifactID: request.ArtifactID, Staged: c.err == nil, Installed: c.err == nil, Version: request.Version,
+	}, c.err
 }
 
 func (c *recordingPrivilegedClient) RestartPanel(context.Context) error {
@@ -246,15 +248,18 @@ func TestPrivilegedBackupRoutesNeverReadHTTPPassphrase(t *testing.T) {
 func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	routes := PanelRoutes{
-		Info:  ServerInfo{Version: "0.6.0"},
-		State: newManagementState(ServerInfo{Mode: "dev", Privileged: client}),
+		Info: ServerInfo{Version: "0.6.0"},
+		State: newManagementState(ServerInfo{
+			Mode: "dev", Privileged: client,
+			UpdateStager: func(context.Context) (string, error) { return "v0.6.0", nil },
+		}),
 	}
 	response := httptest.NewRecorder()
 	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("update status=%d body=%s", response.Code, response.Body.String())
 	}
-	if !reflect.DeepEqual(client.updates, []privileged.UpdateRequest{{ArtifactID: "veil-update", Version: "latest"}}) {
+	if !reflect.DeepEqual(client.updates, []privileged.UpdateRequest{{ArtifactID: "veil-update", Version: "v0.6.0"}}) {
 		t.Fatalf("updates=%+v", client.updates)
 	}
 	deadline := time.Now().Add(time.Second)
