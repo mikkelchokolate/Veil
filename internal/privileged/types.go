@@ -111,7 +111,9 @@ type JournalResult struct {
 type BackupRequest struct {
 	Action               BackupAction `json:"action"`
 	ArchiveName          string       `json:"archiveName,omitempty"`
-	Retention            int          `json:"retention,omitempty"`
+	Daily                int          `json:"daily,omitempty"`
+	Weekly               int          `json:"weekly,omitempty"`
+	Monthly              int          `json:"monthly,omitempty"`
 	CheckOnly            bool         `json:"checkOnly,omitempty"`
 	AllowVersionMismatch bool         `json:"allowVersionMismatch,omitempty"`
 }
@@ -120,14 +122,18 @@ type BackupArchive struct {
 	Name      string `json:"name"`
 	Size      int64  `json:"size,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
+	Encrypted bool   `json:"encrypted,omitempty"`
 }
 
 type BackupResult struct {
-	ArchiveName string          `json:"archiveName,omitempty"`
-	Archives    []BackupArchive `json:"archives,omitempty"`
-	Verified    bool            `json:"verified,omitempty"`
-	Restored    bool            `json:"restored,omitempty"`
-	Pruned      []string        `json:"pruned,omitempty"`
+	ArchiveName     string          `json:"archiveName,omitempty"`
+	Archives        []BackupArchive `json:"archives,omitempty"`
+	Verified        bool            `json:"verified,omitempty"`
+	Restored        bool            `json:"restored,omitempty"`
+	Pruned          []string        `json:"pruned,omitempty"`
+	Kept            []string        `json:"kept,omitempty"`
+	SafetyStatePath string          `json:"safetyStatePath,omitempty"`
+	SafetyKeyPath   string          `json:"safetyKeyPath,omitempty"`
 }
 
 type RotateKeyRequest struct{}

@@ -250,17 +250,17 @@ git commit -m "feat: secure privileged helper socket"
 - Modify: `internal/privileged/executor.go`
 - Test: `internal/privileged/executor_test.go`
 
-- [ ] **Step 1: Write failing CLI and executor tests**
+- [x] **Step 1: Write failing CLI and executor tests**
 
 Require `veil helper serve --socket /run/veil/helper.sock`, reject non-absolute socket paths, reject helper startup when not root on Linux, and verify each operation invokes only its injected existing workflow with resolved values.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `go test ./internal/cli ./internal/privileged -run 'Helper|Executor' -count=1`
 
 Expected: FAIL because helper command wiring is absent.
 
-- [ ] **Step 3: Add the helper command**
+- [x] **Step 3: Add the helper command**
 
 Keep `helper` out of normal user-facing workflow help but include `veil helper serve --help`. Construct the policy from fixed defaults:
 
@@ -275,11 +275,11 @@ Keep `helper` out of normal user-facing workflow help but include `veil helper s
 
 Resolve the configured `veil` account UID using `os/user`. Start the socket server with graceful shutdown on `SIGTERM` and `SIGINT`.
 
-- [ ] **Step 4: Map operations to existing workflows**
+- [x] **Step 4: Map operations to existing workflows**
 
 Reuse generated-config promotion, managed systemd actions/status, bounded journal reads, backup create/list/verify/prune/restore, key rotation, firewall plans, verified update staging, and Panel restart. Preserve existing safety-copy, checksum, signature, and audit behavior. Do not execute a string assembled from a request.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `go test ./internal/cli ./internal/privileged -count=1`
 

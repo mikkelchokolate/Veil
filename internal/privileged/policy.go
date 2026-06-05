@@ -36,15 +36,19 @@ type ArtifactPath struct {
 }
 
 type Policy struct {
-	StagingRoot     string
-	GeneratedRoot   string
-	StateRoot       string
-	BackupRoot      string
-	UpdateRoot      string
-	ManagedUnits    map[string]struct{}
-	Artifacts       map[string]ArtifactPath
-	UpdateArtifacts map[string]string
-	FirewallRules   map[string]struct{}
+	StagingRoot          string
+	GeneratedRoot        string
+	StateRoot            string
+	StatePath            string
+	KeyPath              string
+	BackupPassphrasePath string
+	BackupRoot           string
+	UpdateRoot           string
+	ManagedUnits         map[string]struct{}
+	ManagedUnitPrefixes  []string
+	Artifacts            map[string]ArtifactPath
+	UpdateArtifacts      map[string]string
+	FirewallRules        map[string]struct{}
 }
 
 type ResolvedArtifact struct {
@@ -69,7 +73,12 @@ type ResolvedBackup struct {
 	ArchivePath          string
 	BackupRoot           string
 	StateRoot            string
-	Retention            int
+	StatePath            string
+	KeyPath              string
+	BackupPassphrasePath string
+	Daily                int
+	Weekly               int
+	Monthly              int
 	CheckOnly            bool
 	AllowVersionMismatch bool
 }
@@ -85,7 +94,7 @@ type ResolvedUpdate struct {
 }
 
 func (p Policy) ValidateServiceAction(request ServiceActionRequest) error {
-	if _, ok := p.ManagedUnits[request.Unit]; !ok {
+	if !p.allowsUnit(request.Unit) {
 		return newError(ErrorForbiddenOperation, "service unit is not managed")
 	}
 	switch request.Action {
@@ -101,7 +110,7 @@ func (p Policy) ValidateServiceStatus(request ServiceStatusRequest) error {
 		return newError(ErrorInvalidRequest, "at least one service unit is required")
 	}
 	for _, unit := range request.Units {
-		if _, ok := p.ManagedUnits[unit]; !ok {
+		if !p.allowsUnit(unit) {
 			return newError(ErrorForbiddenOperation, "service unit is not managed")
 		}
 	}
@@ -109,7 +118,7 @@ func (p Policy) ValidateServiceStatus(request ServiceStatusRequest) error {
 }
 
 func (p Policy) ResolveJournal(request JournalRequest) (ResolvedJournal, error) {
-	if _, ok := p.ManagedUnits[request.Unit]; !ok {
+	if !p.allowsUnit(request.Unit) {
 		return ResolvedJournal{}, newError(ErrorForbiddenOperation, "journal unit is not managed")
 	}
 	lines := request.Lines
@@ -172,9 +181,23 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		Action:               request.Action,
 		BackupRoot:           p.BackupRoot,
 		StateRoot:            p.StateRoot,
-		Retention:            request.Retention,
+		StatePath:            p.StatePath,
+		KeyPath:              p.KeyPath,
+		BackupPassphrasePath: p.BackupPassphrasePath,
+		Daily:                request.Daily,
+		Weekly:               request.Weekly,
+		Monthly:              request.Monthly,
 		CheckOnly:            request.CheckOnly,
 		AllowVersionMismatch: request.AllowVersionMismatch,
+	}
+	if resolved.StatePath == "" {
+		resolved.StatePath = filepath.Join(p.StateRoot, "state.json")
+	}
+	if resolved.KeyPath == "" {
+		resolved.KeyPath = filepath.Join(p.StateRoot, "state.key")
+	}
+	if resolved.BackupPassphrasePath == "" {
+		resolved.BackupPassphrasePath = filepath.Join(p.StateRoot, "backup.passphrase")
 	}
 	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRestore
 	if request.ArchiveName == "" {
@@ -220,6 +243,20 @@ func (p Policy) ResolveUpdate(request UpdateRequest) (ResolvedUpdate, error) {
 		return ResolvedUpdate{}, err
 	}
 	return ResolvedUpdate{ArtifactID: request.ArtifactID, Version: request.Version, Path: path}, nil
+}
+
+func (p Policy) allowsUnit(unit string) bool {
+	if _, ok := p.ManagedUnits[unit]; ok {
+		return true
+	}
+	for _, prefix := range p.ManagedUnitPrefixes {
+		if strings.HasPrefix(unit, prefix) &&
+			strings.HasSuffix(unit, ".service") &&
+			!strings.ContainsAny(unit, `/\; "'`) {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveBelow(root, relative string) (string, error) {
