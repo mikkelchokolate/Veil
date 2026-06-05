@@ -136,7 +136,12 @@ func TestBuildRepairPlanFromOptionsBuildsPanelInstallPlan(t *testing.T) {
 			t.Fatalf("repair summary missing %q:\n%s", want, summary)
 		}
 	}
-	for _, unwanted := range []string{"generated/caddy/Caddyfile", "hysteria2", "veil-mieru.service"} {
+	for _, want := range []string{"veil-helper.socket", "veil-hysteria2@.service", "veil-olcrtc@.service", "veil-mieru.service"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("repair summary missing managed unit template %q:\n%s", want, summary)
+		}
+	}
+	for _, unwanted := range []string{"generated/caddy/Caddyfile", "generated/hysteria2", "generated/mieru"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("Panel install repair should not include %q:\n%s", unwanted, summary)
 		}

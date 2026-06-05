@@ -17,6 +17,24 @@ func TestBuildClientLinksBuildsProtocolLinksOutsideHTTPAdapter(t *testing.T) {
 	}
 }
 
+func TestBuildClientLinksSkipsDomainBasedLinksWhenDomainIsUnset(t *testing.T) {
+	response, err := BuildClientLinks(model.Settings{Hysteria2Password: "hy"}, []model.Inbound{
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret", NaiveUsername: "veil"},
+		{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true},
+		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 2080, Enabled: true, Password: "mieru-secret"},
+		{Name: "olc", Protocol: "olcrtc", Transport: "datachannel", Port: 0, Enabled: true, Password: "olc-secret"},
+	})
+	if err != nil {
+		t.Fatalf("BuildClientLinks should not fail without domain: %v", err)
+	}
+	if response.Count != 1 || len(response.Links) != 1 {
+		t.Fatalf("expected only domainless olcRTC link, got %+v", response)
+	}
+	if response.Links[0].Protocol != "olcrtc" {
+		t.Fatalf("unexpected exported link: %+v", response.Links[0])
+	}
+}
+
 func TestBuildClientLinksUsesClientProfilesWhenPresent(t *testing.T) {
 	settings := Settings{
 		Domain:            "vpn.example.com",

@@ -238,7 +238,7 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 
 func protocolNeedsDomain(protocol string) bool {
 	switch protocol {
-	case "naiveproxy", "hysteria2", "olcrtc":
+	case "naiveproxy", "hysteria2":
 		return true
 	default:
 		return false

@@ -197,6 +197,30 @@ func TestValidatorRejectsPanelPortCollision(t *testing.T) {
 	assertIssueCode(t, response, "reserved_panel_port")
 }
 
+func TestValidatorAllowsOlcrtcWithoutDomain(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-olcrtc@relay.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{{
+			Name:      "relay",
+			Protocol:  "olcrtc",
+			Transport: "udp",
+			Port:      3478,
+			Enabled:   true,
+			Password:  "relay-secret",
+		}},
+	})
+
+	if hasIssueCode(response, "domain_required") {
+		t.Fatalf("olcRTC should not require settings.domain: %+v", response)
+	}
+	if !response.Valid {
+		t.Fatalf("olcRTC without domain should be valid: %+v", response)
+	}
+}
+
 func TestValidatorSortsIssuesDeterministically(t *testing.T) {
 	validator := testValidator()
 	validator.Binaries = fakeBinaryLookup{found: map[string]bool{}}

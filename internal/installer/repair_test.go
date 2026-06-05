@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
@@ -28,13 +30,13 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should detect: Caddyfile missing, fallback index missing, veil.service missing, veil-caddy@.service missing
 	if !plan.HasChanges() {
 		t.Fatalf("expected repair plan to have changes for missing files, got none")
 	}
 
-	if len(plan.Actions) != 4 {
-		t.Fatalf("expected 4 repair actions (caddy, fallback, veil.service, veil-caddy@.service), got %d: %+v", len(plan.Actions), plan.Actions)
+	wantActions := 2 + len(renderer.ManagedSystemdUnitNames())
+	if len(plan.Actions) != wantActions {
+		t.Fatalf("expected %d repair actions (panel caddy, fallback, managed systemd units), got %d: %+v", wantActions, len(plan.Actions), plan.Actions)
 	}
 
 	for _, action := range plan.Actions {
@@ -49,6 +51,11 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 	summary := plan.Summary()
 	if summary == "No repair actions required\n" {
 		t.Fatalf("expected repair summary with actions, got: %q", summary)
+	}
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		if !containsRepairAction(plan, filepath.Join(systemdDir, name)) {
+			t.Fatalf("repair plan missing managed unit %q: %+v", name, plan.Actions)
+		}
 	}
 }
 
@@ -102,6 +109,15 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 	if !foundDrift {
 		t.Fatalf("expected drift action for Caddyfile, actions: %+v", plan.Actions)
 	}
+}
+
+func containsRepairAction(plan RepairPlan, path string) bool {
+	for _, action := range plan.Actions {
+		if action.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {

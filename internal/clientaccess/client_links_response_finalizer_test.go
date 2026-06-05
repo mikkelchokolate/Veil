@@ -2,7 +2,7 @@ package clientaccess
 
 import "testing"
 
-func TestClientLinksResponseFinalizerSetsCountAndRejectsEmptyLinks(t *testing.T) {
+func TestClientLinksResponseFinalizerSetsCountAndAllowsEmptyLinks(t *testing.T) {
 	response, err := NewClientLinksResponseFinalizer().Finalize(ClientLinksResponse{Links: []ClientLink{{Name: "alice"}, {Name: "bob"}}})
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
@@ -10,8 +10,11 @@ func TestClientLinksResponseFinalizerSetsCountAndRejectsEmptyLinks(t *testing.T)
 	if response.Count != 2 {
 		t.Fatalf("count = %d", response.Count)
 	}
-	_, err = NewClientLinksResponseFinalizer().Finalize(ClientLinksResponse{})
-	if err == nil || err.Error() != "no enabled client links are available" {
-		t.Fatalf("err = %v", err)
+	empty, err := NewClientLinksResponseFinalizer().Finalize(ClientLinksResponse{})
+	if err != nil {
+		t.Fatalf("empty client links response should be valid for domainless setups: %v", err)
+	}
+	if empty.Count != 0 || len(empty.Artifacts) != 0 {
+		t.Fatalf("empty response = %+v", empty)
 	}
 }

@@ -4,6 +4,17 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.1] - 2026-06-05
+
+### Fixed
+
+- Direct/local Panel setups without `settings.domain` no longer fail the
+  client-links API. Host-based exports are omitted until an endpoint is
+  configured, while domainless `olcRTC` links remain available.
+- Native install and repair now write all dormant managed runtime systemd unit
+  templates, including Hysteria2, olcRTC, Mieru, WARP, backup, and helper
+  units, without starting runtime services before inbounds exist.
+
 ## [v0.6.0] - 2026-06-05
 
 ### Security

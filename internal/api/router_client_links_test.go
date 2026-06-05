@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -70,15 +71,39 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	}
 }
 
-func TestClientLinksEndpointRequiresDomainAndPasswords(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+func TestClientLinksEndpointAllowsDomainlessDirectPanel(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"0.0.0.0:2096",
+			"panelAccess":"direct",
+			"mode":"dev",
+			"hysteria2Password":"hy2-secret"
+		},
+		"inbounds":[
+			{"name":"hyst2","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true},
+			{"name":"mieru","protocol":"mieru","transport":"tcp","port":2080,"enabled":true,"password":"mieru-secret"}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for incomplete client links config, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for domainless direct Panel, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ClientLinksResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode client links: %v", err)
+	}
+	if response.Count != 0 || len(response.Links) != 0 {
+		t.Fatalf("domainless setup should not export host-based links: %+v", response)
 	}
 }
 

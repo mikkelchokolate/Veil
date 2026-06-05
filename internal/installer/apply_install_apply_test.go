@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
@@ -30,8 +32,8 @@ func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_TLS_CERT=")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	if len(result.WrittenFiles) != 4 {
-		t.Fatalf("expected 4 written files, got %+v", result.WrittenFiles)
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")
 	}
 }
 
@@ -64,8 +66,8 @@ func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-caddy@.service"), "caddy")
 	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"))
-	if len(result.WrittenFiles) != 5 {
-		t.Fatalf("expected 5 written files, got %+v", result.WrittenFiles)
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")
 	}
 }
 
