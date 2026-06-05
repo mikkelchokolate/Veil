@@ -36,13 +36,13 @@ func ServiceStatusActionsJS() string {
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
-        btn.textContent = 'Auto-refresh: OFF';
+        btn.textContent = veilT('service.autoRefreshOff');
         btn.classList.remove('danger');
         btn.classList.add('secondary');
       } else {
         loadServiceStatus(); // immediate refresh
         autoRefreshInterval = setInterval(loadServiceStatus, 10000);
-        btn.textContent = 'Auto-refresh: ON (10s)';
+        btn.textContent = veilT('service.autoRefreshOn');
         btn.classList.remove('secondary');
         btn.classList.add('danger');
       }
@@ -61,7 +61,9 @@ func ServiceRestartControlsHTML(runtimes []service.ManagedRuntime) string {
 		}
 		b.WriteString(`        <button id="restart-`)
 		b.WriteString(runtime.ActionName)
-		b.WriteString(`" class="danger" type="button">Restart `)
+		b.WriteString(`" class="danger" type="button" data-veil-restart-service="`)
+		b.WriteString(runtime.ActionName)
+		b.WriteString(`">`)
 		b.WriteString(runtime.ActionName)
 		b.WriteString("</button>\n")
 	}
@@ -70,6 +72,10 @@ func ServiceRestartControlsHTML(runtimes []service.ManagedRuntime) string {
 
 func ServiceRestartActionsJS(runtimes []service.ManagedRuntime) string {
 	var b strings.Builder
+	b.WriteString(`    document.querySelectorAll('[data-veil-restart-service]').forEach((button) => {
+      button.textContent = veilT('service.restart', { service: button.dataset.veilRestartService });
+    });
+`)
 	for _, runtime := range runtimes {
 		if !runtime.ManualRestart {
 			continue

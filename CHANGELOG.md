@@ -48,6 +48,10 @@ All notable changes to Veil will be documented in this file.
 
 - Backup restore jobs publish a terminal success state only after the matching
   audit record has been finalized.
+- Panel HTML injects active CSRF material before placeholder cleanup, restoring
+  cookie-session mutations such as persisted locale changes.
+- Russian localization now covers dynamic operator actions and stable
+  validation issue messages in addition to the static Panel shell.
 
 ### Migration Notes
 

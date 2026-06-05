@@ -19,6 +19,16 @@ func TestRendererReplacesSlotsAndPrefixesPanelPaths(t *testing.T) {
 	}
 }
 
+func TestRendererInjectsCSRFAfterPlaceholderCleanup(t *testing.T) {
+	rendered := NewRenderer(NewSliceCatalog(nil).RenderSlots()).HTML("/", "csrf-secret", LocaleEnglish)
+	if !strings.Contains(rendered, `window.veil_csrf_token = 'csrf-secret';`) {
+		t.Fatal("rendered Panel does not contain the active CSRF token")
+	}
+	if strings.Contains(rendered, "__VEIL_CSRF_TOKEN__") {
+		t.Fatal("rendered Panel retains the CSRF placeholder")
+	}
+}
+
 func TestRendererIncludesLocalizedShell(t *testing.T) {
 	html := NewRenderer(nil).HTML("/", "csrf-token", "ru")
 	for _, want := range []string{

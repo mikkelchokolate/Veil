@@ -74,6 +74,8 @@ var translationCatalogs = map[string]map[string]string{
 		"field.enabled":            "Enabled",
 		"role.admin":               "Administrator",
 		"role.viewer":              "Viewer",
+		"role.viewerReadOnly":      "Viewer role is read-only. Admin role is required for this action.",
+		"role.viewerReadOnlyShort": "Viewer role is read-only; admin required.",
 		"confirm.deleteUser":       "Delete user {username}?",
 		"confirm.revokeSession":    "Revoke this session?",
 		"confirm.revokeCurrent":    "Revoke the current browser session? You will need to sign in again.",
@@ -148,6 +150,8 @@ var translationCatalogs = map[string]map[string]string{
 		"field.enabled":            "Включено",
 		"role.admin":               "Администратор",
 		"role.viewer":              "Наблюдатель",
+		"role.viewerReadOnly":      "Роль наблюдателя доступна только для чтения. Для этого действия нужен администратор.",
+		"role.viewerReadOnlyShort": "Только чтение; требуется администратор.",
 		"confirm.deleteUser":       "Удалить пользователя {username}?",
 		"confirm.revokeSession":    "Отозвать эту сессию?",
 		"confirm.revokeCurrent":    "Отозвать текущую сессию браузера? Потребуется снова войти.",
@@ -199,6 +203,18 @@ const localizationRuntimeTemplate = `(function () {
     return text;
   };
 
+  window.veilValidationIssueText = function (issue) {
+    if (!issue) return '';
+    const prefix = 'validation.' + String(issue.code || '');
+    const messageKey = prefix + '.message';
+    const remediationKey = prefix + '.remediation';
+    const translatedMessage = window.veilT(messageKey);
+    const translatedRemediation = window.veilT(remediationKey);
+    const message = translatedMessage === messageKey ? String(issue.message || '') : translatedMessage;
+    const remediation = translatedRemediation === remediationKey ? String(issue.remediation || '') : translatedRemediation;
+    return message + (remediation ? ' ' + remediation : '');
+  };
+
   function translateValue(value) {
     const trimmed = String(value || '').trim();
     const key = sourceKeys[trimmed];
@@ -246,14 +262,15 @@ const localizationRuntimeTemplate = `(function () {
   async function persistLocale(nextLocale) {
     if (!supported.includes(nextLocale) || nextLocale === window.veilLocale) return;
     document.cookie = 'veil_locale=' + encodeURIComponent(nextLocale) + '; Path=/; Max-Age=31536000; SameSite=Lax';
-    if (window.veil_csrf_token) {
+    const csrf = window.veil_csrf_token || localStorage.getItem('veil_csrf_token') || '';
+    if (csrf) {
       try {
         const response = await fetch('/api/auth/locale', {
           method: 'POST',
           credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-Token': window.veil_csrf_token
+            'X-CSRF-Token': csrf
           },
           body: JSON.stringify({ locale: nextLocale })
         });

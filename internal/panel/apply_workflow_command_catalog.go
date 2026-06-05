@@ -157,7 +157,7 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       if (Array.isArray(plan.issues)) {
         plan.issues.forEach((issue) => {
           if (issue && issue.severity !== 'info') {
-            warnings.push(issue.message + (issue.remediation ? ' ' + issue.remediation : ''));
+            warnings.push(veilValidationIssueText(issue));
           }
         });
       }
@@ -206,7 +206,7 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.colSpan = 5;
-        cell.textContent = 'No managed files or runtime actions were reported.';
+        cell.textContent = veilT('apply.noOperations');
         row.appendChild(cell);
         body.appendChild(row);
         return;

@@ -21,8 +21,7 @@ func NewRenderer(slots []RenderSlot) Renderer {
 }
 
 func (r Renderer) HTML(basePath string, csrfToken string, locale string) string {
-	html := r.baseHTML(locale)
-	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
+	html := r.baseHTML(locale, csrfToken)
 	if basePath == "" || basePath == "/" {
 		return html
 	}
@@ -39,14 +38,15 @@ func (r Renderer) HTML(basePath string, csrfToken string, locale string) string 
 }
 
 func (r Renderer) BaseHTML() string {
-	return r.baseHTML(LocaleEnglish)
+	return r.baseHTML(LocaleEnglish, "")
 }
 
-func (r Renderer) baseHTML(locale string) string {
+func (r Renderer) baseHTML(locale string, csrfToken string) string {
 	html := panelHTMLBase
 	html = strings.ReplaceAll(html, "__PROMETHEUS_BG_BASE64__", prometheusBgBase64)
 	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
 	html = strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
+	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
 	for _, slot := range r.slots {
 		if slot.Render == nil {
 			continue

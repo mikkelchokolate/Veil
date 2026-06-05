@@ -107,6 +107,18 @@ func panelUsersCardHTML() string {
 
 func panelUsersActionsJS() string {
 	return `
+    function setUserTableMessage(tbody, colspan, text, color) {
+      tbody.innerHTML = '';
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = colspan;
+      cell.style.textAlign = 'center';
+      cell.style.color = color;
+      cell.textContent = text;
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    }
+
     async function loadUsers() {
       const tbody = document.getElementById('users-table-body');
       if (!tbody) return;
@@ -114,16 +126,16 @@ func panelUsersActionsJS() string {
         const response = await fetch('/api/users', { headers: authHeaders() });
         if (!response.ok) {
           if (response.status === 403) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Access Denied (Admin role required)</td></tr>';
+            setUserTableMessage(tbody, 4, veilT('status.accessDenied'), 'var(--text-muted)');
             return;
           }
           const text = await response.text();
-          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--accent-danger);">Error: ' + text + '</td></tr>';
+          setUserTableMessage(tbody, 4, veilT('common.error', { error: text }), 'var(--accent-danger)');
           return;
         }
         const users = await response.json();
         if (!users || users.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No users registered</td></tr>';
+          setUserTableMessage(tbody, 4, veilT('status.noUsers'), 'var(--text-muted)');
           return;
         }
         tbody.innerHTML = '';
@@ -146,7 +158,7 @@ func panelUsersActionsJS() string {
           
           // Edit button
           const editBtn = document.createElement('button');
-          editBtn.textContent = 'Edit';
+          editBtn.textContent = veilT('users.edit');
           editBtn.className = 'secondary';
           editBtn.dataset.adminOnly = 'true';
           editBtn.style.padding = '6px 12px';
@@ -157,7 +169,7 @@ func panelUsersActionsJS() string {
           
           // Delete button
           const deleteBtn = document.createElement('button');
-          deleteBtn.textContent = 'Delete';
+          deleteBtn.textContent = veilT('action.delete');
           deleteBtn.className = 'danger';
           deleteBtn.dataset.adminOnly = 'true';
           deleteBtn.style.padding = '6px 12px';
@@ -169,24 +181,24 @@ func panelUsersActionsJS() string {
           tbody.appendChild(tr);
         });
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
+        setUserTableMessage(tbody, 4, veilT('status.requestFailed', { error: String(err) }), 'var(--accent-danger)');
       }
     }
 
     async function loadSessions() {
       const tbody = document.getElementById('sessions-table-body');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>';
+      setUserTableMessage(tbody, 5, veilT('status.loadingSessions'), 'var(--text-muted)');
       try {
         const response = await fetch('/api/auth/sessions', { headers: authHeaders() });
         const text = await response.text();
         if (!response.ok) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-danger);">' + (text || ('HTTP ' + response.status)) + '</td></tr>';
+          setUserTableMessage(tbody, 5, text || ('HTTP ' + response.status), 'var(--accent-danger)');
           return;
         }
         const sessions = text ? JSON.parse(text) : [];
         if (!sessions.length) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No active sessions</td></tr>';
+          setUserTableMessage(tbody, 5, veilT('status.noSessions'), 'var(--text-muted)');
           return;
         }
         tbody.innerHTML = '';
@@ -202,7 +214,7 @@ func panelUsersActionsJS() string {
           expires.textContent = session.expiresAt || '';
           tr.appendChild(expires);
           const current = document.createElement('td');
-          current.textContent = session.current ? 'yes' : 'no';
+          current.textContent = session.current ? veilT('common.yes') : veilT('common.no');
           tr.appendChild(current);
           const actions = document.createElement('td');
           const revoke = document.createElement('button');
@@ -211,7 +223,7 @@ func panelUsersActionsJS() string {
           revoke.dataset.adminOnly = 'true';
           revoke.style.padding = '6px 12px';
           revoke.style.fontSize = '0.75rem';
-          revoke.textContent = session.current ? 'Revoke self' : 'Revoke';
+          revoke.textContent = session.current ? veilT('users.revokeSelf') : veilT('users.revoke');
           revoke.addEventListener('click', () => revokeSession(session.id, Boolean(session.current)));
           actions.appendChild(revoke);
           tr.appendChild(actions);
@@ -219,7 +231,7 @@ func panelUsersActionsJS() string {
         });
         applyViewerRoleGuard();
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
+        setUserTableMessage(tbody, 5, veilT('status.requestFailed', { error: String(err) }), 'var(--accent-danger)');
       }
     }
 
@@ -244,7 +256,7 @@ func panelUsersActionsJS() string {
         }
         await loadSessions();
       } catch (err) {
-        alert('Session revoke failed: ' + String(err));
+        alert(veilT('users.sessionRevokeFailed', { error: String(err) }));
       }
     }
 
@@ -254,21 +266,21 @@ func panelUsersActionsJS() string {
       const token = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
       const output = document.getElementById('token-rotation-output');
       output.dataset.token = token;
-      output.textContent = 'Generated replacement token:\n' + token + '\n\nUpdate VEIL_API_TOKEN in /etc/veil/veil.env or the --auth-token value, restart veil.service, then update API clients and this browser token field.';
+      output.textContent = veilT('users.generatedToken', { token });
     }
 
     async function copyGeneratedAPIToken() {
       const output = document.getElementById('token-rotation-output');
       const token = output.dataset.token || '';
       if (!token) {
-        output.textContent = 'Generate a token first';
+        output.textContent = veilT('users.generateTokenFirst');
         return;
       }
       try {
         await navigator.clipboard.writeText(token);
-        output.textContent = output.textContent + '\n\nCopied generated token to clipboard';
+        output.textContent = output.textContent + '\n\n' + veilT('users.tokenCopied');
       } catch (err) {
-        output.textContent = output.textContent + '\n\nCopy failed: ' + String(err);
+        output.textContent = output.textContent + '\n\n' + veilT('status.copyFailed', { error: String(err) });
       }
     }
 
@@ -316,13 +328,13 @@ func panelUsersActionsJS() string {
       const role = document.getElementById('user-role').value;
       const locale = document.getElementById('user-locale').value;
       const output = document.getElementById('user-output');
-      output.textContent = isEdit ? 'Updating user...' : 'Creating user...';
+      output.textContent = isEdit ? veilT('users.updating') : veilT('users.creating');
       
       const payload = { role, locale };
       if (password) {
         payload.password = password;
       } else if (!isEdit) {
-        output.textContent = 'Password is required for new users';
+        output.textContent = veilT('users.passwordRequired');
         return;
       }
       
@@ -346,14 +358,14 @@ func panelUsersActionsJS() string {
             const data = JSON.parse(text);
             if (data && data.message) msg = data.message;
           } catch (_) {}
-          output.textContent = 'Error: ' + msg;
+          output.textContent = veilT('common.error', { error: msg });
           return;
         }
-        output.textContent = isEdit ? 'User updated successfully' : 'User created successfully';
+        output.textContent = isEdit ? veilT('users.updated') : veilT('users.created');
         cancelUserEdit();
         await loadUsers();
       } catch (err) {
-        output.textContent = 'Request failed: ' + String(err);
+        output.textContent = veilT('status.requestFailed', { error: String(err) });
       }
     }
 
@@ -362,7 +374,7 @@ func panelUsersActionsJS() string {
         return;
       }
       const output = document.getElementById('user-output');
-      output.textContent = 'Deleting user...';
+      output.textContent = veilT('users.deleting');
       try {
         const response = await fetch('/api/users/' + encodeURIComponent(username), {
           method: 'DELETE',
@@ -375,14 +387,14 @@ func panelUsersActionsJS() string {
             const data = JSON.parse(text);
             if (data && data.message) msg = data.message;
           } catch (_) {}
-          output.textContent = 'Error deleting user: ' + msg;
+          output.textContent = veilT('users.deleteFailed', { error: msg });
           return;
         }
-        output.textContent = 'User deleted successfully';
+        output.textContent = veilT('users.deleted');
         cancelUserEdit();
         await loadUsers();
       } catch (err) {
-        output.textContent = 'Request failed: ' + String(err);
+        output.textContent = veilT('status.requestFailed', { error: String(err) });
       }
     }
 `

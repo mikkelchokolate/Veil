@@ -56,7 +56,7 @@ func panelClientProfileActionsJS() string {
       const out = document.getElementById('inbounds-output');
       const name = document.getElementById('client-profile-name').value.trim();
       if (!name) {
-        out.textContent = 'Client profile name is required';
+        out.textContent = veilT('inbounds.profileNameRequired');
         return;
       }
       let profiles = [];
@@ -65,7 +65,7 @@ func panelClientProfileActionsJS() string {
         try {
           profiles = JSON.parse(raw);
         } catch (err) {
-          out.textContent = 'Client profiles must be valid JSON: ' + String(err);
+          out.textContent = veilT('inbounds.profilesInvalid', { error: String(err) });
           return;
         }
       }

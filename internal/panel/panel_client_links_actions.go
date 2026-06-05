@@ -17,7 +17,7 @@ func panelClientLinksActionsJS() string {
 
     async function loadClientSubscriptionPath(path) {
       const output = document.getElementById('client-links-output');
-      output.textContent = 'Loading ' + path + '...';
+      output.textContent = veilT('status.loadingPath', { path });
       try {
         const response = await fetch(path, { headers: requestHeaders() });
         const text = await response.text();
@@ -29,7 +29,7 @@ func panelClientLinksActionsJS() string {
 
     async function downloadMieruConfigs() {
       const output = document.getElementById('client-links-output');
-      output.textContent = 'Loading Mieru client configs...';
+      output.textContent = veilT('clientLinks.loadingMieru');
       try {
         const response = await fetch('/api/client-links', { headers: requestHeaders() });
         const body = await response.json();
@@ -39,7 +39,7 @@ func panelClientLinksActionsJS() string {
         }
         const configs = (body.artifacts || []).filter(artifact => artifact.protocol === 'mieru' && artifact.content).map(artifact => ({ name: artifact.name, config: JSON.parse(artifact.content) }));
         if (!configs.length) {
-          output.textContent = 'No Mieru client configs available';
+          output.textContent = veilT('clientLinks.noMieru');
           return;
         }
         const blob = new Blob([JSON.stringify(configs, null, 2) + '\n'], { type: 'application/json;charset=utf-8' });
@@ -51,15 +51,15 @@ func panelClientLinksActionsJS() string {
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-        output.textContent = 'Downloaded mieru-client-configs.json';
+        output.textContent = veilT('clientLinks.downloaded', { filename: 'mieru-client-configs.json' });
       } catch (err) {
-        output.textContent = 'Mieru config download failed: ' + String(err);
+        output.textContent = veilT('clientLinks.mieruFailed', { error: String(err) });
       }
     }
 
     async function downloadClientLinksJSON() {
       const output = document.getElementById('client-links-output');
-      output.textContent = 'Downloading client links JSON...';
+      output.textContent = veilT('clientLinks.downloadingJSON');
       try {
         const response = await fetch('/api/client-links', { headers: requestHeaders() });
         const text = await response.text();
@@ -77,30 +77,30 @@ func panelClientLinksActionsJS() string {
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-        output.textContent = 'Downloaded veil-client-links.json';
+        output.textContent = veilT('clientLinks.downloaded', { filename: 'veil-client-links.json' });
       } catch (err) {
-        output.textContent = 'Download failed: ' + String(err);
+        output.textContent = veilT('status.downloadFailed', { error: String(err) });
       }
     }
 
     async function copyClientLinksOutput() {
       const output = document.getElementById('client-links-output');
       const text = output.textContent || '';
-      if (!text || text === 'Not loaded') {
-        output.textContent = 'Nothing to copy yet';
+      if (!text || text === veilT('status.notLoaded')) {
+        output.textContent = veilT('clientLinks.nothingToCopy');
         return;
       }
       try {
         await navigator.clipboard.writeText(text);
-        output.textContent = text + '\n\nCopied to clipboard';
+        output.textContent = text + '\n\n' + veilT('clientLinks.copiedOutput');
       } catch (err) {
-        output.textContent = text + '\n\nCopy failed: ' + String(err);
+        output.textContent = text + '\n\n' + veilT('clientLinks.copyFailed', { error: String(err) });
       }
     }
 
     async function downloadClientSubscriptionPath(path, filename) {
       const output = document.getElementById('client-links-output');
-      output.textContent = 'Downloading ' + path + '...';
+      output.textContent = veilT('clientLinks.downloading', { path });
       try {
         const response = await fetch(path, { headers: requestHeaders() });
         const text = await response.text();
@@ -117,9 +117,9 @@ func panelClientLinksActionsJS() string {
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-        output.textContent = 'Downloaded ' + filename;
+        output.textContent = veilT('clientLinks.downloaded', { filename });
       } catch (err) {
-        output.textContent = 'Download failed: ' + String(err);
+        output.textContent = veilT('status.downloadFailed', { error: String(err) });
       }
     }
 
@@ -133,14 +133,16 @@ func panelClientLinksActionsJS() string {
         ? veilT('clientLinks.inboundTitle', { name: inboundName })
         : veilT('clientLinks.connectionTitle');
       const container = document.getElementById('modal-links-container');
-      container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;">Loading connection links...</div>';
+      container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;"></div>';
+      container.firstElementChild.textContent = veilT('clientLinks.loading');
       openVeilDialog(document.getElementById('client-links-modal-overlay'));
 
       fetch('/api/client-links', { headers: requestHeaders() })
       .then(res => res.json())
       .then(body => {
         if (body.message || body.error) {
-          container.innerHTML = '<div style="color: var(--accent-danger); padding: 12px; text-align: center;">' + (body.message || 'Failed to load links') + '</div>';
+          container.innerHTML = '<div style="color: var(--accent-danger); padding: 12px; text-align: center;"></div>';
+          container.firstElementChild.textContent = body.message || veilT('clientLinks.failed');
           return;
         }
 
@@ -149,7 +151,8 @@ func panelClientLinksActionsJS() string {
           links = links.filter((link) => link.name === inboundName || link.name.indexOf(inboundName + '/') === 0);
         }
         if (links.length === 0) {
-          container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;">No connection links available for this inbound. Make sure the inbound is enabled and global settings are saved.</div>';
+          container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;"></div>';
+          container.firstElementChild.textContent = veilT('clientLinks.empty');
           return;
         }
 
@@ -159,7 +162,8 @@ func panelClientLinksActionsJS() string {
         });
       })
       .catch(err => {
-        container.innerHTML = '<div style="color: var(--accent-danger); padding: 12px; text-align: center;">Error: ' + String(err) + '</div>';
+        container.innerHTML = '<div style="color: var(--accent-danger); padding: 12px; text-align: center;"></div>';
+        container.firstElementChild.textContent = veilT('common.error', { error: String(err) });
       });
     };
 
@@ -192,7 +196,7 @@ func panelClientLinksActionsJS() string {
       meta.style.fontSize = '0.8rem';
       meta.style.color = 'var(--text-muted)';
       meta.style.textTransform = 'uppercase';
-      meta.textContent = link.transport + ' / Port ' + link.port;
+      meta.textContent = link.transport + ' / ' + veilT('clientLinks.port', { port: link.port });
       header.appendChild(meta);
       item.appendChild(header);
 
@@ -213,7 +217,7 @@ func panelClientLinksActionsJS() string {
       const copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'secondary';
-      copyBtn.textContent = 'Copy';
+      copyBtn.textContent = veilT('action.copy');
       copyBtn.addEventListener('click', () => copyModalLink(uniqueId, copyBtn));
       row.appendChild(copyBtn);
       item.appendChild(row);
@@ -225,13 +229,13 @@ func panelClientLinksActionsJS() string {
       const downloadBtn = document.createElement('button');
       downloadBtn.type = 'button';
       downloadBtn.className = 'secondary';
-      downloadBtn.textContent = 'Download';
+      downloadBtn.textContent = veilT('action.download');
       downloadBtn.addEventListener('click', () => downloadSingleClientLink(link));
       actions.appendChild(downloadBtn);
       const qrBtn = document.createElement('button');
       qrBtn.type = 'button';
       qrBtn.className = 'secondary';
-      qrBtn.textContent = 'Show QR';
+      qrBtn.textContent = veilT('clientLinks.showQR');
       const qrId = 'link-qr-' + idx;
       qrBtn.addEventListener('click', () => toggleQR(qrId, link.uri));
       actions.appendChild(qrBtn);
@@ -273,7 +277,7 @@ func panelClientLinksActionsJS() string {
           }, 1500);
         });
       } catch (err) {
-        alert('Failed to copy link: ' + String(err));
+        alert(veilT('clientLinks.copyFailedAlert', { error: String(err) }));
       }
     };
 
@@ -314,13 +318,13 @@ func panelClientLinksActionsJS() string {
           container.innerHTML = '';
           const image = document.createElement('img');
           image.src = url;
-          image.alt = 'Client link QR code';
+          image.alt = veilT('clientLinks.qrAlt');
           image.style.width = '100%';
           image.style.height = '100%';
           image.style.border = '0';
           container.appendChild(image);
         } catch (err) {
-          container.textContent = 'QR render failed: ' + String(err);
+          container.textContent = veilT('clientLinks.qrFailed', { error: String(err) });
         }
       } else {
         if (container.dataset.objectUrl) {
