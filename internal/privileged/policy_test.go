@@ -105,9 +105,14 @@ func TestPolicyResolvesOnlyRegisteredUpdateArtifacts(t *testing.T) {
 	if resolved.Path != want {
 		t.Fatalf("want %q, got %q", want, resolved.Path)
 	}
+	if resolved.ChecksumsPath != filepath.Join(policy.UpdateRoot, "checksums.txt") {
+		t.Fatalf("checksums path=%q", resolved.ChecksumsPath)
+	}
 
-	_, err = policy.ResolveUpdate(UpdateRequest{ArtifactID: "../veil"})
+	_, err = policy.ResolveUpdate(UpdateRequest{ArtifactID: "../veil", Version: "0.6.0"})
 	assertOperationErrorCode(t, err, ErrorNotFound)
+	_, err = policy.ResolveUpdate(UpdateRequest{ArtifactID: "veil-linux-amd64", Version: "latest"})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
 }
 
 func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {

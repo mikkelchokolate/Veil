@@ -38,6 +38,10 @@ func NewReleaseCatalog(owner, repo string) ReleaseCatalog {
 }
 
 func (c ReleaseCatalog) Latest() (*Release, error) {
+	return c.LatestContext(context.Background())
+}
+
+func (c ReleaseCatalog) LatestContext(ctx context.Context) (*Release, error) {
 	client := c.HTTPClient
 	if client == nil {
 		client = HTTPClient
@@ -47,7 +51,7 @@ func (c ReleaseCatalog) Latest() (*Release, error) {
 		baseURL = "https://api.github.com"
 	}
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", baseURL, c.Owner, c.Repo)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

@@ -70,9 +70,18 @@ func newManagementState(info ServerInfo) *managementState {
 		configurationValidator:         configurationValidator,
 		enforceConfigurationValidation: enforceConfigurationValidation,
 		privileged:                     info.Privileged,
+		updateStager:                   info.UpdateStager,
 	}
 	if state.liveRoot == "" {
 		state.liveRoot = filepath.Join(state.applyRoot, "live")
+	}
+	if state.updateStager == nil {
+		updateRoot := filepath.Join(state.applyRoot, "updates")
+		if info.StatePath != "" {
+			updateRoot = filepath.Join(filepath.Dir(info.StatePath), "updates")
+		}
+		stager := newPanelUpdateStager(updateRoot)
+		state.updateStager = stager.Stage
 	}
 	sessionPath := ""
 	if info.StatePath != "" {

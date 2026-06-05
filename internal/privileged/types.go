@@ -163,6 +163,8 @@ type UpdateRequest struct {
 type UpdateResult struct {
 	ArtifactID string `json:"artifactId"`
 	Staged     bool   `json:"staged"`
+	Installed  bool   `json:"installed,omitempty"`
+	Version    string `json:"version,omitempty"`
 }
 
 type RestartPanelRequest struct{}

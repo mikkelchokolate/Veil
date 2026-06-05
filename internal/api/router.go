@@ -40,6 +40,7 @@ type ServerInfo struct {
 	ConfigurationValidator  ConfigurationValidator
 	Privileged              privileged.Client
 	RequirePrivilegedHelper bool
+	UpdateStager            func(context.Context) (string, error)
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

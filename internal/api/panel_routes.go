@@ -149,12 +149,29 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
+	routes.State.updateMu.Lock()
+	defer routes.State.updateMu.Unlock()
+	if routes.State.updateStager == nil {
+		writeError(w, "panel update staging is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	version, err := routes.State.updateStager(r.Context())
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
 	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
 		ArtifactID: "veil-update",
-		Version:    "latest",
+		Version:    version,
 	})
 	if err != nil {
 		writePrivilegedError(w, err)
+		return
+	}
+	if !result.Installed {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
+		})
 		return
 	}
 
@@ -164,8 +181,10 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 	}()
 
 	writeJSON(w, map[string]any{
-		"success": true,
-		"staged":  result.Staged,
-		"message": "Update staged successfully. Restarting panel service...",
+		"success":   true,
+		"staged":    result.Staged,
+		"installed": result.Installed,
+		"version":   result.Version,
+		"message":   "Update staged successfully. Restarting panel service...",
 	})
 }
