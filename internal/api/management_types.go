@@ -62,6 +62,7 @@ type managementState struct {
 	backupPassphrasePath           string
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
+	backupRestoreAudit             func(audit.Record) error
 	updateMu                       sync.Mutex
 	updateStager                   func(context.Context) (string, error)
 	configurationValidator         ConfigurationValidator
