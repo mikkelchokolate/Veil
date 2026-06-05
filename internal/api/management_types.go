@@ -6,6 +6,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -40,6 +41,7 @@ type managementState struct {
 	mu                             sync.Mutex
 	statePath                      string
 	applyRoot                      string
+	liveRoot                       string
 	keyPath                        string
 	cipher                         *secrets.Cipher
 	setupAllowed                   bool
@@ -61,4 +63,6 @@ type managementState struct {
 	backupJobs                     map[string]BackupRestoreJob
 	configurationValidator         ConfigurationValidator
 	enforceConfigurationValidation bool
+	privileged                     privileged.Client
+	privilegedLocal                bool
 }

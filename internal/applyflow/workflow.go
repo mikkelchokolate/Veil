@@ -11,6 +11,8 @@ type PromotionRecord struct {
 	LivePath    string
 	BackupPath  string
 	HadPrevious bool
+	ArtifactID  string
+	BackupID    string
 }
 
 type State interface {

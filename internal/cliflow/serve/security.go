@@ -8,7 +8,9 @@ type SecurityOptions struct {
 	MetricsAccess         string
 	StatePath             string
 	ApplyRoot             string
+	LiveRoot              string
 	KeyPath               string
+	HelperSocket          string
 	TLSCert               string
 	TLSKey                string
 	WebBasePath           string
@@ -31,8 +33,12 @@ type Config struct {
 	StateSource           string
 	ApplyRoot             string
 	ApplyRootSource       string
+	LiveRoot              string
+	LiveRootSource        string
 	KeyPath               string
 	KeySource             string
+	HelperSocket          string
+	HelperSocketSource    string
 	PanelAccess           string
 	Domain                string
 	Email                 string
@@ -70,7 +76,9 @@ func (s Security) Resolve() (Config, error) {
 	token, tokenSource := env.AuthToken(opts.AuthToken)
 	statePath, stateSource := env.StatePath(opts.StatePath)
 	applyRoot, applyRootSource := env.ApplyRoot(opts.ApplyRoot)
+	liveRoot, liveRootSource := env.LiveRoot(opts.LiveRoot)
 	keyPath, keySource := env.KeyPath(opts.KeyPath)
+	helperSocket, helperSocketSource := env.HelperSocket(opts.HelperSocket)
 	panelAccess := env.PanelAccess()
 	exposed := publicListen || panelAccess == "direct" || panelAccess == "caddy"
 	sessionAuthConfigured := false
@@ -131,8 +139,12 @@ func (s Security) Resolve() (Config, error) {
 		StateSource:           stateSource,
 		ApplyRoot:             applyRoot,
 		ApplyRootSource:       applyRootSource,
+		LiveRoot:              liveRoot,
+		LiveRootSource:        liveRootSource,
 		KeyPath:               keyPath,
 		KeySource:             keySource,
+		HelperSocket:          helperSocket,
+		HelperSocketSource:    helperSocketSource,
 		PanelAccess:           panelAccess,
 		Domain:                env.Domain(),
 		Email:                 env.Email(),

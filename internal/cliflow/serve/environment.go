@@ -12,6 +12,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -167,6 +168,23 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 	return "/etc/veil", "default"
 }
 
+func (Environment) LiveRoot(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--live-root"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_LIVE_ROOT")); path != "" {
+		return path, "VEIL_LIVE_ROOT"
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil", "live"), "default"
+	}
+	return "/etc/veil/generated", "default"
+}
+
 func (Environment) KeyPath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(flagValue); path != "" {
 		return path, "--key-path"
@@ -182,6 +200,16 @@ func (Environment) KeyPath(flagValue string) (path string, source string) {
 		return filepath.Join(pd, "Veil", "state.key"), "default"
 	}
 	return "/etc/veil/state.key", "default"
+}
+
+func (Environment) HelperSocket(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--helper-socket"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_HELPER_SOCKET")); path != "" {
+		return path, "VEIL_HELPER_SOCKET"
+	}
+	return privileged.DefaultSocketPath, "default"
 }
 
 func (Environment) PanelAccess() string { return strings.TrimSpace(os.Getenv("VEIL_PANEL_ACCESS")) }

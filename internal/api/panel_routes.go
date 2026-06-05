@@ -1,14 +1,13 @@
 package api
 
 import (
-	"bytes"
+	"context"
 	"net/http"
 	"os"
-	"os/exec"
 	"time"
 
-	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/panel"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 type PanelRoutes struct {
@@ -144,49 +143,29 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	setJSONHeaders(w)
-
-	var logBuf bytes.Buffer
-
-	deps := updateflow.WorkflowDependencies{
-		FetchRelease: func() (*updateflow.Release, error) {
-			catalog := updateflow.NewReleaseCatalog("mikkelchokolate", "Veil")
-			catalog.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-			return catalog.Latest()
-		},
-		DownloadAsset: func(url string) ([]byte, error) {
-			updateflow.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-			return updateflow.DownloadAsset(url)
-		},
-	}
-
-	opts := updateflow.WorkflowOptions{
-		CurrentVersion: routes.Info.Version,
-		Yes:            true,
-		DryRun:         false,
-		Force:          false,
-		Restart:        false,
-		Staged:         true,
-	}
-
-	err := updateflow.RunWorkflow(opts, &logBuf, deps)
-	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]any{
-			"success": false,
-			"log":     logBuf.String(),
-			"message": err.Error(),
+	if routes.State == nil || routes.State.privileged == nil {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
 		})
+		return
+	}
+	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
+		ArtifactID: "veil-update",
+		Version:    "latest",
+	})
+	if err != nil {
+		writePrivilegedError(w, err)
 		return
 	}
 
 	go func() {
-		time.Sleep(1 * time.Second)
-		_ = exec.Command("systemctl", "restart", "veil.service").Run()
+		time.Sleep(100 * time.Millisecond)
+		_ = routes.State.privileged.RestartPanel(context.Background())
 	}()
 
 	writeJSON(w, map[string]any{
 		"success": true,
-		"log":     logBuf.String(),
+		"staged":  result.Staged,
 		"message": "Update staged successfully. Restarting panel service...",
 	})
 }

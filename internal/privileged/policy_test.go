@@ -10,8 +10,13 @@ import (
 func TestPolicyAllowsManagedUnitsAndRejectsCraftedUnits(t *testing.T) {
 	policy := testPolicy(t)
 	for _, unit := range []string{"veil.service", "veil-mieru.service"} {
-		if err := policy.ValidateServiceAction(ServiceActionRequest{Unit: unit, Action: ServiceActionRestart}); err != nil {
-			t.Fatalf("managed unit %q rejected: %v", unit, err)
+		for _, action := range []ServiceAction{
+			ServiceActionStart, ServiceActionStop, ServiceActionRestart,
+			ServiceActionReload, ServiceActionEnable, ServiceActionDisable,
+		} {
+			if err := policy.ValidateServiceAction(ServiceActionRequest{Unit: unit, Action: action}); err != nil {
+				t.Fatalf("managed unit %q action %q rejected: %v", unit, action, err)
+			}
 		}
 	}
 	for _, unit := range []string{"ssh.service", "veil.service; reboot", "../veil.service", ""} {
@@ -103,6 +108,41 @@ func TestPolicyResolvesOnlyRegisteredUpdateArtifacts(t *testing.T) {
 
 	_, err = policy.ResolveUpdate(UpdateRequest{ArtifactID: "../veil"})
 	assertOperationErrorCode(t, err, ErrorNotFound)
+}
+
+func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
+	policy := testPolicy(t)
+	resolved, err := policy.ResolvePromotion(PromoteRequest{
+		ArtifactIDs: []string{
+			"caddy/edge.Caddyfile",
+			"hysteria2/udp-edge.yaml",
+			"olcrtc/rtc-edge.yaml",
+			"mieru/server_config.json",
+			"sing-box/warp.json",
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve dynamic artifacts: %v", err)
+	}
+	if len(resolved.Artifacts) != 5 {
+		t.Fatalf("resolved artifacts=%+v", resolved.Artifacts)
+	}
+}
+
+func TestPolicyAllowsOpaquePromotionRestoreID(t *testing.T) {
+	policy := testPolicy(t)
+	resolved, err := policy.ResolvePromotion(PromoteRequest{RestoreBackupID: "20260605T120000.000000000Z"})
+	if err != nil {
+		t.Fatalf("resolve restore: %v", err)
+	}
+	if resolved.RestoreBackupID != "20260605T120000.000000000Z" {
+		t.Fatalf("restore backup id=%q", resolved.RestoreBackupID)
+	}
+	for _, invalid := range []string{"../escape", "/absolute", `bad\id`, ""} {
+		if _, err := policy.ResolvePromotion(PromoteRequest{RestoreBackupID: invalid}); err == nil {
+			t.Fatalf("expected restore id %q to fail", invalid)
+		}
+	}
 }
 
 func testPolicy(t *testing.T) Policy {

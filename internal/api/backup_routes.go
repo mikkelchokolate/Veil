@@ -1,18 +1,16 @@
 package api
 
 import (
-	"errors"
+	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 const maxPanelBackupBytes int64 = 64 * 1024 * 1024
@@ -50,64 +48,39 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 	}
 	switch r.Method {
 	case http.MethodGet:
-		entries, err := backup.ListArchives(s.backupDir)
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionList})
 		if err != nil {
-			writeError(w, "failed to list backup archives", http.StatusInternalServerError)
+			writePrivilegedError(w, err)
 			return
 		}
-		writeJSON(w, entries)
+		writeJSON(w, backupEntriesFromPrivileged(result.Archives))
 	case http.MethodPost:
 		var request backupCreateRequest
 		if !decodeJSONRequest(w, r, &request) {
 			return
 		}
-		passphrase, err := s.panelBackupPassphrase()
-		if err != nil {
-			writeError(w, err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-		s.mu.Lock()
-		statePath := s.statePath
-		keyPath := s.keyPath
-		version := s.version
-		s.mu.Unlock()
-		data, err := backup.CreateBackupWithOptions(statePath, keyPath, passphrase, backup.ArchiveOptions{
-			VeilVersion: version,
-		})
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionCreate})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.create", Target: "state", Success: false, Error: err.Error()})
-			writeError(w, "failed to create backup archive", http.StatusInternalServerError)
+			writePrivilegedError(w, err)
 			return
 		}
-		verification, err := backup.VerifyBackup(data, passphrase)
-		if err != nil {
-			writeError(w, "generated backup failed verification", http.StatusInternalServerError)
-			return
+		name := result.ArchiveName
+		response := BackupCreateResponse{
+			Archive: backup.ArchiveEntry{Name: name, CreatedAt: time.Now().UTC(), Encrypted: true},
+			Verification: backup.VerificationReport{
+				Encrypted: result.Verified,
+			},
 		}
-		name, err := nextPanelBackupName(s.backupDir, time.Now().UTC())
-		if err != nil {
-			writeError(w, "failed to allocate backup archive name", http.StatusInternalServerError)
-			return
-		}
-		path := filepath.Join(s.backupDir, name)
-		if err := atomicfile.Write(path, data, 0o600, 0o700); err != nil {
-			writeError(w, "failed to persist backup archive", http.StatusInternalServerError)
-			return
-		}
-		entry, ok, err := findPanelBackup(s.backupDir, name)
-		if err != nil || !ok {
-			writeError(w, "failed to inspect created backup archive", http.StatusInternalServerError)
-			return
-		}
-		response := BackupCreateResponse{Archive: entry, Verification: verification}
 		if request.Prune {
-			policy := retentionFromRequest(request.Daily, request.Weekly, request.Monthly)
-			result, err := backup.PruneArchives(s.backupDir, policy, false)
+			pruned, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+				Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+			})
 			if err != nil {
-				writeError(w, "backup created but retention failed", http.StatusInternalServerError)
+				writePrivilegedError(w, err)
 				return
 			}
-			response.Prune = &result
+			response.Prune = &backup.PruneResult{Deleted: pruned.Pruned, Kept: pruned.Kept}
 		}
 		s.recordRequestAudit(r, audit.Record{
 			Action:  "backup.create",
@@ -138,22 +111,20 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 	if !decodeJSONRequest(w, r, &request) {
 		return
 	}
-	result, err := backup.PruneArchives(
-		s.backupDir,
-		retentionFromRequest(request.Daily, request.Weekly, request.Monthly),
-		false,
-	)
+	result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+		Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+	})
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		writePrivilegedError(w, err)
 		return
 	}
 	s.recordRequestAudit(r, audit.Record{
 		Action:  "backup.prune",
-		Target:  s.backupDir,
+		Target:  "managed-backups",
 		Success: true,
-		Details: map[string]any{"deleted": len(result.Deleted), "kept": len(result.Kept)},
+		Details: map[string]any{"deleted": len(result.Pruned), "kept": len(result.Kept)},
 	})
-	writeJSON(w, result)
+	writeJSON(w, backup.PruneResult{Deleted: result.Pruned, Kept: result.Kept})
 }
 
 func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Request) {
@@ -166,15 +137,6 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 		writeError(w, "invalid backup archive path", http.StatusBadRequest)
 		return
 	}
-	entry, found, err := findPanelBackup(s.backupDir, name)
-	if err != nil {
-		writeError(w, "failed to inspect backup archive", http.StatusInternalServerError)
-		return
-	}
-	if !found {
-		writeNotFound(w)
-		return
-	}
 	switch action {
 	case "download":
 		if r.Method != http.MethodGet {
@@ -182,9 +144,16 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, entry.Name))
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+			Action: privileged.BackupActionRead, ArchiveName: name,
+		})
+		if err != nil {
+			writePrivilegedError(w, err)
+			return
+		}
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
-		http.ServeFile(w, r, entry.Path)
+		_, _ = w.Write(result.Data)
 	case "verify":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)
@@ -194,22 +163,24 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		report, err := s.verifyPanelBackup(entry.Path)
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+			Action: privileged.BackupActionVerify, ArchiveName: name,
+		})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.verify", Target: name, Success: false, Error: err.Error()})
-			writeError(w, err.Error(), http.StatusUnprocessableEntity)
+			writePrivilegedError(w, err)
 			return
 		}
 		s.recordRequestAudit(r, audit.Record{Action: "backup.verify", Target: name, Success: true})
-		writeJSON(w, report)
+		writeJSON(w, backup.VerificationReport{Encrypted: result.Verified})
 	case "restore":
-		s.queuePanelBackupRestore(w, r, entry)
+		s.queuePanelBackupRestore(w, r, name)
 	default:
 		writeNotFound(w)
 	}
 }
 
-func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http.Request, entry backup.ArchiveEntry) {
+func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http.Request, archiveName string) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
 		return
@@ -224,18 +195,10 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 		writeError(w, "restore requires confirm=true", http.StatusBadRequest)
 		return
 	}
-	passphrase, err := s.panelBackupPassphrase()
-	if err != nil {
-		writeError(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	data, err := readPanelBackup(entry.Path)
-	if err != nil {
-		writeError(w, "failed to read backup archive", http.StatusInternalServerError)
-		return
-	}
-	if _, err := backup.VerifyBackup(data, passphrase); err != nil {
-		writeError(w, err.Error(), http.StatusUnprocessableEntity)
+	if _, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+		Action: privileged.BackupActionVerify, ArchiveName: archiveName,
+	}); err != nil {
+		writePrivilegedError(w, err)
 		return
 	}
 	id, err := generateRandomHex(16)
@@ -247,7 +210,7 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 	ownerSessionToken := currentSessionToken(r)
 	job := BackupRestoreJob{
 		ID:                id,
-		Archive:           entry.Name,
+		Archive:           archiveName,
 		Status:            "queued",
 		CreatedAt:         now,
 		ownerSessionToken: ownerSessionToken,
@@ -258,16 +221,18 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 	actor, role := s.auditActor(r)
 	ip := clientIP(r)
 	userAgent := r.UserAgent()
-	go s.runPanelBackupRestore(id, entry.Name, data, passphrase, ownerSessionToken, actor, role, ip, userAgent)
+	go s.runPanelBackupRestore(id, archiveName, ownerSessionToken, actor, role, ip, userAgent)
 	writeJSONStatus(w, http.StatusAccepted, job)
 }
 
-func (s *managementState) runPanelBackupRestore(id, name string, data []byte, passphrase, ownerSessionToken, actor, role, ip, userAgent string) {
+func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, actor, role, ip, userAgent string) {
 	s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 		job.Status = "running"
 		job.StartedAt = time.Now().UTC()
 	})
-	result, err := backup.RestoreBackupWithOptions(data, s.statePath, s.keyPath, passphrase, backup.RestoreOptions{})
+	result, err := s.backupOperation(context.Background(), privileged.BackupRequest{
+		Action: privileged.BackupActionRestore, ArchiveName: name,
+	})
 	if err == nil {
 		err = s.Reload()
 	}
@@ -338,62 +303,6 @@ func (s *managementState) updateBackupRestoreJob(id string, update func(*BackupR
 	s.backupJobs[id] = job
 }
 
-func (s *managementState) verifyPanelBackup(path string) (backup.VerificationReport, error) {
-	passphrase, err := s.panelBackupPassphrase()
-	if err != nil {
-		return backup.VerificationReport{}, err
-	}
-	data, err := readPanelBackup(path)
-	if err != nil {
-		return backup.VerificationReport{}, err
-	}
-	return backup.VerifyBackup(data, passphrase)
-}
-
-func (s *managementState) panelBackupPassphrase() (string, error) {
-	body, err := os.ReadFile(s.backupPassphrasePath)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("scheduled backup passphrase is not configured; run `veil backup schedule enable`")
-	}
-	if err != nil {
-		return "", fmt.Errorf("read backup passphrase: %w", err)
-	}
-	passphrase := strings.TrimRight(string(body), "\r\n")
-	if len(passphrase) < 16 {
-		return "", errors.New("configured backup passphrase is too short")
-	}
-	return passphrase, nil
-}
-
-func readPanelBackup(path string) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	body, err := io.ReadAll(io.LimitReader(file, maxPanelBackupBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(body)) > maxPanelBackupBytes {
-		return nil, errors.New("backup archive exceeds Panel size limit")
-	}
-	return body, nil
-}
-
-func findPanelBackup(dir, name string) (backup.ArchiveEntry, bool, error) {
-	entries, err := backup.ListArchives(dir)
-	if err != nil {
-		return backup.ArchiveEntry{}, false, err
-	}
-	for _, entry := range entries {
-		if entry.Name == name {
-			return entry, true, nil
-		}
-	}
-	return backup.ArchiveEntry{}, false, nil
-}
-
 func parsePanelBackupPath(r *http.Request) (string, string, bool) {
 	escaped := strings.ToLower(r.URL.EscapedPath())
 	if strings.Contains(escaped, "%2f") || strings.Contains(escaped, "%5c") {
@@ -422,14 +331,22 @@ func errorString(err error) string {
 	return err.Error()
 }
 
-func nextPanelBackupName(dir string, now time.Time) (string, error) {
-	for offset := 0; offset < 60; offset++ {
-		name := "veil_backup_" + now.Add(time.Duration(offset)*time.Second).Format("20060102_150405") + ".tar.gz.enc"
-		if _, err := os.Stat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
-			return name, nil
-		} else if err != nil {
-			return "", err
+func (s *managementState) backupOperation(ctx context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {
+	if s.privileged == nil {
+		return privileged.BackupResult{}, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
 		}
 	}
-	return "", errors.New("too many backup archives created within one minute")
+	return s.privileged.Backup(ctx, request)
+}
+
+func backupEntriesFromPrivileged(entries []privileged.BackupArchive) []backup.ArchiveEntry {
+	result := make([]backup.ArchiveEntry, 0, len(entries))
+	for _, entry := range entries {
+		createdAt, _ := time.Parse(time.RFC3339, entry.CreatedAt)
+		result = append(result, backup.ArchiveEntry{
+			Name: entry.Name, Size: entry.Size, CreatedAt: createdAt, Encrypted: entry.Encrypted,
+		})
+	}
+	return result
 }

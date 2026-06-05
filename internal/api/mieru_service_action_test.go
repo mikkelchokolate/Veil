@@ -8,11 +8,11 @@ import (
 )
 
 func TestServiceActionRouteAllowsMieruRestart(t *testing.T) {
-	oldRunner := serviceControlRunner
-	serviceControlRunner = func(name, action string) ServiceActionResponse {
-		return ServiceActionResponse{Service: name, Action: action, Success: true}
+	oldRunner := serviceActionRunner
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[2], Command: command, Success: true}
 	}
-	t.Cleanup(func() { serviceControlRunner = oldRunner })
+	t.Cleanup(func() { serviceActionRunner = oldRunner })
 
 	r, _ := NewRouter(ServerInfo{Version: "test"})
 	w := httptest.NewRecorder()

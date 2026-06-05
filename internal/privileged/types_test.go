@@ -114,6 +114,7 @@ func TestSupportedOperationContract(t *testing.T) {
 		OperationBackupCreate,
 		OperationBackupList,
 		OperationBackupVerify,
+		OperationBackupRead,
 		OperationBackupPrune,
 		OperationBackupRestore,
 		OperationRotateKey,
@@ -124,6 +125,30 @@ func TestSupportedOperationContract(t *testing.T) {
 	for _, operation := range operations {
 		if !operation.Valid() {
 			t.Errorf("supported operation %q is invalid", operation)
+		}
+	}
+}
+
+func TestBackupReadContractUsesManagedArchiveNameOnly(t *testing.T) {
+	request := RequestEnvelope{
+		Version:   ProtocolVersion,
+		RequestID: "backup-read",
+		Operation: OperationBackupRead,
+		Backup: &BackupRequest{
+			Action:      BackupActionRead,
+			ArchiveName: "veil_backup_20260605_120000.tar.gz.enc",
+		},
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("backup read request rejected: %v", err)
+	}
+	raw, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{`"path"`, `"passphrase"`, `"directory"`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("backup read contract leaked %s: %s", forbidden, raw)
 		}
 	}
 }

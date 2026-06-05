@@ -7,6 +7,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -18,7 +19,9 @@ type HTTPServerOptions struct {
 	MetricsAuthRequired bool
 	StatePath           string
 	ApplyRoot           string
+	LiveRoot            string
 	KeyPath             string
+	HelperSocket        string
 	TLSEnabled          bool
 	TLSCert             string
 	TLSKey              string
@@ -42,6 +45,10 @@ func NewHTTPServer(opts HTTPServerOptions) HTTPServer {
 
 func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
+	helperSocket := opts.HelperSocket
+	if helperSocket == "" {
+		helperSocket = privileged.DefaultSocketPath
+	}
 	validator := livevalidation.Validator{
 		Ports:    livevalidation.HostPortProbe{},
 		DNS:      livevalidation.HostDNSResolver{},
@@ -49,21 +56,24 @@ func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 		Units:    livevalidation.SystemdUnitInspector{},
 	}
 	handler, reloader := api.NewRouter(api.ServerInfo{
-		Version:                opts.Version,
-		Mode:                   "server",
-		AuthToken:              opts.AuthToken,
-		PublicListen:           opts.PublicListen,
-		MetricsAuthRequired:    opts.MetricsAuthRequired,
-		StatePath:              opts.StatePath,
-		ApplyRoot:              opts.ApplyRoot,
-		KeyPath:                opts.KeyPath,
-		PanelListen:            opts.Listen,
-		PanelAccess:            opts.PanelAccess,
-		Domain:                 opts.Domain,
-		Email:                  opts.Email,
-		WebBasePath:            opts.WebBasePath,
-		SetupAllowed:           opts.SetupAllowed,
-		ConfigurationValidator: validator,
+		Version:                 opts.Version,
+		Mode:                    "server",
+		AuthToken:               opts.AuthToken,
+		PublicListen:            opts.PublicListen,
+		MetricsAuthRequired:     opts.MetricsAuthRequired,
+		StatePath:               opts.StatePath,
+		ApplyRoot:               opts.ApplyRoot,
+		LiveRoot:                opts.LiveRoot,
+		KeyPath:                 opts.KeyPath,
+		PanelListen:             opts.Listen,
+		PanelAccess:             opts.PanelAccess,
+		Domain:                  opts.Domain,
+		Email:                   opts.Email,
+		WebBasePath:             opts.WebBasePath,
+		SetupAllowed:            opts.SetupAllowed,
+		ConfigurationValidator:  validator,
+		Privileged:              privileged.NewSocketClient(helperSocket),
+		RequirePrivilegedHelper: true,
 	})
 	srv := &http.Server{
 		Addr:              opts.Listen,
