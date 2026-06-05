@@ -307,7 +307,7 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/backups/restore-jobs/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/backup-restore-jobs/")
 	if id == "" || strings.ContainsAny(id, `/\`) {
 		writeError(w, "invalid restore job id", http.StatusBadRequest)
 		return

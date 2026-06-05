@@ -197,7 +197,7 @@ func panelBackupsActionsJS() string {
     async function pollBackupRestore(id) {
       for (let attempt = 0; attempt < 120; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        const response = await fetch('/api/backups/restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
+        const response = await fetch('/api/backup-restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
         const text = await response.text();
         if (!response.ok) {
           setBackupOutput(text || ('HTTP ' + response.status));
