@@ -28,6 +28,7 @@ func (i ManagementApplyIntent) BuildPlan() ApplyPlanResponse {
 		Warp:      input.Warp,
 	})
 	planInput := ApplyPlanInput{
+		ApplyRoot:               input.ApplyRoot,
 		Settings:                input.Settings,
 		Inbounds:                input.Inbounds,
 		Rules:                   input.Rules,
