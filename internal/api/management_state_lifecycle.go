@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
@@ -68,6 +69,13 @@ func newManagementState(info ServerInfo) *managementState {
 		sessionRegistry = mustNewSessionRegistry("")
 	}
 	state.sessions = sessionRegistry
+	auditPath := ""
+	if info.StatePath != "" {
+		auditPath = filepath.Join(filepath.Dir(info.StatePath), "audit", "panel.jsonl")
+	} else if info.ApplyRoot != "" {
+		auditPath = filepath.Join(defaultApplyRoot(info.ApplyRoot), "generated", "veil", "audit.log")
+	}
+	state.audit = audit.NewRecorder(auditPath, audit.RecorderOptions{})
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)

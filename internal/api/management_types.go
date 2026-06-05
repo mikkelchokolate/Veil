@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
@@ -52,4 +53,5 @@ type managementState struct {
 	users         []User
 	orphanedUnits []string
 	sessions      *SessionRegistry
+	audit         *audit.Recorder
 }
