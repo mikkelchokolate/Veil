@@ -15,15 +15,17 @@
 #     veil admin reset
 #   docker run -d --name veil -p 2096:2096 \
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-#     -v /etc/systemd/system:/host-systemd:ro \
 #     -e VEIL_API_TOKEN=your-secret-token \
 #     -e VEIL_WEB_BASE_PATH=/secret-panel/ \
 #     veil serve --listen 0.0.0.0:2096 --auth-token your-secret-token --web-base-path /secret-panel/
 #
+# Container installs provide Panel administration and staging. Live host
+# promotion, systemd control, backup/key operations, and updates require the
+# bare-metal veil-helper.socket; mounting host systemd paths is unsupported.
+#
 # Run (auto Let's Encrypt TLS):
 #   docker run -d --name veil -p 443:443 \
 #     -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-#     -v /etc/systemd/system:/host-systemd:ro \
 #     -e VEIL_API_TOKEN=your-secret-token \
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls

@@ -20,7 +20,7 @@ Veil supports multiple Inbounds, with varying levels of isolation depending on t
 ## 2. Platform and systemd Dependency
 
 - **Operating System:** Veil's control plane is designed for **Linux** with **systemd**. While you can compile the `veil` binary and run the HTTP Panel on Windows or macOS (for testing or local administration), the background daemon cannot automatically reload firewall rules or control proxy runtimes on non-Linux platforms.
-- **Environment:** Runtimes must be installed on the local system (bare-metal) or the container must have read-write access to the host's systemd socket (`/run/systemd/system`) to allow service orchestration.
+- **Environment:** Full live service orchestration requires runtimes installed on the Linux host and the bare-metal privileged helper. A rootless container can provide loopback/read-only administration and staging, but mounting the host systemd tree or socket into the container is not a supported substitute for the helper policy boundary.
 
 ---
 

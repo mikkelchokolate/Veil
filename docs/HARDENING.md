@@ -175,25 +175,55 @@ runbook.
   restricted address families, native system-call architecture, and explicit
   `ReadWritePaths` for Veil-managed state. Treat local drop-ins as further
   tightening, not as the first hardening layer.
-- **Root surface.** On bare-metal systemd installs, the Panel process still
-  needs root-equivalent access to write `/etc/veil`, write `/var/lib/veil`, and
-  call `systemctl` for managed units. The privileged operations are: install
-  and repair managed unit files, promote generated configs, restart/reload
-  managed units, read bounded journald logs, and rotate the state key.
+- **Panel privilege boundary.** The Panel unit runs as `User=veil` and
+  `Group=veil`, with empty `CapabilityBoundingSet` and `AmbientCapabilities`.
+  It can read the root-owned configuration under `/etc/veil` and write only
+  Panel-owned state, staging, updates, sessions, and audit data under
+  `/var/lib/veil`.
+- **Privileged helper.** Root-only operations are exposed by
+  `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
+  `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
+  only an allowlisted protocol over `AF_UNIX`, and runs with
+  `PrivateNetwork=true`. It has no TCP or UDP listener.
+- **Root operation allowlist.** The helper may promote or restore generated
+  configuration, control allowlisted Managed systemd units, read bounded
+  journald output, create/verify/restore encrypted backups, rotate the state
+  key, apply predefined firewall material, install a checksum-verified staged
+  Veil binary, and restart the Panel. Arbitrary commands, paths, units, and
+  shell input are rejected.
+- **Writable paths.** The Panel owns `/var/lib/veil/state.json`,
+  `/var/lib/veil/sessions.json`, `/var/lib/veil/audit`, staging, and updates.
+  Root retains `/etc/veil/state.key`, backup passphrases, live generated
+  configuration, systemd units, and migration safety copies under
+  `/var/lib/veil/migration-backups`.
 - **Containers run as a dedicated user.** The container image runs as the
-  non-root `veil` user and relies on mounted state directories. Do not mount the
-  host systemd tree read-write unless you are intentionally delegating host
-  service orchestration to the container.
+  non-root `veil` user and relies on mounted state directories. A rootless
+  container can provide local/read-only administration and staging, but full
+  live host orchestration requires the bare-metal helper. Do not mount the host
+  systemd tree into the container as a replacement for that boundary.
 - **Firewall.** Only expose the ports you actually use. The Panel-facing
   firewall material plans rules from enabled Inbounds and Panel access — review
   `GET /api/firewall` output and apply the minimum.
 - **Keep the toolchain current.** CI builds and releases on the latest Go and
   fails on any `govulncheck` finding, so staying on tagged releases keeps you
   ahead of stdlib and dependency CVEs.
-- **Capability envelope.** Units bound to potentially privileged ports keep
-  `CAP_NET_BIND_SERVICE` and drop broader ambient capabilities. If your local
-  deployment does not bind low ports directly, you can remove that capability in
-  a drop-in after validating apply, diagnostics, and restart flows.
+- **Capability envelope.** Protocol runtime units that may bind privileged
+  ports keep only `CAP_NET_BIND_SERVICE`. The Panel and helper units ship with
+  empty capability sets; helper operations rely on root UID plus explicit
+  systemd filesystem and syscall restrictions instead of ambient capabilities.
+
+Check the boundary after installation:
+
+```bash
+systemctl status veil.service veil-helper.socket veil-helper.service
+systemctl show veil.service -p User -p Group -p CapabilityBoundingSet
+systemctl show veil-helper.service -p PrivateNetwork -p RestrictAddressFamilies
+stat -c '%U:%G %a %n' /run/veil/helper.sock
+```
+
+If an ownership migration must be reversed, stop the Panel and helper, restore
+the root-owned originals from `/var/lib/veil/migration-backups`, then run
+`sudo veil repair --yes` before starting the units again.
 
 ## 8. Updates and rollback
 
