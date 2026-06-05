@@ -70,7 +70,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 		if addresses, err := v.DNS.LookupHost(ctx, request.Settings.Domain); err != nil || len(addresses) == 0 {
 			response.Issues = append(response.Issues, issue(
 				"dns_unresolved",
-				SeverityError,
+				SeverityWarning,
 				"settings.domain",
 				"",
 				"Configured domain does not resolve",
@@ -190,7 +190,7 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 	if v.Binaries != nil {
 		if _, err := v.Binaries.LookPath(requirement.binary); err != nil {
 			issues = append(issues, issue(
-				"runtime_binary_missing", SeverityError, "protocol", inbound.Name,
+				"runtime_binary_missing", SeverityWarning, "protocol", inbound.Name,
 				fmt.Sprintf("Required runtime binary %s is not installed", requirement.binary),
 				"Install the protocol runtime before applying.", "live-host",
 			))
@@ -201,7 +201,7 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 		exists, err := v.Units.Exists(ctx, unit)
 		if err != nil || !exists {
 			issues = append(issues, issue(
-				"runtime_unit_missing", SeverityError, "protocol", inbound.Name,
+				"runtime_unit_missing", SeverityWarning, "protocol", inbound.Name,
 				fmt.Sprintf("Required systemd unit %s is unavailable", unit),
 				"Install or repair Veil managed service units.", "live-host",
 			))
