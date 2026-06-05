@@ -29,6 +29,7 @@ type ServiceActionResult = model.ServiceActionResult
 type ServiceHealthResult = model.ServiceHealthResult
 
 type User = model.User
+type SetupState = model.SetupState
 
 type livePromotionRecord = applyflow.PromotionRecord
 
@@ -40,6 +41,7 @@ type managementState struct {
 	applyRoot     string
 	keyPath       string
 	cipher        *secrets.Cipher
+	setup         SetupState
 	settings      Settings
 	inbounds      []Inbound
 	rules         []RoutingRule

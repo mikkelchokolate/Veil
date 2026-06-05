@@ -121,6 +121,7 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 
 func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
+		Setup:         l.state.setup,
 		Settings:      l.state.settings,
 		Inbounds:      l.state.inbounds,
 		Rules:         l.state.rules,
@@ -172,6 +173,7 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		return
 	}
 	managementstate.ApplySnapshot(managementstate.SnapshotTarget{
+		Setup:         &state.setup,
 		Settings:      &state.settings,
 		Inbounds:      &state.inbounds,
 		Rules:         &state.rules,
