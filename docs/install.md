@@ -138,10 +138,26 @@ When installed natively on a Linux host, Veil manages the following directories 
 | Path | Mode | Description |
 |---|---|---|
 | `/usr/local/bin/veil` | `0755` | The compiled Veil management daemon binary. |
-| `/etc/veil/` | `0750` | Configuration root, owned by root/veil. Contains secrets and state. |
+| `/etc/veil/` | `0750` | Configuration root, owned by root/veil. Contains environment files, keys, and generated runtime material. |
 | `/etc/veil/veil.env` | `0600` | Environment variables, Panel listen settings, and authentication tokens. |
-| `/etc/veil/state.json` | `0600` | Persisted Management state containing settings and configured Inbounds. |
+| `/var/lib/veil/state.json` | `0600` | Persisted Management state containing settings and configured Inbounds. |
 | `/etc/veil/state.key` | `0600` | AES-256-GCM encryption key used to encrypt passwords and secrets at rest. |
-| `/var/lib/veil/backups/` | `0700` | Compressed configurations created before applying/repairing settings. |
+| `/etc/veil/backup.passphrase` | `0600` | Optional root-owned passphrase used by the scheduled backup service and Panel backup controls. |
+| `/var/lib/veil/backups/` | `0700` | Verified encrypted disaster-recovery archives managed by the backup timer and Panel. |
+| `/var/lib/veil/sessions.json` | `0600` | Hashed browser session and CSRF state; raw bearer values are never persisted. |
+| `/var/lib/veil/audit/panel.jsonl` | `0600` | Rotated, redacted Panel authentication and mutation audit history. |
 | `/var/log/veil/audit.jsonl` | `0600` | Append-only audit trail logging all install, repair, and rollback events. |
 | `/etc/systemd/system/veil.service` | `0644` | Systemd service definition running the core Panel daemon. |
+| `/etc/systemd/system/veil-backup.service` | `0644` | Hardened oneshot encrypted backup and retention job. |
+| `/etc/systemd/system/veil-backup.timer` | `0644` | Daily scheduler for `veil-backup.service`. |
+
+Enable scheduled encrypted backups after installation:
+
+```bash
+sudo veil backup schedule enable \
+  --passphrase-file /root/veil-backup-passphrase
+systemctl list-timers veil-backup.timer
+```
+
+See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) before relying
+on local backups or performing a restore.
