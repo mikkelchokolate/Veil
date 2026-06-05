@@ -3,12 +3,14 @@ package renderer
 import "path"
 
 const (
-	UnitVeil      = "veil.service"
-	UnitCaddy     = "veil-caddy@.service"
-	UnitHysteria2 = "veil-hysteria2@.service"
-	UnitOlcrtc    = "veil-olcrtc@.service"
-	UnitWarp      = "veil-warp.service"
-	UnitMieru     = "veil-mieru.service"
+	UnitVeil          = "veil.service"
+	UnitCaddy         = "veil-caddy@.service"
+	UnitHysteria2     = "veil-hysteria2@.service"
+	UnitOlcrtc        = "veil-olcrtc@.service"
+	UnitWarp          = "veil-warp.service"
+	UnitMieru         = "veil-mieru.service"
+	UnitBackupService = "veil-backup.service"
+	UnitBackupTimer   = "veil-backup.timer"
 )
 
 const systemdHardeningBlock = `CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -26,7 +28,7 @@ UMask=0077
 `
 
 func ManagedSystemdUnitNames() []string {
-	return []string{UnitVeil, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru}
+	return []string{UnitVeil, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer}
 }
 
 type SystemdConfig struct {
@@ -183,6 +185,48 @@ PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
+`,
+		UnitBackupService: `[Unit]
+Description=Veil encrypted state backup
+Documentation=https://github.com/mikkelchokolate/Veil/blob/main/docs/disaster-recovery.md
+ConditionPathExists=` + path.Join(cfg.EtcDir, "backup.passphrase") + `
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=` + cfg.VeilBinary + ` backup create --state /var/lib/veil/state.json --key-path ` + path.Join(cfg.EtcDir, "state.key") + ` --passphrase-file ` + path.Join(cfg.EtcDir, "backup.passphrase") + ` --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12
+User=root
+Group=root
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+ReadWritePaths=/var/lib/veil/backups
+`,
+		UnitBackupTimer: `[Unit]
+Description=Daily Veil encrypted state backup
+Documentation=https://github.com/mikkelchokolate/Veil/blob/main/docs/disaster-recovery.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=veil-backup.service
+
+[Install]
+WantedBy=timers.target
 `,
 	}
 }
