@@ -21,7 +21,7 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         <div class="terminal-header">
           <div class="terminal-title">speedtest-cli</div>
         </div>
-        <pre class="terminal-body" id="speedtest-output" style="color: #60a5fa;">Not started</pre>
+            <pre class="terminal-body" id="speedtest-output" role="status" aria-live="polite" style="color: #60a5fa;">Not started</pre>
       </div>
     </div>
 
@@ -42,7 +42,7 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         <div class="terminal-header">
           <div class="terminal-title">nslookup</div>
         </div>
-        <pre class="terminal-body" id="dns-lookup-output" style="color: #a78bfa;">Not started</pre>
+            <pre class="terminal-body" id="dns-lookup-output" role="status" aria-live="polite" style="color: #a78bfa;">Not started</pre>
       </div>
     </div>
 
@@ -67,7 +67,7 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         <div class="terminal-header">
           <div class="terminal-title">ping</div>
         </div>
-        <pre class="terminal-body" id="ping-output">Not started</pre>
+            <pre class="terminal-body" id="ping-output" role="status" aria-live="polite">Not started</pre>
       </div>
     </div>
 
@@ -82,7 +82,7 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         <div class="terminal-header">
           <div class="terminal-title">ufw status</div>
         </div>
-        <pre class="terminal-body" id="firewall-output" style="color: #fbbf24;">Not loaded</pre>
+            <pre class="terminal-body" id="firewall-output" role="status" aria-live="polite" style="color: #fbbf24;">Not loaded</pre>
       </div>
     </div>
 
@@ -108,7 +108,7 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
         <div class="terminal-header">
           <div class="terminal-title">journalctl</div>
         </div>
-        <pre class="terminal-body" id="logs-output" style="max-height: 400px; overflow-y: auto; color: #34d399;">Not loaded</pre>
+            <pre class="terminal-body" id="logs-output" role="status" aria-live="polite" style="max-height: 400px; overflow-y: auto; color: #34d399;">Not loaded</pre>
       </div>
     </div>`
 }

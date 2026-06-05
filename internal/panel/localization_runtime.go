@@ -8,6 +8,8 @@ import (
 var translationCatalogs = map[string]map[string]string{
 	LocaleEnglish: {
 		"language.label":           "Language",
+		"a11y.skip":                "Skip to content",
+		"a11y.primaryNavigation":   "Primary navigation",
 		"nav.dashboard":            "Dashboard",
 		"nav.inbounds":             "Inbounds",
 		"nav.routing":              "Routing Rules",
@@ -80,6 +82,8 @@ var translationCatalogs = map[string]map[string]string{
 	},
 	LocaleRussian: {
 		"language.label":           "Язык",
+		"a11y.skip":                "Перейти к содержимому",
+		"a11y.primaryNavigation":   "Основная навигация",
 		"nav.dashboard":            "Обзор",
 		"nav.inbounds":             "Входящие подключения",
 		"nav.routing":              "Маршрутизация",

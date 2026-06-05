@@ -103,6 +103,24 @@ const panelHTMLBase = `<!doctype html>
       min-height: 100vh;
       overflow-x: hidden;
     }
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 1000000;
+      padding: 10px 14px;
+      background: var(--primary);
+      color: var(--canvas);
+      text-decoration: none;
+      transform: translateY(-160%);
+    }
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+    :focus-visible {
+      outline: 3px solid var(--accent-warning) !important;
+      outline-offset: 3px;
+    }
 
     /* Global Noise/Grain Overlay */
     body::after {
@@ -219,6 +237,15 @@ const panelHTMLBase = `<!doctype html>
       color: #fff;
       background: var(--bg-hover);
       border-left: 3px solid var(--primary);
+    }
+    button.nav-item {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      border-left: 0;
+      border-right: 0;
+      border-top: 0;
+      border-radius: 0;
     }
 
     /* Content Wrapper */
@@ -622,7 +649,7 @@ const panelHTMLBase = `<!doctype html>
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border);
       border-radius: 0;
-      width: 90%;
+      width: min(600px, calc(100vw - 32px));
       max-width: 600px;
       max-height: 85vh;
       overflow-y: auto;
@@ -889,6 +916,12 @@ const panelHTMLBase = `<!doctype html>
         gap: 12px;
         padding: 12px 16px;
         box-sizing: border-box;
+        flex-wrap: wrap;
+      }
+      .top-bar-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: space-between;
       }
       .breadcrumb,
       .status-indicator {
@@ -933,9 +966,40 @@ const panelHTMLBase = `<!doctype html>
         padding: 20px;
       }
     }
+    @media (max-width: 420px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+      .actions {
+        flex-direction: column;
+      }
+      button,
+      .nav-item,
+      input,
+      select,
+      textarea {
+        min-height: 44px;
+      }
+      .modal-content {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+        padding: 16px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- Fixed background overlay -->
   <div class="bg-overlay-container">
     <div class="bg-image"></div>
@@ -946,8 +1010,8 @@ const panelHTMLBase = `<!doctype html>
     <div class="logo">
       Veil Panel
     </div>
-    <nav class="nav-menu">
-      <a href="#dashboard" class="nav-item active" onclick="switchTab('dashboard')">
+    <nav class="nav-menu" aria-label="Primary navigation">
+      <a href="#dashboard" class="nav-item active" aria-current="page" onclick="switchTab('dashboard')">
         Dashboard
       </a>
       <a href="#inbounds" class="nav-item" onclick="switchTab('inbounds')">
@@ -968,9 +1032,9 @@ const panelHTMLBase = `<!doctype html>
       <a href="#users" class="nav-item" onclick="switchTab('users')">
         Users
       </a>
-      <a id="btn-logout" class="nav-item" style="margin-top: auto; border-top: 1px solid var(--border); border-bottom: 0;">
+      <button type="button" id="btn-logout" class="nav-item" style="margin-top: auto; border-top: 1px solid var(--border); border-bottom: 0;">
         Log Out
-      </a>
+      </button>
     </nav>
   </aside>
 
@@ -992,7 +1056,7 @@ const panelHTMLBase = `<!doctype html>
       </div>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
       <!-- Section: Dashboard -->
       <div id="dashboard" class="tab-content active">
 __VEIL_PANEL_INTRO_CARDS__
@@ -1043,9 +1107,15 @@ __VEIL_LOCALIZATION_RUNTIME__
       const activeTab = document.getElementById(tabId);
       if (activeTab) activeTab.classList.add('active');
       
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item[href]').forEach((el) => {
+        el.classList.remove('active');
+        el.removeAttribute('aria-current');
+      });
       const activeLink = document.querySelector('.nav-item[href="#' + tabId + '"]');
-      if (activeLink) activeLink.classList.add('active');
+      if (activeLink) {
+        activeLink.classList.add('active');
+        activeLink.setAttribute('aria-current', 'page');
+      }
       
       const pageNames = {
         'dashboard': veilT('nav.dashboard'),

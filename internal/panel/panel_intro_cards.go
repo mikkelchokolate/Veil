@@ -510,7 +510,7 @@ func panelIntroCardsHTML() string {
         </button>
         <div class="veil-output-container">
           <div class="veil-output-label">Runtime Output</div>
-          <pre id="version-output" class="veil-output-pre">Not loaded</pre>
+              <pre id="version-output" class="veil-output-pre" role="status" aria-live="polite">Not loaded</pre>
         </div>
       </div>
     </section>
@@ -546,7 +546,7 @@ func panelIntroCardsHTML() string {
       </form>
       <div class="veil-output-container" style="margin-top: 16px;">
         <div class="veil-output-label">Profile Output Preview</div>
-        <pre id="profile-preview-output" class="veil-output-pre">Not generated</pre>
+              <pre id="profile-preview-output" class="veil-output-pre" role="status" aria-live="polite">Not generated</pre>
       </div>
     </section>
   </div>

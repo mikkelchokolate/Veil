@@ -18,7 +18,7 @@ func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
         <button id="load-service-status" type="button">Load service status</button>
         <button id="toggle-auto-refresh" class="secondary" type="button">Auto-refresh: OFF</button>
       </div>
-      <pre id="service-status-output">Not loaded</pre>
+  <pre id="service-status-output" role="status" aria-live="polite">Not loaded</pre>
       <div class="actions">
 ` + ServiceRestartControlsHTML(runtimes) + `      </div>
     </div>`

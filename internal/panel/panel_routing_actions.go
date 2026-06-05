@@ -71,13 +71,13 @@ func panelRoutingActionsJS() string {
         deleteBtn.style.display = 'none';
       }
       
-      modal.classList.add('active');
+      openVeilDialog(modal);
     }
     
     function closeRoutingModal() {
       const modal = document.getElementById('routing-modal');
       if (modal) {
-        modal.classList.remove('active');
+        closeVeilDialog(modal);
       }
     }
 

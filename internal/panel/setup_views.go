@@ -121,6 +121,15 @@ const setupHTMLTemplate = `<!doctype html>
       body { padding: 0; place-items: stretch; }
       main { min-height: 100vh; border: 0; border-radius: 0; padding: 24px 18px; }
     }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>

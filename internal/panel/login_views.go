@@ -160,6 +160,10 @@ const loginHTMLTemplate = `<!doctype html>
       outline: none;
       border-color: var(--primary);
     }
+    :focus-visible {
+      outline: 3px solid var(--accent-warning) !important;
+      outline-offset: 3px;
+    }
     .locale-picker {
       display: flex;
       align-items: center;
@@ -226,6 +230,15 @@ const loginHTMLTemplate = `<!doctype html>
       display: none;
       box-sizing: border-box;
     }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -233,7 +246,7 @@ const loginHTMLTemplate = `<!doctype html>
     <div class="bg-image"></div>
   </div>
 
-  <div class="card">
+  <main class="card" id="main-content">
     <label class="locale-picker">
       <span>Language</span>
       <select data-veil-locale-select aria-label="Language">
@@ -243,7 +256,7 @@ const loginHTMLTemplate = `<!doctype html>
     </label>
     <h2><span class="pulse-static"></span>&nbsp;Veil Panel</h2>
 
-    <div id="error" class="error-msg"></div>
+    <div id="error" class="error-msg" role="status" aria-live="polite"></div>
 
     <form id="login-form">
       <div style="margin-bottom: 20px;">
@@ -256,7 +269,7 @@ const loginHTMLTemplate = `<!doctype html>
       </div>
       <button type="submit">Log In</button>
     </form>
-  </div>
+  </main>
 
   <script>
     window.veilLocale = "__VEIL_LOCALE__";

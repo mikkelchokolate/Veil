@@ -61,7 +61,7 @@ func panelUsersCardHTML() string {
     <button type="button" id="btn-generate-api-token">Generate token</button>
     <button type="button" id="btn-copy-generated-api-token" class="secondary">Copy generated token</button>
   </div>
-  <pre id="token-rotation-output">No generated token</pre>
+  <pre id="token-rotation-output" role="status" aria-live="polite">No generated token</pre>
 </div>
 
 <div class="card">
@@ -99,7 +99,7 @@ func panelUsersCardHTML() string {
   </form>
   <div class="veil-output-container" style="margin-top: 16px;">
     <div class="veil-output-label">Status Output</div>
-    <pre id="user-output" class="veil-output-pre">Ready</pre>
+    <pre id="user-output" class="veil-output-pre" role="status" aria-live="polite">Ready</pre>
   </div>
 </div>
 `

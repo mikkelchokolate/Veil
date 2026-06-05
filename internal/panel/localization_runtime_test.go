@@ -14,6 +14,8 @@ func TestTranslationCatalogsCoverCorePanelSurfaces(t *testing.T) {
 		}
 		for _, key := range []string{
 			"language.label",
+			"a11y.skip",
+			"a11y.primaryNavigation",
 			"nav.dashboard",
 			"nav.inbounds",
 			"nav.routing",
