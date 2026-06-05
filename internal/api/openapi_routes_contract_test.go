@@ -19,6 +19,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/auth/login":                      {"post"},
 		"/api/auth/logout":                     {"post"},
 		"/api/auth/status":                     {"get"},
+		"/api/auth/locale":                     {"post"},
 		"/api/auth/sessions":                   {"delete", "get"},
 		"/api/admin/rotate-key":                {"post"},
 		"/api/audit":                           {"get"},

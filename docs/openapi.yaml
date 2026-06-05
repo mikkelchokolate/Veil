@@ -19,7 +19,9 @@ info:
     `/api/*` routes accept either `X-Veil-Token`, `Authorization: Bearer`, or
     a `veil_session` cookie created by `/api/auth/login`. Mutating requests
     made with a cookie session must also send `X-CSRF-Token`, and only `admin`
-    sessions may mutate state. `viewer` sessions are read-only.
+    sessions may mutate management state. The sole viewer mutation exception
+    is `POST /api/auth/locale`, which updates only the authenticated user's own
+    language preference and rejects static API-token callers.
 
     Browser sessions survive Panel restarts. Only hashes of the session cookie
     and CSRF token are persisted. Sessions expire after 30 minutes idle or 24
@@ -155,6 +157,7 @@ paths:
                   username: admin
                   password: correct-horse-battery-staple
                   backupAcknowledged: true
+                  locale: ru
       responses:
         "201":
           description: Initial administrator created and setup marked complete.
@@ -168,6 +171,7 @@ paths:
                     completed: true
                     username: admin
                     role: admin
+                    locale: ru
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
@@ -212,6 +216,7 @@ paths:
                     success: true
                     username: admin
                     role: admin
+                    locale: ru
                     csrfToken: 0123456789abcdef0123456789abcdef
         "400":
           $ref: "#/components/responses/BadRequest"
@@ -251,10 +256,58 @@ paths:
                     authenticated: true
                     username: admin
                     role: admin
+                    locale: ru
                     csrfToken: 0123456789abcdef0123456789abcdef
                 anonymous:
                   value:
                     authenticated: false
+  /api/auth/locale:
+    post:
+      tags: [auth]
+      summary: Update the current browser user's locale
+      description: |
+        Self-service exception available to both `admin` and `viewer` browser
+        sessions. Requires the `veil_session` cookie and `X-CSRF-Token`,
+        updates only that session's username, and sets a one-year
+        `veil_locale` preference cookie. Static API tokens cannot call this
+        endpoint.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocaleUpdateRequest"
+            examples:
+              russian:
+                value:
+                  locale: ru
+      responses:
+        "200":
+          description: Locale persisted for the current user.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: SameSite `veil_locale` preference cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocaleResponse"
+              examples:
+                russian:
+                  value:
+                    locale: ru
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/auth/sessions:
     get:
       tags: [auth]
@@ -675,7 +728,7 @@ paths:
       summary: List registered Panel users
       responses:
         "200":
-          description: Registered users and roles.
+          description: Registered users, roles, and locale preferences.
           content:
             application/json:
               schema:
@@ -703,6 +756,7 @@ paths:
                   username: operator
                   password: "change-this-password"
                   role: viewer
+                  locale: en
       responses:
         "201":
           description: User created.
@@ -1846,9 +1900,11 @@ components:
         backupAcknowledged:
           type: boolean
           const: true
+        locale:
+          $ref: "#/components/schemas/Locale"
     SetupCompleteResponse:
       type: object
-      required: [completed, username, role]
+      required: [completed, username, role, locale]
       properties:
         completed:
           type: boolean
@@ -1857,6 +1913,8 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     LoginRequest:
       type: object
       required: [username, password]
@@ -1869,7 +1927,7 @@ components:
           format: password
     LoginResponse:
       type: object
-      required: [success, username, role, csrfToken]
+      required: [success, username, role, locale, csrfToken]
       properties:
         success:
           type: boolean
@@ -1877,6 +1935,8 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
         csrfToken:
           type: string
     AuthStatusResponse:
@@ -1889,8 +1949,28 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
         csrfToken:
           type: string
+    Locale:
+      type: string
+      enum: [en, ru]
+      description: Persisted Panel display language.
+    LocaleUpdateRequest:
+      type: object
+      required: [locale]
+      additionalProperties: false
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
+    LocaleResponse:
+      type: object
+      required: [locale]
+      additionalProperties: false
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
     SessionInfo:
       type: object
       required: [id, username, role, createdAt, lastSeenAt, idleExpiresAt, expiresAt, current]
@@ -2144,12 +2224,14 @@ components:
           type: string
     UserResponse:
       type: object
-      required: [username, role]
+      required: [username, role, locale]
       properties:
         username:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     UserCreateRequest:
       type: object
       required: [username, password, role]
@@ -2162,6 +2244,8 @@ components:
           format: password
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     UserUpdateRequest:
       type: object
       required: [role]
@@ -2172,6 +2256,8 @@ components:
           format: password
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     Settings:
       type: object
       required: [panelListen, mode]
