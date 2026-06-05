@@ -25,6 +25,9 @@ func TestServeSecurityResolvesSafeConfig(t *testing.T) {
 	if cfg.Token != "secret" || cfg.TokenSource != "--auth-token" || cfg.WebBasePath != "/secret/" {
 		t.Fatalf("config = %+v", cfg)
 	}
+	if !cfg.SetupAllowed {
+		t.Fatalf("local loopback config should allow first-run setup: %+v", cfg)
+	}
 }
 
 func TestServeSecurityRejectsPublicListenWithoutSessionUsersEvenWithToken(t *testing.T) {
@@ -111,5 +114,8 @@ func TestServeSecurityTreatsCaddyAsPublicExposure(t *testing.T) {
 	}
 	if !cfg.MetricsAuthRequired || !cfg.SessionAuthConfigured {
 		t.Fatalf("expected authenticated Caddy exposure, got %+v", cfg)
+	}
+	if cfg.SetupAllowed {
+		t.Fatalf("Caddy exposure must not allow first-run setup: %+v", cfg)
 	}
 }

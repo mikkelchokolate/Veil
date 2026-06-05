@@ -43,6 +43,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		ProtectHealthz:    info.PublicListen,
 		ProtectMetrics:    info.MetricsAuthRequired,
 		AllowDevAnonymous: !info.PublicListen,
+		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	return metrics.MetricsMiddleware(secured), state
