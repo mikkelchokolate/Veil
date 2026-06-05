@@ -70,11 +70,14 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if !authenticated {
-				// Also allow if static auth token is set (old API clients bypass session)
-				// or if there are no users at all (dev mode)
 				routes.State.mu.Lock()
 				noUsers := len(routes.State.users) == 0
+				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
+				if setupRequired {
+					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath)))
+					return
+				}
 				if routes.Info.PublicListen && noUsers {
 					writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
 					return

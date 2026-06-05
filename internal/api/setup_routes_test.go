@@ -120,6 +120,27 @@ func TestRouterAllowsUnauthenticatedLocalSetupOnly(t *testing.T) {
 	}
 }
 
+func TestPanelRendersSetupBeforeDashboard(t *testing.T) {
+	dir := t.TempDir()
+	router, _ := NewRouter(ServerInfo{
+		Version:      "test",
+		Mode:         "server",
+		StatePath:    filepath.Join(dir, "state.json"),
+		KeyPath:      filepath.Join(dir, "state.key"),
+		PanelAccess:  "local",
+		PanelListen:  "127.0.0.1:2096",
+		SetupAllowed: true,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="setup-form"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func newTestSetupState(t *testing.T, allowed bool) *managementState {
 	t.Helper()
 	return &managementState{
