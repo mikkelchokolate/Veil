@@ -43,15 +43,15 @@ func panelInboundFormHTML() string {
           <button class="secondary" id="load-inbounds" type="button">Refresh List</button>
           <button class="secondary" onclick="toggleRawView('inbounds-output')" type="button">Raw JSON</button>
         </div>
-        <pre id="inbounds-output" style="display: none; margin-top: 16px;">Not loaded</pre>
+      <pre id="inbounds-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
       </div>
 
       <!-- Add/Edit Inbound Overlay Modal -->
-      <div id="inbound-modal-overlay" class="modal-overlay">
-        <div class="modal-content">
+      <div id="inbound-modal-overlay" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="inbound-modal-title" tabindex="-1">
           <div class="modal-header">
             <h2 id="inbound-modal-title">Add Inbound</h2>
-            <button type="button" class="modal-close" onclick="closeInboundModal()">&times;</button>
+            <button type="button" class="modal-close" aria-label="Close dialog" onclick="closeInboundModal()">&times;</button>
           </div>
           
           <form id="inbound-form">

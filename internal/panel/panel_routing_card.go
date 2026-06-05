@@ -273,8 +273,10 @@ func panelRoutingCardHTML() string {
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid var(--border);
           border-radius: 0;
-          width: 100%;
-          max-width: 500px;
+          box-sizing: border-box;
+          width: min(500px, calc(100vw - 32px));
+          max-height: calc(100vh - 32px);
+          overflow-y: auto;
           padding: 24px;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
           transform: scale(0.95);
@@ -586,7 +588,7 @@ func panelRoutingCardHTML() string {
               <div class="terminal-header">
                 <span class="terminal-title">routing-output</span>
               </div>
-              <pre id="routing-output" class="terminal-body">Not loaded</pre>
+              <pre id="routing-output" class="terminal-body" role="status" aria-live="polite">Not loaded</pre>
             </div>
             <div class="terminal-actions">
               <button class="btn-console-clear" type="button" onclick="document.getElementById('routing-output').textContent = 'Console cleared.'">Clear Console</button>
@@ -597,11 +599,11 @@ func panelRoutingCardHTML() string {
         </div>
 
         <!-- Modal Overlay for Add/Edit Form -->
-        <div id="routing-modal" class="modal-overlay" onclick="if(event.target === this) closeRoutingModal()">
-          <div class="modal-content">
+        <div id="routing-modal" class="modal-overlay" aria-hidden="true" onclick="if(event.target === this) closeRoutingModal()">
+          <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
             <div class="modal-header">
               <h3 id="modal-title">Add Routing Rule</h3>
-              <button type="button" class="modal-close" onclick="closeRoutingModal()">&times;</button>
+              <button type="button" class="modal-close" aria-label="Close dialog" onclick="closeRoutingModal()">&times;</button>
             </div>
             <form id="routing-rule-form">
               <div class="form-group">

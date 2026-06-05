@@ -291,7 +291,7 @@ func panelWarpCardHTML() string {
                 <div class="terminal-header">
                   <span class="terminal-title">warp-output</span>
                 </div>
-                <pre id="warp-output" class="terminal-body">Not loaded</pre>
+              <pre id="warp-output" class="terminal-body" role="status" aria-live="polite">Not loaded</pre>
               </div>
               <div class="terminal-actions">
                 <button class="btn-console-clear" type="button" onclick="document.getElementById('warp-output').textContent = 'Console cleared.'">Clear Console</button>

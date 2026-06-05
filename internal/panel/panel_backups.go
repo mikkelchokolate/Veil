@@ -43,7 +43,7 @@ func panelBackupsCardHTML() string {
       </tbody>
     </table>
   </div>
-  <pre id="backup-output">Ready</pre>
+  <pre id="backup-output" role="status" aria-live="polite">Ready</pre>
 </div>
 `
 }

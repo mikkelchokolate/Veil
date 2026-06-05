@@ -227,13 +227,13 @@ func panelInboundActionsJS() string {
       syncInboundTransportOptions();
       renderDynamicProtocolFields(null);
       
-      document.getElementById('inbound-modal-overlay').classList.add('active');
+      openVeilDialog(document.getElementById('inbound-modal-overlay'));
       clearInboundValidation();
       scheduleInboundValidation();
     };
 
     window.closeInboundModal = function() {
-      document.getElementById('inbound-modal-overlay').classList.remove('active');
+      closeVeilDialog(document.getElementById('inbound-modal-overlay'));
       clearTimeout(inboundValidationTimer);
       if (inboundValidationController) {
         inboundValidationController.abort();
@@ -263,7 +263,7 @@ func panelInboundActionsJS() string {
       document.getElementById('delete-inbound').style.display = 'block';
       renderDynamicProtocolFields(inbound);
       
-      document.getElementById('inbound-modal-overlay').classList.add('active');
+      openVeilDialog(document.getElementById('inbound-modal-overlay'));
       clearInboundValidation();
       scheduleInboundValidation();
     };
