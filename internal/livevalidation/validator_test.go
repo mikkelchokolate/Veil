@@ -158,6 +158,34 @@ func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
 	assertIssueCode(t, response, "port_probe_failed")
 }
 
+func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T) {
+	validator := testValidator()
+	validator.DNS = fakeDNSResolver{hosts: map[string][]string{}}
+	validator.Binaries = fakeBinaryLookup{found: map[string]bool{}}
+	validator.Units = fakeUnitInspector{found: map[string]bool{}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{
+			Domain:        "pending.example",
+			Email:         "admin@example.com",
+			NaiveUsername: "veil",
+			NaivePassword: "secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+		}},
+	})
+
+	if !response.Valid {
+		t.Fatalf("external readiness warnings should not invalidate a candidate: %+v", response)
+	}
+	for _, code := range []string{"dns_unresolved", "runtime_binary_missing", "runtime_unit_missing"} {
+		if severity := issueSeverity(response, code); severity != SeverityWarning {
+			t.Fatalf("%s severity = %q, want warning: %+v", code, severity, response)
+		}
+	}
+}
+
 func TestValidatorRejectsPanelPortCollision(t *testing.T) {
 	response := testValidator().Validate(context.Background(), Request{
 		Settings: model.Settings{PanelListen: "127.0.0.1:2096"},
@@ -229,4 +257,13 @@ func countIssueCode(response Response, code string) int {
 		}
 	}
 	return count
+}
+
+func issueSeverity(response Response, code string) string {
+	for _, issue := range response.Issues {
+		if issue.Code == code {
+			return issue.Severity
+		}
+	}
+	return ""
 }
