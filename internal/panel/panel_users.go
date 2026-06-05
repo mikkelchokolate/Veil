@@ -15,12 +15,13 @@ func panelUsersCardHTML() string {
         <tr>
           <th>Username</th>
           <th>Role</th>
+          <th>Locale</th>
           <th style="width: 150px;">Actions</th>
         </tr>
       </thead>
       <tbody id="users-table-body">
         <tr>
-          <td colspan="3" style="text-align: center; color: var(--text-muted);">Loading users...</td>
+          <td colspan="4" style="text-align: center; color: var(--text-muted);">Loading users...</td>
         </tr>
       </tbody>
     </table>
@@ -83,6 +84,13 @@ func panelUsersCardHTML() string {
           <option value="viewer">Viewer (Read-Only)</option>
         </select>
       </div>
+      <div>
+        <label for="user-locale">Locale</label>
+        <select id="user-locale">
+          <option value="en">English</option>
+          <option value="ru">Русский</option>
+        </select>
+      </div>
     </div>
     <div class="actions">
       <button type="submit" id="btn-save-user">Create User</button>
@@ -106,16 +114,16 @@ func panelUsersActionsJS() string {
         const response = await fetch('/api/users', { headers: authHeaders() });
         if (!response.ok) {
           if (response.status === 403) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Access Denied (Admin role required)</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Access Denied (Admin role required)</td></tr>';
             return;
           }
           const text = await response.text();
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--accent-danger);">Error: ' + text + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--accent-danger);">Error: ' + text + '</td></tr>';
           return;
         }
         const users = await response.json();
         if (!users || users.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No users registered</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No users registered</td></tr>';
           return;
         }
         tbody.innerHTML = '';
@@ -129,6 +137,10 @@ func panelUsersActionsJS() string {
           const tdRole = document.createElement('td');
           tdRole.innerHTML = '<span class="badge">' + u.role + '</span>';
           tr.appendChild(tdRole);
+
+          const tdLocale = document.createElement('td');
+          tdLocale.textContent = u.locale || 'en';
+          tr.appendChild(tdLocale);
           
           const tdActions = document.createElement('td');
           
@@ -140,7 +152,7 @@ func panelUsersActionsJS() string {
           editBtn.style.padding = '6px 12px';
           editBtn.style.fontSize = '0.75rem';
           editBtn.style.marginRight = '8px';
-          editBtn.addEventListener('click', () => editUser(u.username, u.role));
+          editBtn.addEventListener('click', () => editUser(u.username, u.role, u.locale));
           tdActions.appendChild(editBtn);
           
           // Delete button
@@ -157,7 +169,7 @@ func panelUsersActionsJS() string {
           tbody.appendChild(tr);
         });
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--accent-danger);">Request failed: ' + String(err) + '</td></tr>';
       }
     }
 
@@ -212,7 +224,7 @@ func panelUsersActionsJS() string {
     }
 
     async function revokeSession(id, isCurrent) {
-      if (!confirm(isCurrent ? 'Revoke the current browser session? You will need to sign in again.' : 'Revoke this browser session?')) {
+      if (!confirm(isCurrent ? veilT('confirm.revokeCurrent') : veilT('confirm.revokeSession'))) {
         return;
       }
       try {
@@ -260,7 +272,7 @@ func panelUsersActionsJS() string {
       }
     }
 
-    function editUser(username, role) {
+    function editUser(username, role, locale) {
       document.getElementById('user-is-edit').value = 'true';
       const usernameInput = document.getElementById('user-username');
       usernameInput.value = username;
@@ -272,8 +284,9 @@ func panelUsersActionsJS() string {
       pwdInput.required = false;
       
       document.getElementById('user-role').value = role;
-      document.getElementById('user-form-title').textContent = 'Edit User: ' + username;
-      document.getElementById('btn-save-user').textContent = 'Save Changes';
+      document.getElementById('user-locale').value = locale || 'en';
+      document.getElementById('user-form-title').textContent = veilT('users.editTitle', { username });
+      document.getElementById('btn-save-user').textContent = veilT('users.saveChanges');
       document.getElementById('btn-cancel-user-edit').style.display = 'inline-flex';
     }
 
@@ -289,8 +302,9 @@ func panelUsersActionsJS() string {
       pwdInput.required = true;
       
       document.getElementById('user-role').value = 'admin';
-      document.getElementById('user-form-title').textContent = 'Add New User';
-      document.getElementById('btn-save-user').textContent = 'Create User';
+      document.getElementById('user-locale').value = 'en';
+      document.getElementById('user-form-title').textContent = veilT('users.addTitle');
+      document.getElementById('btn-save-user').textContent = veilT('users.create');
       document.getElementById('btn-cancel-user-edit').style.display = 'none';
     }
 
@@ -300,10 +314,11 @@ func panelUsersActionsJS() string {
       const username = document.getElementById('user-username').value.trim();
       const password = document.getElementById('user-password').value;
       const role = document.getElementById('user-role').value;
+      const locale = document.getElementById('user-locale').value;
       const output = document.getElementById('user-output');
       output.textContent = isEdit ? 'Updating user...' : 'Creating user...';
       
-      const payload = { role };
+      const payload = { role, locale };
       if (password) {
         payload.password = password;
       } else if (!isEdit) {
@@ -343,7 +358,7 @@ func panelUsersActionsJS() string {
     }
 
     async function deleteUser(username) {
-      if (!confirm('Are you sure you want to delete user "' + username + '"?')) {
+      if (!confirm(veilT('confirm.deleteUser', { username }))) {
         return;
       }
       const output = document.getElementById('user-output');

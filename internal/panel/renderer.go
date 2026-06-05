@@ -20,8 +20,8 @@ func NewRenderer(slots []RenderSlot) Renderer {
 	return Renderer{slots: append([]RenderSlot(nil), slots...)}
 }
 
-func (r Renderer) HTML(basePath string, csrfToken string) string {
-	html := r.BaseHTML()
+func (r Renderer) HTML(basePath string, csrfToken string, locale string) string {
+	html := r.baseHTML(locale)
 	html = strings.ReplaceAll(html, "__VEIL_CSRF_TOKEN__", csrfToken)
 	if basePath == "" || basePath == "/" {
 		return html
@@ -39,8 +39,14 @@ func (r Renderer) HTML(basePath string, csrfToken string) string {
 }
 
 func (r Renderer) BaseHTML() string {
+	return r.baseHTML(LocaleEnglish)
+}
+
+func (r Renderer) baseHTML(locale string) string {
 	html := panelHTMLBase
 	html = strings.ReplaceAll(html, "__PROMETHEUS_BG_BASE64__", prometheusBgBase64)
+	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
+	html = strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
 	for _, slot := range r.slots {
 		if slot.Render == nil {
 			continue
@@ -56,7 +62,7 @@ func (r Renderer) BaseHTML() string {
 // panelHTMLBase is the raw panel HTML. Paths in JS strings are all /-prefixed
 // (e.g., "/api/status"). At serve time, a replacer injects the web base path.
 const panelHTMLBase = `<!doctype html>
-<html lang="en">
+<html lang="__VEIL_LOCALE__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -247,6 +253,25 @@ const panelHTMLBase = `<!doctype html>
     .breadcrumb span {
       color: #fff;
       mix-blend-mode: plus-lighter;
+    }
+    .top-bar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 16px;
+      min-width: 0;
+    }
+    .locale-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .locale-control select {
+      width: auto;
+      min-width: 76px;
+      padding: 8px 30px 8px 10px !important;
     }
     
     main {
@@ -953,8 +978,17 @@ const panelHTMLBase = `<!doctype html>
   <div class="content-wrapper">
     <header class="top-bar">
       <div class="breadcrumb">Veil Panel / <span id="current-page-title">Dashboard</span></div>
-      <div class="status-indicator">
-        API Service: <span class="badge badge-success"><span class="pulse-static"></span> ONLINE</span>
+      <div class="top-bar-actions">
+        <label class="locale-control">
+          <span>Language</span>
+          <select data-veil-locale-select aria-label="Language">
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+        </label>
+        <div class="status-indicator">
+          API Service: <span class="badge badge-success"><span class="pulse-static"></span> ONLINE</span>
+        </div>
       </div>
     </header>
 
@@ -1001,7 +1035,9 @@ __VEIL_PANEL_USERS_CARD__
   </div>
 
   <script>
+    window.veilLocale = "__VEIL_LOCALE__";
     window.veil_csrf_token = '__VEIL_CSRF_TOKEN__';
+__VEIL_LOCALIZATION_RUNTIME__
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       const activeTab = document.getElementById(tabId);
@@ -1012,15 +1048,15 @@ __VEIL_PANEL_USERS_CARD__
       if (activeLink) activeLink.classList.add('active');
       
       const pageNames = {
-        'dashboard': 'Dashboard',
-        'inbounds': 'Inbounds',
-        'routing': 'Routing Rules',
-        'warp': 'WARP',
-        'diagnostics': 'System Tools',
-        'backups': 'Backups',
-        'users': 'Users'
+        'dashboard': veilT('nav.dashboard'),
+        'inbounds': veilT('nav.inbounds'),
+        'routing': veilT('nav.routing'),
+        'warp': veilT('nav.warp'),
+        'diagnostics': veilT('nav.diagnostics'),
+        'backups': veilT('nav.backups'),
+        'users': veilT('nav.users')
       };
-      document.getElementById('current-page-title').innerText = pageNames[tabId] || 'Dashboard';
+      document.getElementById('current-page-title').innerText = pageNames[tabId] || veilT('nav.dashboard');
       if (tabId === 'users' && typeof loadUsers === 'function') {
         loadUsers();
       }

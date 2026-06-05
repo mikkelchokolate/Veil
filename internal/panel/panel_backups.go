@@ -134,7 +134,7 @@ func panelBackupsActionsJS() string {
     }
 
     async function pruneBackups() {
-      if (!confirm('Apply the displayed daily, weekly, and monthly retention policy? Deleted archives cannot be recovered from this host.')) return;
+      if (!confirm(veilT('confirm.pruneBackups'))) return;
       const response = await fetch('/api/backups/prune', {
         method: 'POST',
         headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -174,7 +174,7 @@ func panelBackupsActionsJS() string {
     }
 
     async function restoreBackup(name) {
-      const typed = prompt('Restore overwrites live state and revokes existing sessions. Type the archive name to continue:\n' + name);
+      const typed = prompt(veilT('confirm.restoreBackupPrompt', { name }));
       if (typed !== name) {
         setBackupOutput('Restore cancelled');
         return;

@@ -58,7 +58,9 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         return;
       }
       const runtimes = applyRuntimesFromResponse(data);
-      output.textContent = runtimes.length === 0 ? 'Runtime units: none required' : 'Runtime units: ' + runtimes.join(', ');
+      output.textContent = runtimes.length === 0
+        ? veilT('apply.runtimeNone')
+        : veilT('apply.runtimeList', { runtimes: runtimes.join(', ') });
     }
 
     function applyPlanFromResponse(data) {
@@ -147,10 +149,10 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       const warnings = [];
       const metadata = applyPreviewMetadata(data);
       if (plan.valid === false) {
-        warnings.push('Plan is invalid; fix validation errors before applying.');
+        warnings.push(veilT('apply.warningInvalid'));
       }
       if (Array.isArray(plan.errors) && plan.errors.length > 0) {
-        warnings.push('Plan errors are present in the raw output.');
+        warnings.push(veilT('apply.warningErrors'));
       }
       if (Array.isArray(plan.issues)) {
         plan.issues.forEach((issue) => {
@@ -160,22 +162,22 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         });
       }
       if (Array.isArray(plan.operations) && plan.operations.some((operation) => operation.interruptionRisk === 'connection-drop')) {
-        warnings.push('One or more service restarts can drop active proxy connections.');
+        warnings.push(veilT('apply.warningConnectionDrop'));
       }
       if (metadata.includes('firewall') || metadata.includes('ufw') || metadata.includes('iptables') || metadata.includes('nft')) {
-        warnings.push('Firewall changes can lock out remote access; verify SSH and provider console access before applying.');
+        warnings.push(veilT('apply.warningFirewall'));
       }
       if (metadata.includes('dns') || metadata.includes('domain')) {
-        warnings.push('DNS changes depend on public records and propagation before client links work.');
+        warnings.push(veilT('apply.warningDNS'));
       }
       if (metadata.includes('tls') || metadata.includes('caddy') || metadata.includes('acme') || metadata.includes('cert') || metadata.includes(':443') || metadata.includes(' 443')) {
-        warnings.push('TLS changes require valid domain reachability and certificate issuance.');
+        warnings.push(veilT('apply.warningTLS'));
       }
       if (applyRuntimesFromResponse(data).length > 0 || metadata.includes('systemctl') || metadata.includes('reload') || metadata.includes('restart') || metadata.includes('service')) {
-        warnings.push('Service reload or restart can interrupt active proxy sessions.');
+        warnings.push(veilT('apply.warningServiceRestart'));
       }
       if (warnings.length === 0) {
-        warnings.push('No DNS/TLS/firewall/service warnings detected in plan metadata.');
+        warnings.push(veilT('apply.warningNone'));
       }
       return warnings;
     }
@@ -183,7 +185,9 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
     function renderApplySafePreview(data) {
       const warningsOutput = document.getElementById('apply-safety-warnings');
       if (warningsOutput) {
-        warningsOutput.textContent = 'Safety warnings: ' + applyWarningsFromResponse(data).join(' ');
+        warningsOutput.textContent = veilT('apply.warningSummary', {
+          warnings: applyWarningsFromResponse(data).join(' ')
+        });
       }
       const body = document.getElementById('apply-file-diff-preview-body');
       if (!body) {

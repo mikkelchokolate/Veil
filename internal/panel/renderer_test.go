@@ -10,12 +10,27 @@ func TestRendererReplacesSlotsAndPrefixesPanelPaths(t *testing.T) {
 		{Placeholder: "__VEIL_PANEL_INTRO_CARDS__", Render: func() string { return `<button data-url="/api/version">Version</button>` }},
 	})
 
-	html := renderer.HTML("/secret/", "")
+	html := renderer.HTML("/secret/", "", "ru")
 	if !strings.Contains(html, `<button data-url="/secret/api/version">Version</button>`) {
 		t.Fatalf("Panel HTML did not render slot and prefix path:\n%s", html)
 	}
 	if strings.Contains(html, "__VEIL_PANEL_INTRO_CARDS__") {
 		t.Fatalf("Panel HTML left slot placeholder unresolved")
+	}
+}
+
+func TestRendererIncludesLocalizedShell(t *testing.T) {
+	html := NewRenderer(nil).HTML("/", "csrf-token", "ru")
+	for _, want := range []string{
+		`<html lang="ru">`,
+		`data-veil-locale-select`,
+		`window.veilLocale = "ru"`,
+		`window.veilT`,
+		`id="current-page-title"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("localized Panel missing %q", want)
+		}
 	}
 }
 

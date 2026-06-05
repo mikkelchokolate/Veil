@@ -272,14 +272,18 @@ func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *managementState) userLocale(username string) string {
+	return panel.NormalizeLocale(s.storedUserLocale(username))
+}
+
+func (s *managementState) storedUserLocale(username string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, user := range s.users {
 		if user.Username == username {
-			return panel.NormalizeLocale(user.Locale)
+			return user.Locale
 		}
 	}
-	return panel.LocaleEnglish
+	return ""
 }
 
 func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Request) {

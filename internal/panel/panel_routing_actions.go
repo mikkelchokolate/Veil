@@ -46,7 +46,7 @@ func panelRoutingActionsJS() string {
       }
       
       if (rule) {
-        title.textContent = 'Edit Routing Rule';
+        title.textContent = veilT('routing.edit');
         nameInput.value = rule.name || '';
         nameInput.readOnly = true;
         matchInput.value = rule.match || '';
@@ -62,7 +62,7 @@ func panelRoutingActionsJS() string {
         enabledCheckbox.checked = Boolean(rule.enabled);
         deleteBtn.style.display = 'inline-block';
       } else {
-        title.textContent = 'Add Routing Rule';
+        title.textContent = veilT('routing.add');
         nameInput.value = '';
         nameInput.readOnly = false;
         matchInput.value = '';
@@ -146,7 +146,7 @@ func panelRoutingActionsJS() string {
         btnEdit.type = 'button';
         btnEdit.className = 'btn-action-edit';
         btnEdit.dataset.adminOnly = 'true';
-        btnEdit.textContent = 'Edit';
+        btnEdit.textContent = veilT('users.edit');
         btnEdit.addEventListener('click', () => {
           openRoutingModal(rule);
         });
@@ -171,7 +171,7 @@ func panelRoutingActionsJS() string {
       event.preventDefault();
       const name = document.getElementById('routing-rule-name').value.trim();
       if (!name) {
-        document.getElementById('routing-output').textContent = 'Routing rule name is required';
+        document.getElementById('routing-output').textContent = veilT('routing.nameRequired');
         return;
       }
       const payload = {
@@ -196,10 +196,10 @@ func panelRoutingActionsJS() string {
     async function deleteRoutingRule() {
       const name = document.getElementById('routing-rule-name').value.trim();
       if (!name) {
-        document.getElementById('routing-output').textContent = 'Routing rule name is required';
+        document.getElementById('routing-output').textContent = veilT('routing.nameRequired');
         return;
       }
-      if (confirm('Are you sure you want to delete routing rule \"' + name + '\"?')) {
+      if (confirm(veilT('confirm.deleteRoutingRule', { name }))) {
         await loadJSON('/api/routing/rules/' + encodeURIComponent(name), 'routing-output', { method: 'DELETE' });
         closeRoutingModal();
         loadRoutingRules();
