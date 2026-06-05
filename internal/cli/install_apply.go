@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -20,6 +21,7 @@ var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 }
 
 var installExecutableFunc = os.Executable
+var installPrepareHostFunc = hostaccess.Prepare
 
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
 	actualBackupDir := opts.BackupDir
@@ -121,6 +123,10 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
+	}
+	if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
+		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+		return fmt.Errorf("prepare panel service account and permissions: %w", err)
 	}
 	if err := installSystemdRunFunc(service.SystemdApplyPlan(installer.PanelSystemdUnits(profile))); err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
