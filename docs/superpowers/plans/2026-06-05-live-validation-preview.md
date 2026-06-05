@@ -397,7 +397,7 @@ git commit -m "feat: add structured apply preview"
 - Modify: `internal/panel/panel.css`
 - Test: `internal/panel/panel_test.go`
 
-- [ ] **Step 1: Write failing panel contract tests**
+- [x] **Step 1: Write failing panel contract tests**
 
 Assert rendered Panel assets contain:
 
@@ -408,23 +408,23 @@ Assert rendered Panel assets contain:
 - submit disabling only while validation is pending or has errors;
 - remediation text without exposing credentials.
 
-- [ ] **Step 2: Run focused panel tests and verify failure**
+- [x] **Step 2: Run focused panel tests and verify failure**
 
 Run: `go test ./internal/panel -run 'Validation|InboundModal' -count=1`
 
 Expected: FAIL because live validation UI is absent.
 
-- [ ] **Step 3: Implement accessible validation feedback**
+- [x] **Step 3: Implement accessible validation feedback**
 
 Serialize the complete candidate snapshot, debounce `POST /api/validation` by 300 ms, abort stale calls, and ignore responses whose sequence number is no longer current. Map `field` paths to inputs, set `aria-invalid`, and render one concise remediation per issue in an `aria-live="polite"` region. Preserve all values when the server rejects save.
 
-- [ ] **Step 4: Run panel tests**
+- [x] **Step 4: Run panel tests**
 
 Run: `go test ./internal/panel -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit validation UX**
+- [x] **Step 5: Commit validation UX**
 
 ```bash
 git add internal/panel
