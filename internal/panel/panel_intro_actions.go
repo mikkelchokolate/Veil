@@ -113,7 +113,17 @@ func panelIntroActionsJS() string {
       document.querySelectorAll('[data-admin-only="true"], button[id^="restart-"]').forEach((el) => controls.push(el));
       controls.forEach((el) => {
         wireViewerGuard(el);
-        el.disabled = viewer;
+        if (viewer) {
+          if (el.dataset.viewerGuardDisabled !== 'true') {
+            el.dataset.viewerGuardWasDisabled = el.disabled ? 'true' : 'false';
+            el.dataset.viewerGuardDisabled = 'true';
+          }
+          el.disabled = true;
+        } else if (el.dataset.viewerGuardDisabled === 'true') {
+          el.disabled = el.dataset.viewerGuardWasDisabled === 'true';
+          delete el.dataset.viewerGuardWasDisabled;
+          delete el.dataset.viewerGuardDisabled;
+        }
         el.title = viewer ? 'Viewer role is read-only; admin required.' : '';
       });
       adminOnlyFormIds.forEach((id) => {
