@@ -73,7 +73,7 @@ func panelBackupsActionsJS() string {
         const text = await response.text();
         if (!response.ok) {
           tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-danger);"></td></tr>';
-          tbody.firstElementChild.firstElementChild.textContent = text || ('HTTP ' + response.status);
+          tbody.firstElementChild.firstElementChild.textContent = formatAPIError(text, response.status);
           return;
         }
         const backups = text ? JSON.parse(text) : [];
@@ -128,7 +128,7 @@ func panelBackupsActionsJS() string {
       });
       const text = await response.text();
       if (!response.ok) {
-        setBackupOutput(text || ('HTTP ' + response.status));
+        setBackupOutput(formatAPIError(text, response.status));
         return;
       }
       setBackupOutput(JSON.parse(text));
@@ -143,7 +143,7 @@ func panelBackupsActionsJS() string {
         body: JSON.stringify(backupRetention())
       });
       const text = await response.text();
-      setBackupOutput(response.ok && text ? JSON.parse(text) : (text || ('HTTP ' + response.status)));
+      setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
       if (response.ok) await loadBackups();
     }
 
@@ -155,13 +155,13 @@ func panelBackupsActionsJS() string {
         body: '{}'
       });
       const text = await response.text();
-      setBackupOutput(response.ok && text ? JSON.parse(text) : (text || ('HTTP ' + response.status)));
+      setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
     }
 
     async function downloadBackup(name) {
       const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/download', { headers: authHeaders() });
       if (!response.ok) {
-        setBackupOutput(await response.text());
+        setBackupOutput(formatAPIError(await response.text(), response.status));
         return;
       }
       const blob = await response.blob();
@@ -188,7 +188,7 @@ func panelBackupsActionsJS() string {
       });
       const text = await response.text();
       if (!response.ok) {
-        setBackupOutput(text || ('HTTP ' + response.status));
+        setBackupOutput(formatAPIError(text, response.status));
         return;
       }
       const job = JSON.parse(text);
@@ -202,7 +202,7 @@ func panelBackupsActionsJS() string {
         const response = await fetch('/api/backup-restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
         const text = await response.text();
         if (!response.ok) {
-          setBackupOutput(text || ('HTTP ' + response.status));
+          setBackupOutput(formatAPIError(text, response.status));
           return;
         }
         const job = JSON.parse(text);

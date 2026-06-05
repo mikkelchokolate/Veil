@@ -38,6 +38,20 @@ func panelIntroActionsJS() string {
       return Object.assign({}, extra || {}, authHeaders());
     }
 
+    function formatAPIError(text, status) {
+      if (!text) return 'HTTP ' + status;
+      try {
+        const data = JSON.parse(text);
+        if (data && data.error && data.error.message) {
+          return data.error.message;
+        }
+        if (data && data.message) {
+          return data.message;
+        }
+      } catch (_) {}
+      return text;
+    }
+
     function currentUserRole() {
       return window.veil_user_role || localStorage.getItem('veil_user_role') || '';
     }
@@ -171,7 +185,7 @@ func panelIntroActionsJS() string {
         const response = await fetch(path, requestOptions);
         const text = await response.text();
         if (!response.ok) {
-          output.textContent = text || ('HTTP ' + response.status);
+          output.textContent = formatAPIError(text, response.status);
           return null;
         }
         const parsed = text ? JSON.parse(text) : null;
@@ -223,7 +237,7 @@ func panelIntroActionsJS() string {
           if (data && data.log) {
             output.textContent = veilT('version.updateFailed', { details: data.log + "\n\n" + veilT('common.error', { error: data.message || veilT('status.unknownError') }) });
           } else {
-            output.textContent = veilT('version.updateFailed', { details: text });
+            output.textContent = veilT('version.updateFailed', { details: formatAPIError(text, response.status) });
           }
           return;
         }

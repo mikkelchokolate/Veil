@@ -10,6 +10,8 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 	for _, want := range []string{
 		`veil_api_token`,
 		`function authHeaders()`,
+		`function formatAPIError(text, status)`,
+		`data.error.message`,
 		`function currentUserRole()`,
 		`function applyViewerRoleGuard()`,
 		`adminOnlyControlIds`,
