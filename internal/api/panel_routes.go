@@ -1,14 +1,13 @@
 package api
 
 import (
-	"bytes"
+	"context"
 	"net/http"
 	"os"
-	"os/exec"
 	"time"
 
-	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/panel"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 type PanelRoutes struct {
@@ -60,32 +59,37 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		// Check session; if no valid session, show login page.
 		csrfToken := ""
+		locale := panel.ResolveLocale("", r)
 		if routes.State != nil {
 			var authenticated bool
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
-				if sess, ok := globalSessions.Get(cookie.Value); ok {
+				if session, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
 					authenticated = true
-					csrfToken = sess.CSRFToken
+					locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
+					csrfToken, _, _ = routes.State.sessionRegistry().EnsureCSRF(cookie.Value)
 				}
 			}
 			if !authenticated {
-				// Also allow if static auth token is set (old API clients bypass session)
-				// or if there are no users at all (dev mode)
 				routes.State.mu.Lock()
 				noUsers := len(routes.State.users) == 0
+				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
+				if setupRequired {
+					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath, locale)))
+					return
+				}
 				if routes.Info.PublicListen && noUsers {
 					writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath)))
+					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath, locale)))
 					return
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken)))
+		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken, locale)))
 	}
 }
 
@@ -112,8 +116,8 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func panelHTML(basePath string, csrfToken string) string {
-	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken)
+func panelHTML(basePath string, csrfToken string, locale string) string {
+	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale)
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -141,49 +145,48 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	setJSONHeaders(w)
-
-	var logBuf bytes.Buffer
-
-	deps := updateflow.WorkflowDependencies{
-		FetchRelease: func() (*updateflow.Release, error) {
-			catalog := updateflow.NewReleaseCatalog("mikkelchokolate", "Veil")
-			catalog.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-			return catalog.Latest()
-		},
-		DownloadAsset: func(url string) ([]byte, error) {
-			updateflow.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-			return updateflow.DownloadAsset(url)
-		},
+	if routes.State == nil || routes.State.privileged == nil {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper is unavailable",
+		})
+		return
 	}
-
-	opts := updateflow.WorkflowOptions{
-		CurrentVersion: routes.Info.Version,
-		Yes:            true,
-		DryRun:         false,
-		Force:          false,
-		Restart:        false,
-		Staged:         true,
+	routes.State.updateMu.Lock()
+	defer routes.State.updateMu.Unlock()
+	if routes.State.updateStager == nil {
+		writeError(w, "panel update staging is unavailable", http.StatusServiceUnavailable)
+		return
 	}
-
-	err := updateflow.RunWorkflow(opts, &logBuf, deps)
+	version, err := routes.State.updateStager(r.Context())
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]any{
-			"success": false,
-			"log":     logBuf.String(),
-			"message": err.Error(),
+		writeError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
+		ArtifactID: "veil-update",
+		Version:    version,
+	})
+	if err != nil {
+		writePrivilegedError(w, err)
+		return
+	}
+	if !result.Installed {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
 		})
 		return
 	}
 
 	go func() {
-		time.Sleep(1 * time.Second)
-		_ = exec.Command("systemctl", "restart", "veil.service").Run()
+		time.Sleep(100 * time.Millisecond)
+		_ = routes.State.privileged.RestartPanel(context.Background())
 	}()
 
 	writeJSON(w, map[string]any{
-		"success": true,
-		"log":     logBuf.String(),
-		"message": "Update staged successfully. Restarting panel service...",
+		"success":   true,
+		"staged":    result.Staged,
+		"installed": result.Installed,
+		"version":   result.Version,
+		"message":   "Update staged successfully. Restarting panel service...",
 	})
 }

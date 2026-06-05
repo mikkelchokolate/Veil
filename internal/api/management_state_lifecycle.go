@@ -2,7 +2,6 @@ package api
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -10,9 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ManagementStateLifecycle struct {
@@ -50,14 +50,63 @@ func newManagementState(info ServerInfo) *managementState {
 		Domain:      info.Domain,
 		Email:       info.Email,
 	})
+	configurationValidator := info.ConfigurationValidator
+	enforceConfigurationValidation := configurationValidator != nil
+	if configurationValidator == nil {
+		configurationValidator = livevalidation.Validator{}
+	}
 	state := &managementState{
-		statePath: info.StatePath,
-		applyRoot: defaultApplyRoot(info.ApplyRoot),
-		keyPath:   keyPath,
-		settings:  model.Settings,
-		inbounds:  model.Inbounds,
-		rules:     model.Rules,
-		warp:      model.Warp,
+		statePath:                      info.StatePath,
+		applyRoot:                      defaultApplyRoot(info.ApplyRoot),
+		liveRoot:                       info.LiveRoot,
+		keyPath:                        keyPath,
+		setupAllowed:                   info.SetupAllowed,
+		settings:                       model.Settings,
+		inbounds:                       model.Inbounds,
+		rules:                          model.Rules,
+		warp:                           model.Warp,
+		version:                        info.Version,
+		backupJobs:                     make(map[string]BackupRestoreJob),
+		configurationValidator:         configurationValidator,
+		enforceConfigurationValidation: enforceConfigurationValidation,
+		privileged:                     info.Privileged,
+		updateStager:                   info.UpdateStager,
+	}
+	if state.liveRoot == "" {
+		state.liveRoot = filepath.Join(state.applyRoot, "live")
+	}
+	if state.updateStager == nil {
+		updateRoot := filepath.Join(state.applyRoot, "updates")
+		if info.StatePath != "" {
+			updateRoot = filepath.Join(filepath.Dir(info.StatePath), "updates")
+		}
+		stager := newPanelUpdateStager(updateRoot)
+		state.updateStager = stager.Stage
+	}
+	sessionPath := ""
+	if info.StatePath != "" {
+		sessionPath = filepath.Join(filepath.Dir(info.StatePath), "sessions.json")
+	}
+	sessionRegistry, err := NewSessionRegistry(sessionPath)
+	if err != nil {
+		log.Printf("error loading Panel sessions from %s: %v", sessionPath, err)
+		sessionRegistry = mustNewSessionRegistry("")
+	}
+	state.sessions = sessionRegistry
+	if info.StatePath != "" {
+		state.backupDir = filepath.Join(filepath.Dir(info.StatePath), "backups")
+	}
+	state.backupPassphrasePath = filepath.Join(filepath.Dir(keyPath), "backup.passphrase")
+	auditPath := ""
+	if info.StatePath != "" {
+		auditPath = filepath.Join(filepath.Dir(info.StatePath), "audit", "panel.jsonl")
+	} else if info.ApplyRoot != "" {
+		auditPath = filepath.Join(defaultApplyRoot(info.ApplyRoot), "generated", "veil", "audit.log")
+	}
+	state.audit = audit.NewRecorder(auditPath, audit.RecorderOptions{})
+	if state.privileged == nil && !info.RequirePrivilegedHelper {
+		state.privileged = newLocalPrivilegedClient(state)
+		state.privilegedLocal = true
 	}
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
@@ -65,42 +114,6 @@ func newManagementState(info ServerInfo) *managementState {
 	}
 	if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
-	}
-
-	effectiveMode := state.settings.Mode
-	if effectiveMode == "" {
-		effectiveMode = info.Mode
-	}
-	if len(state.users) == 0 && info.AuthToken == "" && info.StatePath != "" && info.KeyPath != "" && effectiveMode != "dev" {
-		username, password, err := generateRandomAdminAuth()
-		if err == nil {
-			hashed, bcryptErr := bcrypt.GenerateFromPassword([]byte(password), 10)
-			if bcryptErr == nil {
-				state.users = []User{
-					{
-						Username:     username,
-						PasswordHash: string(hashed),
-						Role:         "admin",
-					},
-				}
-				if state.settings.WebBasePath == "" {
-					state.settings.WebBasePath = generateRandomWebBasePath()
-				}
-				if saveErr := lifecycle.SaveLocked(); saveErr == nil {
-					fmt.Printf("\n========================================================================\n")
-					fmt.Printf("VEIL INITIAL ADMIN CREDENTIALS GENERATED\n")
-					fmt.Printf("Username: %s\n", username)
-					fmt.Printf("Password: %s\n", password)
-					fmt.Printf("WebBasePath: %s\n", state.settings.WebBasePath)
-					fmt.Printf("Please record these credentials! You can change them later in the Web UI.\n")
-					fmt.Printf("========================================================================\n\n")
-				} else {
-					log.Printf("error saving generated admin credentials: %v", saveErr)
-				}
-			}
-		} else {
-			log.Printf("error generating random admin credentials: %v", err)
-		}
 	}
 
 	return state
@@ -121,6 +134,7 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 
 func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
+		Setup:         l.state.setup,
 		Settings:      l.state.settings,
 		Inbounds:      l.state.inbounds,
 		Rules:         l.state.rules,
@@ -172,6 +186,7 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		return
 	}
 	managementstate.ApplySnapshot(managementstate.SnapshotTarget{
+		Setup:         &state.setup,
 		Settings:      &state.settings,
 		Inbounds:      &state.inbounds,
 		Rules:         &state.rules,
@@ -202,24 +217,4 @@ func generateRandomHex(length int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
-}
-
-func generateRandomAdminAuth() (string, string, error) {
-	suffix, err := generateRandomHex(4)
-	if err != nil {
-		return "", "", err
-	}
-	pass, err := generateRandomHex(16)
-	if err != nil {
-		return "", "", err
-	}
-	return "admin_" + suffix, pass, nil
-}
-
-func generateRandomWebBasePath() string {
-	b := make([]byte, 9)
-	if _, err := rand.Read(b); err != nil {
-		return "/veil-panel/"
-	}
-	return "/" + base64.RawURLEncoding.EncodeToString(b) + "/"
 }

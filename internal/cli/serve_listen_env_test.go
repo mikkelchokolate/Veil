@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"path/filepath"
 	"testing"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestServeEnvironmentResolvesListenFromEnv(t *testing.T) {
@@ -27,10 +30,17 @@ func TestResolveServeConfigCarriesTLSPathsFromEnv(t *testing.T) {
 }
 
 func TestResolveServeConfigUsesResolvedPanelInstallEnvironment(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := managementstate.NewStore(statePath, nil).Save(model.ManagementSnapshot{
+		Users: []model.User{{Username: "admin", PasswordHash: "hash", Role: "admin"}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
 	t.Setenv("VEIL_LISTEN", "127.0.0.1:34567")
 	t.Setenv("VEIL_PANEL_ACCESS", "caddy")
 	t.Setenv("VEIL_DOMAIN", "panel.example.com")
 	t.Setenv("VEIL_EMAIL", "admin@example.com")
+	t.Setenv("VEIL_STATE_PATH", statePath)
 	cfg, err := serveflow.NewSecurity(serveflow.SecurityOptions{}).Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)

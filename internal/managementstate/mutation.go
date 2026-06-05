@@ -261,6 +261,9 @@ func (m Mutation) CreateUser(user model.User) (model.User, error) {
 	if user.Username == "" || (user.Role != "admin" && user.Role != "viewer") {
 		return model.User{}, errors.New("invalid user data")
 	}
+	if !validUserLocale(user.Locale) {
+		return model.User{}, errors.New("invalid user locale")
+	}
 	for _, existing := range *m.target.Users {
 		if existing.Username == user.Username {
 			return model.User{}, errors.New("user already exists")
@@ -287,12 +290,22 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 	if update.Role != "admin" && update.Role != "viewer" {
 		return model.User{}, errors.New("invalid role")
 	}
+	if !validUserLocale(update.Locale) {
+		return model.User{}, errors.New("invalid user locale")
+	}
 	update.Username = username
+	if update.Locale == "" {
+		update.Locale = (*m.target.Users)[idx].Locale
+	}
 	(*m.target.Users)[idx] = update
 	if err := m.save(); err != nil {
 		return model.User{}, err
 	}
 	return update, nil
+}
+
+func validUserLocale(locale string) bool {
+	return locale == "" || locale == "en" || locale == "ru"
 }
 
 func (m Mutation) DeleteUser(username string) error {

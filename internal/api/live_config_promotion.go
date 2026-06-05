@@ -88,6 +88,10 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 }
 
 func (p LiveConfigPromotion) scanOrphans(liveFiles []string) ([]string, error) {
+	return scanLiveConfigOrphans(filepath.Join(p.applyRoot, "live"), liveFiles)
+}
+
+func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error) {
 	orphaned := []string{}
 	activeMap := make(map[string]bool)
 	for _, f := range liveFiles {
@@ -105,7 +109,7 @@ func (p LiveConfigPromotion) scanOrphans(liveFiles []string) ([]string, error) {
 	}
 
 	for _, d := range dirs {
-		dirPath := filepath.Join(p.applyRoot, "live", d.subpath)
+		dirPath := filepath.Join(liveRoot, d.subpath)
 		entries, err := os.ReadDir(dirPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -131,6 +135,29 @@ func (p LiveConfigPromotion) scanOrphans(liveFiles []string) ([]string, error) {
 		}
 	}
 	return orphaned, nil
+}
+
+func UnitForArtifactID(id string) (string, bool) {
+	slashPath := filepath.ToSlash(id)
+	for _, spec := range []struct {
+		prefix  string
+		suffix  string
+		unit    string
+		exclude string
+	}{
+		{prefix: "caddy/", suffix: ".Caddyfile", unit: "veil-caddy@", exclude: "panel"},
+		{prefix: "hysteria2/", suffix: ".yaml", unit: "veil-hysteria2@", exclude: "server"},
+		{prefix: "olcrtc/", suffix: ".yaml", unit: "veil-olcrtc@", exclude: "server"},
+	} {
+		if !strings.HasPrefix(slashPath, spec.prefix) || !strings.HasSuffix(slashPath, spec.suffix) {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(slashPath, spec.prefix), spec.suffix)
+		if name != "" && name != spec.exclude && !strings.Contains(name, "/") {
+			return spec.unit + name + ".service", true
+		}
+	}
+	return "", false
 }
 
 func UnitForLiveConfig(livePath string) (string, bool) {

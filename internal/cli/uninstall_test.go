@@ -39,7 +39,7 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"Veil uninstall plan",
 		"Stop services:",
 		"Disable services:",
-		"Remove files:",
+		"Preserved state:",
 		"Remove systemd units:",
 		"/etc/systemd/system/veil.service",
 		"/etc/systemd/system/veil-olcrtc@.service",
@@ -126,8 +126,8 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		}
 	}
 
-	// Verify files/dirs are removed
-	for _, path := range []string{"/etc/veil", "/var/lib/veil", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
+	// Verify units and binary are removed while configuration and state are preserved.
+	for _, path := range []string{"/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
 		found := false
 		for _, r := range removed {
 			if filepath.ToSlash(r) == filepath.ToSlash(path) {
@@ -137,6 +137,13 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("path %s was not removed", path)
+		}
+	}
+	for _, preserved := range []string{"/etc/veil", "/var/lib/veil"} {
+		for _, removedPath := range removed {
+			if filepath.ToSlash(removedPath) == preserved {
+				t.Fatalf("normal uninstall removed preserved path %s", preserved)
+			}
 		}
 	}
 
@@ -180,8 +187,40 @@ func TestUninstallHasCorrectHelp(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "uninstall") || !strings.Contains(got, "--yes") || !strings.Contains(got, "--dry-run") {
+	if !strings.Contains(got, "uninstall") || !strings.Contains(got, "--yes") || !strings.Contains(got, "--dry-run") || !strings.Contains(got, "--purge") {
 		t.Fatalf("help output missing expected content:\n%s", got)
+	}
+}
+
+func TestUninstallPurgeRemovesState(t *testing.T) {
+	origStop := uninstallServiceStopper
+	origRemove := uninstallFileRemover
+	origReload := uninstallSystemdReloader
+	t.Cleanup(func() {
+		uninstallServiceStopper = origStop
+		uninstallFileRemover = origRemove
+		uninstallSystemdReloader = origReload
+	})
+	var removed []string
+	uninstallServiceStopper = func(string) error { return nil }
+	uninstallFileRemover = func(path string) error {
+		removed = append(removed, filepath.ToSlash(path))
+		return nil
+	}
+	uninstallSystemdReloader = func() error { return nil }
+	cmd := NewRootCommand("test")
+	cmd.SetArgs([]string{"uninstall", "--yes", "--purge"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/etc/veil", "/var/lib/veil"} {
+		found := false
+		for _, path := range removed {
+			found = found || path == want
+		}
+		if !found {
+			t.Fatalf("purge did not remove %s: %v", want, removed)
+		}
 	}
 }
 

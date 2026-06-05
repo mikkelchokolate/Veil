@@ -5,9 +5,11 @@ import "strings"
 // LoginHTML renders the login page. It reuses the exact same CSS variables,
 // fonts, and component classes defined in panelHTMLBase so the two pages are
 // visually identical.
-func LoginHTML(basePath string) string {
+func LoginHTML(basePath string, locale string) string {
 	html := loginHTMLTemplate
 	html = strings.ReplaceAll(html, "__PROMETHEUS_BG_BASE64__", prometheusBgBase64)
+	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
+	html = strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
 	if basePath == "" || basePath == "/" {
 		return html
 	}
@@ -22,7 +24,7 @@ func LoginHTML(basePath string) string {
 // loginHTMLTemplate shares the design tokens, fonts, and card component
 // styling with panelHTMLBase.
 const loginHTMLTemplate = `<!doctype html>
-<html lang="en">
+<html lang="__VEIL_LOCALE__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -140,7 +142,7 @@ const loginHTMLTemplate = `<!doctype html>
       color: var(--text-muted);
       font-weight: 500;
     }
-    input {
+    input, select {
       box-sizing: border-box;
       width: 100%;
       border: 1px solid var(--border);
@@ -157,6 +159,28 @@ const loginHTMLTemplate = `<!doctype html>
     input:focus {
       outline: none;
       border-color: var(--primary);
+    }
+    :focus-visible {
+      outline: 3px solid var(--accent-warning) !important;
+      outline-offset: 3px;
+    }
+    .locale-picker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 20px;
+    }
+    .locale-picker span {
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+    .locale-picker select {
+      width: auto;
+      margin-left: auto;
+      padding: 8px 10px;
+      background: var(--canvas);
     }
 
     /* ── button ── */
@@ -206,6 +230,15 @@ const loginHTMLTemplate = `<!doctype html>
       display: none;
       box-sizing: border-box;
     }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -213,10 +246,17 @@ const loginHTMLTemplate = `<!doctype html>
     <div class="bg-image"></div>
   </div>
 
-  <div class="card">
+  <main class="card" id="main-content">
+    <label class="locale-picker">
+      <span>Language</span>
+      <select data-veil-locale-select aria-label="Language">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
     <h2><span class="pulse-static"></span>&nbsp;Veil Panel</h2>
 
-    <div id="error" class="error-msg"></div>
+    <div id="error" class="error-msg" role="status" aria-live="polite"></div>
 
     <form id="login-form">
       <div style="margin-bottom: 20px;">
@@ -229,9 +269,12 @@ const loginHTMLTemplate = `<!doctype html>
       </div>
       <button type="submit">Log In</button>
     </form>
-  </div>
+  </main>
 
   <script>
+    window.veilLocale = "__VEIL_LOCALE__";
+    window.veil_csrf_token = "";
+__VEIL_LOCALIZATION_RUNTIME__
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value.trim();
@@ -239,14 +282,14 @@ const loginHTMLTemplate = `<!doctype html>
       const errorDiv = document.getElementById('error');
       errorDiv.style.display = 'none';
       try {
-        const resp = await fetch('/api/auth/login', {
+        const resp = await fetch("/api/auth/login", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password }),
         });
         const data = await resp.json();
         if (!resp.ok) {
-          errorDiv.textContent = data.message || 'Authentication failed';
+          errorDiv.textContent = data.message || veilT('auth.failed');
           errorDiv.style.display = 'block';
           return;
         }
@@ -254,6 +297,9 @@ const loginHTMLTemplate = `<!doctype html>
         localStorage.setItem('veil_username', data.username);
         localStorage.setItem('veil_user_role', data.role || '');
         localStorage.removeItem('veil_api_token');
+        if (data.locale) {
+          document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+        }
         window.location.reload();
       } catch (err) {
         errorDiv.textContent = String(err);

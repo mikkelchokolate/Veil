@@ -97,5 +97,20 @@ This command restores the state file, stages the generated files, restarts the a
 
 ### "Apply Live" Failures on systemd Runtimes
 - **Symptom:** Staging works, but applying changes fails on systemd operations.
-- **Cause:** Veil expects to interact with the host systemd daemon. If running inside a standard Docker container without mounting systemd sockets, systemd reloads will fail.
-- **Resolution:** If deploying via Docker, ensure you run under loopback/local mode, or configure `/host-systemd` mounts as shown in the hardening and Docker guides.
+- **Cause:** The non-root Panel could not reach the bare-metal privileged helper, the helper rejected a path/unit outside its allowlist, or the target runtime failed.
+- **Resolution:** Check `veil-helper.socket` and `veil-helper.service`, then inspect the helper journal and the target runtime journal. Rootless containers support local/read-only administration and staging, not live host systemd orchestration.
+
+### Privileged Helper Is Unavailable
+- **Symptom:** A privileged API returns JSON matching `{"error":{"code":"operation_failed","message":"..."}}`, or Panel actions report that `/run/veil/helper.sock` is unavailable.
+- **Cause:** Socket activation is disabled, permissions do not allow the `veil` account to connect, or the helper failed its policy checks.
+- **Resolution:**
+
+```bash
+systemctl status veil-helper.socket veil-helper.service
+journalctl -u veil-helper.service -n 100 --no-pager
+stat -c '%U:%G %a %n' /run/veil/helper.sock
+systemctl restart veil-helper.socket
+```
+
+The expected socket mode is `root:veil 0660`. Do not replace it with a
+world-writable socket or give the Panel process root privileges.

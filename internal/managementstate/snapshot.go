@@ -3,6 +3,7 @@ package managementstate
 import "github.com/mikkelchokolate/Veil/internal/model"
 
 type SnapshotInput struct {
+	Setup         model.SetupState
 	Settings      model.Settings
 	Inbounds      []model.Inbound
 	Rules         []model.RoutingRule
@@ -13,6 +14,7 @@ type SnapshotInput struct {
 }
 
 type SnapshotTarget struct {
+	Setup         *model.SetupState
 	Settings      *model.Settings
 	Inbounds      *[]model.Inbound
 	Rules         *[]model.RoutingRule
@@ -24,6 +26,7 @@ type SnapshotTarget struct {
 
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 	return model.ManagementSnapshot{
+		Setup:         input.Setup,
 		Settings:      input.Settings,
 		Inbounds:      cloneInbounds(input.Inbounds),
 		Rules:         append([]model.RoutingRule(nil), input.Rules...),
@@ -35,6 +38,9 @@ func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 }
 
 func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
+	if target.Setup != nil {
+		*target.Setup = snapshot.Setup
+	}
 	if target.Settings != nil && snapshot.Settings.PanelListen != "" {
 		*target.Settings = MergeSettingsDefaults(snapshot.Settings, *target.Settings)
 	}

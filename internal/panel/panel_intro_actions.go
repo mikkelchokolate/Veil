@@ -90,7 +90,7 @@ func panelIntroActionsJS() string {
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      alert('Viewer role is read-only. Admin role is required for this action.');
+      alert(veilT('role.viewerReadOnly'));
     }
 
     function wireViewerGuard(el) {
@@ -113,8 +113,18 @@ func panelIntroActionsJS() string {
       document.querySelectorAll('[data-admin-only="true"], button[id^="restart-"]').forEach((el) => controls.push(el));
       controls.forEach((el) => {
         wireViewerGuard(el);
-        el.disabled = viewer;
-        el.title = viewer ? 'Viewer role is read-only; admin required.' : '';
+        if (viewer) {
+          if (el.dataset.viewerGuardDisabled !== 'true') {
+            el.dataset.viewerGuardWasDisabled = el.disabled ? 'true' : 'false';
+            el.dataset.viewerGuardDisabled = 'true';
+          }
+          el.disabled = true;
+        } else if (el.dataset.viewerGuardDisabled === 'true') {
+          el.disabled = el.dataset.viewerGuardWasDisabled === 'true';
+          delete el.dataset.viewerGuardWasDisabled;
+          delete el.dataset.viewerGuardDisabled;
+        }
+        el.title = viewer ? veilT('role.viewerReadOnlyShort') : '';
       });
       adminOnlyFormIds.forEach((id) => {
         const form = document.getElementById(id);
@@ -154,7 +164,7 @@ func panelIntroActionsJS() string {
 
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
-      output.textContent = 'Loading ' + path + '...';
+      output.textContent = veilT('status.loadingPath', { path });
       const requestOptions = options || {};
       requestOptions.headers = requestHeaders(requestOptions.headers || {});
       try {
@@ -165,7 +175,7 @@ func panelIntroActionsJS() string {
           return null;
         }
         const parsed = text ? JSON.parse(text) : null;
-        output.textContent = parsed === null ? 'OK' : JSON.stringify(parsed, null, 2);
+        output.textContent = parsed === null ? veilT('common.ok') : JSON.stringify(parsed, null, 2);
         return parsed;
       } catch (err) {
         output.textContent = String(err);
@@ -179,7 +189,7 @@ func panelIntroActionsJS() string {
       const email = document.getElementById('profile-email').value.trim();
       const panelAccess = document.getElementById('profile-panel-access').value;
       if (panelAccess === 'caddy' && (!domain || !email)) {
-        document.getElementById('profile-preview-output').textContent = 'Domain and email are required for Caddy Panel access';
+        document.getElementById('profile-preview-output').textContent = veilT('installPreview.caddyRequired');
         return;
       }
       await loadJSON('/api/profiles/ru-recommended/preview', 'profile-preview-output', {
@@ -197,7 +207,7 @@ func panelIntroActionsJS() string {
       const btn = document.getElementById('update-version');
       const output = document.getElementById('version-output');
       btn.disabled = true;
-      output.textContent = 'Starting self-update... Fetching latest release, verifying checksums and installing binary. Please wait, this will take a moment...';
+      output.textContent = veilT('version.startingUpdate');
       
       try {
         const response = await fetch('/api/version/update', {
@@ -211,42 +221,42 @@ func panelIntroActionsJS() string {
         if (!response.ok) {
           btn.disabled = false;
           if (data && data.log) {
-            output.textContent = "UPDATE FAILED:\n" + data.log + "\n\nError: " + (data.message || 'unknown error');
+            output.textContent = veilT('version.updateFailed', { details: data.log + "\n\n" + veilT('common.error', { error: data.message || veilT('status.unknownError') }) });
           } else {
-            output.textContent = "UPDATE FAILED:\n" + text;
+            output.textContent = veilT('version.updateFailed', { details: text });
           }
           return;
         }
         
-        output.textContent = (data && data.log ? data.log + "\n\n" : "") + "Update staged successfully! Restarting panel service to apply...";
+        output.textContent = (data && data.log ? data.log + "\n\n" : "") + veilT('version.updateStaged');
         
         setTimeout(() => {
           let attempts = 0;
           const maxAttempts = 20;
           const pollInterval = setInterval(async () => {
             attempts++;
-            output.textContent = "Staging completed. Waiting for service restart and health check... (Attempt " + attempts + "/" + maxAttempts + ")";
+            output.textContent = veilT('version.waitingRestart', { attempt: attempts, max: maxAttempts });
             try {
               const checkResp = await fetch('/api/version', { headers: authHeaders() });
               if (checkResp.ok) {
                 const checkData = await checkResp.json();
                 clearInterval(pollInterval);
                 btn.disabled = false;
-                output.textContent = "SERVICE BACK ONLINE!\n\n" + JSON.stringify(checkData, null, 2);
+                output.textContent = veilT('version.backOnline', { details: JSON.stringify(checkData, null, 2) });
               }
             } catch (_) {
             }
             if (attempts >= maxAttempts) {
               clearInterval(pollInterval);
               btn.disabled = false;
-              output.textContent = "Restart is taking longer than expected. Please refresh the page manually in a few seconds to check status.";
+              output.textContent = veilT('version.restartSlow');
             }
           }, 2000);
         }, 3000);
         
       } catch (err) {
         btn.disabled = false;
-        output.textContent = "Request error: " + String(err);
+        output.textContent = veilT('status.requestFailed', { error: String(err) });
       }
     });
 

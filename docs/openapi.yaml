@@ -1,27 +1,43 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "1.0.0"
+  version: "0.6.0"
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
     ## Authentication model
-    Veil is fail-closed for public Panel listeners. A non-loopback `--listen`
-    address requires both API token authentication (`--auth-token` or
-    `VEIL_API_TOKEN`) and user/session authentication already configured in
-    Management state (`veil admin reset` or `veil admin set`). Loopback-only
-    listeners may run without credentials for development and SSH-tunnel use.
+    Veil is fail-closed for public Panel exposure. A non-loopback `--listen`
+    address requires native TLS, API token authentication (`--auth-token` or
+    `VEIL_API_TOKEN`), user/session authentication, and authenticated metrics.
+    Caddy exposure requires user/session authentication and authenticated
+    metrics even though the Veil listener remains on loopback.
+
+    An unconfigured local loopback listener exposes only the first-run setup
+    flow needed to create the initial administrator. Setup is unavailable
+    through direct or Caddy exposure.
 
     `/api/*` routes accept either `X-Veil-Token`, `Authorization: Bearer`, or
     a `veil_session` cookie created by `/api/auth/login`. Mutating requests
     made with a cookie session must also send `X-CSRF-Token`, and only `admin`
-    sessions may mutate state. `viewer` sessions are read-only.
+    sessions may mutate management state. The sole viewer mutation exception
+    is `POST /api/auth/locale`, which updates only the authenticated user's own
+    language preference and rejects static API-token callers.
+
+    Browser sessions survive Panel restarts. Only hashes of the session cookie
+    and CSRF token are persisted. Sessions expire after 30 minutes idle or 24
+    hours absolute and are revoked when a user's password, role, or existence
+    changes.
 
     `/healthz`, `/metrics`, and the Panel UI are not treated as proof of
     authorization. On public listeners `/healthz` is authenticated, `/metrics`
     follows the separate metrics policy (`--metrics-access` /
     `VEIL_METRICS_ACCESS`), and the Panel UI renders only the login surface
     until a valid session exists.
+
+    Validation and ordinary HTTP failures use a `text/plain` response body.
+    Failures returned by the privileged helper use the structured
+    `PrivilegedErrorEnvelope` JSON schema so operators and generated clients
+    can distinguish policy, availability, validation, and execution failures.
   license:
     name: GPL-3.0-or-later
     url: https://www.gnu.org/licenses/gpl-3.0.html
@@ -33,12 +49,17 @@ security:
   - sessionCookie: []
 tags:
   - name: status
+  - name: setup
   - name: auth
+  - name: audit
+  - name: admin
+  - name: backups
   - name: settings
   - name: inbounds
   - name: routing
   - name: warp
   - name: client-links
+  - name: validation
   - name: apply
   - name: runtime
   - name: diagnostics
@@ -99,6 +120,68 @@ paths:
                     veil_uptime_seconds 12
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/setup/status:
+    get:
+      tags: [setup]
+      summary: Inspect first-run setup state
+      description: Available without authentication only on a local loopback listener.
+      security: []
+      responses:
+        "200":
+          description: Current setup state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupStatusResponse"
+              examples:
+                required:
+                  value:
+                    required: true
+                    allowed: true
+                    panelAccess: local
+  /api/setup/complete:
+    post:
+      tags: [setup]
+      summary: Create the initial administrator
+      description: Single-use operation available only on an unconfigured local loopback listener.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupCompleteRequest"
+            examples:
+              initial-admin:
+                value:
+                  username: admin
+                  password: correct-horse-battery-staple
+                  backupAcknowledged: true
+                  locale: ru
+      responses:
+        "201":
+          description: Initial administrator created and setup marked complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupCompleteResponse"
+              examples:
+                complete:
+                  value:
+                    completed: true
+                    username: admin
+                    role: admin
+                    locale: ru
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Setup was already completed or a user already exists.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/ErrorText"
   /api/auth/login:
     post:
       tags: [auth]
@@ -133,6 +216,7 @@ paths:
                     success: true
                     username: admin
                     role: admin
+                    locale: ru
                     csrfToken: 0123456789abcdef0123456789abcdef
         "400":
           $ref: "#/components/responses/BadRequest"
@@ -172,10 +256,58 @@ paths:
                     authenticated: true
                     username: admin
                     role: admin
+                    locale: ru
                     csrfToken: 0123456789abcdef0123456789abcdef
                 anonymous:
                   value:
                     authenticated: false
+  /api/auth/locale:
+    post:
+      tags: [auth]
+      summary: Update the current browser user's locale
+      description: |
+        Self-service exception available to both `admin` and `viewer` browser
+        sessions. Requires the `veil_session` cookie and `X-CSRF-Token`,
+        updates only that session's username, and sets a one-year
+        `veil_locale` preference cookie. Static API tokens cannot call this
+        endpoint.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocaleUpdateRequest"
+            examples:
+              russian:
+                value:
+                  locale: ru
+      responses:
+        "200":
+          description: Locale persisted for the current user.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: SameSite `veil_locale` preference cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocaleResponse"
+              examples:
+                russian:
+                  value:
+                    locale: ru
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/auth/sessions:
     get:
       tags: [auth]
@@ -200,7 +332,12 @@ paths:
                     - id: 0123456789abcdef
                       username: admin
                       role: admin
-                      expiresAt: "2026-06-04T18:30:00Z"
+                      createdAt: "2026-06-05T12:00:00Z"
+                      lastSeenAt: "2026-06-05T12:10:00Z"
+                      idleExpiresAt: "2026-06-05T12:40:00Z"
+                      expiresAt: "2026-06-06T12:00:00Z"
+                      userAgent: Mozilla/5.0
+                      remoteAddr: 192.0.2.10
                       current: true
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -244,13 +381,354 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/audit:
+    get:
+      tags: [audit]
+      summary: List structured Panel audit history
+      description: |
+        Returns newest-first, redacted authentication and mutation events.
+        Requires an admin token or admin session. The raw session cookie, CSRF
+        token, passwords, and authorization values are never returned.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: before
+          in: query
+          required: false
+          description: Return records strictly older than this RFC3339 timestamp.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Bounded audit history and an optional backward-pagination cursor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditListResponse"
+              examples:
+                recent:
+                  value:
+                    items:
+                      - timestamp: "2026-06-05T12:10:00Z"
+                        actor: admin
+                        role: admin
+                        action: auth.session.revoke
+                        target: 0123456789abcdef
+                        ip: 192.0.2.10
+                        success: true
+                    nextBefore: "2026-06-05T12:10:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/admin/rotate-key:
+    post:
+      tags: [admin]
+      summary: Rotate the state-encryption key
+      description: |
+        Re-encrypts management state with a newly generated root-managed key.
+        Requires admin role and CSRF for cookie sessions. All browser sessions
+        except the initiating session are revoked after a successful rotation.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+            examples:
+              rotate:
+                value: {}
+      responses:
+        "200":
+          description: State was re-encrypted and other sessions were revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyRotationResponse"
+              examples:
+                rotated:
+                  value:
+                    success: true
+                    revokedSessions: 3
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/PrivilegedFailure"
+  /api/backups:
+    get:
+      tags: [backups]
+      summary: List managed disaster-recovery archives
+      description: Requires an admin token or admin session.
+      responses:
+        "200":
+          description: Archives in newest-first order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BackupArchive"
+              examples:
+                managed:
+                  value:
+                    - name: veil_backup_20260605_020000.tar.gz.enc
+                      path: /var/lib/veil/backups/veil_backup_20260605_020000.tar.gz.enc
+                      size: 4096
+                      createdAt: "2026-06-05T02:00:00Z"
+                      encrypted: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [backups]
+      summary: Create and verify an encrypted archive
+      description: |
+        Uses `/etc/veil/backup.passphrase` server-side. The passphrase is never
+        accepted from or returned to the browser. Requires admin and CSRF for a
+        cookie session.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupCreateRequest"
+            examples:
+              create-and-prune:
+                value:
+                  prune: true
+                  daily: 7
+                  weekly: 4
+                  monthly: 12
+      responses:
+        "201":
+          description: Archive created, persisted, and verified.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/backups/prune:
+    post:
+      tags: [backups]
+      summary: Apply managed archive retention
+      description: Requires admin and CSRF for a cookie session.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupPruneRequest"
+            examples:
+              standard:
+                value:
+                  daily: 7
+                  weekly: 4
+                  monthly: 12
+      responses:
+        "200":
+          description: Retention result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupPruneResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/backups/{name}/download:
+    parameters:
+      - $ref: "#/components/parameters/BackupName"
+    get:
+      tags: [backups]
+      summary: Download an encrypted archive
+      description: Requires an admin token or admin session.
+      responses:
+        "200":
+          description: Encrypted backup bytes.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              example: attachment; filename="veil_backup_20260605_020000.tar.gz.enc"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/backups/{name}/verify:
+    parameters:
+      - $ref: "#/components/parameters/BackupName"
+    post:
+      tags: [backups]
+      summary: Decrypt and verify an archive without writing state
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+      responses:
+        "200":
+          description: Verification and compatibility report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupVerificationReport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Archive decryption, checksum, state/key, or schema validation failed.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/ErrorText"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/backups/{name}/restore:
+    parameters:
+      - $ref: "#/components/parameters/BackupName"
+    post:
+      tags: [backups]
+      summary: Queue a verified state and key restore
+      description: |
+        Requires explicit confirmation, admin, and CSRF for a cookie session.
+        Successful restore preserves `.pre-restore-*` safety copies and revokes
+        browser sessions after the initiating session reads the final job.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupRestoreRequest"
+            examples:
+              confirmed:
+                value:
+                  confirm: true
+      responses:
+        "202":
+          description: Restore job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupRestoreJob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Archive verification failed before the job was queued.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/ErrorText"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/backup-restore-jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RestoreJobID"
+    get:
+      tags: [backups]
+      summary: Read queued restore progress
+      description: Requires an admin token or admin session.
+      responses:
+        "200":
+          description: Current restore job state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupRestoreJob"
+              examples:
+                complete:
+                  value:
+                    id: 0123456789abcdef0123456789abcdef
+                    archive: veil_backup_20260605_020000.tar.gz.enc
+                    status: succeeded
+                    createdAt: "2026-06-05T02:10:00Z"
+                    startedAt: "2026-06-05T02:10:00Z"
+                    finishedAt: "2026-06-05T02:10:01Z"
+                    safetyStatePath: /var/lib/veil/state.json.pre-restore-20260605T021000.000000000Z
+                    safetyKeyPath: /etc/veil/state.key.pre-restore-20260605T021000.000000000Z
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/users:
     get:
       tags: [auth]
       summary: List registered Panel users
       responses:
         "200":
-          description: Registered users and roles.
+          description: Registered users, roles, and locale preferences.
           content:
             application/json:
               schema:
@@ -278,6 +756,7 @@ paths:
                   username: operator
                   password: "change-this-password"
                   role: viewer
+                  locale: en
       responses:
         "201":
           description: User created.
@@ -395,19 +874,31 @@ paths:
               $ref: "#/components/schemas/EmptyObject"
       responses:
         "200":
-          description: Update staged successfully.
+          description: Release archive was staged, re-verified by the helper, installed, and a Panel restart was scheduled.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdateResponse"
+              examples:
+                installed:
+                  value:
+                    success: true
+                    staged: true
+                    installed: true
+                    version: v0.6.0
+                    message: Update staged successfully. Restarting panel service...
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
-          description: Update failed.
+          $ref: "#/components/responses/PrivilegedFailure"
+        "502":
+          description: GitHub release metadata or assets could not be downloaded or verified.
           content:
-            application/json:
+            text/plain:
               schema:
-                $ref: "#/components/schemas/UpdateResponse"
+                $ref: "#/components/schemas/ErrorText"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/settings:
     get:
       tags: [settings]
@@ -835,10 +1326,78 @@ paths:
                 $ref: "#/components/schemas/ApplyResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/validation:
+    post:
+      tags: [validation]
+      summary: Validate a candidate configuration against live host state
+      description: |
+        Performs the same candidate and live-host checks used authoritatively
+        before settings, Inbound, WARP, and apply mutations. The result may
+        become stale if host state changes after this request; Veil validates
+        again immediately before mutation.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidationRequest"
+            examples:
+              candidate:
+                value:
+                  settings:
+                    panelListen: 127.0.0.1:2096
+                    panelAccess: local
+                    mode: server
+                  inbounds:
+                    - name: edge
+                      protocol: mieru
+                      transport: tcp
+                      port: 443
+                      enabled: true
+                      password: "[REDACTED]"
+                  warp:
+                    enabled: false
+                    endpoint: engage.cloudflareclient.com:2408
+      responses:
+        "200":
+          description: Validation completed. Inspect `valid` and `issues`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
+              examples:
+                busy-port:
+                  value:
+                    valid: false
+                    checkedAt: "2026-06-05T12:00:00Z"
+                    issues:
+                      - code: port_in_use
+                        severity: error
+                        field: port
+                        inboundId: edge
+                        message: TCP port 443 is already in use
+                        remediation: Stop the conflicting service or choose another port.
+                        source: live-host
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/apply/plan:
-    get:
+    post:
       tags: [apply]
       summary: Preview the apply plan without writing live files
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       responses:
         "200":
           description: Apply plan.
@@ -846,6 +1405,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApplyPlanResponse"
+              examples:
+                restart-preview:
+                  value:
+                    valid: true
+                    errors: []
+                    configs:
+                      - /etc/veil/generated/mieru/server_config.json
+                    actions:
+                      - validate management state
+                      - stage generated configs
+                      - restart veil-mieru.service
+                    runtimes:
+                      - veil-mieru.service
+                    issues: []
+                    operations:
+                      - type: promote_file
+                        source: /etc/veil/generated/mieru/server_config.json
+                        destination: /etc/veil/live/mieru/server_config.json
+                        interruptionRisk: reload
+                        rollbackAvailable: true
+                        validationSource: render-and-live-host
+                      - type: restart_service
+                        unit: veil-mieru.service
+                        interruptionRisk: connection-drop
+                        rollbackAvailable: true
+                        validationSource: managed-unit-catalog
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
   /api/apply/history:
     get:
       tags: [apply]
@@ -860,17 +1447,41 @@ paths:
                 items:
                   $ref: "#/components/schemas/ApplyHistoryEntry"
   /api/profiles/ru-recommended/preview:
-    get:
+    post:
       tags: [apply]
       summary: Preview the ru-recommended install profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RURecommendedPreviewRequest"
+            examples:
+              caddy:
+                value:
+                  domain: vpn.example.com
+                  email: admin@example.com
+                  panelAccess: caddy
       responses:
         "200":
           description: Profile preview.
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: "#/components/schemas/RURecommendedPreviewResponse"
+              examples:
+                caddy:
+                  value:
+                    domain: vpn.example.com
+                    email: admin@example.com
+                    panelAccess: caddy
+                    panelUrl: https://vpn.example.com/4f10dbe4/
+                    caddyfile: |
+                      vpn.example.com {
+                        reverse_proxy 127.0.0.1:2096
+                      }
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/services/{name}/restart:
     parameters:
       - $ref: "#/components/parameters/Name"
@@ -1118,6 +1729,20 @@ components:
       schema:
         type: string
         minLength: 1
+    BackupName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^veil_backup_[0-9]{8}_[0-9]{6}\.tar\.gz\.enc$'
+    RestoreJobID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
   responses:
     BadRequest:
       description: Request body, query string, or path failed validation.
@@ -1166,6 +1791,38 @@ components:
         text/plain:
           schema:
             $ref: "#/components/schemas/ErrorText"
+    ValidationFailed:
+      description: Candidate configuration failed authoritative validation and was not mutated.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationFailure"
+          examples:
+            busy-port:
+              value:
+                error:
+                  code: validation_failed
+                  message: configuration failed live validation
+                issues:
+                  - code: port_in_use
+                    severity: error
+                    field: port
+                    inboundId: edge
+                    message: TCP port 443 is already in use
+                    remediation: Stop the conflicting service or choose another port.
+                    source: live-host
+    PrivilegedFailure:
+      description: The allowlisted root helper rejected or could not complete the operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PrivilegedErrorEnvelope"
+          examples:
+            unavailable:
+              value:
+                error:
+                  code: operation_failed
+                  message: privileged helper is unavailable
   schemas:
     EmptyObject:
       type: object
@@ -1173,6 +1830,22 @@ components:
     ErrorText:
       type: string
       description: Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
+    ErrorObject:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    PrivilegedErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
     HealthResponse:
       type: object
       required: [status]
@@ -1188,6 +1861,60 @@ components:
       properties:
         success:
           type: boolean
+    KeyRotationResponse:
+      type: object
+      required: [success, revokedSessions]
+      additionalProperties: false
+      properties:
+        success:
+          type: boolean
+          const: true
+        revokedSessions:
+          type: integer
+          minimum: 0
+    SetupStatusResponse:
+      type: object
+      required: [required, allowed, panelAccess]
+      properties:
+        required:
+          type: boolean
+        allowed:
+          type: boolean
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy, ""]
+    SetupCompleteRequest:
+      type: object
+      required: [username, password, backupAcknowledged]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[\p{L}\p{N}._-]+$'
+        password:
+          type: string
+          format: password
+          minLength: 12
+        backupAcknowledged:
+          type: boolean
+          const: true
+        locale:
+          $ref: "#/components/schemas/Locale"
+    SetupCompleteResponse:
+      type: object
+      required: [completed, username, role, locale]
+      properties:
+        completed:
+          type: boolean
+          const: true
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     LoginRequest:
       type: object
       required: [username, password]
@@ -1200,7 +1927,7 @@ components:
           format: password
     LoginResponse:
       type: object
-      required: [success, username, role, csrfToken]
+      required: [success, username, role, locale, csrfToken]
       properties:
         success:
           type: boolean
@@ -1208,6 +1935,8 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
         csrfToken:
           type: string
     AuthStatusResponse:
@@ -1220,11 +1949,31 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
         csrfToken:
           type: string
+    Locale:
+      type: string
+      enum: [en, ru]
+      description: Persisted Panel display language.
+    LocaleUpdateRequest:
+      type: object
+      required: [locale]
+      additionalProperties: false
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
+    LocaleResponse:
+      type: object
+      required: [locale]
+      additionalProperties: false
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
     SessionInfo:
       type: object
-      required: [id, username, role, expiresAt, current]
+      required: [id, username, role, createdAt, lastSeenAt, idleExpiresAt, expiresAt, current]
       properties:
         id:
           type: string
@@ -1235,9 +1984,22 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        idleExpiresAt:
+          type: string
+          format: date-time
         expiresAt:
           type: string
           format: date-time
+        userAgent:
+          type: string
+        remoteAddr:
+          type: string
         current:
           type: boolean
           description: True when this entry matches the caller's `veil_session` cookie.
@@ -1253,14 +2015,223 @@ components:
     UserRole:
       type: string
       enum: [admin, viewer]
+    AuditRecord:
+      type: object
+      required: [timestamp, actor, action, success]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        role:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        ip:
+          type: string
+        userAgent:
+          type: string
+        requestId:
+          type: string
+        success:
+          type: boolean
+        error:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    AuditListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditRecord"
+        nextBefore:
+          type: string
+          format: date-time
+    BackupArchive:
+      type: object
+      required: [name, path, size, createdAt, encrypted]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+          description: Absolute server-side archive path.
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        encrypted:
+          type: boolean
+    BackupCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        prune:
+          type: boolean
+          default: false
+        daily:
+          type: integer
+          minimum: 0
+          maximum: 365
+          default: 7
+        weekly:
+          type: integer
+          minimum: 0
+          maximum: 104
+          default: 4
+        monthly:
+          type: integer
+          minimum: 0
+          maximum: 120
+          default: 12
+    BackupPruneRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        daily:
+          type: integer
+          minimum: 0
+          maximum: 365
+          default: 7
+        weekly:
+          type: integer
+          minimum: 0
+          maximum: 104
+          default: 4
+        monthly:
+          type: integer
+          minimum: 0
+          maximum: 120
+          default: 12
+    BackupArchiveFile:
+      type: object
+      required: [name, size, sha256]
+      properties:
+        name:
+          type: string
+          enum: [state.json, state.key]
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    BackupVerificationReport:
+      type: object
+      required:
+        - formatVersion
+        - encryptionVersion
+        - encrypted
+        - legacy
+        - stateSchemaVersion
+        - files
+      properties:
+        formatVersion:
+          type: integer
+          minimum: 0
+          description: Zero for legacy archives without a manifest.
+        encryptionVersion:
+          type: integer
+          enum: [0, 1, 2]
+          description: Zero for unencrypted archives.
+        encrypted:
+          type: boolean
+        legacy:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        veilVersion:
+          type: string
+        stateSchemaVersion:
+          type: integer
+          minimum: 1
+        files:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/BackupArchiveFile"
+    BackupPruneResult:
+      type: object
+      required: [kept, deleted, dryRun]
+      properties:
+        kept:
+          type: array
+          items:
+            type: string
+        deleted:
+          type: array
+          items:
+            type: string
+        dryRun:
+          type: boolean
+    BackupCreateResponse:
+      type: object
+      required: [archive, verification]
+      properties:
+        archive:
+          $ref: "#/components/schemas/BackupArchive"
+        verification:
+          $ref: "#/components/schemas/BackupVerificationReport"
+        prune:
+          $ref: "#/components/schemas/BackupPruneResult"
+    BackupRestoreRequest:
+      type: object
+      required: [confirm]
+      additionalProperties: false
+      properties:
+        confirm:
+          type: boolean
+          const: true
+    BackupRestoreJob:
+      type: object
+      required: [id, archive, status, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+        archive:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+        safetyStatePath:
+          type: string
+        safetyKeyPath:
+          type: string
     UserResponse:
       type: object
-      required: [username, role]
+      required: [username, role, locale]
       properties:
         username:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     UserCreateRequest:
       type: object
       required: [username, password, role]
@@ -1273,6 +2244,8 @@ components:
           format: password
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     UserUpdateRequest:
       type: object
       required: [role]
@@ -1283,6 +2256,8 @@ components:
           format: password
         role:
           $ref: "#/components/schemas/UserRole"
+        locale:
+          $ref: "#/components/schemas/Locale"
     Settings:
       type: object
       required: [panelListen, mode]
@@ -1563,9 +2538,92 @@ components:
           enum: [tcp, udp]
         service:
           type: string
+    ValidationRequest:
+      type: object
+      required: [settings, inbounds, warp]
+      additionalProperties: false
+      properties:
+        settings:
+          $ref: "#/components/schemas/Settings"
+        inbounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inbound"
+        warp:
+          $ref: "#/components/schemas/WarpConfig"
+    ValidationIssue:
+      type: object
+      required: [code, severity, message, source]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          examples: [port_in_use]
+        severity:
+          type: string
+          enum: [error, warning, info]
+        field:
+          type: string
+          examples: [port]
+        inboundId:
+          type: string
+          examples: [edge]
+        message:
+          type: string
+        remediation:
+          type: string
+        source:
+          type: string
+          enum: [candidate, live-host, render, managed-unit-catalog]
+    ValidationResponse:
+      type: object
+      required: [valid, issues, checkedAt]
+      additionalProperties: false
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        checkedAt:
+          type: string
+          format: date-time
+    ValidationFailure:
+      type: object
+      required: [error, issues]
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+    ApplyOperation:
+      type: object
+      required: [type, interruptionRisk, rollbackAvailable, validationSource]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [promote_file, remove_file, reload_service, restart_service, disable_service, update_firewall]
+        source:
+          type: string
+        destination:
+          type: string
+        unit:
+          type: string
+        interruptionRisk:
+          type: string
+          enum: [none, reload, connection-drop, lockout-risk]
+        rollbackAvailable:
+          type: boolean
+        validationSource:
+          type: string
     ApplyPlanResponse:
       type: object
-      required: [valid, configs, actions]
+      required: [valid, configs, actions, issues, operations]
       properties:
         valid:
           type: boolean
@@ -1585,6 +2643,14 @@ components:
           type: array
           items:
             type: string
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplyOperation"
     ApplyRequest:
       type: object
       required: [confirm, applyLive, applyServices]
@@ -1777,13 +2843,51 @@ components:
           type: string
     UpdateResponse:
       type: object
-      required: [success, log, message]
+      required: [success, staged, installed, version, message]
+      additionalProperties: false
       properties:
         success:
           type: boolean
-        log:
+          const: true
+        staged:
+          type: boolean
+        installed:
+          type: boolean
+        version:
           type: string
         message:
+          type: string
+    RURecommendedPreviewRequest:
+      type: object
+      required: [domain, email]
+      additionalProperties: false
+      properties:
+        domain:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy]
+    RURecommendedPreviewResponse:
+      type: object
+      required: [domain, email, panelAccess]
+      additionalProperties: false
+      properties:
+        domain:
+          type: string
+        email:
+          type: string
+          format: email
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy]
+        panelUrl:
+          type: string
+          format: uri
+        caddyfile:
           type: string
     SystemStats:
       type: object

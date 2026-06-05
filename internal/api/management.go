@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyhistory"
 	"github.com/mikkelchokolate/Veil/internal/audit"
@@ -40,13 +39,23 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
 	mux.HandleFunc("/api/firewall", s.handleFirewall)
+	mux.HandleFunc("/api/validation", s.handleValidation)
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/locale", s.handleAuthLocale)
 	mux.HandleFunc("/api/auth/sessions", s.handleAuthSessions)
+	mux.HandleFunc("/api/admin/rotate-key", s.handleRotateKey)
+	mux.HandleFunc("/api/audit", s.handleAudit)
+	mux.HandleFunc("/api/backups", s.handleBackups)
+	mux.HandleFunc("/api/backups/prune", s.handleBackupPrune)
+	mux.HandleFunc("/api/backup-restore-jobs/", s.handleBackupRestoreJob)
+	mux.HandleFunc("/api/backups/", s.handleBackupByName)
+	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
+	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
 	mux.HandleFunc("/api/users", s.handleUsersRoute)
 	mux.HandleFunc("/api/users/", s.handleUsersRoute)
 }
@@ -126,28 +135,14 @@ func (s *managementState) saveLocked() error {
 }
 
 func (s *managementState) logUserAction(r *http.Request, action string, target string, success bool, details string) {
-	username, _ := r.Context().Value(contextKeyUsername).(string)
-	role, _ := r.Context().Value(contextKeyRole).(string)
-
-	if username == "" {
-		// Fallback defaults (e.g. if auth middleware bypassed, or static token was used)
-		username = "api-token"
-		role = "admin"
+	eventDetails := map[string]any(nil)
+	if details != "" {
+		eventDetails = map[string]any{"message": details}
 	}
-
-	ip := r.RemoteAddr
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		ip = strings.Split(fwd, ",")[0]
-	}
-
-	auditLogPath := filepath.Join(s.applyRoot, "generated", "veil", "audit.log")
-	_ = audit.LogUserAction(auditLogPath, audit.UserAuditEvent{
-		Username:  username,
-		Role:      role,
-		Action:    action,
-		Target:    target,
-		IPAddress: ip,
-		Success:   success,
-		Details:   details,
+	s.recordRequestAudit(r, audit.Record{
+		Action:  action,
+		Target:  target,
+		Success: success,
+		Details: eventDetails,
 	})
 }

@@ -36,6 +36,7 @@ type authMiddlewareOptions struct {
 	ProtectHealthz    bool
 	ProtectMetrics    bool
 	AllowDevAnonymous bool
+	AllowSetup        bool
 }
 
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
@@ -46,6 +47,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if path == "/api/auth/login" ||
 			path == "/api/auth/logout" ||
 			path == "/api/auth/status" {
+			requiresAuth = false
+		}
+		if opts.AllowSetup && (path == "/api/setup/status" || path == "/api/setup/complete") {
 			requiresAuth = false
 		}
 		if path == "/healthz" && opts.ProtectHealthz {
@@ -62,7 +66,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var username string
 		var role string
 		var isCookieSession bool
-		var session Session
 
 		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
 		hasStaticToken := false
@@ -76,11 +79,10 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
-				if sess, ok := globalSessions.Get(cookie.Value); ok {
+				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
 					username = sess.Username
 					role = sess.Role
 					isCookieSession = true
-					session = sess
 				}
 			}
 		}
@@ -105,14 +107,14 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		// 4. CSRF check for mutating cookie sessions
 		if isCookieSession && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
-			if providedCSRF == "" || subtle.ConstantTimeCompare([]byte(providedCSRF), []byte(session.CSRFToken)) != 1 {
+			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
 				writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
 				return
 			}
 		}
 
 		// 5. RBAC check for mutating operations
-		if role != "admin" && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
 		}
@@ -124,6 +126,14 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isMutatingRequest(r *http.Request) bool {
+	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete
+}
+
+func isSelfServiceMutation(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
 }
 
 type contextKey string

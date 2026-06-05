@@ -39,3 +39,31 @@ func TestPanelUsersActionsRenderSessionAndTokenManagement(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelUsersUIEditsLocaleAndUsesLocalizedVariablePhrases(t *testing.T) {
+	card := panelUsersCardHTML()
+	for _, want := range []string{
+		`<th>Locale</th>`,
+		`id="user-locale"`,
+		`<option value="en">English</option>`,
+		`<option value="ru">Русский</option>`,
+	} {
+		if !strings.Contains(card, want) {
+			t.Fatalf("Users card missing locale control %q", want)
+		}
+	}
+
+	actions := panelUsersActionsJS()
+	for _, want := range []string{
+		`editUser(u.username, u.role, u.locale)`,
+		`function editUser(username, role, locale)`,
+		`const locale = document.getElementById('user-locale').value`,
+		`const payload = { role, locale }`,
+		`veilT('users.editTitle'`,
+		`veilT('confirm.deleteUser'`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Users actions missing localized locale behavior %q", want)
+		}
+	}
+}

@@ -46,7 +46,11 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
 
 Veil provides three exposure profiles for the management Panel:
 
-Before any public exposure, create Panel credentials explicitly:
+An unconfigured `local` installation presents a first-run page only on its
+loopback listener. Create the initial administrator there, then sign in.
+
+Before changing an installation to `direct` or `caddy`, create Panel
+credentials explicitly if setup has not already been completed:
 
 ```bash
 sudo veil admin reset
@@ -54,7 +58,11 @@ sudo veil admin reset
 sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
 ```
 
-Direct public `veil serve` listeners require both a configured Panel user and an API token. Local loopback listeners can be reached through SSH and are the recommended interactive choice.
+Direct public `veil serve` listeners require native TLS, a configured Panel
+user, an API token, and authenticated metrics. Caddy exposure requires a Panel
+user and authenticated metrics even though the Veil listener stays on
+loopback. Local loopback listeners can be reached through SSH and are the
+recommended interactive choice.
 
 ### Local Mode (Highly Recommended)
 Exposes the Panel on the loopback interface (`127.0.0.1:<panel-port>`) with a self-signed TLS certificate.
@@ -76,7 +84,13 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 Exposes the Panel directly on all interfaces on the configured port using self-signed TLS.
 - **URL:** `https://your-server-ip:<panel-port>/`
 - **Why:** Convenient for quick staging or internal networks.
-- **Warning:** Direct exposure of self-signed HTTP endpoints is prone to port scanning and certificate bypass dialog warnings. `veil serve` refuses non-loopback direct exposure unless both `VEIL_API_TOKEN` and a Panel user are configured.
+- **Warning:** Direct exposure with a self-signed certificate is prone to port
+  scanning and certificate bypass dialog warnings. `veil serve` refuses
+  non-loopback direct exposure unless TLS, `VEIL_API_TOKEN`, a Panel user, and
+  authenticated metrics are configured. Plain public HTTP is rejected; the
+  emergency `--unsafe-allow-public-http` /
+  `VEIL_UNSAFE_ALLOW_PUBLIC_HTTP=true` override must never be used on an
+  untrusted network.
 
 ---
 
@@ -124,10 +138,50 @@ When installed natively on a Linux host, Veil manages the following directories 
 | Path | Mode | Description |
 |---|---|---|
 | `/usr/local/bin/veil` | `0755` | The compiled Veil management daemon binary. |
-| `/etc/veil/` | `0750` | Configuration root, owned by root/veil. Contains secrets and state. |
-| `/etc/veil/veil.env` | `0600` | Environment variables, Panel listen settings, and authentication tokens. |
-| `/etc/veil/state.json` | `0600` | Persisted Management state containing settings and configured Inbounds. |
-| `/etc/veil/state.key` | `0600` | AES-256-GCM encryption key used to encrypt passwords and secrets at rest. |
-| `/var/lib/veil/backups/` | `0700` | Compressed configurations created before applying/repairing settings. |
+| `/etc/veil/` | `0750` | Configuration root, owned by root/veil. Contains environment files, keys, and generated runtime material. |
+| `/etc/veil/veil.env` | `0640 root:veil` | Environment variables, Panel listen settings, and authentication tokens readable by the Panel service. |
+| `/var/lib/veil/state.json` | `0600 veil:veil` | Persisted Management state containing settings and configured Inbounds. |
+| `/etc/veil/state.key` | `0640 root:veil` | AES-256-GCM encryption key readable by the Panel but writable only through the privileged helper. |
+| `/etc/veil/backup.passphrase` | `0600` | Optional root-owned passphrase used by the scheduled backup service and Panel backup controls. |
+| `/var/lib/veil/backups/` | `0700 root:root` | Verified encrypted disaster-recovery archives managed through the privileged helper and backup timer. |
+| `/var/lib/veil/staging/` | `0700 veil:veil` | Candidate generated configuration awaiting privileged promotion. |
+| `/var/lib/veil/updates/` | `0700 veil:veil` | Downloaded release archive and checksum material awaiting helper verification. |
+| `/var/lib/veil/migration-backups/` | `0700 root:root` | Root-owned safety copies created before ownership or permission migration. |
+| `/var/lib/veil/sessions.json` | `0600 veil:veil` | Hashed browser session and CSRF state; raw bearer values are never persisted. |
+| `/var/lib/veil/audit/panel.jsonl` | `0600 veil:veil` | Rotated, redacted Panel authentication and mutation audit history. |
 | `/var/log/veil/audit.jsonl` | `0600` | Append-only audit trail logging all install, repair, and rollback events. |
-| `/etc/systemd/system/veil.service` | `0644` | Systemd service definition running the core Panel daemon. |
+| `/etc/systemd/system/veil.service` | `0644` | Hardened non-root Panel service running as the `veil` account. |
+| `/etc/systemd/system/veil-helper.service` | `0644` | Root privileged helper with an allowlisted operation protocol. |
+| `/etc/systemd/system/veil-helper.socket` | `0644` | Socket activation for `/run/veil/helper.sock` with `root:veil 0660` access. |
+| `/etc/systemd/system/veil-backup.service` | `0644` | Hardened oneshot encrypted backup and retention job. |
+| `/etc/systemd/system/veil-backup.timer` | `0644` | Daily scheduler for `veil-backup.service`. |
+
+Passing an alternative `--systemd-dir` is a staging/package-build mode. Veil
+writes the requested files but does not create the `veil` service account,
+change current-host ownership, or invoke `systemctl`. Native host installation
+keeps the default `/etc/systemd/system` path and always applies those hardening
+steps.
+
+Enable scheduled encrypted backups after installation:
+
+```bash
+sudo veil backup schedule enable \
+  --passphrase-file /root/veil-backup-passphrase
+systemctl list-timers veil-backup.timer
+```
+
+See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) before relying
+on local backups or performing a restore.
+
+Normal removal stops and removes managed units and the binary while preserving
+`/etc/veil`, `/var/lib/veil`, encrypted backups, and the locked `veil` account:
+
+```bash
+sudo veil uninstall --yes
+```
+
+Destructive removal is explicit. Review and export backups first, then use:
+
+```bash
+sudo veil uninstall --yes --purge
+```

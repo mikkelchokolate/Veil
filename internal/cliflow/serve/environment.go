@@ -12,6 +12,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -164,7 +165,24 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil"), "default"
 	}
-	return "/etc/veil", "default"
+	return "/var/lib/veil/staging", "default"
+}
+
+func (Environment) LiveRoot(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--live-root"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_LIVE_ROOT")); path != "" {
+		return path, "VEIL_LIVE_ROOT"
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil", "live"), "default"
+	}
+	return "/etc/veil/generated", "default"
 }
 
 func (Environment) KeyPath(flagValue string) (path string, source string) {
@@ -184,9 +202,34 @@ func (Environment) KeyPath(flagValue string) (path string, source string) {
 	return "/etc/veil/state.key", "default"
 }
 
+func (Environment) HelperSocket(flagValue string) (path string, source string) {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path, "--helper-socket"
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_HELPER_SOCKET")); path != "" {
+		return path, "VEIL_HELPER_SOCKET"
+	}
+	return privileged.DefaultSocketPath, "default"
+}
+
 func (Environment) PanelAccess() string { return strings.TrimSpace(os.Getenv("VEIL_PANEL_ACCESS")) }
 func (Environment) Domain() string      { return strings.TrimSpace(os.Getenv("VEIL_DOMAIN")) }
 func (Environment) Email() string       { return strings.TrimSpace(os.Getenv("VEIL_EMAIL")) }
+
+func (Environment) AllowUnsafePublicHTTP(flagValue bool) (bool, error) {
+	if flagValue {
+		return true, nil
+	}
+	value := strings.TrimSpace(os.Getenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP"))
+	if value == "" {
+		return false, nil
+	}
+	allowed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP must be a boolean: %w", err)
+	}
+	return allowed, nil
+}
 
 func (Environment) WebBasePath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(flagValue); path != "" {

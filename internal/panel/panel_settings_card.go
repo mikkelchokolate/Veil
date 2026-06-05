@@ -75,6 +75,6 @@ func panelSettingsCardHTML() string {
             <button class="secondary" id="load-settings" type="button">Load settings</button>
           </div>
         </form>
-        <pre id="settings-output">Not loaded</pre>
+      <pre id="settings-output" role="status" aria-live="polite">Not loaded</pre>
       </div>`
 }

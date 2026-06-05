@@ -55,7 +55,13 @@ Protocol runtimes are not selected during install. Open the Panel after install 
 
 ### First-run admin setup
 
-Veil expects Panel user/session authentication before any public exposure. For local installs, the first server start can generate one-time admin credentials and print them to the service log. For planned public exposure, initialize credentials explicitly before switching the listener to a public interface:
+Veil expects Panel user/session authentication before any public exposure. An
+unconfigured `local` install opens a loopback-only first-run page where you
+create the initial administrator and confirm backup responsibilities. The
+setup API is disabled for `direct`, `caddy`, and non-loopback listeners.
+
+For planned public exposure, initialize credentials before changing the access
+mode:
 
 ```bash
 sudo veil admin reset
@@ -63,7 +69,10 @@ sudo veil admin reset
 sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
 ```
 
-When `veil serve` listens on a non-loopback address, it refuses to start unless both an API token and at least one Panel user are configured.
+When `veil serve` listens on a non-loopback address, it refuses to start unless
+an API token, at least one Panel user, authenticated metrics, and TLS are
+configured. Caddy exposure also requires a Panel user and authenticated metrics
+before the reverse proxy is allowed to expose the loopback listener.
 
 ## Inbounds
 
@@ -113,28 +122,55 @@ veil uninstall --yes
 The Panel includes operator-focused controls for production use:
 
 - **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
-- **Users and sessions** - create admin/viewer users, audit active browser sessions, and revoke stale sessions.
+- **Users and sessions** - create admin/viewer users, inspect durable browser sessions, and revoke stale sessions.
+- **English and Russian UI** - choose a language during setup, from the Panel header, or per user; authenticated preferences survive logout and restart.
 - **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
-- **Safe apply preview** - review generated files, staged/live paths, backups, rollback files, runtime actions, and DNS/TLS/firewall/service warnings before applying.
+- **Live validation and safe apply preview** - inspect field-level port, DNS, runtime, and unit checks plus structured generated/live file operations, rollback availability, and interruption risk before applying.
 - **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
+- **Accessible operation** - skip navigation, keyboard-contained dialogs, live status announcements, reduced-motion support, and responsive layouts are included.
 
 ### Backup, rollback, and audit
 
-Repair can write backups and a JSONL audit log. The backup directory must be writable; audit entries are not written during `--dry-run`.
+The Panel records authentication, user, configuration, apply, and service
+actions in a structured, redacted, rotated JSONL log. With the default state
+path it is stored at `/var/lib/veil/audit/panel.jsonl`; administrators can read
+the bounded history through `GET /api/audit`.
+
+Encrypted disaster-recovery archives include both Management state and its
+encryption key, plus a checksum manifest. Native packages ship a daily systemd
+timer with daily/weekly/monthly retention. The Panel can create, verify,
+download, prune, and restore managed archives without sending the backup
+passphrase to the browser. The configured backup and audit directories must be
+writable by the process performing each operation.
 
 ```bash
+sudo veil backup schedule enable --passphrase-file /root/veil-backup-passphrase
+sudo veil backup list --dir /var/lib/veil/backups
+sudo veil backup prune --dir /var/lib/veil/backups \
+  --daily 7 --weekly 4 --monthly 12 --dry-run
+sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase
+sudo veil backup restore /path/to/archive.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase --check-only
+
 veil repair --backup-dir /var/lib/veil/backups --audit-log /var/log/veil/audit.jsonl --yes
 veil rollback list --backup-dir /var/lib/veil/backups
 veil rollback restore <backup-id> --backup-dir /var/lib/veil/backups --yes
 veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 ```
 
+See the [disaster recovery guide](docs/disaster-recovery.md) for cross-host
+restore, safety copies, key rotation, and recovery-drill procedures.
+
 ## Security
 
-- **Fail-closed public listen** - non-loopback `veil serve` requires both `VEIL_API_TOKEN`/`--auth-token` and user/session auth
+- **Fail-closed public exposure** - direct listeners require TLS, `VEIL_API_TOKEN`/`--auth-token`, user/session auth, and authenticated metrics; Caddy exposure requires user/session auth and authenticated metrics
 - **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
-- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role
+- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role. Hashed session state survives Panel restarts, expires after 30 minutes idle or 24 hours absolute, and is revoked when user authority changes
+- **Locale preference** - authenticated users, including viewers, may update only their own `en`/`ru` preference through `POST /api/auth/locale`; static API tokens cannot call it
+- **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
+- **Privilege separation** - the Panel runs as the locked `veil` user with no capabilities; root-only operations use the allowlisted, peer-credential-checked `veil-helper.socket`
 - **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
 - **TLS 1.2+** — when HTTPS is enabled
@@ -148,23 +184,26 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 | Mode | Listener | Required auth | Notes |
 |---|---|---|---|
 | Local + SSH tunnel | `127.0.0.1:<panel-port>` | Session user recommended; token optional | Recommended and safest. Use `ssh -L <panel-port>:127.0.0.1:<panel-port> host`. |
-| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS and routes a random Web base path. |
-| Direct public listen | `0.0.0.0:2096` or public IP | Session user and API token | `veil serve` refuses to start without both. Use TLS and authenticated metrics. |
+| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS, routes a random Web base path, and forces authenticated metrics. |
+| Direct public listen | `0.0.0.0:<panel-port>` or public IP | Session user and API token | `veil serve` refuses to start without TLS, both auth layers, and authenticated metrics. |
 
 ## Documentation
 
 - [Installation guide](docs/install.md) — setup options, access modes, and compiling from source
 - [Troubleshooting guide](docs/troubleshooting.md) — diagnostics, logs, and state rollback
 - [Hardening guide](docs/HARDENING.md) — secure deployment and operations
+- [Panel operations guide](docs/operations.md) - live validation guarantees, race boundaries, and structured apply previews
 - [Known limitations](docs/known-limitations.md) — multi-inbound behavior and platform limits
 - [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
+- [Generated Go SDK](sdk/go) — typed client generated from the OpenAPI contract
 - [Security policy](SECURITY.md) — vulnerability reporting
 - [Changelog](CHANGELOG.md) — release history
 - [Context](CONTEXT.md) — domain language and architecture
+- [Disaster recovery guide](docs/disaster-recovery.md) - encrypted backups, retention, restore, and key rotation
 
 ## Native packages
 
-Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary and managed systemd units; run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
+Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary, create the locked `veil` account, migrate scoped permissions with safety copies, and ship the hardened Panel, `veil-helper.socket`, backup, and runtime units. Run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
 
 ### Verify a release
 

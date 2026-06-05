@@ -1,6 +1,10 @@
 package managementstate
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 func TestManagementStateMutationOwnsSettingsInboundAndWarpMutations(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", NaivePassword: "secret"}
@@ -113,5 +117,54 @@ func TestManagementStateMutationDoesNotSaveOnInvalidMutation(t *testing.T) {
 	}
 	if saves != 0 {
 		t.Fatalf("saves = %d, want 0", saves)
+	}
+}
+
+func TestManagementStateMutationValidatesAndPreservesUserLocale(t *testing.T) {
+	users := []model.User{{
+		Username:     "viewer",
+		PasswordHash: "hash",
+		Role:         "viewer",
+		Locale:       "ru",
+	}}
+	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Users: &users}, func() error { return nil })
+
+	updated, err := mutation.UpdateUser("viewer", model.User{PasswordHash: "hash-2", Role: "viewer"})
+	if err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+	if updated.Locale != "ru" || users[0].Locale != "ru" {
+		t.Fatalf("locale was not preserved: updated=%+v stored=%+v", updated, users[0])
+	}
+
+	if _, err := mutation.CreateUser(model.User{
+		Username:     "bad-locale",
+		PasswordHash: "hash",
+		Role:         "viewer",
+		Locale:       "de",
+	}); err == nil {
+		t.Fatal("expected unsupported locale error")
+	}
+}
+
+func TestManagementStateCodecPersistsUserLocale(t *testing.T) {
+	codec := NewManagementStateCodec()
+	body, err := codec.Encode(model.ManagementSnapshot{
+		Users: []model.User{{
+			Username:     "admin",
+			PasswordHash: "hash",
+			Role:         "admin",
+			Locale:       "ru",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := codec.Decode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Users) != 1 || snapshot.Users[0].Locale != "ru" {
+		t.Fatalf("snapshot=%+v", snapshot)
 	}
 }

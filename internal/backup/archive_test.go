@@ -18,7 +18,7 @@ func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
 
-	stateContent := []byte(`{"version": 1, "data": "test"}`)
+	stateContent := []byte(`{"schemaVersion":3,"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"local","mode":"server"}}`)
 	keyContent := bytes.Repeat([]byte{0x42}, 32)
 
 	if err := os.WriteFile(statePath, stateContent, 0o600); err != nil {
@@ -67,7 +67,7 @@ func TestCreateAndRestoreBackupEncrypted(t *testing.T) {
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
 
-	stateContent := []byte(`{"secure": true}`)
+	stateContent := []byte(`{"schemaVersion":3,"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"local","mode":"server"}}`)
 	keyContent := bytes.Repeat([]byte{0x99}, 32)
 
 	if err := os.WriteFile(statePath, stateContent, 0o600); err != nil {
@@ -130,7 +130,7 @@ func TestRestoreUnencryptedBackupWithPassphraseErrors(t *testing.T) {
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
 
-	stateContent := []byte(`{"secure": false}`)
+	stateContent := []byte(`{"schemaVersion":3,"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"local","mode":"server"}}`)
 	keyContent := bytes.Repeat([]byte{0x11}, 32)
 
 	if err := os.WriteFile(statePath, stateContent, 0o600); err != nil {
@@ -159,7 +159,7 @@ func TestRestoreLegacyVersion1Backup(t *testing.T) {
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
 
-	stateContent := []byte(`{"secure": true, "version": 1}`)
+	stateContent := []byte(`{"schemaVersion":1,"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"local","mode":"server"}}`)
 	keyContent := bytes.Repeat([]byte{0x77}, 32)
 
 	if err := os.WriteFile(statePath, stateContent, 0o600); err != nil {

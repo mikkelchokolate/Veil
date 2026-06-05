@@ -50,7 +50,7 @@ func TestServeHealthLifecycle(t *testing.T) {
 func TestServeAuthGate(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
 
-	resp := srv.doNoAuth(http.MethodGet, "/api/status")
+	resp := srv.doNoAuth(http.MethodGet, "/api/version")
 	if resp.StatusCode != http.StatusUnauthorized {
 		drain(resp)
 		t.Fatalf("expected 401 without token, got %d", resp.StatusCode)
@@ -61,7 +61,7 @@ func TestServeAuthGate(t *testing.T) {
 	drain(resp)
 
 	// Valid token => 200.
-	req := srv.do(http.MethodGet, "/api/status", "")
+	req := srv.do(http.MethodGet, "/api/version", "")
 	if req.StatusCode != http.StatusOK {
 		drain(req)
 		t.Fatalf("expected 200 with valid token, got %d", req.StatusCode)
@@ -76,7 +76,7 @@ func TestServeAuthDisabled(t *testing.T) {
 		seedState: `{"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"}}`,
 	})
 
-	resp := srv.doNoAuth(http.MethodGet, "/api/status")
+	resp := srv.doNoAuth(http.MethodGet, "/api/version")
 	if resp.StatusCode != http.StatusOK {
 		t.Logf("Server logs:\n%s", srv.logBuf.String())
 		drain(resp)

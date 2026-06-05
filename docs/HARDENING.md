@@ -41,6 +41,17 @@ other non-loopback address) requires both:
 2. User/session auth already present in Management state (`veil admin reset` or
    `veil admin set --username admin --password ...`).
 
+It also requires native TLS and authenticated metrics. Plain public HTTP is
+refused before the server opens its socket. The
+`--unsafe-allow-public-http` / `VEIL_UNSAFE_ALLOW_PUBLIC_HTTP=true` escape
+hatch exists only for controlled recovery and sends credentials without
+transport protection.
+
+Caddy mode is evaluated as public exposure even though Veil itself listens on
+loopback. It requires a configured Panel user and authenticated metrics before
+startup. The API token remains optional for browser-only Caddy deployments and
+is required for token-authenticated automation.
+
 The bearer token is compared in constant time and accepted via either header:
 
 ```
@@ -52,7 +63,19 @@ X-Veil-Token: <token>
   token mode is only acceptable for loopback-only deployments fronted by SSH.
 - Browser access uses `/api/auth/login`, an HTTP-only `veil_session` cookie,
   CSRF headers for mutating requests, and admin/viewer RBAC. Viewer sessions
-  cannot mutate state.
+  cannot mutate state. Sessions have a 30-minute idle timeout and a 24-hour
+  absolute lifetime.
+- Session metadata survives Panel restarts in
+  `/var/lib/veil/sessions.json`. Only SHA-256 hashes of the session and CSRF
+  bearer values are persisted; raw values remain browser-side. Password and
+  role changes, user deletion, and explicit administrator revocation invalidate
+  affected sessions.
+- First-run setup is available only on a loopback `local` listener with no
+  users. It is not served through Caddy or a direct listener.
+- Candidate configuration is checked against live ports, DNS, runtime
+  binaries, and managed units. The server repeats validation immediately
+  before every settings, Inbound, WARP, or apply mutation; failed checks return
+  `422` without changing state.
 - `/metrics` has an independent policy: `--metrics-access auto` (default),
   `authenticated`, or `public`. `public` is rejected on non-loopback Panel
   listeners.
@@ -74,7 +97,46 @@ X-Veil-Token: <token>
 - Never commit `veil.env` or generated config to version control. Treat backups
   produced by the Backup lifecycle as sensitive — they contain managed material.
 
-## 4. Supply-chain integrity
+## 4. Encrypted backups and key lifecycle
+
+- CLI archive creation requires encryption unless the operator explicitly uses
+  `--allow-unencrypted`. Plain archives contain both state and its decryption
+  key and should not be used for routine operations.
+- Native packages ship hardened `veil-backup.service` and
+  `veil-backup.timer` units. Enable them with
+  `veil backup schedule enable --passphrase-file <path>`.
+- The scheduled passphrase is stored at `/etc/veil/backup.passphrase` with
+  mode `0600`; the Panel reads it server-side and never returns it to the
+  browser.
+- Store retained archives off-host and keep the passphrase in a separate
+  security domain. Local retention does not protect against host loss.
+- Run `veil backup verify` or `veil backup restore --check-only` before every
+  restore. Veil validates checksums, the state/key pair, and Management schema
+  compatibility before writing.
+- Restore creates `.pre-restore-*` safety copies. Keep them until service
+  health and all enabled Inbounds are verified.
+- Rotate state encryption with `veil admin rotate-key` after suspected key
+  exposure or migration from an untrusted host, then export a new archive.
+
+See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) for the full
+runbook.
+
+## 5. Panel audit history
+
+- Authentication, setup, user/session administration, configuration mutation,
+  apply, and service actions are written as compact JSONL records under
+  `/var/lib/veil/audit/panel.jsonl` when the default state path is used.
+- The recorder rotates at 5 MiB and retains five generations
+  (`panel.jsonl.1` through `panel.jsonl.5`). Files and directories are
+  owner-only by default.
+- Detail keys associated with passwords, tokens, cookies, CSRF values,
+  authorization headers, API keys, and private keys are recursively replaced
+  with `[REDACTED]`.
+- Administrators can inspect up to 500 records per request with
+  `GET /api/audit?limit=100`; use the returned `nextBefore` timestamp to page
+  backward. Viewer sessions are denied.
+
+## 6. Supply-chain integrity
 
 - **Release binaries** are verified by the installer against `checksums.txt`,
   with a uniqueness guard that rejects a forged duplicate asset line before
@@ -106,34 +168,64 @@ X-Veil-Token: <token>
 - **Routing source material** (route-dat files) is checksum-verified before it
   is staged, so a tampered routing mirror cannot inject rules.
 
-## 5. Host and runtime hardening
+## 7. Host and runtime hardening
 
 - **Shipped systemd hardening is the baseline.** Packaged units include
   `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp`,
   restricted address families, native system-call architecture, and explicit
   `ReadWritePaths` for Veil-managed state. Treat local drop-ins as further
   tightening, not as the first hardening layer.
-- **Root surface.** On bare-metal systemd installs, the Panel process still
-  needs root-equivalent access to write `/etc/veil`, write `/var/lib/veil`, and
-  call `systemctl` for managed units. The privileged operations are: install
-  and repair managed unit files, promote generated configs, restart/reload
-  managed units, read bounded journald logs, and rotate the state key.
+- **Panel privilege boundary.** The Panel unit runs as `User=veil` and
+  `Group=veil`, with empty `CapabilityBoundingSet` and `AmbientCapabilities`.
+  It can read the root-owned configuration under `/etc/veil` and write only
+  Panel-owned state, staging, updates, sessions, and audit data under
+  `/var/lib/veil`.
+- **Privileged helper.** Root-only operations are exposed by
+  `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
+  `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
+  only an allowlisted protocol over `AF_UNIX`, and runs with
+  `PrivateNetwork=true`. It has no TCP or UDP listener.
+- **Root operation allowlist.** The helper may promote or restore generated
+  configuration, control allowlisted Managed systemd units, read bounded
+  journald output, create/verify/restore encrypted backups, rotate the state
+  key, apply predefined firewall material, install a checksum-verified staged
+  Veil binary, and restart the Panel. Arbitrary commands, paths, units, and
+  shell input are rejected.
+- **Writable paths.** The Panel owns `/var/lib/veil/state.json`,
+  `/var/lib/veil/sessions.json`, `/var/lib/veil/audit`, staging, and updates.
+  Root retains `/etc/veil/state.key`, backup passphrases, live generated
+  configuration, systemd units, and migration safety copies under
+  `/var/lib/veil/migration-backups`.
 - **Containers run as a dedicated user.** The container image runs as the
-  non-root `veil` user and relies on mounted state directories. Do not mount the
-  host systemd tree read-write unless you are intentionally delegating host
-  service orchestration to the container.
+  non-root `veil` user and relies on mounted state directories. A rootless
+  container can provide local/read-only administration and staging, but full
+  live host orchestration requires the bare-metal helper. Do not mount the host
+  systemd tree into the container as a replacement for that boundary.
 - **Firewall.** Only expose the ports you actually use. The Panel-facing
   firewall material plans rules from enabled Inbounds and Panel access — review
   `GET /api/firewall` output and apply the minimum.
 - **Keep the toolchain current.** CI builds and releases on the latest Go and
   fails on any `govulncheck` finding, so staying on tagged releases keeps you
   ahead of stdlib and dependency CVEs.
-- **Capability envelope.** Units bound to potentially privileged ports keep
-  `CAP_NET_BIND_SERVICE` and drop broader ambient capabilities. If your local
-  deployment does not bind low ports directly, you can remove that capability in
-  a drop-in after validating apply, diagnostics, and restart flows.
+- **Capability envelope.** Protocol runtime units that may bind privileged
+  ports keep only `CAP_NET_BIND_SERVICE`. The Panel and helper units ship with
+  empty capability sets; helper operations rely on root UID plus explicit
+  systemd filesystem and syscall restrictions instead of ambient capabilities.
 
-## 6. Updates and rollback
+Check the boundary after installation:
+
+```bash
+systemctl status veil.service veil-helper.socket veil-helper.service
+systemctl show veil.service -p User -p Group -p CapabilityBoundingSet
+systemctl show veil-helper.service -p PrivateNetwork -p RestrictAddressFamilies
+stat -c '%U:%G %a %n' /run/veil/helper.sock
+```
+
+If an ownership migration must be reversed, stop the Panel and helper, restore
+the root-owned originals from `/var/lib/veil/migration-backups`, then run
+`sudo veil repair --yes` before starting the units again.
+
+## 8. Updates and rollback
 
 - Update with `veil update`, which verifies release checksums, swaps the binary
   atomically, restarts the managed unit, health-checks the Panel, and can roll

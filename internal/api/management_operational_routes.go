@@ -84,6 +84,9 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	status := http.StatusOK
 	if !plan.Valid {
 		status = http.StatusBadRequest
+		if len(plan.Issues) > 0 {
+			status = http.StatusUnprocessableEntity
+		}
 	}
 	writeJSONStatus(w, status, plan)
 }
@@ -115,6 +118,9 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
+	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
+		status = http.StatusUnprocessableEntity
+	}
 	s.logUserAction(r, "apply_configuration", "system", err == nil && status == http.StatusOK, "")
 	if err != nil {
 		writeError(w, err.Error(), status)

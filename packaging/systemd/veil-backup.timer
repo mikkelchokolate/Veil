@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Veil encrypted state backup
+Documentation=https://github.com/mikkelchokolate/Veil/blob/main/docs/disaster-recovery.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=veil-backup.service
+
+[Install]
+WantedBy=timers.target

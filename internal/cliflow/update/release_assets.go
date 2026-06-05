@@ -12,8 +12,9 @@ import (
 )
 
 type Archive struct {
-	Name string
-	Body []byte
+	Name      string
+	Body      []byte
+	Checksums []byte
 }
 
 type ReleaseAssets struct {
@@ -51,7 +52,7 @@ func (a ReleaseAssets) DownloadVerifiedArchive() (Archive, error) {
 	if err := VerifyAssetChecksum(archive, a.assetName, string(checksumsBody)); err != nil {
 		return Archive{}, fmt.Errorf("checksum verification failed: %w", err)
 	}
-	return Archive{Name: a.assetName, Body: archive}, nil
+	return Archive{Name: a.assetName, Body: archive, Checksums: checksumsBody}, nil
 }
 
 // AssetName returns the expected release asset name for the current platform.

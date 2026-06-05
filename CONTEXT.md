@@ -37,7 +37,7 @@ The CLI readiness flow that checks required and optional host commands and rende
 _Avoid_: doctor print helper, dependency checklist glue
 
 **Veil uninstall**:
-The CLI flow that previews and removes Veil managed files, Managed systemd units, state, and binary material. The uninstall CLI workflow package owns the plan, ordering, and concrete side-effect actions; Cobra only adapts flags and writers.
+The CLI flow that previews and removes Veil managed units and binary material while preserving `/etc/veil` and `/var/lib/veil` by default. Destructive state removal requires explicit `--purge`. The uninstall CLI workflow package owns the plan, ordering, and concrete side-effect actions; Cobra only adapts flags and writers.
 _Avoid_: remove command script, cleanup helper
 
 **Veil rollback**:
@@ -127,6 +127,10 @@ _Avoid_: service component, daemon file
 **Runtime command**:
 A fixed external command Veil runs to validate configs, control Managed systemd units, read systemd status, or check runtime health. Runtime command execution lives outside HTTP Adapters.
 _Avoid_: shell snippet, exec call
+
+**Privileged helper**:
+The root-owned, socket-activated process that accepts an allowlisted operation protocol over `/run/veil/helper.sock`, authenticates the Panel with Unix peer credentials, and performs the minimum host mutations that cannot run as the unprivileged `veil` user.
+_Avoid_: root Panel, generic command runner, host shell API
 
 **Service status**:
 The Panel-facing status snapshot and log access for Managed systemd units, including runtime catalog entries, systemd load/active/sub-state fields, and bounded journald reads. The service package owns status response and log command shaping; HTTP routes are Adapters.
@@ -226,7 +230,7 @@ _Avoid_: logging, masking
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - **Veil status** owns Panel status fetch, generated local Panel TLS trust, and human/JSON rendering outside the Cobra command Adapter.
 - **Veil doctor** owns command readiness checks and human/JSON readiness rendering outside the Cobra command Adapter.
-- **Veil uninstall** owns preview, service stop/disable actions, file removal actions, and daemon reload outside the Cobra command Adapter.
+- **Veil uninstall** owns preview, service stop/disable actions, binary removal, optional `--purge`, and daemon reload outside the Cobra command Adapter; normal removal preserves `/etc/veil` and `/var/lib/veil`.
 - **Veil rollback** owns backup listing, restore, cleanup, and rollback audit event ordering outside the Cobra command Adapter.
 - **Veil repair** owns profile selection, repair plan preview, dry-run, and apply ordering outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
@@ -249,7 +253,7 @@ _Avoid_: logging, masking
 - A **Generated config set** contains **Generated config artifacts** and **Routing source material** from the generated config package that are promoted by the **Apply workflow**.
 - The **Routing rule catalog** owns routing rule validation, preset profiles, preset application, and preset response shaping outside HTTP Adapters.
 - **Protocol runtime provisioning** is derived from enabled **Inbounds** and WARP state and selects **Managed systemd units**.
-- **Runtime commands** are executed through an Adapter so validation, reload, restart, systemd status, and health-check behavior share one command seam.
+- Non-privileged **Runtime commands** are executed through an Adapter; live promotion, service control, journald reads, backup/key operations, verified updates, and restart cross the **Privileged helper** boundary.
 - The Managed systemd unit catalog maps promoted Generated config artifacts to service reload/restart actions, action success policy, health collection, health policy, and **Service status** outside HTTP Adapters.
 - **Runtime observation** concentrates procfs parser output into the Panel-facing observation model outside HTTP Adapters.
 - **HTTP observability** concentrates metrics exposition, request accounting, status recording, and rate-limit decisions outside HTTP Adapters.

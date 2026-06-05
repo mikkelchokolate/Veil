@@ -31,9 +31,15 @@ jobs:
       - run: go vet ./...
       - name: Validate OpenAPI
         run: make verify-openapi
+      - name: Verify generated Go SDK
+        run: make verify-sdk
       - run: make build
-      - name: Test with race detector and coverage
-        run: go test ./... -race -count=1 -coverprofile=coverage.out
+      - name: Test generated SDK with race detector
+        run: go test ./sdk/go -race -count=1
+      - name: Test product code with race detector and coverage
+        run: |
+          packages="$(go list ./... | grep -v '/sdk/go$')"
+          go test ${packages} -race -count=1 -coverprofile=coverage.out
       - name: Verify coverage threshold (min 70%)
         run: |
           total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
@@ -45,6 +51,7 @@ jobs:
           name: code-coverage-report
           path: coverage.out
       - run: bash -n scripts/install.sh scripts/uninstall.sh
+      - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
       - run: git diff --check
@@ -69,7 +76,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh packaging/scripts/*.sh
+
+  privilege-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.25.11'
+      - name: Verify systemd socket activation
+        run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
+      - name: Verify helper socket and filesystem access matrix
+        run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
+      - name: Validate hardened systemd units
+        run: |
+          go build -o /tmp/veil-unit-verify ./cmd/veil
+          sudo install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil
+          systemd-analyze verify packaging/systemd/veil.service packaging/systemd/veil-helper.service packaging/systemd/veil-helper.socket
 
   e2e:
     runs-on: ubuntu-latest

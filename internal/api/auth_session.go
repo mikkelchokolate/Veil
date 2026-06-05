@@ -1,132 +1,24 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"net/http"
-	"sort"
 	"strings"
-	"sync"
-	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/panel"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Session struct {
-	Token     string
-	Username  string
-	Role      string
-	CSRFToken string
-	ExpiresAt time.Time
-}
+var errUserNotFound = errors.New("user not found")
 
-type SessionInfo struct {
-	ID        string `json:"id"`
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	ExpiresAt string `json:"expiresAt"`
-	Current   bool   `json:"current"`
-}
-
-type SessionRegistry struct {
-	mu       sync.RWMutex
-	sessions map[string]Session
-}
-
-var globalSessions = &SessionRegistry{
-	sessions: make(map[string]Session),
-}
-
-func (r *SessionRegistry) NewSession(username, role string) Session {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	token, _ := generateRandomHex(32)
-	csrf, _ := generateRandomHex(32)
-
-	session := Session{
-		Token:     token,
-		Username:  username,
-		Role:      role,
-		CSRFToken: csrf,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+func (s *managementState) sessionRegistry() *SessionRegistry {
+	if s != nil && s.sessions != nil {
+		return s.sessions
 	}
-	r.sessions[token] = session
-	return session
-}
-
-func (r *SessionRegistry) Get(token string) (Session, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	s, ok := r.sessions[token]
-	if !ok {
-		return Session{}, false
-	}
-	if time.Now().After(s.ExpiresAt) {
-		r.mu.RUnlock()
-		r.mu.Lock()
-		delete(r.sessions, token)
-		r.mu.Unlock()
-		r.mu.RLock()
-		return Session{}, false
-	}
-	return s, true
-}
-
-func (r *SessionRegistry) Delete(token string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.sessions, token)
-}
-
-func (r *SessionRegistry) List(currentToken string) []SessionInfo {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := time.Now()
-	sessions := make([]SessionInfo, 0, len(r.sessions))
-	for token, session := range r.sessions {
-		if now.After(session.ExpiresAt) {
-			delete(r.sessions, token)
-			continue
-		}
-		sessions = append(sessions, SessionInfo{
-			ID:        sessionID(token),
-			Username:  session.Username,
-			Role:      session.Role,
-			ExpiresAt: session.ExpiresAt.UTC().Format(time.RFC3339),
-			Current:   token == currentToken,
-		})
-	}
-	sort.Slice(sessions, func(i, j int) bool {
-		if sessions[i].Current != sessions[j].Current {
-			return sessions[i].Current
-		}
-		if sessions[i].Username != sessions[j].Username {
-			return sessions[i].Username < sessions[j].Username
-		}
-		return sessions[i].ExpiresAt < sessions[j].ExpiresAt
-	})
-	return sessions
-}
-
-func (r *SessionRegistry) DeleteByID(id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for token := range r.sessions {
-		if sessionID(token) == id {
-			delete(r.sessions, token)
-			return true
-		}
-	}
-	return false
-}
-
-func sessionID(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])[:16]
+	return globalSessions
 }
 
 func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -144,46 +36,80 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Check if matching any stored user
-	var matchedUser *User
+	var matchedUser User
+	foundUser := false
 	for _, u := range s.users {
 		if u.Username == req.Username {
-			matchedUser = &u
+			matchedUser = u
+			foundUser = true
 			break
 		}
 	}
+	userCount := len(s.users)
+	fallbackPassword := s.settings.NaivePassword
+	panelAccess := s.settings.PanelAccess
+	s.mu.Unlock()
 
-	// Validate credentials
 	valid := false
 	role := "viewer"
-	if matchedUser != nil {
+	locale := panel.LocaleEnglish
+	if foundUser {
 		if err := bcrypt.CompareHashAndPassword([]byte(matchedUser.PasswordHash), []byte(req.Password)); err == nil {
 			valid = true
 			role = matchedUser.Role
+			locale = panel.NormalizeLocale(matchedUser.Locale)
 		}
-	} else if len(s.users) == 0 && s.settings.NaivePassword != "" && req.Username == "admin" {
-		// Fallback for static auth token
-		if req.Password == s.settings.NaivePassword {
+	} else if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
+		if req.Password == fallbackPassword {
 			valid = true
 			role = "admin"
 		}
 	}
 
 	if !valid {
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   req.Username,
+			Action:  "auth.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "invalid credentials",
+		})
 		writeError(w, "invalid username or password", http.StatusUnauthorized)
 		return
 	}
 
-	session := globalSessions.NewSession(req.Username, role)
+	session, err := s.sessionRegistry().Create(SessionCreateInput{
+		Username:   req.Username,
+		Role:       role,
+		UserAgent:  r.UserAgent(),
+		RemoteAddr: clientIP(r),
+	})
+	if err != nil {
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   req.Username,
+			Role:    role,
+			Action:  "auth.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "session persistence failed",
+		})
+		writeError(w, "failed to persist session", http.StatusInternalServerError)
+		return
+	}
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   req.Username,
+		Role:    role,
+		Action:  "auth.login",
+		Target:  "panel",
+		Success: true,
+	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "veil_session",
 		Value:    session.Token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   r.TLS != nil || panelAccess == "caddy",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400,
 	})
@@ -192,6 +118,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"success":   true,
 		"username":  req.Username,
 		"role":      role,
+		"locale":    locale,
 		"csrfToken": session.CSRFToken,
 	})
 }
@@ -204,7 +131,18 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
-		globalSessions.Delete(cookie.Value)
+		actor, role := "", ""
+		if session, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			actor, role = session.Username, session.Role
+		}
+		s.sessionRegistry().Delete(cookie.Value)
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   actor,
+			Role:    role,
+			Action:  "auth.logout",
+			Target:  "panel",
+			Success: true,
+		})
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -226,12 +164,22 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
-		if sess, ok := globalSessions.Get(cookie.Value); ok {
+		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRF(cookie.Value)
+			if csrfErr != nil {
+				writeError(w, "failed to refresh session", http.StatusInternalServerError)
+				return
+			}
+			if !csrfOK {
+				writeJSON(w, map[string]any{"authenticated": false})
+				return
+			}
 			writeJSON(w, map[string]any{
 				"authenticated": true,
 				"username":      sess.Username,
 				"role":          sess.Role,
-				"csrfToken":     sess.CSRFToken,
+				"locale":        s.userLocale(sess.Username),
+				"csrfToken":     csrf,
 			})
 			return
 		}
@@ -242,15 +190,111 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	cookie, err := r.Cookie("veil_session")
+	if err != nil {
+		writeError(w, "an authenticated user session is required", http.StatusUnauthorized)
+		return
+	}
+	session, ok := s.sessionRegistry().Get(cookie.Value)
+	if !ok {
+		writeError(w, "an authenticated user session is required", http.StatusUnauthorized)
+		return
+	}
+	if actor, _ := r.Context().Value(contextKeyUsername).(string); actor != "" && actor != session.Username {
+		writeError(w, "session user mismatch", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Locale string `json:"locale"`
+	}
+	if !decodeJSONRequest(w, r, &req) {
+		return
+	}
+	locale, ok := panel.ParseLocale(req.Locale)
+	if !ok || (locale != panel.LocaleEnglish && locale != panel.LocaleRussian) {
+		writeError(w, "locale must be en or ru", http.StatusBadRequest)
+		return
+	}
+
+	var updated model.User
+	err = s.withMutation(func(mutation managementstate.Mutation) error {
+		var current model.User
+		found := false
+		for _, user := range mutation.Users() {
+			if user.Username == session.Username {
+				current = user
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errUserNotFound
+		}
+		current.Locale = locale
+		var updateErr error
+		updated, updateErr = mutation.UpdateUser(session.Username, current)
+		return updateErr
+	})
+	if err != nil {
+		if err == errUserNotFound {
+			writeNotFound(w)
+			return
+		}
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.mu.Lock()
+	panelAccess := s.settings.PanelAccess
+	s.mu.Unlock()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "veil_locale",
+		Value:    updated.Locale,
+		Path:     "/",
+		Secure:   r.TLS != nil || panelAccess == "caddy",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   31536000,
+	})
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   session.Username,
+		Role:    session.Role,
+		Action:  "auth.locale.update",
+		Target:  session.Username,
+		Success: true,
+		Details: map[string]any{"locale": updated.Locale},
+	})
+	writeJSON(w, map[string]string{"locale": updated.Locale})
+}
+
+func (s *managementState) userLocale(username string) string {
+	return panel.NormalizeLocale(s.storedUserLocale(username))
+}
+
+func (s *managementState) storedUserLocale(username string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, user := range s.users {
+		if user.Username == username {
+			return user.Locale
+		}
+	}
+	return ""
+}
+
 func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Request) {
-	if !requestHasAdminRole(r) {
+	if !requestHasAdminRole(s, r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, globalSessions.List(currentSessionToken(r)))
+		writeJSON(w, s.sessionRegistry().List(currentSessionToken(r)))
 	case http.MethodDelete:
 		var req struct {
 			ID string `json:"id"`
@@ -262,10 +306,21 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 			writeError(w, "session id is required", http.StatusBadRequest)
 			return
 		}
-		if !globalSessions.DeleteByID(req.ID) {
+		if !s.sessionRegistry().DeleteByID(req.ID) {
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "auth.session.revoke",
+				Target:  req.ID,
+				Success: false,
+				Error:   "session not found",
+			})
 			writeNotFound(w)
 			return
 		}
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "auth.session.revoke",
+			Target:  req.ID,
+			Success: true,
+		})
 		writeJSON(w, map[string]any{"success": true})
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodDelete)
@@ -274,7 +329,7 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 
 func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Request) {
 	// Only accessible if role is admin. Verified in middleware, but double check.
-	if !requestHasAdminRole(r) {
+	if !requestHasAdminRole(s, r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
@@ -286,10 +341,15 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		type UserResponse struct {
 			Username string `json:"username"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale"`
 		}
 		var list []UserResponse
 		for _, u := range s.users {
-			list = append(list, UserResponse{Username: u.Username, Role: u.Role})
+			list = append(list, UserResponse{
+				Username: u.Username,
+				Role:     u.Role,
+				Locale:   panel.NormalizeLocale(u.Locale),
+			})
 		}
 		writeJSON(w, list)
 
@@ -298,6 +358,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			Username string `json:"username"`
 			Password string `json:"password"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale,omitempty"`
 		}
 		if !decodeJSONRequest(w, r, &req) {
 			return
@@ -305,6 +366,16 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		if req.Username == "" || req.Password == "" || (req.Role != "admin" && req.Role != "viewer") {
 			writeError(w, "username, password, and valid role (admin/viewer) are required", http.StatusBadRequest)
 			return
+		}
+		if req.Locale == "" {
+			req.Locale = panel.LocaleEnglish
+		} else {
+			locale, ok := panel.ParseLocale(req.Locale)
+			if !ok {
+				writeError(w, "locale must be en or ru", http.StatusBadRequest)
+				return
+			}
+			req.Locale = locale
 		}
 
 		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
@@ -317,17 +388,31 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			Username:     req.Username,
 			PasswordHash: string(hashed),
 			Role:         req.Role,
+			Locale:       req.Locale,
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			created, mErr := mutation.CreateUser(newUser)
 			if mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.create",
+					Target:  req.Username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusConflict)
 				return nil
 			}
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.create",
+				Target:  created.Username,
+				Success: true,
+				Details: map[string]any{"role": created.Role},
+			})
 			writeJSONStatus(w, http.StatusCreated, map[string]any{
 				"username": created.Username,
 				"role":     created.Role,
+				"locale":   created.Locale,
 			})
 			return nil
 		})
@@ -349,6 +434,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		var req struct {
 			Password string `json:"password,omitempty"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale,omitempty"`
 		}
 		if !decodeJSONRequest(w, r, &req) {
 			return
@@ -356,6 +442,14 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		if req.Role != "admin" && req.Role != "viewer" {
 			writeError(w, "valid role (admin/viewer) is required", http.StatusBadRequest)
 			return
+		}
+		if req.Locale != "" {
+			locale, ok := panel.ParseLocale(req.Locale)
+			if !ok {
+				writeError(w, "locale must be en or ru", http.StatusBadRequest)
+				return
+			}
+			req.Locale = locale
 		}
 
 		s.mu.Lock()
@@ -387,17 +481,35 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 			Username:     username,
 			PasswordHash: hash,
 			Role:         req.Role,
+			Locale:       req.Locale,
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			updated, mErr := mutation.UpdateUser(username, update)
 			if mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.update",
+					Target:  username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
 			writeJSON(w, map[string]any{
 				"username": updated.Username,
 				"role":     updated.Role,
+				"locale":   panel.NormalizeLocale(updated.Locale),
+			})
+			_, _ = s.sessionRegistry().DeleteByUsername(username)
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.update",
+				Target:  username,
+				Success: true,
+				Details: map[string]any{
+					"role":            updated.Role,
+					"passwordChanged": req.Password != "",
+				},
 			})
 			return nil
 		})
@@ -405,9 +517,11 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 	} else if r.Method == http.MethodDelete {
 		s.mu.Lock()
 		exists := false
+		targetRole := ""
 		for _, u := range s.users {
 			if u.Username == username {
 				exists = true
+				targetRole = u.Role
 				break
 			}
 		}
@@ -428,16 +542,28 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		}
 		s.mu.Unlock()
 
-		if adminCount <= 1 {
+		if targetRole == "admin" && adminCount <= 1 {
 			writeError(w, "cannot delete the last administrator", http.StatusBadRequest)
 			return
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			if mErr := mutation.DeleteUser(username); mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.delete",
+					Target:  username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
+			_, _ = s.sessionRegistry().DeleteByUsername(username)
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.delete",
+				Target:  username,
+				Success: true,
+			})
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		})
@@ -446,14 +572,14 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 	}
 }
 
-func requestHasAdminRole(r *http.Request) bool {
+func requestHasAdminRole(state *managementState, r *http.Request) bool {
 	if role, _ := r.Context().Value(contextKeyRole).(string); role == "admin" {
 		return true
 	}
 	cookie, err := r.Cookie("veil_session")
 	var activeSession Session
 	if err == nil {
-		activeSession, _ = globalSessions.Get(cookie.Value)
+		activeSession, _ = state.sessionRegistry().Get(cookie.Value)
 	}
 	return activeSession.Role == "admin"
 }
@@ -464,4 +590,11 @@ func currentSessionToken(r *http.Request) string {
 		return ""
 	}
 	return cookie.Value
+}
+
+func clientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
+		return forwarded
+	}
+	return r.RemoteAddr
 }

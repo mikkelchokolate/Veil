@@ -6,6 +6,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +19,17 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 			if !decodeJSONRequest(w, r, &settings) {
 				return nil
 			}
-			updated, err := mutation.UpdateSettings(settings)
+			candidate := settings
+			if err := veilsettings.NewSettingsValidation().NormalizeAndValidate(&candidate, s.settings); err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
+			if validation, ok := s.enforceValidationLocked(r.Context(), candidate, s.inbounds, s.warp); !ok {
+				s.logUserAction(r, "update_settings", "settings", false, "live validation failed")
+				writeValidationFailure(w, validation)
+				return nil
+			}
+			updated, err := mutation.UpdateSettings(candidate)
 			s.logUserAction(r, "update_settings", "settings", err == nil, "")
 			if err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
@@ -42,7 +53,18 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			if !decodeJSONRequest(w, r, &inbound) {
 				return nil
 			}
-			created, err := mutation.CreateInbound(inbound)
+			created, candidate, err := inbounds.NewInboundCatalog(s.inbounds).Create(inbound)
+			if err != nil {
+				s.logUserAction(r, "create_inbound", inbound.Name, false, "")
+				writeInboundManagementError(w, err)
+				return nil
+			}
+			if validation, ok := s.enforceValidationLocked(r.Context(), s.settings, candidate.List(), s.warp); !ok {
+				s.logUserAction(r, "create_inbound", inbound.Name, false, "live validation failed")
+				writeValidationFailure(w, validation)
+				return nil
+			}
+			created, err = mutation.CreateInbound(created)
 			s.logUserAction(r, "create_inbound", inbound.Name, err == nil, "")
 			if err != nil {
 				writeInboundManagementError(w, err)
@@ -76,7 +98,18 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 			if !decodeJSONRequest(w, r, &update) {
 				return nil
 			}
-			updated, err := mutation.UpdateInbound(name, update)
+			updated, candidate, err := inbounds.NewInboundCatalog(s.inbounds).Update(name, update)
+			if err != nil {
+				s.logUserAction(r, "update_inbound", name, false, "")
+				writeInboundManagementError(w, err)
+				return nil
+			}
+			if validation, ok := s.enforceValidationLocked(r.Context(), s.settings, candidate.List(), s.warp); !ok {
+				s.logUserAction(r, "update_inbound", name, false, "live validation failed")
+				writeValidationFailure(w, validation)
+				return nil
+			}
+			updated, err = mutation.UpdateInbound(name, updated)
 			s.logUserAction(r, "update_inbound", name, err == nil, "")
 			if err != nil {
 				writeInboundManagementError(w, err)
