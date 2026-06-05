@@ -239,6 +239,16 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	if err == nil {
 		_, err = s.sessionRegistry().DeleteAllExcept(ownerSessionToken)
 	}
+	_ = s.appendBackupRestoreAudit(audit.Record{
+		Actor:     actor,
+		Role:      role,
+		Action:    "backup.restore",
+		Target:    name,
+		IP:        ip,
+		UserAgent: userAgent,
+		Success:   err == nil,
+		Error:     errorString(err),
+	})
 	finished := time.Now().UTC()
 	s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 		job.FinishedAt = finished
@@ -251,16 +261,13 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		}
 		job.Status = "succeeded"
 	})
-	_ = s.auditRecorder().Append(audit.Record{
-		Actor:     actor,
-		Role:      role,
-		Action:    "backup.restore",
-		Target:    name,
-		IP:        ip,
-		UserAgent: userAgent,
-		Success:   err == nil,
-		Error:     errorString(err),
-	})
+}
+
+func (s *managementState) appendBackupRestoreAudit(record audit.Record) error {
+	if s.backupRestoreAudit != nil {
+		return s.backupRestoreAudit(record)
+	}
+	return s.auditRecorder().Append(record)
 }
 
 func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.Request) {

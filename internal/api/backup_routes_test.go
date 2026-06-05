@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
@@ -117,6 +118,13 @@ func TestBackupRoutesRejectTraversalAndPruneManagedArchives(t *testing.T) {
 
 func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	state := newPanelBackupState(t)
+	auditStarted := make(chan audit.Record, 1)
+	releaseAudit := make(chan struct{})
+	state.backupRestoreAudit = func(record audit.Record) error {
+		auditStarted <- record
+		<-releaseAudit
+		return nil
+	}
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
 	state.handleBackups(createResponse, create)
@@ -142,6 +150,18 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if err := json.NewDecoder(restoreResponse.Body).Decode(&accepted); err != nil {
 		t.Fatal(err)
 	}
+	select {
+	case record := <-auditStarted:
+		if record.Action != "backup.restore" {
+			t.Fatalf("unexpected restore audit record: %+v", record)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("restore audit finalization did not start")
+	}
+	if job, _ := state.backupRestoreJob(accepted.ID); job.Status == "succeeded" {
+		t.Fatal("restore job reported success before audit finalization completed")
+	}
+	close(releaseAudit)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		job, ok := state.backupRestoreJob(accepted.ID)
