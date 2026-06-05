@@ -259,7 +259,8 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		}
 		return resolved, nil
 	}
-	if filepath.Base(request.ArchiveName) != request.ArchiveName ||
+	if strings.ContainsAny(request.ArchiveName, `/\`) ||
+		filepath.Base(request.ArchiveName) != request.ArchiveName ||
 		!strings.HasSuffix(strings.ToLower(request.ArchiveName), ".enc") {
 		return ResolvedBackup{}, newError(ErrorInvalidRequest, "archiveName must be an .enc basename")
 	}

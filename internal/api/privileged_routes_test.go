@@ -273,7 +273,12 @@ func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 
 func TestRotateKeyRequiresAdminAndRevokesSessions(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	root := t.TempDir()
+	state := newManagementState(ServerInfo{
+		Mode: "dev", Privileged: client,
+		StatePath: filepath.Join(root, "state.json"),
+		KeyPath:   filepath.Join(root, "state.key"),
+	})
 	admin, _ := state.sessionRegistry().Create(SessionCreateInput{Username: "admin", Role: "admin"})
 	viewer, _ := state.sessionRegistry().Create(SessionCreateInput{Username: "viewer", Role: "viewer"})
 

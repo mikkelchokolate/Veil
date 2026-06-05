@@ -144,7 +144,7 @@ func Build(input Input) model.ApplyPlanResponse {
 }
 
 func buildOperations(configs, actions, runtimes []string, generatedRoot, liveRoot string) []model.ApplyOperation {
-	operations := make([]model.ApplyOperation, 0, len(configs)+len(actions))
+	var operations []model.ApplyOperation
 	sortedConfigs := append([]string(nil), configs...)
 	sort.Strings(sortedConfigs)
 	for _, config := range sortedConfigs {

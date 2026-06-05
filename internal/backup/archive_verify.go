@@ -350,7 +350,7 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 		if seen[name] {
 			return archiveContents{}, fmt.Errorf("invalid backup: duplicate archive entry %q", name)
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg && header.Typeflag != 0 {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q is not a regular file", name)
 		}
 		if header.Size < 0 || header.Size > maxBackupArchiveFileBytes {

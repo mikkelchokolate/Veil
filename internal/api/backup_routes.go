@@ -13,8 +13,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
-const maxPanelBackupBytes int64 = 64 * 1024 * 1024
-
 type BackupCreateResponse struct {
 	Archive      backup.ArchiveEntry       `json:"archive"`
 	Verification backup.VerificationReport `json:"verification"`
@@ -322,13 +320,6 @@ func parsePanelBackupPath(r *http.Request) (string, string, bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
-}
-
-func retentionFromRequest(daily, weekly, monthly int) backup.RetentionPolicy {
-	if daily == 0 && weekly == 0 && monthly == 0 {
-		return backup.DefaultRetentionPolicy()
-	}
-	return backup.RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}
 }
 
 func errorString(err error) string {
