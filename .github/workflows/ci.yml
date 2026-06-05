@@ -34,8 +34,12 @@ jobs:
       - name: Verify generated Go SDK
         run: make verify-sdk
       - run: make build
-      - name: Test with race detector and coverage
-        run: go test ./... -race -count=1 -coverprofile=coverage.out
+      - name: Test generated SDK with race detector
+        run: go test ./sdk/go -race -count=1
+      - name: Test product code with race detector and coverage
+        run: |
+          packages="$(go list ./... | grep -v '/sdk/go$')"
+          go test ${packages} -race -count=1 -coverprofile=coverage.out
       - name: Verify coverage threshold (min 70%)
         run: |
           total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')

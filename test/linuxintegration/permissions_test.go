@@ -27,7 +27,15 @@ func TestIntegrationPanelPermissionMatrix(t *testing.T) {
 	gid64, _ := strconv.ParseUint(account.Gid, 10, 32)
 	panel := hostaccess.Identity{UID: int(uid64), GID: int(gid64)}
 
-	root := t.TempDir()
+	root, err := os.MkdirTemp("", "veil-permission-matrix-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("remove permission fixture: %v", err)
+		}
+	})
 	if err := os.Chmod(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
