@@ -290,7 +290,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
-		"go test ./... -race -count=1",
+		"go test ./sdk/go -race -count=1",
+		"go list ./... | grep -v '/sdk/go$'",
+		"go test ${packages} -race -count=1 -coverprofile=coverage.out",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
