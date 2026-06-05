@@ -90,7 +90,10 @@ jobs:
       - name: Verify helper socket and filesystem access matrix
         run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
       - name: Validate hardened systemd units
-        run: systemd-analyze verify packaging/systemd/veil.service packaging/systemd/veil-helper.service packaging/systemd/veil-helper.socket
+        run: |
+          go build -o /tmp/veil-unit-verify ./cmd/veil
+          sudo install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil
+          systemd-analyze verify packaging/systemd/veil.service packaging/systemd/veil-helper.service packaging/systemd/veil-helper.socket
 
   e2e:
     runs-on: ubuntu-latest
