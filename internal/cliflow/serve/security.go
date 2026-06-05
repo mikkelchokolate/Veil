@@ -3,17 +3,18 @@ package serve
 import "fmt"
 
 type SecurityOptions struct {
-	Listen        string
-	AuthToken     string
-	MetricsAccess string
-	StatePath     string
-	ApplyRoot     string
-	KeyPath       string
-	TLSCert       string
-	TLSKey        string
-	WebBasePath   string
-	AutoTLS       bool
-	AutoTLSDir    string
+	Listen                string
+	AuthToken             string
+	MetricsAccess         string
+	StatePath             string
+	ApplyRoot             string
+	KeyPath               string
+	TLSCert               string
+	TLSKey                string
+	WebBasePath           string
+	AutoTLS               bool
+	AutoTLSDir            string
+	AllowUnsafePublicHTTP bool
 }
 
 type Config struct {
@@ -43,6 +44,7 @@ type Config struct {
 	AutoTLSDomain         string
 	AutoTLSEmail          string
 	AutoTLSCacheDir       string
+	AllowUnsafePublicHTTP bool
 }
 
 type Security struct {
@@ -68,19 +70,18 @@ func (s Security) Resolve() (Config, error) {
 	statePath, stateSource := env.StatePath(opts.StatePath)
 	applyRoot, applyRootSource := env.ApplyRoot(opts.ApplyRoot)
 	keyPath, keySource := env.KeyPath(opts.KeyPath)
+	panelAccess := env.PanelAccess()
+	exposed := publicListen || panelAccess == "direct" || panelAccess == "caddy"
 	sessionAuthConfigured := false
-	if publicListen {
+	if exposed {
 		var sessionErr error
 		sessionAuthConfigured, sessionErr = env.SessionAuthConfigured(statePath)
 		if sessionErr != nil {
 			return Config{}, fmt.Errorf("session auth check: %w", sessionErr)
 		}
 	}
-	if err := env.ValidatePublicExposure(listen, tokenSource, sessionAuthConfigured); err != nil {
-		return Config{}, err
-	}
 	metricsAccess, metricsAccessSource := env.MetricsAccess(opts.MetricsAccess)
-	metricsAuthRequired, err := env.MetricsAuthRequired(metricsAccess, publicListen, tokenSource, sessionAuthConfigured)
+	metricsAuthRequired, err := env.MetricsAuthRequired(metricsAccess, exposed, tokenSource, sessionAuthConfigured)
 	if err != nil {
 		return Config{}, err
 	}
@@ -98,6 +99,22 @@ func (s Security) Resolve() (Config, error) {
 		tlsCert = ""
 		tlsKey = ""
 	}
+	allowUnsafePublicHTTP, err := env.AllowUnsafePublicHTTP(opts.AllowUnsafePublicHTTP)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := NewExposurePolicy().Validate(ExposureInput{
+		PanelAccess:           panelAccess,
+		PublicListen:          publicListen,
+		TokenConfigured:       tokenSource != "disabled",
+		SessionAuthConfigured: sessionAuthConfigured,
+		MetricsAuthRequired:   metricsAuthRequired,
+		NativeTLS:             tlsEnabled,
+		ProxyTLS:              panelAccess == "caddy",
+		AllowUnsafePublicHTTP: allowUnsafePublicHTTP,
+	}); err != nil {
+		return Config{}, err
+	}
 	return Config{
 		Listen:                listen,
 		ListenSource:          listenSource,
@@ -114,7 +131,7 @@ func (s Security) Resolve() (Config, error) {
 		ApplyRootSource:       applyRootSource,
 		KeyPath:               keyPath,
 		KeySource:             keySource,
-		PanelAccess:           env.PanelAccess(),
+		PanelAccess:           panelAccess,
 		Domain:                env.Domain(),
 		Email:                 env.Email(),
 		WebBasePath:           webBasePath,
@@ -125,5 +142,6 @@ func (s Security) Resolve() (Config, error) {
 		AutoTLSDomain:         autoTLSConfig.Domain,
 		AutoTLSEmail:          autoTLSConfig.Email,
 		AutoTLSCacheDir:       autoTLSConfig.CacheDir,
+		AllowUnsafePublicHTTP: allowUnsafePublicHTTP,
 	}, nil
 }

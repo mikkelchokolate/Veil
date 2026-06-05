@@ -188,6 +188,21 @@ func (Environment) PanelAccess() string { return strings.TrimSpace(os.Getenv("VE
 func (Environment) Domain() string      { return strings.TrimSpace(os.Getenv("VEIL_DOMAIN")) }
 func (Environment) Email() string       { return strings.TrimSpace(os.Getenv("VEIL_EMAIL")) }
 
+func (Environment) AllowUnsafePublicHTTP(flagValue bool) (bool, error) {
+	if flagValue {
+		return true, nil
+	}
+	value := strings.TrimSpace(os.Getenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP"))
+	if value == "" {
+		return false, nil
+	}
+	allowed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP must be a boolean: %w", err)
+	}
+	return allowed, nil
+}
+
 func (Environment) WebBasePath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(flagValue); path != "" {
 		return CleanWebBasePath(path), "--web-base-path"

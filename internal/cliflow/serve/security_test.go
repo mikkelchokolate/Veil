@@ -60,6 +60,8 @@ func TestServeSecurityAllowsPublicListenWithTokenAndSessionUser(t *testing.T) {
 		Listen:    "0.0.0.0:2096",
 		AuthToken: "secret",
 		StatePath: statePath,
+		TLSCert:   "/tmp/panel.crt",
+		TLSKey:    "/tmp/panel.key",
 	})
 
 	cfg, err := security.Resolve()
@@ -68,5 +70,46 @@ func TestServeSecurityAllowsPublicListenWithTokenAndSessionUser(t *testing.T) {
 	}
 	if !cfg.PublicListen || !cfg.SessionAuthConfigured || !cfg.MetricsAuthRequired {
 		t.Fatalf("expected public/session/metrics auth flags, got %+v", cfg)
+	}
+}
+
+func TestServeSecurityRejectsPublicListenWithoutTLS(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := managementstate.NewStore(statePath, nil).Save(model.ManagementSnapshot{
+		Users: []model.User{{Username: "admin", PasswordHash: "hash", Role: "admin"}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	_, err := NewSecurity(SecurityOptions{
+		Listen:    "0.0.0.0:2096",
+		AuthToken: "secret",
+		StatePath: statePath,
+	}).Resolve()
+	if err == nil || !strings.Contains(err.Error(), "TLS") {
+		t.Fatalf("expected public HTTP to be rejected, got %v", err)
+	}
+}
+
+func TestServeSecurityTreatsCaddyAsPublicExposure(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "caddy")
+	statePath := filepath.Join(t.TempDir(), "state.json")
+
+	_, err := NewSecurity(SecurityOptions{StatePath: statePath}).Resolve()
+	if err == nil || !strings.Contains(err.Error(), "user/session") {
+		t.Fatalf("expected Caddy without users to be rejected, got %v", err)
+	}
+
+	if err := managementstate.NewStore(statePath, nil).Save(model.ManagementSnapshot{
+		Users: []model.User{{Username: "admin", PasswordHash: "hash", Role: "admin"}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	cfg, err := NewSecurity(SecurityOptions{StatePath: statePath}).Resolve()
+	if err != nil {
+		t.Fatalf("expected configured Caddy exposure: %v", err)
+	}
+	if !cfg.MetricsAuthRequired || !cfg.SessionAuthConfigured {
+		t.Fatalf("expected authenticated Caddy exposure, got %+v", cfg)
 	}
 }
