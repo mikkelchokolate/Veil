@@ -161,14 +161,17 @@ func TestPackageScriptsExist(t *testing.T) {
 }
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
-	for _, unit := range []string{
-		"../../packaging/systemd/veil.service",
+	runtimeUnits := []string{
 		"../../packaging/systemd/veil-caddy@.service",
 		"../../packaging/systemd/veil-hysteria2@.service",
 		"../../packaging/systemd/veil-olcrtc@.service",
 		"../../packaging/systemd/veil-mieru.service",
 		"../../packaging/systemd/veil-warp.service",
-	} {
+	}
+	for _, unit := range append([]string{
+		"../../packaging/systemd/veil.service",
+		"../../packaging/systemd/veil-helper.service",
+	}, runtimeUnits...) {
 		body, err := os.ReadFile(unit)
 		if err != nil {
 			t.Fatalf("missing systemd unit %s: %v", unit, err)
@@ -179,9 +182,6 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			"ProtectSystem=strict",
 			"ProtectHome=yes",
 			"PrivateTmp=true",
-			"CapabilityBoundingSet=CAP_NET_BIND_SERVICE",
-			"AmbientCapabilities=CAP_NET_BIND_SERVICE",
-			"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
 			"SystemCallArchitectures=native",
 			"ProtectKernelTunables=true",
 			"ProtectKernelModules=true",
@@ -194,6 +194,37 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 		} {
 			if !strings.Contains(config, want) {
 				t.Fatalf("systemd unit %s missing hardening directive %q:\n%s", unit, want, config)
+			}
+		}
+	}
+	for _, unit := range runtimeUnits {
+		body, err := os.ReadFile(unit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config := string(body)
+		for _, want := range []string{
+			"CapabilityBoundingSet=CAP_NET_BIND_SERVICE",
+			"AmbientCapabilities=CAP_NET_BIND_SERVICE",
+			"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+		} {
+			if !strings.Contains(config, want) {
+				t.Fatalf("runtime unit %s missing %q", unit, want)
+			}
+		}
+	}
+	for _, unit := range []string{
+		"../../packaging/systemd/veil.service",
+		"../../packaging/systemd/veil-helper.service",
+	} {
+		body, err := os.ReadFile(unit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config := strings.ReplaceAll(string(body), "\r\n", "\n")
+		for _, want := range []string{"CapabilityBoundingSet=\n", "AmbientCapabilities=\n"} {
+			if !strings.Contains(config, want) {
+				t.Fatalf("control-plane unit %s missing empty %q", unit, want)
 			}
 		}
 	}

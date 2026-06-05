@@ -86,3 +86,30 @@ func TestHelperServeResolvesVeilUIDAndStartsSocketServer(t *testing.T) {
 		t.Fatalf("serve arguments: path=%q uid=%d", gotPath, gotUID)
 	}
 }
+
+func TestHelperServeUsesSystemdSocketActivation(t *testing.T) {
+	var activated bool
+	cmd := newHelperCommandWithDependencies(helperCommandDependencies{
+		GOOS:         "linux",
+		EffectiveUID: func() int { return 0 },
+		LookupUID:    func(string) (uint32, error) { return 4242, nil },
+		Serve: func(context.Context, string, uint32, bool) error {
+			t.Fatal("path listener must not be used with socket activation")
+			return nil
+		},
+		ServeActivated: func(_ context.Context, uid uint32, allowRoot bool) error {
+			activated = true
+			if uid != 4242 || allowRoot {
+				t.Fatalf("activated arguments: uid=%d allowRoot=%t", uid, allowRoot)
+			}
+			return errors.New("stop")
+		},
+	})
+	cmd.SetArgs([]string{"serve", "--systemd-socket-activation"})
+	if err := cmd.Execute(); err == nil || err.Error() != "stop" {
+		t.Fatalf("expected injected stop, got %v", err)
+	}
+	if !activated {
+		t.Fatal("systemd socket listener was not used")
+	}
+}

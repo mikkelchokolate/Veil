@@ -11,6 +11,8 @@ const (
 	UnitMieru         = "veil-mieru.service"
 	UnitBackupService = "veil-backup.service"
 	UnitBackupTimer   = "veil-backup.timer"
+	UnitHelperService = "veil-helper.service"
+	UnitHelperSocket  = "veil-helper.socket"
 )
 
 const systemdHardeningBlock = `CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -28,7 +30,10 @@ UMask=0077
 `
 
 func ManagedSystemdUnitNames() []string {
-	return []string{UnitVeil, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer}
+	return []string{
+		UnitVeil, UnitHelperService, UnitHelperSocket, UnitCaddy, UnitHysteria2,
+		UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer,
+	}
 }
 
 type SystemdConfig struct {
@@ -71,12 +76,21 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	return map[string]string{
 		UnitVeil: `[Unit]
 Description=Veil panel
-After=network-online.target
+After=network-online.target veil-helper.socket
 Wants=network-online.target
+Requires=veil-helper.socket
 
 [Service]
 Type=simple
+User=veil
+Group=veil
+RuntimeDirectory=veil
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
+Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
+Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging
+Environment=VEIL_LIVE_ROOT=` + path.Join(cfg.EtcDir, "generated") + `
 ExecStart=` + cfg.VeilBinary + ` serve
 Restart=on-failure
 RestartSec=3
@@ -84,10 +98,76 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+PrivateDevices=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+ReadOnlyPaths=` + cfg.EtcDir + `
+ReadWritePaths=/var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
+`,
+		UnitHelperService: `[Unit]
+Description=Veil privileged helper
+Requires=veil-helper.socket
+After=veil-helper.socket
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=` + cfg.VeilBinary + ` helper serve --systemd-socket-activation
+NoNewPrivileges=true
+PrivateNetwork=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+ReadOnlyPaths=` + cfg.EtcDir + `
+ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin
+`,
+		UnitHelperSocket: `[Unit]
+Description=Veil privileged helper socket
+
+[Socket]
+ListenStream=/run/veil/helper.sock
+Accept=no
+SocketUser=root
+SocketGroup=veil
+SocketMode=0660
+DirectoryMode=0750
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target
 `,
 		UnitCaddy: `[Unit]
 Description=Veil managed NaiveProxy/Caddy (%i)

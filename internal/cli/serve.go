@@ -52,7 +52,7 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token; defaults to VEIL_API_TOKEN when set")
 	cmd.Flags().StringVar(&metricsAccess, "metrics-access", "", "metrics exposure policy: auto, authenticated, or public; defaults to VEIL_METRICS_ACCESS or auto")
 	cmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
-	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /etc/veil")
+	cmd.Flags().StringVar(&applyRoot, "apply-root", "", "root for staged apply files; defaults to VEIL_APPLY_ROOT or /var/lib/veil/staging")
 	cmd.Flags().StringVar(&liveRoot, "live-root", "", "root for helper-managed live configs; defaults to VEIL_LIVE_ROOT or /etc/veil/generated")
 	cmd.Flags().StringVar(&keyPath, "key-path", "", "encryption key file path; defaults to VEIL_KEY_PATH or /etc/veil/state.key")
 	cmd.Flags().StringVar(&helperSocket, "helper-socket", "", "privileged helper Unix socket; defaults to VEIL_HELPER_SOCKET or /run/veil/helper.sock")
