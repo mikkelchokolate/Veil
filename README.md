@@ -124,7 +124,7 @@ The Panel includes operator-focused controls for production use:
 - **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
 - **Users and sessions** - create admin/viewer users, inspect durable browser sessions, and revoke stale sessions.
 - **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
-- **Safe apply preview** - review generated files, staged/live paths, backups, rollback files, runtime actions, and DNS/TLS/firewall/service warnings before applying.
+- **Live validation and safe apply preview** - inspect field-level port, DNS, runtime, and unit checks plus structured generated/live file operations, rollback availability, and interruption risk before applying.
 - **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
 
 ### Backup, rollback, and audit
@@ -188,6 +188,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 - [Installation guide](docs/install.md) — setup options, access modes, and compiling from source
 - [Troubleshooting guide](docs/troubleshooting.md) — diagnostics, logs, and state rollback
 - [Hardening guide](docs/HARDENING.md) — secure deployment and operations
+- [Panel operations guide](docs/operations.md) - live validation guarantees, race boundaries, and structured apply previews
 - [Known limitations](docs/known-limitations.md) — multi-inbound behavior and platform limits
 - [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
 - [Security policy](SECURITY.md) — vulnerability reporting

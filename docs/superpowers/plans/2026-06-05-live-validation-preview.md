@@ -474,21 +474,21 @@ git commit -m "feat: render structured apply preview"
 - Modify: `README.md`
 - Test: `internal/api/openapi_contract_test.go`
 
-- [ ] **Step 1: Write failing OpenAPI contract assertions**
+- [x] **Step 1: Write failing OpenAPI contract assertions**
 
 Assert `/api/validation`, `ValidationIssue`, `ValidationResponse`, and `ApplyOperation` exist, all response codes reference the common error envelope, and examples include a busy port and a connection-drop preview.
 
-- [ ] **Step 2: Run documentation checks and verify failure**
+- [x] **Step 2: Run documentation checks and verify failure**
 
 Run: `go test ./internal/api -run OpenAPI -count=1`
 
 Expected: FAIL because new schemas and path are undocumented.
 
-- [ ] **Step 3: Document contracts and guarantees**
+- [x] **Step 3: Document contracts and guarantees**
 
 Document request/response schemas, RBAC, issue codes, examples, authoritative server validation, race limitations between preview and apply, and how Veil revalidates immediately before mutation.
 
-- [ ] **Step 4: Validate documentation**
+- [x] **Step 4: Validate documentation**
 
 Run:
 
@@ -499,7 +499,7 @@ npx --yes @redocly/cli lint docs/openapi.yaml
 
 Expected: both commands PASS with no OpenAPI errors.
 
-- [ ] **Step 5: Commit documentation**
+- [x] **Step 5: Commit documentation**
 
 ```bash
 git add docs/openapi.yaml docs/operations.md README.md internal/api/openapi_contract_test.go
