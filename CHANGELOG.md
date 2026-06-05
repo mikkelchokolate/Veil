@@ -4,6 +4,16 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.2] - 2026-06-05
+
+### Fixed
+
+- Missing or inaccessible privileged helper sockets are now reported as a
+  repairable `503 Service Unavailable` with native-install recovery commands
+  instead of exposing a raw Unix socket dial error.
+- Panel error rendering now unwraps structured API error envelopes, so Update,
+  Service Status, and Backups show the actionable message instead of raw JSON.
+
 ## [v0.6.1] - 2026-06-05
 
 ### Fixed

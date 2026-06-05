@@ -296,6 +296,30 @@ func TestPrivilegedUpdateUnavailableTellsOperatorHowToRepair(t *testing.T) {
 	}
 }
 
+func TestMissingPrivilegedHelperSocketTellsOperatorHowToRepair(t *testing.T) {
+	client := &recordingPrivilegedClient{
+		err: &privileged.Error{
+			Code:    privileged.ErrorOperationFailed,
+			Message: "privileged operation failed: dial unix /run/veil/helper.sock: connect: no such file or directory",
+		},
+	}
+	router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{"privileged helper is unavailable", "veil-helper.socket", "install.sh --force"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("helper socket response missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "dial unix") {
+		t.Fatalf("helper socket response should not expose raw dial error:\n%s", body)
+	}
+}
+
 func TestRotateKeyRequiresAdminAndRevokesSessions(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	root := t.TempDir()

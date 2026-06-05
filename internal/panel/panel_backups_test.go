@@ -30,6 +30,7 @@ func TestPanelBackupsActionsUseServerSideSecretAndQueuedRestore(t *testing.T) {
 		`async function loadBackups()`,
 		`async function createBackup()`,
 		`async function pruneBackups()`,
+		`formatAPIError(text, response.status)`,
 		`/api/backups/`,
 		`/verify`,
 		`/download`,

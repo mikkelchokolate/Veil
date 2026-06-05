@@ -144,6 +144,10 @@ func writeError(w http.ResponseWriter, msg string, code int) {
 }
 
 func writePrivilegedError(w http.ResponseWriter, err error) {
+	if privilegedHelperSocketUnavailable(err) {
+		writePrivilegedHelperUnavailable(w)
+		return
+	}
 	status := http.StatusInternalServerError
 	code := privileged.ErrorOperationFailed
 	message := "privileged operation failed"
@@ -171,6 +175,23 @@ func writePrivilegedError(w http.ResponseWriter, err error) {
 			"message": message,
 		},
 	})
+}
+
+func privilegedHelperSocketUnavailable(err error) bool {
+	var operationError *privileged.Error
+	if !errors.As(err, &operationError) {
+		return false
+	}
+	message := strings.ToLower(operationError.Message)
+	if !strings.Contains(message, "helper.sock") {
+		return false
+	}
+	for _, marker := range []string{"no such file or directory", "connection refused", "permission denied"} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func writeNotFound(w http.ResponseWriter) {
