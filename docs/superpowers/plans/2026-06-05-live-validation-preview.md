@@ -509,29 +509,29 @@ git commit -m "docs: document live validation and previews"
 ### Task 9: End-to-End and Responsive Verification
 
 **Files:**
-- Modify: `tests/e2e/panel_api_test.go`
-- Modify: `tests/e2e/panel_browser_test.go`
+- Modify: `test/e2e/live_validation_preview_test.go`
+- Modify: `test/e2e/proxy_negative_test.go`
 
-- [ ] **Step 1: Add failing end-to-end scenarios**
+- [x] **Step 1: Add failing end-to-end scenarios**
 
 Cover authenticated validation, viewer denial, busy-port save refusal, unchanged-binding acceptance, structured preview, secret redaction, and apply refusal without state mutation.
 
-- [ ] **Step 2: Run new end-to-end tests and verify failure**
+- [x] **Step 2: Run new end-to-end tests and verify failure**
 
-Run: `go test ./tests/e2e -run 'Validation|StructuredPreview' -count=1`
+Run: `go test -tags e2e ./test/e2e/... -run 'Validation|StructuredPreview' -count=1`
 
 Expected: FAIL before the scenarios are wired to the final server.
 
-- [ ] **Step 3: Complete server wiring**
+- [x] **Step 3: Complete server wiring**
 
 Construct production probes in the CLI server, inject them into the API, and keep deterministic fake probes in all existing tests. Ensure validation timeouts are bounded by the request context.
 
-- [ ] **Step 4: Run full verification**
+- [x] **Step 4: Run full verification**
 
 Run:
 
 ```bash
-gofmt -w internal/livevalidation internal/model internal/api internal/applyplan internal/panel tests/e2e
+gofmt -w internal/livevalidation internal/model internal/api internal/applyplan internal/panel test/e2e
 go test ./...
 npx --yes @redocly/cli lint docs/openapi.yaml
 ```
@@ -540,9 +540,9 @@ Expected: PASS.
 
 Open the Panel in the in-app browser at desktop and 390x844 mobile sizes. Verify the inbound modal has no horizontal overflow, stale validation responses do not replace current results, keyboard focus reaches every error, and the apply preview remains readable.
 
-- [ ] **Step 5: Commit end-to-end coverage**
+- [x] **Step 5: Commit end-to-end coverage**
 
 ```bash
-git add internal tests/e2e
+git add internal test/e2e
 git commit -m "test: cover live validation workflow"
 ```
