@@ -41,6 +41,17 @@ other non-loopback address) requires both:
 2. User/session auth already present in Management state (`veil admin reset` or
    `veil admin set --username admin --password ...`).
 
+It also requires native TLS and authenticated metrics. Plain public HTTP is
+refused before the server opens its socket. The
+`--unsafe-allow-public-http` / `VEIL_UNSAFE_ALLOW_PUBLIC_HTTP=true` escape
+hatch exists only for controlled recovery and sends credentials without
+transport protection.
+
+Caddy mode is evaluated as public exposure even though Veil itself listens on
+loopback. It requires a configured Panel user and authenticated metrics before
+startup. The API token remains optional for browser-only Caddy deployments and
+is required for token-authenticated automation.
+
 The bearer token is compared in constant time and accepted via either header:
 
 ```
@@ -53,6 +64,8 @@ X-Veil-Token: <token>
 - Browser access uses `/api/auth/login`, an HTTP-only `veil_session` cookie,
   CSRF headers for mutating requests, and admin/viewer RBAC. Viewer sessions
   cannot mutate state.
+- First-run setup is available only on a loopback `local` listener with no
+  users. It is not served through Caddy or a direct listener.
 - `/metrics` has an independent policy: `--metrics-access auto` (default),
   `authenticated`, or `public`. `public` is rejected on non-loopback Panel
   listeners.

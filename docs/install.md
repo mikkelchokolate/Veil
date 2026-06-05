@@ -46,7 +46,11 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
 
 Veil provides three exposure profiles for the management Panel:
 
-Before any public exposure, create Panel credentials explicitly:
+An unconfigured `local` installation presents a first-run page only on its
+loopback listener. Create the initial administrator there, then sign in.
+
+Before changing an installation to `direct` or `caddy`, create Panel
+credentials explicitly if setup has not already been completed:
 
 ```bash
 sudo veil admin reset
@@ -54,7 +58,11 @@ sudo veil admin reset
 sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
 ```
 
-Direct public `veil serve` listeners require both a configured Panel user and an API token. Local loopback listeners can be reached through SSH and are the recommended interactive choice.
+Direct public `veil serve` listeners require native TLS, a configured Panel
+user, an API token, and authenticated metrics. Caddy exposure requires a Panel
+user and authenticated metrics even though the Veil listener stays on
+loopback. Local loopback listeners can be reached through SSH and are the
+recommended interactive choice.
 
 ### Local Mode (Highly Recommended)
 Exposes the Panel on the loopback interface (`127.0.0.1:<panel-port>`) with a self-signed TLS certificate.
@@ -76,7 +84,13 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 Exposes the Panel directly on all interfaces on the configured port using self-signed TLS.
 - **URL:** `https://your-server-ip:<panel-port>/`
 - **Why:** Convenient for quick staging or internal networks.
-- **Warning:** Direct exposure of self-signed HTTP endpoints is prone to port scanning and certificate bypass dialog warnings. `veil serve` refuses non-loopback direct exposure unless both `VEIL_API_TOKEN` and a Panel user are configured.
+- **Warning:** Direct exposure with a self-signed certificate is prone to port
+  scanning and certificate bypass dialog warnings. `veil serve` refuses
+  non-loopback direct exposure unless TLS, `VEIL_API_TOKEN`, a Panel user, and
+  authenticated metrics are configured. Plain public HTTP is rejected; the
+  emergency `--unsafe-allow-public-http` /
+  `VEIL_UNSAFE_ALLOW_PUBLIC_HTTP=true` override must never be used on an
+  untrusted network.
 
 ---
 

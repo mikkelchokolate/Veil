@@ -1,16 +1,20 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "1.0.0"
+  version: "1.1.0"
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
     ## Authentication model
-    Veil is fail-closed for public Panel listeners. A non-loopback `--listen`
-    address requires both API token authentication (`--auth-token` or
-    `VEIL_API_TOKEN`) and user/session authentication already configured in
-    Management state (`veil admin reset` or `veil admin set`). Loopback-only
-    listeners may run without credentials for development and SSH-tunnel use.
+    Veil is fail-closed for public Panel exposure. A non-loopback `--listen`
+    address requires native TLS, API token authentication (`--auth-token` or
+    `VEIL_API_TOKEN`), user/session authentication, and authenticated metrics.
+    Caddy exposure requires user/session authentication and authenticated
+    metrics even though the Veil listener remains on loopback.
+
+    An unconfigured local loopback listener exposes only the first-run setup
+    flow needed to create the initial administrator. Setup is unavailable
+    through direct or Caddy exposure.
 
     `/api/*` routes accept either `X-Veil-Token`, `Authorization: Bearer`, or
     a `veil_session` cookie created by `/api/auth/login`. Mutating requests
@@ -33,6 +37,7 @@ security:
   - sessionCookie: []
 tags:
   - name: status
+  - name: setup
   - name: auth
   - name: settings
   - name: inbounds
@@ -99,6 +104,66 @@ paths:
                     veil_uptime_seconds 12
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/setup/status:
+    get:
+      tags: [setup]
+      summary: Inspect first-run setup state
+      description: Available without authentication only on a local loopback listener.
+      security: []
+      responses:
+        "200":
+          description: Current setup state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupStatusResponse"
+              examples:
+                required:
+                  value:
+                    required: true
+                    allowed: true
+                    panelAccess: local
+  /api/setup/complete:
+    post:
+      tags: [setup]
+      summary: Create the initial administrator
+      description: Single-use operation available only on an unconfigured local loopback listener.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupCompleteRequest"
+            examples:
+              initial-admin:
+                value:
+                  username: admin
+                  password: correct-horse-battery-staple
+                  backupAcknowledged: true
+      responses:
+        "201":
+          description: Initial administrator created and setup marked complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupCompleteResponse"
+              examples:
+                complete:
+                  value:
+                    completed: true
+                    username: admin
+                    role: admin
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Setup was already completed or a user already exists.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/ErrorText"
   /api/auth/login:
     post:
       tags: [auth]
@@ -1188,6 +1253,45 @@ components:
       properties:
         success:
           type: boolean
+    SetupStatusResponse:
+      type: object
+      required: [required, allowed, panelAccess]
+      properties:
+        required:
+          type: boolean
+        allowed:
+          type: boolean
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy, ""]
+    SetupCompleteRequest:
+      type: object
+      required: [username, password, backupAcknowledged]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[\p{L}\p{N}._-]+$'
+        password:
+          type: string
+          format: password
+          minLength: 12
+        backupAcknowledged:
+          type: boolean
+          const: true
+    SetupCompleteResponse:
+      type: object
+      required: [completed, username, role]
+      properties:
+        completed:
+          type: boolean
+          const: true
+        username:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
     LoginRequest:
       type: object
       required: [username, password]
