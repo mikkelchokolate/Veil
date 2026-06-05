@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"path/filepath"
 
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -16,7 +18,7 @@ func NewManagementApplyContext(state *managementState) ManagementApplyContext {
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 	s := ctx.state
-	return NewManagementApplyIntent(ManagementApplyIntentInput{
+	plan := NewManagementApplyIntent(ManagementApplyIntentInput{
 		ApplyRoot:     s.applyRoot,
 		Settings:      s.settings,
 		Inbounds:      s.inbounds,
@@ -24,6 +26,16 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 		RoutingSource: s.routingSource,
 		Warp:          s.warp,
 	}).BuildPlan()
+	if validation, ok := s.enforceValidationLocked(context.Background(), s.settings, s.inbounds, s.warp); !ok {
+		plan.Valid = false
+		plan.Issues = append(plan.Issues, validation.Issues...)
+		for _, issue := range validation.Issues {
+			if issue.Severity == "error" {
+				plan.Errors = managementstate.AppendUnique(plan.Errors, issue.Message)
+			}
+		}
+	}
+	return plan
 }
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {

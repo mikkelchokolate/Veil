@@ -36,7 +36,7 @@
 - Modify: `internal/model/types.go`
 - Test: `internal/model/types_test.go`
 
-- [ ] **Step 1: Write the failing JSON contract test**
+- [x] **Step 1: Write the failing JSON contract test**
 
 Add a test that marshals an `ApplyPlanResponse` containing a `ValidationIssue` and `ApplyOperation`, then asserts the JSON keys `issues`, `operations`, `interruptionRisk`, `rollbackAvailable`, and `validationSource` are present and secrets are not introduced.
 
@@ -69,13 +69,13 @@ func TestApplyPlanResponseIncludesStructuredPreview(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the contract test and verify failure**
+- [x] **Step 2: Run the contract test and verify failure**
 
 Run: `go test ./internal/model -run TestApplyPlanResponseIncludesStructuredPreview -count=1`
 
 Expected: FAIL because the structured types and fields do not exist.
 
-- [ ] **Step 3: Add stable shared types**
+- [x] **Step 3: Add stable shared types**
 
 Add:
 
@@ -108,13 +108,13 @@ Issues     []ValidationIssue `json:"issues"`
 Operations []ApplyOperation `json:"operations"`
 ```
 
-- [ ] **Step 4: Run model tests**
+- [x] **Step 4: Run model tests**
 
 Run: `go test ./internal/model -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the model contract**
+- [x] **Step 5: Commit the model contract**
 
 ```bash
 git add internal/model/types.go internal/model/types_test.go
@@ -128,7 +128,7 @@ git commit -m "feat: add structured validation model"
 - Create: `internal/livevalidation/validator.go`
 - Test: `internal/livevalidation/validator_test.go`
 
-- [ ] **Step 1: Write failing duplicate, required-field, and host-probe tests**
+- [x] **Step 1: Write failing duplicate, required-field, and host-probe tests**
 
 Cover:
 
@@ -159,13 +159,13 @@ type UnitInspector interface {
 
 The unchanged-binding test supplies both `CurrentInbounds` and an identical candidate. A new candidate using a busy port must receive `port_in_use`.
 
-- [ ] **Step 2: Run validator tests and verify failure**
+- [x] **Step 2: Run validator tests and verify failure**
 
 Run: `go test ./internal/livevalidation -count=1`
 
 Expected: FAIL because the package does not exist.
 
-- [ ] **Step 3: Implement the validator**
+- [x] **Step 3: Implement the validator**
 
 Define:
 
@@ -204,13 +204,13 @@ Implement stable checks:
 - issues are sorted by severity, inbound ID, field, and code;
 - `Valid` is false exactly when an `error` issue exists.
 
-- [ ] **Step 4: Run validator tests**
+- [x] **Step 4: Run validator tests**
 
 Run: `go test ./internal/livevalidation -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the validator**
+- [x] **Step 5: Commit the validator**
 
 ```bash
 git add internal/livevalidation
@@ -223,7 +223,7 @@ git commit -m "feat: add live configuration validation"
 - Create: `internal/livevalidation/host_probes.go`
 - Test: `internal/livevalidation/host_probes_test.go`
 
-- [ ] **Step 1: Write failing real TCP/UDP probe tests**
+- [x] **Step 1: Write failing real TCP/UDP probe tests**
 
 Reserve an ephemeral TCP listener and UDP packet socket, then assert the matching transport is unavailable and a released port becomes available.
 
@@ -235,23 +235,23 @@ func TestHostPortProbeRejectsUnknownTransport(t *testing.T)
 
 Also test binary lookup and a fake command runner for `systemctl show --property=LoadState --value`.
 
-- [ ] **Step 2: Run probe tests and verify failure**
+- [x] **Step 2: Run probe tests and verify failure**
 
 Run: `go test ./internal/livevalidation -run 'TestHost|TestSystemd' -count=1`
 
 Expected: FAIL because production probes are missing.
 
-- [ ] **Step 3: Implement bounded host probes**
+- [x] **Step 3: Implement bounded host probes**
 
 Use `net.Listen("tcp", "127.0.0.1:"+port)` and `net.ListenPacket("udp", "127.0.0.1:"+port)` with immediate close. Use `net.DefaultResolver.LookupHost`, `exec.LookPath`, and an injected context-aware command runner for unit inspection. Unknown transports return an error; probe errors become validation issues instead of panics.
 
-- [ ] **Step 4: Run package tests**
+- [x] **Step 4: Run package tests**
 
 Run: `go test ./internal/livevalidation -count=1`
 
 Expected: PASS on Windows and Linux.
 
-- [ ] **Step 5: Commit host probes**
+- [x] **Step 5: Commit host probes**
 
 ```bash
 git add internal/livevalidation/host_probes.go internal/livevalidation/host_probes_test.go
@@ -268,7 +268,7 @@ git commit -m "feat: probe live host configuration"
 - Modify: `internal/api/management_settings.go`
 - Modify: `internal/api/server.go`
 
-- [ ] **Step 1: Write failing endpoint and mutation tests**
+- [x] **Step 1: Write failing endpoint and mutation tests**
 
 Add tests proving:
 
@@ -280,13 +280,13 @@ Add tests proving:
 - applying invalid state yields `422` before staging or service actions;
 - unchanged persisted bindings remain saveable.
 
-- [ ] **Step 2: Run focused API tests and verify failure**
+- [x] **Step 2: Run focused API tests and verify failure**
 
 Run: `go test ./internal/api -run 'Validation|RejectsInvalid.*Save|RejectsInvalid.*Apply' -count=1`
 
 Expected: FAIL because the route and authoritative validator hook are absent.
 
-- [ ] **Step 3: Add one validator dependency to the API**
+- [x] **Step 3: Add one validator dependency to the API**
 
 Introduce an API-owned interface:
 
@@ -308,13 +308,13 @@ type validationRequest struct {
 
 Register `POST /api/validation`, load current inbounds for unchanged-binding ownership, and return the shared response. Call the identical helper before settings/inbound persistence and before apply execution. Return `422` with the existing error envelope plus structured issues.
 
-- [ ] **Step 4: Run API tests**
+- [x] **Step 4: Run API tests**
 
 Run: `go test ./internal/api -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit validation enforcement**
+- [x] **Step 5: Commit validation enforcement**
 
 ```bash
 git add internal/api

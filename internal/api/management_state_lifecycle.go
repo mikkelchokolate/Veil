@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
@@ -49,17 +50,24 @@ func newManagementState(info ServerInfo) *managementState {
 		Domain:      info.Domain,
 		Email:       info.Email,
 	})
+	configurationValidator := info.ConfigurationValidator
+	enforceConfigurationValidation := configurationValidator != nil
+	if configurationValidator == nil {
+		configurationValidator = livevalidation.Validator{}
+	}
 	state := &managementState{
-		statePath:    info.StatePath,
-		applyRoot:    defaultApplyRoot(info.ApplyRoot),
-		keyPath:      keyPath,
-		setupAllowed: info.SetupAllowed,
-		settings:     model.Settings,
-		inbounds:     model.Inbounds,
-		rules:        model.Rules,
-		warp:         model.Warp,
-		version:      info.Version,
-		backupJobs:   make(map[string]BackupRestoreJob),
+		statePath:                      info.StatePath,
+		applyRoot:                      defaultApplyRoot(info.ApplyRoot),
+		keyPath:                        keyPath,
+		setupAllowed:                   info.SetupAllowed,
+		settings:                       model.Settings,
+		inbounds:                       model.Inbounds,
+		rules:                          model.Rules,
+		warp:                           model.Warp,
+		version:                        info.Version,
+		backupJobs:                     make(map[string]BackupRestoreJob),
+		configurationValidator:         configurationValidator,
+		enforceConfigurationValidation: enforceConfigurationValidation,
 	}
 	sessionPath := ""
 	if info.StatePath != "" {

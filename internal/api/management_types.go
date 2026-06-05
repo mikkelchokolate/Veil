@@ -37,26 +37,28 @@ type livePromotionRecord = applyflow.PromotionRecord
 type managementSnapshot = model.ManagementSnapshot
 
 type managementState struct {
-	mu                   sync.Mutex
-	statePath            string
-	applyRoot            string
-	keyPath              string
-	cipher               *secrets.Cipher
-	setupAllowed         bool
-	setup                SetupState
-	settings             Settings
-	inbounds             []Inbound
-	rules                []RoutingRule
-	routingPreset        string
-	routingSource        RoutingSource
-	warp                 WarpConfig
-	users                []User
-	orphanedUnits        []string
-	sessions             *SessionRegistry
-	audit                *audit.Recorder
-	version              string
-	backupDir            string
-	backupPassphrasePath string
-	backupJobsMu         sync.Mutex
-	backupJobs           map[string]BackupRestoreJob
+	mu                             sync.Mutex
+	statePath                      string
+	applyRoot                      string
+	keyPath                        string
+	cipher                         *secrets.Cipher
+	setupAllowed                   bool
+	setup                          SetupState
+	settings                       Settings
+	inbounds                       []Inbound
+	rules                          []RoutingRule
+	routingPreset                  string
+	routingSource                  RoutingSource
+	warp                           WarpConfig
+	users                          []User
+	orphanedUnits                  []string
+	sessions                       *SessionRegistry
+	audit                          *audit.Recorder
+	version                        string
+	backupDir                      string
+	backupPassphrasePath           string
+	backupJobsMu                   sync.Mutex
+	backupJobs                     map[string]BackupRestoreJob
+	configurationValidator         ConfigurationValidator
+	enforceConfigurationValidation bool
 }

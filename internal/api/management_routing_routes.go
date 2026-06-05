@@ -146,6 +146,21 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
 			}
+			candidateWarp := s.warp
+			candidateRules := append([]RoutingRule(nil), s.rules...)
+			candidateMutation := managementstate.NewMutation(managementstate.MutationTarget{
+				Warp:  &candidateWarp,
+				Rules: &candidateRules,
+			}, nil)
+			if _, err := candidateMutation.UpdateWarp(warp); err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
+			if validation, ok := s.enforceValidationLocked(r.Context(), s.settings, s.inbounds, candidateWarp); !ok {
+				s.logUserAction(r, "update_warp", "warp", false, "live validation failed")
+				writeValidationFailure(w, validation)
+				return nil
+			}
 			updated, err := mutation.UpdateWarp(warp)
 			s.logUserAction(r, "update_warp", "warp", err == nil, "")
 			if err != nil {
