@@ -14,7 +14,7 @@ import (
 
 const maxRequestBytes int64 = 1 << 20
 
-var ErrUnixPeerCredentialsUnsupported = errors.New("Unix peer credential verification is unsupported on this platform")
+var ErrUnixPeerCredentialsUnsupported = errors.New("unix peer credential verification is unsupported on this platform")
 
 type Server struct {
 	client  Client

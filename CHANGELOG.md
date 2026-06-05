@@ -55,6 +55,8 @@ All notable changes to Veil will be documented in this file.
 - Installs targeting an alternative systemd directory now stage files without
   creating accounts, changing ownership, or invoking systemctl on the build
   host.
+- Privileged backup archive names reject both Unix and Windows path separators
+  consistently on every host platform.
 
 ### Migration Notes
 

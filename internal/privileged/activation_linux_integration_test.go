@@ -42,6 +42,7 @@ func TestSystemdSocketActivationAdoptsFD3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	listener.SetUnlinkOnClose(false)
 	file, err := listener.File()
 	if err != nil {
 		listener.Close()
