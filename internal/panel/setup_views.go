@@ -2,16 +2,18 @@ package panel
 
 import "strings"
 
-func SetupHTML(basePath string) string {
+func SetupHTML(basePath string, locale string) string {
 	path := strings.TrimRight(basePath, "/")
 	if path == "" {
 		path = ""
 	}
-	return strings.ReplaceAll(setupHTMLTemplate, "__VEIL_SETUP_API__", path+"/api/setup/complete")
+	html := strings.ReplaceAll(setupHTMLTemplate, "__VEIL_SETUP_API__", path+"/api/setup/complete")
+	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
+	return strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
 }
 
 const setupHTMLTemplate = `<!doctype html>
-<html lang="en">
+<html lang="__VEIL_LOCALE__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -55,7 +57,7 @@ const setupHTMLTemplate = `<!doctype html>
     form { display: grid; gap: 22px; margin-top: 28px; }
     section { display: grid; gap: 12px; }
     label { display: grid; gap: 7px; font-weight: 600; }
-    input[type="text"], input[type="password"] {
+    input[type="text"], input[type="password"], select {
       width: 100%;
       min-height: 44px;
       border: 1px solid var(--border);
@@ -65,9 +67,26 @@ const setupHTMLTemplate = `<!doctype html>
       padding: 10px 12px;
       font: inherit;
     }
-    input:focus-visible, button:focus-visible {
+    input:focus-visible, select:focus-visible, button:focus-visible {
       outline: 3px solid var(--focus);
       outline-offset: 2px;
+    }
+    .locale-picker {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-bottom: 20px;
+      color: var(--muted);
+    }
+    .locale-picker select {
+      width: auto;
+      min-height: 40px;
+      background: var(--surface-strong);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
     }
     .choice {
       display: grid;
@@ -106,6 +125,13 @@ const setupHTMLTemplate = `<!doctype html>
 </head>
 <body>
   <main>
+    <label class="locale-picker">
+      <span>Language</span>
+      <select data-veil-locale-select aria-label="Language">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
     <h1>Set up Veil</h1>
     <p>Create the first administrator before configuring proxy inbounds.</p>
     <form id="setup-form">
@@ -134,13 +160,16 @@ const setupHTMLTemplate = `<!doctype html>
     </form>
   </main>
   <script>
+    window.veilLocale = "__VEIL_LOCALE__";
+    window.veil_csrf_token = "";
+__VEIL_LOCALIZATION_RUNTIME__
     document.getElementById('setup-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = document.getElementById('setup-submit');
       const result = document.getElementById('setup-result');
       button.disabled = true;
       result.className = '';
-      result.textContent = 'Saving setup...';
+      result.textContent = veilT('setup.saving');
       try {
         const response = await fetch("__VEIL_SETUP_API__", {
           method: 'POST',
@@ -148,7 +177,8 @@ const setupHTMLTemplate = `<!doctype html>
           body: JSON.stringify({
             username: document.getElementById('setup-username').value.trim(),
             password: document.getElementById('setup-password').value,
-            backupAcknowledged: document.getElementById('setup-backup-ack').checked
+            backupAcknowledged: document.getElementById('setup-backup-ack').checked,
+            locale: window.veilLocale
           })
         });
         const text = await response.text();
@@ -157,11 +187,11 @@ const setupHTMLTemplate = `<!doctype html>
           result.textContent = text || ('HTTP ' + response.status);
           return;
         }
-        result.textContent = 'Setup complete. Opening sign in...';
+        result.textContent = veilT('setup.done');
         window.setTimeout(() => window.location.reload(), 500);
       } catch (error) {
         result.className = 'error';
-        result.textContent = 'Setup request failed: ' + String(error);
+        result.textContent = veilT('setup.failed', { error: String(error) });
       } finally {
         button.disabled = false;
       }

@@ -18,7 +18,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`"applyServices":true`,
 		`function renderApplyRuntimes(data)`,
 		`data.plan && Array.isArray(data.plan.runtimes)`,
-		`Runtime units: none required`,
+		`veilT('apply.runtimeNone')`,
 		`function renderApplySafePreview(data)`,
 		`apply-file-diff-preview-body`,
 		`apply-safety-warnings`,
@@ -61,7 +61,7 @@ func TestPanelApplyPreviewUsesStructuredOperationsWithCompatibilityFallback(t *t
 		`operation.validationSource`,
 		`Structured operation`,
 		`appendApplyPreviewRows`,
-		`Plan is invalid`,
+		`veilT('apply.warningInvalid')`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Structured apply preview missing %q", want)

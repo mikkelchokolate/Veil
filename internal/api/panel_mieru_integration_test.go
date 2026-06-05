@@ -11,7 +11,7 @@ import (
 )
 
 func TestPanelHTMLExposesCompleteMieruOperations(t *testing.T) {
-	html := panelHTML("/", "")
+	html := panelHTML("/", "", "en")
 	for _, want := range []string{
 		`<option value="mieru">mieru</option>`,
 		`"mieru":["tcp","udp"]`,

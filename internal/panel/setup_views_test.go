@@ -6,7 +6,7 @@ import (
 )
 
 func TestSetupHTMLContainsAccessibleFirstRunControls(t *testing.T) {
-	html := SetupHTML("/panel/")
+	html := SetupHTML("/panel/", "ru")
 	for _, want := range []string{
 		`id="setup-form"`,
 		`for="setup-username"`,
@@ -19,6 +19,10 @@ func TestSetupHTMLContainsAccessibleFirstRunControls(t *testing.T) {
 		"Create administrator",
 		"Local access",
 		"Backup and recovery",
+		`<html lang="ru">`,
+		`data-veil-locale-select`,
+		`window.veilLocale = "ru"`,
+		`window.veilT`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("setup HTML missing %q", want)

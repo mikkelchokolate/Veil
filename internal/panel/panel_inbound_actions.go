@@ -201,14 +201,14 @@ func panelInboundActionsJS() string {
       const summary = document.getElementById('inbound-validation-summary');
       if (summary) {
         summary.className = 'validation-summary';
-        summary.textContent = 'Checking configuration...';
+        summary.textContent = veilT('inbounds.validationChecking');
       }
       clearTimeout(inboundValidationTimer);
       inboundValidationTimer = setTimeout(validateInboundCandidate, inboundValidationDebounceMs);
     }
 
     window.openAddInboundModal = function() {
-      document.getElementById('inbound-modal-title').innerText = 'Add Inbound';
+      document.getElementById('inbound-modal-title').innerText = veilT('modal.addInbound');
       document.getElementById('inbound-name').value = '';
       document.getElementById('inbound-name').readOnly = false;
       document.getElementById('inbound-protocol').value = 'naiveproxy';
@@ -244,7 +244,7 @@ func panelInboundActionsJS() string {
       const inbound = window.cachedInbounds.find(i => i.name === name);
       if (!inbound) return;
 
-      document.getElementById('inbound-modal-title').innerText = 'Edit Inbound: ' + name;
+      document.getElementById('inbound-modal-title').innerText = veilT('inbounds.editTitle', { name });
       document.getElementById('inbound-name').value = inbound.name;
       document.getElementById('inbound-name').readOnly = true;
       document.getElementById('inbound-protocol').value = inbound.protocol;
@@ -281,7 +281,7 @@ func panelInboundActionsJS() string {
     };
 
     window.directDeleteInbound = async function(name) {
-      if (confirm('Are you sure you want to delete inbound "' + name + '"?')) {
+      if (confirm(veilT('confirm.deleteInbound', { name }))) {
         await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
         loadInboundsIntoOutput();
       }
@@ -494,7 +494,7 @@ func panelInboundActionsJS() string {
       }
       const name = payload.name;
       if (!name) {
-        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        document.getElementById('inbounds-output').textContent = veilT('inbounds.nameRequired');
         return;
       }
       const exists = Array.isArray(window.cachedInbounds) && window.cachedInbounds.some((inbound) => inbound.name === name);
@@ -514,10 +514,10 @@ func panelInboundActionsJS() string {
     async function deleteInbound() {
       const name = document.getElementById('inbound-name').value.trim();
       if (!name) {
-        document.getElementById('inbounds-output').textContent = 'Inbound name is required';
+        document.getElementById('inbounds-output').textContent = veilT('inbounds.nameRequired');
         return;
       }
-      if (confirm('Are you sure you want to delete inbound "' + name + '"?')) {
+      if (confirm(veilT('confirm.deleteInbound', { name }))) {
         await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
         closeInboundModal();
         loadInboundsIntoOutput();

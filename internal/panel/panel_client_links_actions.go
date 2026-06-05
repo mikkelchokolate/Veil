@@ -129,7 +129,9 @@ func panelClientLinksActionsJS() string {
     };
 
     window.openClientLinksModalFor = async function(inboundName) {
-      document.getElementById('client-links-modal-title').innerText = inboundName ? ('Client Links: ' + inboundName) : 'Client Connection Links';
+      document.getElementById('client-links-modal-title').innerText = inboundName
+        ? veilT('clientLinks.inboundTitle', { name: inboundName })
+        : veilT('clientLinks.connectionTitle');
       const container = document.getElementById('modal-links-container');
       container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;">Loading connection links...</div>';
       document.getElementById('client-links-modal-overlay').classList.add('active');
@@ -261,7 +263,7 @@ func panelClientLinksActionsJS() string {
       try {
         navigator.clipboard.writeText(input.value).then(() => {
           const origText = btn.innerText;
-          btn.innerText = 'Copied!';
+          btn.innerText = veilT('clientLinks.copied');
           btn.style.background = 'var(--accent-success)';
           btn.style.color = '#fff';
           setTimeout(() => {
@@ -291,7 +293,7 @@ func panelClientLinksActionsJS() string {
     window.toggleQR = async function(qrId, uri) {
       const container = document.getElementById(qrId);
       if (container.style.display === 'none' || container.style.display === '') {
-        container.textContent = 'Rendering QR...';
+        container.textContent = veilT('clientLinks.renderingQR');
         container.style.display = 'flex';
         try {
           const response = await fetch('/api/client-links/qr', {

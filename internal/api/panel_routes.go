@@ -59,12 +59,14 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		// Check session; if no valid session, show login page.
 		csrfToken := ""
+		locale := panel.ResolveLocale("", r)
 		if routes.State != nil {
 			var authenticated bool
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
-				if _, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
+				if session, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
 					authenticated = true
+					locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
 					csrfToken, _, _ = routes.State.sessionRegistry().EnsureCSRF(cookie.Value)
 				}
 			}
@@ -74,7 +76,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
 				if setupRequired {
-					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath)))
+					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath, locale)))
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
@@ -82,12 +84,12 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath)))
+					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath, locale)))
 					return
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken)))
+		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken, locale)))
 	}
 }
 
@@ -114,8 +116,8 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func panelHTML(basePath string, csrfToken string) string {
-	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken)
+func panelHTML(basePath string, csrfToken string, locale string) string {
+	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale)
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
