@@ -19,6 +19,22 @@ func TestRendererReplacesSlotsAndPrefixesPanelPaths(t *testing.T) {
 	}
 }
 
+func TestRendererIncludesMobilePanelLayout(t *testing.T) {
+	html := NewRenderer(nil).BaseHTML()
+	for _, want := range []string{
+		"@media (max-width: 760px)",
+		"body {\n        display: block;",
+		".sidebar {\n        position: static;",
+		".content-wrapper {\n        margin-left: 0;",
+		".nav-menu {\n        flex-direction: row;",
+		".table-container {\n        max-width: 100%;",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("Panel HTML missing mobile layout rule %q", want)
+		}
+	}
+}
+
 func TestSliceCatalogContainsUsersSlice(t *testing.T) {
 	catalog := NewSliceCatalog(nil)
 	slice, ok := catalog.Slice("users")

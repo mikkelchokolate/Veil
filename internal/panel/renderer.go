@@ -791,6 +791,92 @@ const panelHTMLBase = `<!doctype html>
       max-height: 400px;
       white-space: pre-wrap;
     }
+
+    @media (max-width: 760px) {
+      body {
+        display: block;
+        min-width: 0;
+      }
+      .sidebar {
+        position: static;
+        width: 100%;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        padding: 16px;
+      }
+      .nav-menu {
+        flex-direction: row;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+      }
+      .nav-item {
+        flex: 0 0 auto;
+        padding: 12px 16px;
+        white-space: nowrap;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+      }
+      .nav-item.active {
+        border-left: 0;
+        border-bottom: 3px solid var(--primary);
+      }
+      .content-wrapper {
+        margin-left: 0;
+        width: 100%;
+      }
+      .top-bar {
+        height: auto;
+        min-height: 58px;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 16px;
+        box-sizing: border-box;
+      }
+      .breadcrumb,
+      .status-indicator {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      main {
+        padding: 16px;
+      }
+      .card {
+        padding: 16px;
+      }
+      .grid,
+      .form-grid,
+      .telemetry-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .actions button {
+        width: 100%;
+      }
+      button {
+        max-width: 100%;
+        white-space: normal;
+        text-align: center;
+        overflow-wrap: anywhere;
+      }
+      p,
+      code,
+      pre {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .table-container {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .table-container table {
+        min-width: 720px;
+      }
+      .modal-content {
+        box-sizing: border-box;
+        padding: 20px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -819,6 +905,9 @@ const panelHTMLBase = `<!doctype html>
       </a>
       <a href="#diagnostics" class="nav-item" onclick="switchTab('diagnostics')">
         System Tools
+      </a>
+      <a href="#backups" class="nav-item" onclick="switchTab('backups')">
+        Backups
       </a>
       <a href="#users" class="nav-item" onclick="switchTab('users')">
         Users
@@ -868,6 +957,11 @@ __VEIL_PANEL_APPLY_CARD__
 __VEIL_PANEL_DIAGNOSTICS_CARDS__
       </div>
 
+      <!-- Section: Backups -->
+      <div id="backups" class="tab-content">
+__VEIL_PANEL_BACKUPS_CARD__
+      </div>
+
       <!-- Section: Users -->
       <div id="users" class="tab-content">
 __VEIL_PANEL_USERS_CARD__
@@ -892,11 +986,15 @@ __VEIL_PANEL_USERS_CARD__
         'routing': 'Routing Rules',
         'warp': 'WARP',
         'diagnostics': 'System Tools',
+        'backups': 'Backups',
         'users': 'Users'
       };
       document.getElementById('current-page-title').innerText = pageNames[tabId] || 'Dashboard';
       if (tabId === 'users' && typeof loadUsers === 'function') {
         loadUsers();
+      }
+      if (tabId === 'backups' && typeof loadBackups === 'function') {
+        loadBackups();
       }
       window.scrollTo(0, 0);
     }
@@ -904,7 +1002,7 @@ __VEIL_PANEL_USERS_CARD__
     // Handle hash reload
     window.addEventListener('DOMContentLoaded', () => {
       const hash = window.location.hash.substring(1);
-      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics', 'users'].includes(hash)) {
+      if (['dashboard', 'inbounds', 'routing', 'warp', 'diagnostics', 'backups', 'users'].includes(hash)) {
         switchTab(hash);
       }
     });
@@ -929,6 +1027,7 @@ __VEIL_PANEL_SERVICE_RESTART_ACTIONS__
 __VEIL_PANEL_RUNTIME_STATS_ACTIONS__
 __VEIL_PANEL_APPLY_ACTIONS__
 __VEIL_PANEL_DIAGNOSTICS_ACTIONS__
+__VEIL_PANEL_BACKUPS_ACTIONS__
 __VEIL_PANEL_USERS_ACTIONS__
 __VEIL_PANEL_EVENT_BINDINGS__
   </script>
