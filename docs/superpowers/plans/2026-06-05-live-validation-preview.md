@@ -331,7 +331,7 @@ git commit -m "feat: enforce live validation before mutation"
 - Modify: `internal/api/management_apply_intent.go`
 - Modify: `internal/generatedconfig/artifact_catalog.go`
 
-- [ ] **Step 1: Write failing operation-plan tests**
+- [x] **Step 1: Write failing operation-plan tests**
 
 Assert a representative multi-protocol plan contains:
 
@@ -357,13 +357,13 @@ Assert a representative multi-protocol plan contains:
 
 Verify operation order is deterministic and no credential values, passwords, private keys, or tokens appear after JSON marshaling.
 
-- [ ] **Step 2: Run apply-plan tests and verify failure**
+- [x] **Step 2: Run apply-plan tests and verify failure**
 
 Run: `go test ./internal/applyplan ./internal/api -run 'Structured|Operation|SecretFree' -count=1`
 
 Expected: FAIL because plans only expose strings.
 
-- [ ] **Step 3: Build operations from managed artifacts and units**
+- [x] **Step 3: Build operations from managed artifacts and units**
 
 Extend planner input with generated and live roots, artifact descriptors, and validation issues. Produce:
 
@@ -376,13 +376,13 @@ Extend planner input with generated and live roots, artifact descriptors, and va
 
 Keep `Configs`, `Actions`, and `Runtimes` for clients predating v0.6.
 
-- [ ] **Step 4: Run planner and API tests**
+- [x] **Step 4: Run planner and API tests**
 
 Run: `go test ./internal/applyplan ./internal/api -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit structured preview**
+- [x] **Step 5: Commit structured preview**
 
 ```bash
 git add internal/applyplan internal/api internal/generatedconfig

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"path/filepath"
+
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/panelaccess"
@@ -9,6 +11,7 @@ import (
 )
 
 type ApplyPlanInput struct {
+	ApplyRoot               string
 	Settings                Settings
 	Inbounds                []Inbound
 	Rules                   []RoutingRule
@@ -20,6 +23,7 @@ type ApplyPlanInput struct {
 }
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
+	applyRoot := defaultApplyRoot(input.ApplyRoot)
 	panelAccessIntent := panelaccess.New(input.Settings, protocols.NewCatalog().RequiresCaddy).ApplyIntent(input.Inbounds)
 	capabilities := []applyplan.ProtocolCapability{}
 	catalog := NewApplyProtocolCapabilityCatalog()
@@ -34,10 +38,11 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
 	}
-	runtimeUnits := service.NewProtocolRuntimeProvisioning(NewManagedRuntimeCatalog()).Plan(input.Inbounds, input.Warp).SystemdUnits()
+	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
+	runtimeUnits := service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits()
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""
-	if action, ok := NewManagedRuntimeCatalog().ApplyAction("sing-box"); ok {
+	if action, ok := runtimeCatalog.ApplyAction("sing-box"); ok {
 		warpAction = action
 	}
 	return applyplan.Build(applyplan.Input{
@@ -61,5 +66,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		WarpAction:            warpAction,
 		ValidateInboundRender: validateInboundRender,
 		ValidateWarpRender:    input.ValidateWarpRender,
+		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
+		LiveRoot:              filepath.Join(applyRoot, "live"),
 	})
 }
