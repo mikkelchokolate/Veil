@@ -191,6 +191,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 - [Panel operations guide](docs/operations.md) - live validation guarantees, race boundaries, and structured apply previews
 - [Known limitations](docs/known-limitations.md) — multi-inbound behavior and platform limits
 - [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
+- [Generated Go SDK](sdk/go) — typed client generated from the OpenAPI contract
 - [Security policy](SECURITY.md) — vulnerability reporting
 - [Changelog](CHANGELOG.md) — release history
 - [Context](CONTEXT.md) — domain language and architecture

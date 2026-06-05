@@ -31,6 +31,8 @@ jobs:
       - run: go vet ./...
       - name: Validate OpenAPI
         run: make verify-openapi
+      - name: Verify generated Go SDK
+        run: make verify-sdk
       - run: make build
       - name: Test with race detector and coverage
         run: go test ./... -race -count=1 -coverprofile=coverage.out

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "1.3.0"
+  version: "0.6.0"
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
@@ -31,6 +31,11 @@ info:
     follows the separate metrics policy (`--metrics-access` /
     `VEIL_METRICS_ACCESS`), and the Panel UI renders only the login surface
     until a valid session exists.
+
+    Validation and ordinary HTTP failures use a `text/plain` response body.
+    Failures returned by the privileged helper use the structured
+    `PrivilegedErrorEnvelope` JSON schema so operators and generated clients
+    can distinguish policy, availability, validation, and execution failures.
   license:
     name: GPL-3.0-or-later
     url: https://www.gnu.org/licenses/gpl-3.0.html
@@ -45,6 +50,7 @@ tags:
   - name: setup
   - name: auth
   - name: audit
+  - name: admin
   - name: backups
   - name: settings
   - name: inbounds
@@ -375,6 +381,48 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/admin/rotate-key:
+    post:
+      tags: [admin]
+      summary: Rotate the state-encryption key
+      description: |
+        Re-encrypts management state with a newly generated root-managed key.
+        Requires admin role and CSRF for cookie sessions. All browser sessions
+        except the initiating session are revoked after a successful rotation.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+            examples:
+              rotate:
+                value: {}
+      responses:
+        "200":
+          description: State was re-encrypted and other sessions were revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyRotationResponse"
+              examples:
+                rotated:
+                  value:
+                    success: true
+                    revokedSessions: 3
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/PrivilegedFailure"
   /api/backups:
     get:
       tags: [backups]
@@ -772,19 +820,31 @@ paths:
               $ref: "#/components/schemas/EmptyObject"
       responses:
         "200":
-          description: Update staged successfully.
+          description: Release archive was staged, re-verified by the helper, installed, and a Panel restart was scheduled.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdateResponse"
+              examples:
+                installed:
+                  value:
+                    success: true
+                    staged: true
+                    installed: true
+                    version: v0.6.0
+                    message: Update staged successfully. Restarting panel service...
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
-          description: Update failed.
+          $ref: "#/components/responses/PrivilegedFailure"
+        "502":
+          description: GitHub release metadata or assets could not be downloaded or verified.
           content:
-            application/json:
+            text/plain:
               schema:
-                $ref: "#/components/schemas/UpdateResponse"
+                $ref: "#/components/schemas/ErrorText"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/settings:
     get:
       tags: [settings]
@@ -1333,17 +1393,41 @@ paths:
                 items:
                   $ref: "#/components/schemas/ApplyHistoryEntry"
   /api/profiles/ru-recommended/preview:
-    get:
+    post:
       tags: [apply]
       summary: Preview the ru-recommended install profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RURecommendedPreviewRequest"
+            examples:
+              caddy:
+                value:
+                  domain: vpn.example.com
+                  email: admin@example.com
+                  panelAccess: caddy
       responses:
         "200":
           description: Profile preview.
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: "#/components/schemas/RURecommendedPreviewResponse"
+              examples:
+                caddy:
+                  value:
+                    domain: vpn.example.com
+                    email: admin@example.com
+                    panelAccess: caddy
+                    panelUrl: https://vpn.example.com/4f10dbe4/
+                    caddyfile: |
+                      vpn.example.com {
+                        reverse_proxy 127.0.0.1:2096
+                      }
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/services/{name}/restart:
     parameters:
       - $ref: "#/components/parameters/Name"
@@ -1673,6 +1757,18 @@ components:
                     message: TCP port 443 is already in use
                     remediation: Stop the conflicting service or choose another port.
                     source: live-host
+    PrivilegedFailure:
+      description: The allowlisted root helper rejected or could not complete the operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PrivilegedErrorEnvelope"
+          examples:
+            unavailable:
+              value:
+                error:
+                  code: operation_failed
+                  message: privileged helper is unavailable
   schemas:
     EmptyObject:
       type: object
@@ -1689,6 +1785,13 @@ components:
           type: string
         message:
           type: string
+    PrivilegedErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
     HealthResponse:
       type: object
       required: [status]
@@ -1704,6 +1807,17 @@ components:
       properties:
         success:
           type: boolean
+    KeyRotationResponse:
+      type: object
+      required: [success, revokedSessions]
+      additionalProperties: false
+      properties:
+        success:
+          type: boolean
+          const: true
+        revokedSessions:
+          type: integer
+          minimum: 0
     SetupStatusResponse:
       type: object
       required: [required, allowed, panelAccess]
@@ -2643,13 +2757,51 @@ components:
           type: string
     UpdateResponse:
       type: object
-      required: [success, log, message]
+      required: [success, staged, installed, version, message]
+      additionalProperties: false
       properties:
         success:
           type: boolean
-        log:
+          const: true
+        staged:
+          type: boolean
+        installed:
+          type: boolean
+        version:
           type: string
         message:
+          type: string
+    RURecommendedPreviewRequest:
+      type: object
+      required: [domain, email]
+      additionalProperties: false
+      properties:
+        domain:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy]
+    RURecommendedPreviewResponse:
+      type: object
+      required: [domain, email, panelAccess]
+      additionalProperties: false
+      properties:
+        domain:
+          type: string
+        email:
+          type: string
+          format: email
+        panelAccess:
+          type: string
+          enum: [local, direct, caddy]
+        panelUrl:
+          type: string
+          format: uri
+        caddyfile:
           type: string
     SystemStats:
       type: object
