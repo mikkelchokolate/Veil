@@ -331,6 +331,32 @@ const panelHTMLBase = `<!doctype html>
       outline: none;
       border-color: var(--primary);
     }
+    input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+      border-color: var(--accent-danger);
+    }
+    .field-validation {
+      margin: 6px 0 0;
+      color: var(--accent-danger);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    .validation-summary {
+      border-left: 3px solid var(--border-hover);
+      padding: 12px 14px;
+      margin-top: 16px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+    .validation-summary.validation-error {
+      border-left-color: var(--accent-danger);
+      color: color-mix(in srgb, var(--accent-danger) 78%, white);
+    }
+    .validation-summary.validation-ok {
+      border-left-color: var(--accent-success);
+      color: color-mix(in srgb, var(--accent-success) 78%, white);
+    }
     select {
       appearance: none !important;
       -webkit-appearance: none !important;
@@ -384,6 +410,11 @@ const panelHTMLBase = `<!doctype html>
     }
     button:active {
       transform: scale(0.98);
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+      transform: none;
     }
     button.secondary {
       border-color: var(--border);

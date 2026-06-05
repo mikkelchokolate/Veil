@@ -5,6 +5,207 @@ const panelInboundActionsPlaceholder = "__VEIL_PANEL_INBOUND_ACTIONS__"
 func panelInboundActionsJS() string {
 	return panelInboundProtocolTransportRulesJS() + `    // Global cash and modals handlers
     window.cachedInbounds = [];
+    window.cachedSettings = window.cachedSettings || null;
+    window.cachedWarp = window.cachedWarp || null;
+
+    const inboundValidationDebounceMs = 300;
+    let inboundValidationTimer = null;
+    let inboundValidationController = null;
+    let inboundValidationSequence = 0;
+    let inboundValidationValid = false;
+
+    function clearInboundValidation() {
+      document.querySelectorAll('#inbound-form [aria-invalid]').forEach((control) => {
+        control.setAttribute('aria-invalid', 'false');
+      });
+      document.querySelectorAll('#inbound-form .field-validation').forEach((message) => {
+        message.hidden = true;
+        message.textContent = '';
+      });
+      const summary = document.getElementById('inbound-validation-summary');
+      if (summary) {
+        summary.className = 'validation-summary';
+        summary.textContent = 'Validation runs as fields change.';
+      }
+    }
+
+    function inboundFieldControl(field) {
+      const normalized = String(field || '').replace(/^inbounds\[[0-9]+\]\./, '');
+      const ids = {
+        name: 'inbound-name',
+        protocol: 'inbound-protocol',
+        transport: 'inbound-transport',
+        port: 'inbound-port',
+        password: 'inbound-password',
+        naivePassword: 'inbound-naive-password',
+        hysteria2Password: 'inbound-hysteria2-password',
+        olcrtcRoomID: 'inbound-olcrtc-room-id'
+      };
+      return document.getElementById(ids[normalized] || '');
+    }
+
+    function renderInboundValidation(response) {
+      clearInboundValidation();
+      const issues = response && Array.isArray(response.issues) ? response.issues : [];
+      const summary = document.getElementById('inbound-validation-summary');
+      const errors = issues.filter((issue) => issue.severity === 'error');
+      issues.forEach((issue) => {
+        const control = inboundFieldControl(issue.field);
+        if (!control) {
+          return;
+        }
+        control.setAttribute('aria-invalid', issue.severity === 'error' ? 'true' : 'false');
+        const describedBy = control.getAttribute('aria-describedby');
+        const message = describedBy ? document.getElementById(describedBy) : null;
+        if (message) {
+          message.hidden = false;
+          message.textContent = issue.message + (issue.remediation ? ' ' + issue.remediation : '');
+        }
+      });
+      if (summary) {
+        summary.className = errors.length > 0 ? 'validation-summary validation-error' : 'validation-summary validation-ok';
+        if (issues.length === 0) {
+          summary.textContent = 'Configuration is ready to save.';
+        } else {
+          summary.textContent = issues.map((issue) => issue.message + (issue.remediation ? ' ' + issue.remediation : '')).join(' ');
+        }
+      }
+      inboundValidationValid = !!(response && response.valid);
+      const saveButton = document.getElementById('save-inbound');
+      if (saveButton) {
+        saveButton.disabled = !inboundValidationValid || isViewerRole();
+      }
+      return inboundValidationValid;
+    }
+
+    function buildInboundCandidate() {
+      const name = document.getElementById('inbound-name').value.trim();
+      const protocol = document.getElementById('inbound-protocol').value;
+      const payload = {
+        name: name,
+        protocol: protocol,
+        transport: document.getElementById('inbound-transport').value,
+        port: numberOrZero('inbound-port'),
+        enabled: document.getElementById('inbound-enabled').checked
+      };
+      const profilesRaw = document.getElementById('inbound-profiles').value.trim();
+      if (profilesRaw) {
+        payload.profiles = JSON.parse(profilesRaw);
+      }
+      const password = document.getElementById('inbound-password').value.trim();
+      if (password) {
+        payload.password = password;
+      }
+      if (protocol === 'naiveproxy') {
+        const usernameEl = document.getElementById('inbound-naive-username');
+        const passwordEl = document.getElementById('inbound-naive-password');
+        const fallbackEl = document.getElementById('inbound-fallback-root');
+        if (usernameEl) payload.naiveUsername = usernameEl.value.trim();
+        if (passwordEl) payload.naivePassword = passwordEl.value.trim();
+        if (fallbackEl) payload.fallbackRoot = fallbackEl.value.trim();
+      } else if (protocol === 'hysteria2') {
+        const passwordEl = document.getElementById('inbound-hysteria2-password');
+        const masqueradeEl = document.getElementById('inbound-masquerade-url');
+        if (passwordEl) payload.hysteria2Password = passwordEl.value.trim();
+        if (masqueradeEl) payload.masqueradeURL = masqueradeEl.value.trim();
+      } else if (protocol === 'olcrtc') {
+        const authEl = document.getElementById('inbound-olcrtc-auth');
+        const transportEl = document.getElementById('inbound-olcrtc-transport');
+        const roomEl = document.getElementById('inbound-olcrtc-room-id');
+        if (authEl) payload.olcrtcAuth = authEl.value.trim();
+        if (transportEl) payload.olcrtcTransport = transportEl.value.trim();
+        if (roomEl) payload.olcrtcRoomID = roomEl.value.trim();
+      }
+      return payload;
+    }
+
+    async function ensureInboundValidationContext() {
+      if (window.cachedSettings && window.cachedWarp) {
+        return true;
+      }
+      const responses = await Promise.all([
+        fetch('/api/settings', { headers: authHeaders() }),
+        fetch('/api/warp', { headers: authHeaders() })
+      ]);
+      if (!responses[0].ok || !responses[1].ok) {
+        return false;
+      }
+      window.cachedSettings = await responses[0].json();
+      window.cachedWarp = await responses[1].json();
+      return true;
+    }
+
+    async function validateInboundCandidate() {
+      const sequence = ++inboundValidationSequence;
+      if (inboundValidationController) {
+        inboundValidationController.abort();
+      }
+      inboundValidationController = new AbortController();
+      const saveButton = document.getElementById('save-inbound');
+      if (saveButton) {
+        saveButton.disabled = true;
+      }
+      try {
+        if (!await ensureInboundValidationContext()) {
+          throw new Error('Could not load settings required for validation.');
+        }
+        const candidate = buildInboundCandidate();
+        const inbounds = Array.isArray(window.cachedInbounds) ? window.cachedInbounds.map((item) => Object.assign({}, item)) : [];
+        const existingIndex = inbounds.findIndex((item) => item.name === candidate.name);
+        if (existingIndex >= 0) {
+          inbounds[existingIndex] = candidate;
+        } else {
+          inbounds.push(candidate);
+        }
+        const response = await fetch('/api/validation', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ settings: window.cachedSettings, inbounds: inbounds, warp: window.cachedWarp }),
+          signal: inboundValidationController.signal
+        });
+        const data = await response.json();
+        if (sequence !== inboundValidationSequence) {
+          return false;
+        }
+        if (!response.ok) {
+          throw new Error(data && data.error && data.error.message ? data.error.message : 'Validation request failed.');
+        }
+        return renderInboundValidation(data);
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          return false;
+        }
+        if (sequence !== inboundValidationSequence) {
+          return false;
+        }
+        inboundValidationValid = false;
+        clearInboundValidation();
+        const summary = document.getElementById('inbound-validation-summary');
+        if (summary) {
+          summary.className = 'validation-summary validation-error';
+          summary.textContent = String(error && error.message ? error.message : error);
+        }
+        if (saveButton) {
+          saveButton.disabled = true;
+        }
+        return false;
+      }
+    }
+
+    function scheduleInboundValidation() {
+      inboundValidationValid = false;
+      const saveButton = document.getElementById('save-inbound');
+      if (saveButton) {
+        saveButton.disabled = true;
+      }
+      const summary = document.getElementById('inbound-validation-summary');
+      if (summary) {
+        summary.className = 'validation-summary';
+        summary.textContent = 'Checking configuration...';
+      }
+      clearTimeout(inboundValidationTimer);
+      inboundValidationTimer = setTimeout(validateInboundCandidate, inboundValidationDebounceMs);
+    }
 
     window.openAddInboundModal = function() {
       document.getElementById('inbound-modal-title').innerText = 'Add Inbound';
@@ -27,10 +228,16 @@ func panelInboundActionsJS() string {
       renderDynamicProtocolFields(null);
       
       document.getElementById('inbound-modal-overlay').classList.add('active');
+      clearInboundValidation();
+      scheduleInboundValidation();
     };
 
     window.closeInboundModal = function() {
       document.getElementById('inbound-modal-overlay').classList.remove('active');
+      clearTimeout(inboundValidationTimer);
+      if (inboundValidationController) {
+        inboundValidationController.abort();
+      }
     };
 
     window.openEditInboundModal = function(name) {
@@ -57,6 +264,8 @@ func panelInboundActionsJS() string {
       renderDynamicProtocolFields(inbound);
       
       document.getElementById('inbound-modal-overlay').classList.add('active');
+      clearInboundValidation();
+      scheduleInboundValidation();
     };
 
     window.toggleInboundActive = async function(name, checked) {
@@ -136,16 +345,19 @@ func panelInboundActionsJS() string {
 
     function genInboundPassword() {
       document.getElementById('inbound-password').value = randomPassword();
+      scheduleInboundValidation();
     }
 
     window.genInboundNaivePassword = function() {
       const el = document.getElementById('inbound-naive-password');
       if (el) el.value = randomPassword();
+      scheduleInboundValidation();
     };
 
     window.genInboundHysteria2Password = function() {
       const el = document.getElementById('inbound-hysteria2-password');
       if (el) el.value = randomPassword();
+      scheduleInboundValidation();
     };
 
     window.genInboundOlcrtcRoomID = function() {
@@ -160,6 +372,7 @@ func panelInboundActionsJS() string {
       } else {
         el.value = 'room-' + Math.floor(100000 + Math.random() * 900000);
       }
+      scheduleInboundValidation();
     };
 
     window.renderDynamicProtocolFields = function(inbound) {
@@ -260,66 +473,40 @@ func panelInboundActionsJS() string {
           genInboundOlcrtcRoomID();
         }
       }
+      scheduleInboundValidation();
     };
 
     async function saveInbound(event) {
       event.preventDefault();
-      const name = document.getElementById('inbound-name').value.trim();
+      if (!await validateInboundCandidate()) {
+        return;
+      }
+      let payload;
+      try {
+        payload = buildInboundCandidate();
+      } catch (err) {
+        const summary = document.getElementById('inbound-validation-summary');
+        if (summary) {
+          summary.className = 'validation-summary validation-error';
+          summary.textContent = 'Client profiles must be valid JSON: ' + String(err);
+        }
+        return;
+      }
+      const name = payload.name;
       if (!name) {
         document.getElementById('inbounds-output').textContent = 'Inbound name is required';
         return;
       }
-      const protocol = document.getElementById('inbound-protocol').value;
-      const payload = {
-        name: name,
-        protocol: protocol,
-        transport: document.getElementById('inbound-transport').value,
-        port: numberOrZero('inbound-port'),
-        enabled: document.getElementById('inbound-enabled').checked
-      };
-      const profilesRaw = document.getElementById('inbound-profiles').value.trim();
-      if (profilesRaw) {
-        try {
-          payload.profiles = JSON.parse(profilesRaw);
-        } catch (err) {
-          document.getElementById('inbounds-output').textContent = 'Client profiles must be valid JSON: ' + String(err);
-          return;
-        }
-      }
-      const pw = document.getElementById('inbound-password').value.trim();
       const exists = Array.isArray(window.cachedInbounds) && window.cachedInbounds.some((inbound) => inbound.name === name);
-      if (pw) {
-        payload.password = pw;
-      }
-      
-      // Grab protocol-specific fields
-      if (protocol === 'naiveproxy') {
-        const usernameEl = document.getElementById('inbound-naive-username');
-        const passwordEl = document.getElementById('inbound-naive-password');
-        const fallbackEl = document.getElementById('inbound-fallback-root');
-        if (usernameEl) payload.naiveUsername = usernameEl.value.trim();
-        if (passwordEl) payload.naivePassword = passwordEl.value.trim();
-        if (fallbackEl) payload.fallbackRoot = fallbackEl.value.trim();
-      } else if (protocol === 'hysteria2') {
-        const passwordEl = document.getElementById('inbound-hysteria2-password');
-        const masqueradeEl = document.getElementById('inbound-masquerade-url');
-        if (passwordEl) payload.hysteria2Password = passwordEl.value.trim();
-        if (masqueradeEl) payload.masqueradeURL = masqueradeEl.value.trim();
-      } else if (protocol === 'olcrtc') {
-        const authEl = document.getElementById('inbound-olcrtc-auth');
-        const transportEl = document.getElementById('inbound-olcrtc-transport');
-        const roomEl = document.getElementById('inbound-olcrtc-room-id');
-        if (authEl) payload.olcrtcAuth = authEl.value.trim();
-        if (transportEl) payload.olcrtcTransport = transportEl.value.trim();
-        if (roomEl) payload.olcrtcRoomID = roomEl.value.trim();
-      }
 
-      await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
+      const saved = await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
         method: exists ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+      if (!saved) {
+        return;
+      }
       closeInboundModal();
       loadInboundsIntoOutput();
     }
@@ -339,6 +526,11 @@ func panelInboundActionsJS() string {
 
     // Auto load inbounds list on startup
     window.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('inbound-form');
+      if (form) {
+        form.addEventListener('input', scheduleInboundValidation);
+        form.addEventListener('change', scheduleInboundValidation);
+      }
       setTimeout(loadInboundsIntoOutput, 500);
     });`
 }
