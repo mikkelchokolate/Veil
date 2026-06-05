@@ -169,7 +169,7 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if _, ok := state.sessionRegistry().Get(otherSession.Token); ok {
 		t.Fatal("restore did not revoke another active session")
 	}
-	status := adminJSONRequest(http.MethodGet, "/api/backups/restore-jobs/"+accepted.ID, "")
+	status := adminJSONRequest(http.MethodGet, "/api/backup-restore-jobs/"+accepted.ID, "")
 	status.AddCookie(&http.Cookie{Name: "veil_session", Value: ownerSession.Token})
 	statusResponse := httptest.NewRecorder()
 	state.handleBackupRestoreJob(statusResponse, status)

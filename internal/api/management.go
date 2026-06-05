@@ -49,7 +49,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/backups", s.handleBackups)
 	mux.HandleFunc("/api/backups/prune", s.handleBackupPrune)
-	mux.HandleFunc("/api/backups/restore-jobs/", s.handleBackupRestoreJob)
+	mux.HandleFunc("/api/backup-restore-jobs/", s.handleBackupRestoreJob)
 	mux.HandleFunc("/api/backups/", s.handleBackupByName)
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)

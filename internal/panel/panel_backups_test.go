@@ -34,7 +34,7 @@ func TestPanelBackupsActionsUseServerSideSecretAndQueuedRestore(t *testing.T) {
 		`/verify`,
 		`/download`,
 		`/restore`,
-		`/api/backups/restore-jobs/`,
+		`/api/backup-restore-jobs/`,
 		`confirm: true`,
 	} {
 		if !strings.Contains(actions, want) {
