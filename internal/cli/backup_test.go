@@ -37,6 +37,7 @@ func TestBackupRestoreCLIUnencrypted(t *testing.T) {
 		"--state", statePath,
 		"--key-path", keyPath,
 		"--output", backupPath,
+		"--allow-unencrypted",
 	})
 
 	if err := cmd.Execute(); err != nil {

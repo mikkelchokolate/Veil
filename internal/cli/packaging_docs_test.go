@@ -125,6 +125,8 @@ func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 		"name: veil",
 		"dst: /usr/local/bin/veil",
 		"veil.service",
+		"veil-backup.service",
+		"veil-backup.timer",
 		"veil-caddy@.service",
 		"veil-hysteria2@.service",
 		"veil-olcrtc@.service",
