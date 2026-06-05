@@ -88,14 +88,16 @@ func TestPortCollisionInbound(t *testing.T) {
 
 	// Try to add inbound on the same port
 	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-tcp-coll","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"pass"}`, inboundPort))
-	// If the API immediately rejects port conflicts or accepts it but fails on apply, both are valid.
-	if resp.StatusCode == http.StatusConflict {
-		// Fail-fast on duplicate checks inside Veil (but wait, Veil duplicate check is for duplicate ports inside the state, not on the host. So it should succeed here).
-		drain(resp)
+	// Live validation rejects a host-level collision before state mutation.
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		body := readJSON(t, resp)
+		if !jsonContainsIssue(body, "port_in_use") {
+			t.Fatalf("422 response missing port_in_use issue: %+v", body)
+		}
 		return
 	}
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected 201 Created or 409 Conflict, got %d: %v", resp.StatusCode, readJSON(t, resp))
+		t.Fatalf("expected 201 Created or 422 Unprocessable Entity, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
