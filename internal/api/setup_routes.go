@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -93,6 +94,13 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		writeError(w, "failed to persist first-run setup", http.StatusInternalServerError)
 		return
 	}
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   req.Username,
+		Role:    "admin",
+		Action:  "setup.complete",
+		Target:  "panel",
+		Success: true,
+	})
 
 	writeJSONStatus(w, http.StatusCreated, map[string]any{
 		"completed": true,

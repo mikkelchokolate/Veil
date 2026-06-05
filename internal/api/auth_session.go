@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"golang.org/x/crypto/bcrypt"
@@ -60,6 +61,13 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !valid {
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   req.Username,
+			Action:  "auth.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "invalid credentials",
+		})
 		writeError(w, "invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -71,9 +79,24 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		RemoteAddr: clientIP(r),
 	})
 	if err != nil {
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   req.Username,
+			Role:    role,
+			Action:  "auth.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "session persistence failed",
+		})
 		writeError(w, "failed to persist session", http.StatusInternalServerError)
 		return
 	}
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   req.Username,
+		Role:    role,
+		Action:  "auth.login",
+		Target:  "panel",
+		Success: true,
+	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "veil_session",
@@ -101,7 +124,18 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
+		actor, role := "", ""
+		if session, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			actor, role = session.Username, session.Role
+		}
 		s.sessionRegistry().Delete(cookie.Value)
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   actor,
+			Role:    role,
+			Action:  "auth.logout",
+			Target:  "panel",
+			Success: true,
+		})
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -169,9 +203,20 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if !s.sessionRegistry().DeleteByID(req.ID) {
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "auth.session.revoke",
+				Target:  req.ID,
+				Success: false,
+				Error:   "session not found",
+			})
 			writeNotFound(w)
 			return
 		}
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "auth.session.revoke",
+			Target:  req.ID,
+			Success: true,
+		})
 		writeJSON(w, map[string]any{"success": true})
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodDelete)
@@ -228,9 +273,21 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			created, mErr := mutation.CreateUser(newUser)
 			if mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.create",
+					Target:  req.Username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusConflict)
 				return nil
 			}
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.create",
+				Target:  created.Username,
+				Success: true,
+				Details: map[string]any{"role": created.Role},
+			})
 			writeJSONStatus(w, http.StatusCreated, map[string]any{
 				"username": created.Username,
 				"role":     created.Role,
@@ -298,6 +355,12 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			updated, mErr := mutation.UpdateUser(username, update)
 			if mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.update",
+					Target:  username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
@@ -306,6 +369,15 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				"role":     updated.Role,
 			})
 			_, _ = s.sessionRegistry().DeleteByUsername(username)
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.update",
+				Target:  username,
+				Success: true,
+				Details: map[string]any{
+					"role":            updated.Role,
+					"passwordChanged": req.Password != "",
+				},
+			})
 			return nil
 		})
 
@@ -344,10 +416,21 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
 			if mErr := mutation.DeleteUser(username); mErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.delete",
+					Target:  username,
+					Success: false,
+					Error:   mErr.Error(),
+				})
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
 			_, _ = s.sessionRegistry().DeleteByUsername(username)
+			s.recordRequestAudit(r, audit.Record{
+				Action:  "user.delete",
+				Target:  username,
+				Success: true,
+			})
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		})

@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyhistory"
 	"github.com/mikkelchokolate/Veil/internal/audit"
@@ -47,6 +46,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	mux.HandleFunc("/api/auth/sessions", s.handleAuthSessions)
+	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
 	mux.HandleFunc("/api/users", s.handleUsersRoute)
@@ -128,28 +128,14 @@ func (s *managementState) saveLocked() error {
 }
 
 func (s *managementState) logUserAction(r *http.Request, action string, target string, success bool, details string) {
-	username, _ := r.Context().Value(contextKeyUsername).(string)
-	role, _ := r.Context().Value(contextKeyRole).(string)
-
-	if username == "" {
-		// Fallback defaults (e.g. if auth middleware bypassed, or static token was used)
-		username = "api-token"
-		role = "admin"
+	eventDetails := map[string]any(nil)
+	if details != "" {
+		eventDetails = map[string]any{"message": details}
 	}
-
-	ip := r.RemoteAddr
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		ip = strings.Split(fwd, ",")[0]
-	}
-
-	auditLogPath := filepath.Join(s.applyRoot, "generated", "veil", "audit.log")
-	_ = audit.LogUserAction(auditLogPath, audit.UserAuditEvent{
-		Username:  username,
-		Role:      role,
-		Action:    action,
-		Target:    target,
-		IPAddress: ip,
-		Success:   success,
-		Details:   details,
+	s.recordRequestAudit(r, audit.Record{
+		Action:  action,
+		Target:  target,
+		Success: success,
+		Details: eventDetails,
 	})
 }
