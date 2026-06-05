@@ -34,7 +34,7 @@
 - Create: `internal/privileged/client.go`
 - Test: `internal/privileged/types_test.go`
 
-- [ ] **Step 1: Write failing request-contract tests**
+- [x] **Step 1: Write failing request-contract tests**
 
 Test JSON round trips and reject unknown operations. The supported operations are:
 
@@ -58,13 +58,13 @@ const (
 
 Verify JSON never contains shell command strings and every request has `version`, `requestId`, `operation`, and exactly one typed payload.
 
-- [ ] **Step 2: Run contract tests and verify failure**
+- [x] **Step 2: Run contract tests and verify failure**
 
 Run: `go test ./internal/privileged -run 'Contract|RoundTrip|UnknownOperation' -count=1`
 
 Expected: FAIL because the package does not exist.
 
-- [ ] **Step 3: Define the narrow interface and payloads**
+- [x] **Step 3: Define the narrow interface and payloads**
 
 Define:
 
@@ -84,13 +84,13 @@ type Client interface {
 
 Use operation-specific structs with IDs, archive basenames, managed unit names, bounded line counts, and logical artifact IDs. Do not expose arbitrary executable names, command arguments, absolute caller-selected destinations, or passphrases.
 
-- [ ] **Step 4: Run package tests**
+- [x] **Step 4: Run package tests**
 
 Run: `go test ./internal/privileged -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the protocol**
+- [x] **Step 5: Commit the protocol**
 
 ```bash
 git add internal/privileged
