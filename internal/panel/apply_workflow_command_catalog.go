@@ -85,6 +85,16 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 
     function applyFilesFromResponse(data) {
       const plan = applyPlanFromResponse(data);
+      if (Array.isArray(plan.operations)) {
+        return plan.operations.map((operation) => ({
+          operation: String(operation.type || 'operation').replace(/_/g, ' '),
+          target: operation.destination || operation.unit || operation.source || 'managed target',
+          risk: operation.interruptionRisk || 'none',
+          rollback: operation.rollbackAvailable ? 'available' : 'not available',
+          validatedBy: operation.validationSource || 'not reported',
+          note: 'Structured operation'
+        }));
+      }
       const rows = [];
       appendApplyPreviewRows(rows, 'generated', plan.configs, 'Generated managed config. No file content is shown.');
       appendApplyPreviewRows(rows, 'runtime plan', plan.actions, 'Planned service or runtime action.');
@@ -92,7 +102,14 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       appendApplyPreviewRows(rows, 'live promote', data && data.liveFiles, 'Staged file promoted to the live runtime path.');
       appendApplyPreviewRows(rows, 'backup', data && data.backupFiles, 'Existing live file preserved before promotion.');
       appendApplyPreviewRows(rows, 'rollback', data && data.rollbackFiles, 'Rollback file available if reload or health checks fail.');
-      return rows;
+      return rows.map((entry) => ({
+        operation: entry.stage,
+        target: entry.name,
+        risk: entry.stage === 'runtime plan' ? 'review action' : 'reload',
+        rollback: entry.stage === 'backup' || entry.stage === 'rollback' ? 'available' : 'not reported',
+        validatedBy: 'legacy plan fields',
+        note: entry.note
+      }));
     }
 
     function applyPreviewMetadata(data) {
@@ -135,6 +152,16 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       if (Array.isArray(plan.errors) && plan.errors.length > 0) {
         warnings.push('Plan errors are present in the raw output.');
       }
+      if (Array.isArray(plan.issues)) {
+        plan.issues.forEach((issue) => {
+          if (issue && issue.severity !== 'info') {
+            warnings.push(issue.message + (issue.remediation ? ' ' + issue.remediation : ''));
+          }
+        });
+      }
+      if (Array.isArray(plan.operations) && plan.operations.some((operation) => operation.interruptionRisk === 'connection-drop')) {
+        warnings.push('One or more service restarts can drop active proxy connections.');
+      }
       if (metadata.includes('firewall') || metadata.includes('ufw') || metadata.includes('iptables') || metadata.includes('nft')) {
         warnings.push('Firewall changes can lock out remote access; verify SSH and provider console access before applying.');
       }
@@ -164,10 +191,17 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       }
       const rows = applyFilesFromResponse(data);
       body.textContent = '';
+      const plan = applyPlanFromResponse(data);
+      ['apply-staged-files', 'apply-live-configs', 'reload-services'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.disabled = plan.valid === false || isViewerRole();
+        }
+      });
       if (rows.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 3;
+        cell.colSpan = 5;
         cell.textContent = 'No managed files or runtime actions were reported.';
         row.appendChild(cell);
         body.appendChild(row);
@@ -175,7 +209,7 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
       }
       rows.forEach((entry) => {
         const row = document.createElement('tr');
-        ['stage', 'name', 'note'].forEach((field) => {
+        ['operation', 'target', 'risk', 'rollback', 'validatedBy'].forEach((field) => {
           const cell = document.createElement('td');
           cell.textContent = entry[field];
           row.appendChild(cell);
