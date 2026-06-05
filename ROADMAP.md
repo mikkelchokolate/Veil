@@ -51,7 +51,7 @@ to the release history so this file remains a reliable source of truth.
 - Add daily, weekly, and monthly retention policies.
 - Add Panel controls for create, list, download, verify, prune, and queued
   restore operations.
-- Maintain cross-version restore fixtures in CI.
+- Restore committed encrypted v1 and v0.5.0-v2 compatibility fixtures in CI.
 
 ### Validation And Preview
 

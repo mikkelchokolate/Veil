@@ -93,7 +93,31 @@ X-Veil-Token: <token>
 - Never commit `veil.env` or generated config to version control. Treat backups
   produced by the Backup lifecycle as sensitive — they contain managed material.
 
-## 4. Panel audit history
+## 4. Encrypted backups and key lifecycle
+
+- CLI archive creation requires encryption unless the operator explicitly uses
+  `--allow-unencrypted`. Plain archives contain both state and its decryption
+  key and should not be used for routine operations.
+- Native packages ship hardened `veil-backup.service` and
+  `veil-backup.timer` units. Enable them with
+  `veil backup schedule enable --passphrase-file <path>`.
+- The scheduled passphrase is stored at `/etc/veil/backup.passphrase` with
+  mode `0600`; the Panel reads it server-side and never returns it to the
+  browser.
+- Store retained archives off-host and keep the passphrase in a separate
+  security domain. Local retention does not protect against host loss.
+- Run `veil backup verify` or `veil backup restore --check-only` before every
+  restore. Veil validates checksums, the state/key pair, and Management schema
+  compatibility before writing.
+- Restore creates `.pre-restore-*` safety copies. Keep them until service
+  health and all enabled Inbounds are verified.
+- Rotate state encryption with `veil admin rotate-key` after suspected key
+  exposure or migration from an untrusted host, then export a new archive.
+
+See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) for the full
+runbook.
+
+## 5. Panel audit history
 
 - Authentication, setup, user/session administration, configuration mutation,
   apply, and service actions are written as compact JSONL records under
@@ -108,7 +132,7 @@ X-Veil-Token: <token>
   `GET /api/audit?limit=100`; use the returned `nextBefore` timestamp to page
   backward. Viewer sessions are denied.
 
-## 5. Supply-chain integrity
+## 6. Supply-chain integrity
 
 - **Release binaries** are verified by the installer against `checksums.txt`,
   with a uniqueness guard that rejects a forged duplicate asset line before
@@ -140,7 +164,7 @@ X-Veil-Token: <token>
 - **Routing source material** (route-dat files) is checksum-verified before it
   is staged, so a tampered routing mirror cannot inject rules.
 
-## 6. Host and runtime hardening
+## 7. Host and runtime hardening
 
 - **Shipped systemd hardening is the baseline.** Packaged units include
   `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp`,
@@ -167,7 +191,7 @@ X-Veil-Token: <token>
   deployment does not bind low ports directly, you can remove that capability in
   a drop-in after validating apply, diagnostics, and restart flows.
 
-## 7. Updates and rollback
+## 8. Updates and rollback
 
 - Update with `veil update`, which verifies release checksums, swaps the binary
   atomically, restarts the managed unit, health-checks the Panel, and can roll

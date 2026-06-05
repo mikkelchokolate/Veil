@@ -134,16 +134,31 @@ actions in a structured, redacted, rotated JSONL log. With the default state
 path it is stored at `/var/lib/veil/audit/panel.jsonl`; administrators can read
 the bounded history through `GET /api/audit`.
 
-Repair also writes backup lifecycle events to its configured JSONL audit log.
-The backup directory must be writable; repair audit entries are not written
-during `--dry-run`.
+Encrypted disaster-recovery archives include both Management state and its
+encryption key, plus a checksum manifest. Native packages ship a daily systemd
+timer with daily/weekly/monthly retention. The Panel can create, verify,
+download, prune, and restore managed archives without sending the backup
+passphrase to the browser. The configured backup and audit directories must be
+writable by the process performing each operation.
 
 ```bash
+sudo veil backup schedule enable --passphrase-file /root/veil-backup-passphrase
+sudo veil backup list --dir /var/lib/veil/backups
+sudo veil backup prune --dir /var/lib/veil/backups \
+  --daily 7 --weekly 4 --monthly 12 --dry-run
+sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase
+sudo veil backup restore /path/to/archive.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase --check-only
+
 veil repair --backup-dir /var/lib/veil/backups --audit-log /var/log/veil/audit.jsonl --yes
 veil rollback list --backup-dir /var/lib/veil/backups
 veil rollback restore <backup-id> --backup-dir /var/lib/veil/backups --yes
 veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 ```
+
+See the [disaster recovery guide](docs/disaster-recovery.md) for cross-host
+restore, safety copies, key rotation, and recovery-drill procedures.
 
 ## Security
 
@@ -178,6 +193,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 - [Security policy](SECURITY.md) — vulnerability reporting
 - [Changelog](CHANGELOG.md) — release history
 - [Context](CONTEXT.md) — domain language and architecture
+- [Disaster recovery guide](docs/disaster-recovery.md) - encrypted backups, retention, restore, and key rotation
 
 ## Native packages
 
