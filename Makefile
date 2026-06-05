@@ -4,7 +4,7 @@ DOCKER_IMAGE?=ghcr.io/mikkelchokolate/veil
 GOARCH?=$(shell go env GOARCH)
 MAINTAINER?=Veil Maintainers <veil@users.noreply.github.com>
 
-.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom e2e verify-openapi verify-release
+.PHONY: test build tidy docker release-check dist package package-deb package-rpm package-apk sbom e2e generate-sdk verify-sdk verify-openapi verify-release
 
 test:
 	go test ./...
@@ -14,6 +14,13 @@ e2e:
 
 verify-openapi:
 	npx --yes @redocly/cli@1.25.15 lint docs/openapi.yaml
+
+generate-sdk:
+	go generate ./sdk/go
+
+verify-sdk:
+	go generate ./sdk/go
+	git diff --exit-code -- sdk/go/veilclient.gen.go
 
 build:
 	mkdir -p bin
@@ -61,7 +68,7 @@ release-check:
 	git diff --check
 	@test -z "$$(git status --short)" || (git status --short && exit 1)
 
-verify-release: release-check verify-openapi
+verify-release: release-check verify-openapi verify-sdk
 	@echo "Release verification passed"
 
 docker:
