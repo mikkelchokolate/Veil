@@ -1,14 +1,18 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/panel"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var errUserNotFound = errors.New("user not found")
 
 func (s *managementState) sessionRegistry() *SessionRegistry {
 	if s != nil && s.sessions != nil {
@@ -48,10 +52,12 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	valid := false
 	role := "viewer"
+	locale := panel.LocaleEnglish
 	if foundUser {
 		if err := bcrypt.CompareHashAndPassword([]byte(matchedUser.PasswordHash), []byte(req.Password)); err == nil {
 			valid = true
 			role = matchedUser.Role
+			locale = panel.NormalizeLocale(matchedUser.Locale)
 		}
 	} else if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
 		if req.Password == fallbackPassword {
@@ -112,6 +118,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"success":   true,
 		"username":  req.Username,
 		"role":      role,
+		"locale":    locale,
 		"csrfToken": session.CSRFToken,
 	})
 }
@@ -171,6 +178,7 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 				"authenticated": true,
 				"username":      sess.Username,
 				"role":          sess.Role,
+				"locale":        s.userLocale(sess.Username),
 				"csrfToken":     csrf,
 			})
 			return
@@ -180,6 +188,98 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, map[string]any{
 		"authenticated": false,
 	})
+}
+
+func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	cookie, err := r.Cookie("veil_session")
+	if err != nil {
+		writeError(w, "an authenticated user session is required", http.StatusUnauthorized)
+		return
+	}
+	session, ok := s.sessionRegistry().Get(cookie.Value)
+	if !ok {
+		writeError(w, "an authenticated user session is required", http.StatusUnauthorized)
+		return
+	}
+	if actor, _ := r.Context().Value(contextKeyUsername).(string); actor != "" && actor != session.Username {
+		writeError(w, "session user mismatch", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Locale string `json:"locale"`
+	}
+	if !decodeJSONRequest(w, r, &req) {
+		return
+	}
+	locale, ok := panel.ParseLocale(req.Locale)
+	if !ok || (locale != panel.LocaleEnglish && locale != panel.LocaleRussian) {
+		writeError(w, "locale must be en or ru", http.StatusBadRequest)
+		return
+	}
+
+	var updated model.User
+	err = s.withMutation(func(mutation managementstate.Mutation) error {
+		var current model.User
+		found := false
+		for _, user := range mutation.Users() {
+			if user.Username == session.Username {
+				current = user
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errUserNotFound
+		}
+		current.Locale = locale
+		var updateErr error
+		updated, updateErr = mutation.UpdateUser(session.Username, current)
+		return updateErr
+	})
+	if err != nil {
+		if err == errUserNotFound {
+			writeNotFound(w)
+			return
+		}
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.mu.Lock()
+	panelAccess := s.settings.PanelAccess
+	s.mu.Unlock()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "veil_locale",
+		Value:    updated.Locale,
+		Path:     "/",
+		Secure:   r.TLS != nil || panelAccess == "caddy",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   31536000,
+	})
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   session.Username,
+		Role:    session.Role,
+		Action:  "auth.locale.update",
+		Target:  session.Username,
+		Success: true,
+		Details: map[string]any{"locale": updated.Locale},
+	})
+	writeJSON(w, map[string]string{"locale": updated.Locale})
+}
+
+func (s *managementState) userLocale(username string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, user := range s.users {
+		if user.Username == username {
+			return panel.NormalizeLocale(user.Locale)
+		}
+	}
+	return panel.LocaleEnglish
 }
 
 func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Request) {
@@ -237,10 +337,15 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		type UserResponse struct {
 			Username string `json:"username"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale"`
 		}
 		var list []UserResponse
 		for _, u := range s.users {
-			list = append(list, UserResponse{Username: u.Username, Role: u.Role})
+			list = append(list, UserResponse{
+				Username: u.Username,
+				Role:     u.Role,
+				Locale:   panel.NormalizeLocale(u.Locale),
+			})
 		}
 		writeJSON(w, list)
 
@@ -249,6 +354,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			Username string `json:"username"`
 			Password string `json:"password"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale,omitempty"`
 		}
 		if !decodeJSONRequest(w, r, &req) {
 			return
@@ -256,6 +362,16 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		if req.Username == "" || req.Password == "" || (req.Role != "admin" && req.Role != "viewer") {
 			writeError(w, "username, password, and valid role (admin/viewer) are required", http.StatusBadRequest)
 			return
+		}
+		if req.Locale == "" {
+			req.Locale = panel.LocaleEnglish
+		} else {
+			locale, ok := panel.ParseLocale(req.Locale)
+			if !ok {
+				writeError(w, "locale must be en or ru", http.StatusBadRequest)
+				return
+			}
+			req.Locale = locale
 		}
 
 		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
@@ -268,6 +384,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			Username:     req.Username,
 			PasswordHash: string(hashed),
 			Role:         req.Role,
+			Locale:       req.Locale,
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
@@ -291,6 +408,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			writeJSONStatus(w, http.StatusCreated, map[string]any{
 				"username": created.Username,
 				"role":     created.Role,
+				"locale":   created.Locale,
 			})
 			return nil
 		})
@@ -312,6 +430,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		var req struct {
 			Password string `json:"password,omitempty"`
 			Role     string `json:"role"`
+			Locale   string `json:"locale,omitempty"`
 		}
 		if !decodeJSONRequest(w, r, &req) {
 			return
@@ -319,6 +438,14 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		if req.Role != "admin" && req.Role != "viewer" {
 			writeError(w, "valid role (admin/viewer) is required", http.StatusBadRequest)
 			return
+		}
+		if req.Locale != "" {
+			locale, ok := panel.ParseLocale(req.Locale)
+			if !ok {
+				writeError(w, "locale must be en or ru", http.StatusBadRequest)
+				return
+			}
+			req.Locale = locale
 		}
 
 		s.mu.Lock()
@@ -350,6 +477,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 			Username:     username,
 			PasswordHash: hash,
 			Role:         req.Role,
+			Locale:       req.Locale,
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
@@ -367,6 +495,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 			writeJSON(w, map[string]any{
 				"username": updated.Username,
 				"role":     updated.Role,
+				"locale":   panel.NormalizeLocale(updated.Locale),
 			})
 			_, _ = s.sessionRegistry().DeleteByUsername(username)
 			s.recordRequestAudit(r, audit.Record{

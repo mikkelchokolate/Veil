@@ -203,6 +203,16 @@ func TestAuthMiddleware(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("viewer executing mutation expected 403, got %d", w.Code)
 	}
+
+	// 10. A viewer may update only their own locale through the self-service route.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/locale", nil)
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: viewerSess.Token})
+	req.Header.Set("X-CSRF-Token", viewerSess.CSRFToken)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("viewer locale update expected 200, got %d", w.Code)
+	}
 }
 
 func TestRouterUsersEndpointAcceptsStaticAdminToken(t *testing.T) {
@@ -277,6 +287,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 			Username:     "alice",
 			PasswordHash: string(hashed),
 			Role:         "admin",
+			Locale:       "ru",
 		},
 	}
 
@@ -293,12 +304,13 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 		Success   bool   `json:"success"`
 		Username  string `json:"username"`
 		Role      string `json:"role"`
+		Locale    string `json:"locale"`
 		CSRFToken string `json:"csrfToken"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&loginResp); err != nil {
 		t.Fatalf("failed to decode login response: %v", err)
 	}
-	if !loginResp.Success || loginResp.Username != "alice" || loginResp.Role != "admin" || loginResp.CSRFToken == "" {
+	if !loginResp.Success || loginResp.Username != "alice" || loginResp.Role != "admin" || loginResp.Locale != "ru" || loginResp.CSRFToken == "" {
 		t.Fatalf("invalid login response contents: %+v", loginResp)
 	}
 
@@ -326,12 +338,13 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 		Authenticated bool   `json:"authenticated"`
 		Username      string `json:"username"`
 		Role          string `json:"role"`
+		Locale        string `json:"locale"`
 		CSRFToken     string `json:"csrfToken"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&statusResp); err != nil {
 		t.Fatalf("failed to decode status response: %v", err)
 	}
-	if !statusResp.Authenticated || statusResp.Username != "alice" || statusResp.Role != "admin" || statusResp.CSRFToken != loginResp.CSRFToken {
+	if !statusResp.Authenticated || statusResp.Username != "alice" || statusResp.Role != "admin" || statusResp.Locale != "ru" || statusResp.CSRFToken != loginResp.CSRFToken {
 		t.Fatalf("invalid status response contents: %+v", statusResp)
 	}
 
