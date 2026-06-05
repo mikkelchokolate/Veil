@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -164,6 +165,14 @@ type RequestEnvelope struct {
 	Firewall      *FirewallRequest      `json:"firewall,omitempty"`
 	Update        *UpdateRequest        `json:"update,omitempty"`
 	RestartPanel  *RestartPanelRequest  `json:"restartPanel,omitempty"`
+}
+
+type ResponseEnvelope struct {
+	Version   int             `json:"version"`
+	RequestID string          `json:"requestId"`
+	OK        bool            `json:"ok"`
+	Result    json.RawMessage `json:"result,omitempty"`
+	Error     *Error          `json:"error,omitempty"`
 }
 
 func (r RequestEnvelope) Validate() error {

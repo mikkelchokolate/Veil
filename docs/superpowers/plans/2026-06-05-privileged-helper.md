@@ -185,7 +185,7 @@ git commit -m "feat: enforce privileged helper policy"
 - Test: `internal/privileged/server_test.go`
 - Test: `internal/privileged/socket_linux_test.go`
 
-- [ ] **Step 1: Write failing transport tests**
+- [x] **Step 1: Write failing transport tests**
 
 Test:
 
@@ -199,13 +199,13 @@ Test:
 - Linux rejects an unapproved UID before decoding the request;
 - non-Linux returns `ErrUnixPeerCredentialsUnsupported` from `ServeUnix`.
 
-- [ ] **Step 2: Run transport tests and verify failure**
+- [x] **Step 2: Run transport tests and verify failure**
 
 Run: `go test ./internal/privileged -run 'Server|Socket|Peer' -count=1`
 
 Expected: FAIL because the transport is absent.
 
-- [ ] **Step 3: Implement bounded JSON transport**
+- [x] **Step 3: Implement bounded JSON transport**
 
 Use a `net.UnixListener`, `io.LimitReader(conn, 1<<20+1)`, `json.Decoder.DisallowUnknownFields`, and a response envelope:
 
@@ -221,11 +221,11 @@ type ResponseEnvelope struct {
 
 Set deadlines, close after one response, and remove only a socket owned by the configured helper path.
 
-- [ ] **Step 4: Implement Linux peer verification**
+- [x] **Step 4: Implement Linux peer verification**
 
 Use `SyscallConn` and `unix.GetsockoptUcred(fd, unix.SOL_SOCKET, unix.SO_PEERCRED)`. Compare `Uid` to the configured `veil` UID; allow root only in explicit test/admin configuration. Keep Linux code behind `//go:build linux` and the unsupported implementation behind `//go:build !linux`.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run:
 
