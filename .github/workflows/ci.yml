@@ -45,6 +45,7 @@ jobs:
           name: code-coverage-report
           path: coverage.out
       - run: bash -n scripts/install.sh scripts/uninstall.sh
+      - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
       - run: git diff --check
@@ -69,7 +70,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh packaging/scripts/*.sh
+
+  privilege-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.25.11'
+      - name: Verify systemd socket activation
+        run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
+      - name: Verify helper socket and filesystem access matrix
+        run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
+      - name: Validate hardened systemd units
+        run: systemd-analyze verify packaging/systemd/veil.service packaging/systemd/veil-helper.service packaging/systemd/veil-helper.socket
 
   e2e:
     runs-on: ubuntu-latest
