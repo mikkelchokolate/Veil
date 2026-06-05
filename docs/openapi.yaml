@@ -51,6 +51,7 @@ tags:
   - name: routing
   - name: warp
   - name: client-links
+  - name: validation
   - name: apply
   - name: runtime
   - name: diagnostics
@@ -1211,10 +1212,78 @@ paths:
                 $ref: "#/components/schemas/ApplyResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/validation:
+    post:
+      tags: [validation]
+      summary: Validate a candidate configuration against live host state
+      description: |
+        Performs the same candidate and live-host checks used authoritatively
+        before settings, Inbound, WARP, and apply mutations. The result may
+        become stale if host state changes after this request; Veil validates
+        again immediately before mutation.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidationRequest"
+            examples:
+              candidate:
+                value:
+                  settings:
+                    panelListen: 127.0.0.1:2096
+                    panelAccess: local
+                    mode: server
+                  inbounds:
+                    - name: edge
+                      protocol: mieru
+                      transport: tcp
+                      port: 443
+                      enabled: true
+                      password: "[REDACTED]"
+                  warp:
+                    enabled: false
+                    endpoint: engage.cloudflareclient.com:2408
+      responses:
+        "200":
+          description: Validation completed. Inspect `valid` and `issues`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
+              examples:
+                busy-port:
+                  value:
+                    valid: false
+                    checkedAt: "2026-06-05T12:00:00Z"
+                    issues:
+                      - code: port_in_use
+                        severity: error
+                        field: port
+                        inboundId: edge
+                        message: TCP port 443 is already in use
+                        remediation: Stop the conflicting service or choose another port.
+                        source: live-host
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/apply/plan:
-    get:
+    post:
       tags: [apply]
       summary: Preview the apply plan without writing live files
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
       responses:
         "200":
           description: Apply plan.
@@ -1222,6 +1291,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApplyPlanResponse"
+              examples:
+                restart-preview:
+                  value:
+                    valid: true
+                    errors: []
+                    configs:
+                      - /etc/veil/generated/mieru/server_config.json
+                    actions:
+                      - validate management state
+                      - stage generated configs
+                      - restart veil-mieru.service
+                    runtimes:
+                      - veil-mieru.service
+                    issues: []
+                    operations:
+                      - type: promote_file
+                        source: /etc/veil/generated/mieru/server_config.json
+                        destination: /etc/veil/live/mieru/server_config.json
+                        interruptionRisk: reload
+                        rollbackAvailable: true
+                        validationSource: render-and-live-host
+                      - type: restart_service
+                        unit: veil-mieru.service
+                        interruptionRisk: connection-drop
+                        rollbackAvailable: true
+                        validationSource: managed-unit-catalog
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
   /api/apply/history:
     get:
       tags: [apply]
@@ -1556,6 +1653,26 @@ components:
         text/plain:
           schema:
             $ref: "#/components/schemas/ErrorText"
+    ValidationFailed:
+      description: Candidate configuration failed authoritative validation and was not mutated.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationFailure"
+          examples:
+            busy-port:
+              value:
+                error:
+                  code: validation_failed
+                  message: configuration failed live validation
+                issues:
+                  - code: port_in_use
+                    severity: error
+                    field: port
+                    inboundId: edge
+                    message: TCP port 443 is already in use
+                    remediation: Stop the conflicting service or choose another port.
+                    source: live-host
   schemas:
     EmptyObject:
       type: object
@@ -1563,6 +1680,15 @@ components:
     ErrorText:
       type: string
       description: Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
+    ErrorObject:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
     HealthResponse:
       type: object
       required: [status]
@@ -2212,9 +2338,92 @@ components:
           enum: [tcp, udp]
         service:
           type: string
+    ValidationRequest:
+      type: object
+      required: [settings, inbounds, warp]
+      additionalProperties: false
+      properties:
+        settings:
+          $ref: "#/components/schemas/Settings"
+        inbounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inbound"
+        warp:
+          $ref: "#/components/schemas/WarpConfig"
+    ValidationIssue:
+      type: object
+      required: [code, severity, message, source]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          examples: [port_in_use]
+        severity:
+          type: string
+          enum: [error, warning, info]
+        field:
+          type: string
+          examples: [port]
+        inboundId:
+          type: string
+          examples: [edge]
+        message:
+          type: string
+        remediation:
+          type: string
+        source:
+          type: string
+          enum: [candidate, live-host, render, managed-unit-catalog]
+    ValidationResponse:
+      type: object
+      required: [valid, issues, checkedAt]
+      additionalProperties: false
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        checkedAt:
+          type: string
+          format: date-time
+    ValidationFailure:
+      type: object
+      required: [error, issues]
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+    ApplyOperation:
+      type: object
+      required: [type, interruptionRisk, rollbackAvailable, validationSource]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [promote_file, remove_file, reload_service, restart_service, disable_service, update_firewall]
+        source:
+          type: string
+        destination:
+          type: string
+        unit:
+          type: string
+        interruptionRisk:
+          type: string
+          enum: [none, reload, connection-drop, lockout-risk]
+        rollbackAvailable:
+          type: boolean
+        validationSource:
+          type: string
     ApplyPlanResponse:
       type: object
-      required: [valid, configs, actions]
+      required: [valid, configs, actions, issues, operations]
       properties:
         valid:
           type: boolean
@@ -2234,6 +2443,14 @@ components:
           type: array
           items:
             type: string
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplyOperation"
     ApplyRequest:
       type: object
       required: [confirm, applyLive, applyServices]

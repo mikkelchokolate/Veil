@@ -72,6 +72,10 @@ X-Veil-Token: <token>
   affected sessions.
 - First-run setup is available only on a loopback `local` listener with no
   users. It is not served through Caddy or a direct listener.
+- Candidate configuration is checked against live ports, DNS, runtime
+  binaries, and managed units. The server repeats validation immediately
+  before every settings, Inbound, WARP, or apply mutation; failed checks return
+  `422` without changing state.
 - `/metrics` has an independent policy: `--metrics-access auto` (default),
   `authenticated`, or `public`. `public` is rejected on non-loopback Panel
   listeners.
