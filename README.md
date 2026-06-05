@@ -122,14 +122,21 @@ veil uninstall --yes
 The Panel includes operator-focused controls for production use:
 
 - **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
-- **Users and sessions** - create admin/viewer users, audit active browser sessions, and revoke stale sessions.
+- **Users and sessions** - create admin/viewer users, inspect durable browser sessions, and revoke stale sessions.
 - **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
 - **Safe apply preview** - review generated files, staged/live paths, backups, rollback files, runtime actions, and DNS/TLS/firewall/service warnings before applying.
 - **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
 
 ### Backup, rollback, and audit
 
-Repair can write backups and a JSONL audit log. The backup directory must be writable; audit entries are not written during `--dry-run`.
+The Panel records authentication, user, configuration, apply, and service
+actions in a structured, redacted, rotated JSONL log. With the default state
+path it is stored at `/var/lib/veil/audit/panel.jsonl`; administrators can read
+the bounded history through `GET /api/audit`.
+
+Repair also writes backup lifecycle events to its configured JSONL audit log.
+The backup directory must be writable; repair audit entries are not written
+during `--dry-run`.
 
 ```bash
 veil repair --backup-dir /var/lib/veil/backups --audit-log /var/log/veil/audit.jsonl --yes
@@ -142,7 +149,8 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 
 - **Fail-closed public exposure** - direct listeners require TLS, `VEIL_API_TOKEN`/`--auth-token`, user/session auth, and authenticated metrics; Caddy exposure requires user/session auth and authenticated metrics
 - **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
-- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role
+- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role. Hashed session state survives Panel restarts, expires after 30 minutes idle or 24 hours absolute, and is revoked when user authority changes
+- **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
 - **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)

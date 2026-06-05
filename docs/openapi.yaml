@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "1.1.0"
+  version: "1.2.0"
   description: |
     HTTP management API exposed by the Veil Panel (`veil serve`).
 
@@ -21,6 +21,11 @@ info:
     made with a cookie session must also send `X-CSRF-Token`, and only `admin`
     sessions may mutate state. `viewer` sessions are read-only.
 
+    Browser sessions survive Panel restarts. Only hashes of the session cookie
+    and CSRF token are persisted. Sessions expire after 30 minutes idle or 24
+    hours absolute and are revoked when a user's password, role, or existence
+    changes.
+
     `/healthz`, `/metrics`, and the Panel UI are not treated as proof of
     authorization. On public listeners `/healthz` is authenticated, `/metrics`
     follows the separate metrics policy (`--metrics-access` /
@@ -39,6 +44,7 @@ tags:
   - name: status
   - name: setup
   - name: auth
+  - name: audit
   - name: settings
   - name: inbounds
   - name: routing
@@ -265,7 +271,12 @@ paths:
                     - id: 0123456789abcdef
                       username: admin
                       role: admin
-                      expiresAt: "2026-06-04T18:30:00Z"
+                      createdAt: "2026-06-05T12:00:00Z"
+                      lastSeenAt: "2026-06-05T12:10:00Z"
+                      idleExpiresAt: "2026-06-05T12:40:00Z"
+                      expiresAt: "2026-06-06T12:00:00Z"
+                      userAgent: Mozilla/5.0
+                      remoteAddr: 192.0.2.10
                       current: true
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -309,6 +320,59 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/audit:
+    get:
+      tags: [audit]
+      summary: List structured Panel audit history
+      description: |
+        Returns newest-first, redacted authentication and mutation events.
+        Requires an admin token or admin session. The raw session cookie, CSRF
+        token, passwords, and authorization values are never returned.
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: before
+          in: query
+          required: false
+          description: Return records strictly older than this RFC3339 timestamp.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Bounded audit history and an optional backward-pagination cursor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditListResponse"
+              examples:
+                recent:
+                  value:
+                    items:
+                      - timestamp: "2026-06-05T12:10:00Z"
+                        actor: admin
+                        role: admin
+                        action: auth.session.revoke
+                        target: 0123456789abcdef
+                        ip: 192.0.2.10
+                        success: true
+                    nextBefore: "2026-06-05T12:10:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/users:
     get:
       tags: [auth]
@@ -1328,7 +1392,7 @@ components:
           type: string
     SessionInfo:
       type: object
-      required: [id, username, role, expiresAt, current]
+      required: [id, username, role, createdAt, lastSeenAt, idleExpiresAt, expiresAt, current]
       properties:
         id:
           type: string
@@ -1339,9 +1403,22 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/UserRole"
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        idleExpiresAt:
+          type: string
+          format: date-time
         expiresAt:
           type: string
           format: date-time
+        userAgent:
+          type: string
+        remoteAddr:
+          type: string
         current:
           type: boolean
           description: True when this entry matches the caller's `veil_session` cookie.
@@ -1357,6 +1434,45 @@ components:
     UserRole:
       type: string
       enum: [admin, viewer]
+    AuditRecord:
+      type: object
+      required: [timestamp, actor, action, success]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        role:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        ip:
+          type: string
+        userAgent:
+          type: string
+        requestId:
+          type: string
+        success:
+          type: boolean
+        error:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    AuditListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditRecord"
+        nextBefore:
+          type: string
+          format: date-time
     UserResponse:
       type: object
       required: [username, role]

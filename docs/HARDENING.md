@@ -63,7 +63,13 @@ X-Veil-Token: <token>
   token mode is only acceptable for loopback-only deployments fronted by SSH.
 - Browser access uses `/api/auth/login`, an HTTP-only `veil_session` cookie,
   CSRF headers for mutating requests, and admin/viewer RBAC. Viewer sessions
-  cannot mutate state.
+  cannot mutate state. Sessions have a 30-minute idle timeout and a 24-hour
+  absolute lifetime.
+- Session metadata survives Panel restarts in
+  `/var/lib/veil/sessions.json`. Only SHA-256 hashes of the session and CSRF
+  bearer values are persisted; raw values remain browser-side. Password and
+  role changes, user deletion, and explicit administrator revocation invalidate
+  affected sessions.
 - First-run setup is available only on a loopback `local` listener with no
   users. It is not served through Caddy or a direct listener.
 - `/metrics` has an independent policy: `--metrics-access auto` (default),
@@ -87,7 +93,22 @@ X-Veil-Token: <token>
 - Never commit `veil.env` or generated config to version control. Treat backups
   produced by the Backup lifecycle as sensitive — they contain managed material.
 
-## 4. Supply-chain integrity
+## 4. Panel audit history
+
+- Authentication, setup, user/session administration, configuration mutation,
+  apply, and service actions are written as compact JSONL records under
+  `/var/lib/veil/audit/panel.jsonl` when the default state path is used.
+- The recorder rotates at 5 MiB and retains five generations
+  (`panel.jsonl.1` through `panel.jsonl.5`). Files and directories are
+  owner-only by default.
+- Detail keys associated with passwords, tokens, cookies, CSRF values,
+  authorization headers, API keys, and private keys are recursively replaced
+  with `[REDACTED]`.
+- Administrators can inspect up to 500 records per request with
+  `GET /api/audit?limit=100`; use the returned `nextBefore` timestamp to page
+  backward. Viewer sessions are denied.
+
+## 5. Supply-chain integrity
 
 - **Release binaries** are verified by the installer against `checksums.txt`,
   with a uniqueness guard that rejects a forged duplicate asset line before
@@ -119,7 +140,7 @@ X-Veil-Token: <token>
 - **Routing source material** (route-dat files) is checksum-verified before it
   is staged, so a tampered routing mirror cannot inject rules.
 
-## 5. Host and runtime hardening
+## 6. Host and runtime hardening
 
 - **Shipped systemd hardening is the baseline.** Packaged units include
   `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp`,
@@ -146,7 +167,7 @@ X-Veil-Token: <token>
   deployment does not bind low ports directly, you can remove that capability in
   a drop-in after validating apply, diagnostics, and restart flows.
 
-## 6. Updates and rollback
+## 7. Updates and rollback
 
 - Update with `veil update`, which verifies release checksums, swaps the binary
   atomically, restarts the managed unit, health-checks the Panel, and can roll
