@@ -106,7 +106,7 @@ git commit -m "feat: add privileged helper protocol"
 - Test: `internal/privileged/policy_test.go`
 - Test: `internal/privileged/adapter_test.go`
 
-- [ ] **Step 1: Write failing allowlist tests**
+- [x] **Step 1: Write failing allowlist tests**
 
 Cover:
 
@@ -120,13 +120,13 @@ Cover:
 - update artifacts must resolve below `/var/lib/veil/updates`;
 - no request can carry a shell command.
 
-- [ ] **Step 2: Run policy tests and verify failure**
+- [x] **Step 2: Run policy tests and verify failure**
 
 Run: `go test ./internal/privileged -run 'Policy|Rejects|Allows' -count=1`
 
 Expected: FAIL because policy enforcement is absent.
 
-- [ ] **Step 3: Implement policy-owned resolution**
+- [x] **Step 3: Implement policy-owned resolution**
 
 Define:
 
@@ -144,7 +144,7 @@ type Policy struct {
 
 Resolve paths using `filepath.Clean`, `filepath.Rel`, and `EvalSymlinks` for existing parents. Require the resulting relative path not to be absolute, `..`, or begin with `..` plus a separator. The policy, not the caller, selects state key, backup passphrase, firewall tooling, and executable paths.
 
-- [ ] **Step 4: Implement the local adapter**
+- [x] **Step 4: Implement the local adapter**
 
 The adapter validates every typed request with `Policy` and calls injected executor functions:
 
@@ -164,7 +164,7 @@ type Executor struct {
 
 Return stable error codes `invalid_request`, `forbidden_operation`, `not_found`, `conflict`, and `operation_failed`.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `go test ./internal/privileged -count=1`
 
