@@ -98,6 +98,15 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	}
 }
 
+func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
+	if !shouldPrepareInstallHost(defaultSystemdDir) {
+		t.Fatal("canonical native install must prepare the service account and permissions")
+	}
+	if shouldPrepareInstallHost(t.TempDir()) {
+		t.Fatal("staging install must not mutate current-host accounts or ownership")
+	}
+}
+
 func TestApplyRURecommendedInstallPreservesExistingState(t *testing.T) {
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc

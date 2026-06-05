@@ -156,6 +156,12 @@ When installed natively on a Linux host, Veil manages the following directories 
 | `/etc/systemd/system/veil-backup.service` | `0644` | Hardened oneshot encrypted backup and retention job. |
 | `/etc/systemd/system/veil-backup.timer` | `0644` | Daily scheduler for `veil-backup.service`. |
 
+Passing an alternative `--systemd-dir` is a staging/package-build mode. Veil
+writes the requested files but does not create the `veil` service account,
+change current-host ownership, or invoke `systemctl`. Native host installation
+keeps the default `/etc/systemd/system` path and always applies those hardening
+steps.
+
 Enable scheduled encrypted backups after installation:
 
 ```bash

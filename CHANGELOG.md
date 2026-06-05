@@ -52,6 +52,9 @@ All notable changes to Veil will be documented in this file.
   cookie-session mutations such as persisted locale changes.
 - Russian localization now covers dynamic operator actions and stable
   validation issue messages in addition to the static Panel shell.
+- Installs targeting an alternative systemd directory now stage files without
+  creating accounts, changing ownership, or invoking systemctl on the build
+  host.
 
 ### Migration Notes
 
