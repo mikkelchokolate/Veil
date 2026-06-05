@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestManagedMaterialBuildsEnvContent(t *testing.T) {
@@ -47,7 +49,11 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	for _, want := range []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env", "/etc/systemd/system/veil.service", "/etc/systemd/system/veil-caddy@.service"} {
+	wants := []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env"}
+	for _, name := range renderer.ManagedSystemdUnitNames() {
+		wants = append(wants, "/etc/systemd/system/"+name)
+	}
+	for _, want := range wants {
 		wantSlash := filepath.FromSlash(want)
 		if !hasFile(files, wantSlash) {
 			t.Fatalf("files missing %q (native: %q): %+v", want, wantSlash, files)

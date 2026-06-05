@@ -108,11 +108,7 @@ func (m ManagedMaterial) Files() ([]File, error) {
 	}
 	if paths.SystemdDir != "" {
 		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
-		unitNames := []string{renderer.UnitVeil}
-		if input.InstallPanelCaddy {
-			unitNames = append(unitNames, renderer.UnitCaddy)
-		}
-		for _, name := range unitNames {
+		for _, name := range renderer.ManagedSystemdUnitNames() {
 			files = append(files, File{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})
 		}
 	}
