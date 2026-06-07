@@ -4,6 +4,18 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.12] - 2026-06-07
+
+### Added
+
+- One-click WARP. Enabling WARP now provisions a free Cloudflare WARP account
+  automatically — Veil generates a WireGuard keypair, registers the public key
+  with the Cloudflare WARP API, and stores the returned peer key, endpoint,
+  interface addresses, and reserved bytes. No private key or license to enter:
+  flip the toggle and it works. The enable now persists (it previously failed
+  validation with an empty key and silently reverted), and a WARP routing rule
+  is added automatically.
+
 ## [v0.6.11] - 2026-06-07
 
 ### Fixed

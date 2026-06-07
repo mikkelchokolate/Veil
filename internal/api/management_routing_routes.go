@@ -1,11 +1,20 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/routing"
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
+
+// warpRegisterFunc provisions a free Cloudflare WARP account so enabling WARP
+// needs no manual key/license. It is a package variable so tests can swap in a
+// fake registrar.
+var warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
+	return veilwarp.NewRegistrar().Register(ctx)
+}
 
 func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Request) {
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
@@ -145,6 +154,26 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 			var warp WarpConfig
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
+			}
+			// First-time enable: provision a free Cloudflare WARP account so the
+			// operator only flips the toggle — no key or license to enter.
+			if warp.Enabled && warp.PrivateKey == "" && s.warp.PrivateKey == "" {
+				reg, err := warpRegisterFunc(r.Context())
+				if err != nil {
+					s.logUserAction(r, "update_warp", "warp", false, "registration failed")
+					writeError(w, "WARP registration failed: "+err.Error(), http.StatusBadGateway)
+					return nil
+				}
+				warp.PrivateKey = reg.PrivateKey
+				warp.PeerPublicKey = reg.PeerPublicKey
+				warp.LocalAddress = reg.LocalAddress
+				warp.Reserved = reg.Reserved
+				if reg.Endpoint != "" {
+					warp.Endpoint = reg.Endpoint
+				}
+				if reg.License != "" {
+					warp.LicenseKey = reg.License
+				}
 			}
 			candidateWarp := s.warp
 			candidateRules := append([]RoutingRule(nil), s.rules...)
