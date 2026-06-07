@@ -26,7 +26,7 @@ func TestDoctorCommandPrintsReadinessSummary(t *testing.T) {
 		"Required commands:",
 		"caddy:",
 		"hysteria:",
-		"mieru:",
+		"mita:",
 		"sing-box:",
 		"ufw:",
 	} {
@@ -66,7 +66,7 @@ func TestDoctorCommandPrintsJSONReadinessSummary(t *testing.T) {
 		`"commands"`,
 		`"name":"caddy"`,
 		`"name":"hysteria"`,
-		`"name":"mieru"`,
+		`"name":"mita"`,
 		`"name":"sing-box"`,
 		`"name":"ufw"`,
 		`"name":"systemctl","error":"command not found","present":false`,

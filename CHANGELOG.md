@@ -4,6 +4,21 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.7] - 2026-06-07
+
+### Fixed
+
+- Mieru inbounds now work with the current upstream server. Veil previously ran
+  `mieru run -c <config>`, but mieru's server binary is `mita`, which is a daemon
+  controlled over an RPC socket and has no `run -c` command — so Mieru could
+  never start. The Mieru unit now launches `mita run` (using `MITA_CONFIG_FILE`
+  and `MITA_UDS_PATH` under a root-owned `StateDirectory=mita`) and, once the RPC
+  socket is ready, applies Veil's generated config and starts the proxy
+  (`mita apply config … && mita start`). The runtime check and `veil doctor` now
+  look for the `mita` server binary instead of the `mieru` client binary. Veil's
+  generated `server_config.json` already matched mita's format. Install the
+  server binary as `/usr/local/bin/mita` to use Mieru.
+
 ## [v0.6.6] - 2026-06-07
 
 ### Fixed

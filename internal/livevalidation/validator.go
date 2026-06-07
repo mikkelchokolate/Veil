@@ -38,7 +38,8 @@ var runtimeRequirements = map[string]runtimeRequirement{
 		},
 	},
 	"mieru": {
-		binary: "mieru",
+		// mieru's server binary is "mita" (the "mieru" binary is the client).
+		binary: "mita",
 		unit: func(model.Inbound) string {
 			return "veil-mieru.service"
 		},
