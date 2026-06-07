@@ -4,7 +4,25 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-## [v0.6.5] - 2026-06-07
+## [v0.6.6] - 2026-06-07
+
+### Fixed
+
+- The privileged helper now runs with the file capabilities it actually needs
+  (`CAP_DAC_OVERRIDE`, `CAP_DAC_READ_SEARCH`, `CAP_CHOWN`, `CAP_FOWNER`) instead
+  of an empty capability set. As root-with-no-capabilities it could not traverse
+  the `veil`-owned `/var/lib/veil` or read `veil`-owned staging, so privileged
+  operations over that tree failed — e.g. Backups returned
+  `read backup directory: open /var/lib/veil/backups: permission denied`. The
+  helper still has no network and no other capabilities.
+- Service Status no longer breaks when managed systemd **template** units
+  (`veil-caddy@.service`, `veil-hysteria2@.service`, `veil-olcrtc@.service`) are
+  present. Templates cannot be queried with `systemctl show` (they have no
+  instance), which previously failed the whole status batch with "Unit name … is
+  neither a valid invocation ID nor unit name". Template units are now reported
+  as inactive, and a single unit's query failure no longer aborts the rest.
+
+
 
 ### Fixed
 

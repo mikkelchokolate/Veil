@@ -99,10 +99,28 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		ServiceStatus: func(ctx context.Context, request ServiceStatusRequest) (ServiceStatusResult, error) {
 			result := ServiceStatusResult{Services: make([]ServiceStatus, 0, len(request.Units))}
 			for _, unit := range request.Units {
+				// Template units (foo@.service) have no runtime status of their own
+				// and cannot be queried with `systemctl show`; report them as
+				// inactive instead of failing the whole batch.
+				if strings.HasSuffix(unit, "@.service") {
+					result.Services = append(result.Services, ServiceStatus{
+						Unit: unit, LoadState: "loaded", ActiveState: "inactive", SubState: "dead",
+					})
+					continue
+				}
 				command := service.NewSystemdServiceStatusCommand(unit)
 				output, err := config.RunCommand(ctx, append([]string{command.Name()}, command.Args()...), command.Timeout())
 				if err != nil {
-					return ServiceStatusResult{}, err
+					// One unit's query failure must not break the whole status page.
+					detail := strings.TrimSpace(output)
+					if detail == "" {
+						detail = err.Error()
+					}
+					result.Services = append(result.Services, ServiceStatus{
+						Unit: unit, LoadState: "unknown", ActiveState: "unknown", SubState: "unknown",
+						Error: detail,
+					})
+					continue
 				}
 				status := service.NewSystemdServiceStatusParser().Parse(unit, output)
 				result.Services = append(result.Services, ServiceStatus{

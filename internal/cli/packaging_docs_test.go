@@ -213,20 +213,27 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			}
 		}
 	}
-	for _, unit := range []string{
-		"../../packaging/systemd/veil.service",
-		"../../packaging/systemd/veil-helper.service",
-	} {
-		body, err := os.ReadFile(unit)
-		if err != nil {
-			t.Fatal(err)
+	// The unprivileged Panel keeps an empty capability set; it delegates privileged
+	// work to the helper.
+	panelBody, err := os.ReadFile("../../packaging/systemd/veil.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	panelConfig := strings.ReplaceAll(string(panelBody), "\r\n", "\n")
+	for _, want := range []string{"CapabilityBoundingSet=\n", "AmbientCapabilities=\n"} {
+		if !strings.Contains(panelConfig, want) {
+			t.Fatalf("control-plane unit veil.service missing empty %q", want)
 		}
-		config := strings.ReplaceAll(string(body), "\r\n", "\n")
-		for _, want := range []string{"CapabilityBoundingSet=\n", "AmbientCapabilities=\n"} {
-			if !strings.Contains(config, want) {
-				t.Fatalf("control-plane unit %s missing empty %q", unit, want)
-			}
-		}
+	}
+	// The root helper needs file capabilities to read veil-owned state/staging and
+	// manage root-owned generated configs and backups across ownership boundaries.
+	helperBody, err := os.ReadFile("../../packaging/systemd/veil-helper.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helperConfig := strings.ReplaceAll(string(helperBody), "\r\n", "\n")
+	if !strings.Contains(helperConfig, "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER") {
+		t.Fatalf("veil-helper.service must grant the DAC/chown capabilities the helper needs:\n%s", helperConfig)
 	}
 }
 
