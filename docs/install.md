@@ -173,14 +173,24 @@ systemctl list-timers veil-backup.timer
 See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) before relying
 on local backups or performing a restore.
 
-Normal removal stops and removes managed units and the binary while preserving
-`/etc/veil`, `/var/lib/veil`, encrypted backups, and the locked `veil` account:
+By default, removal stops and removes managed units, the binary, **and** the
+configuration and state in `/etc/veil` and `/var/lib/veil` (including encrypted
+backups), so a later install starts fresh with a new password and panel path.
+The locked `veil` account is preserved. Review and export backups first:
 
 ```bash
 sudo veil uninstall --yes
 ```
 
-Destructive removal is explicit. Review and export backups first, then use:
+To preserve configuration and credentials across a reinstall — for example
+before an in-place upgrade — keep the data directories instead:
+
+```bash
+sudo veil uninstall --yes --keep-data
+```
+
+`--purge` remains accepted as an explicit alias for the default full removal and
+always overrides `--keep-data`:
 
 ```bash
 sudo veil uninstall --yes --purge

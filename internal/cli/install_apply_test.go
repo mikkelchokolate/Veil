@@ -98,6 +98,76 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	}
 }
 
+func TestApplyRURecommendedInstallFailsWhenExistingStateUnreadable(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	applyCalled := false
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		applyCalled = true
+		return installer.ApplyResult{}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+	})
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+	resolvedKeyPath := filepath.Join(tempEtc, "state.key")
+	resolvedStatePath := filepath.Join(tempVar, "state.json")
+
+	// Persist state encrypted under one key...
+	keyA, err := secrets.LoadOrCreateKey(resolvedKeyPath)
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	cipherA, err := secrets.NewCipher(*keyA)
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	if err := managementstate.NewStore(resolvedStatePath, cipherA).Save(model.ManagementSnapshot{
+		// An encrypted secret field is what makes a wrong key fail to decrypt.
+		Settings: model.Settings{WebBasePath: "/old/", Hysteria2Password: "super-secret"},
+		Users:    []model.User{{Username: "old_admin", PasswordHash: "hash", Role: "admin"}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	// ...then swap in a different key, simulating /etc/veil being recreated while
+	// /var/lib/veil/state.json survived. The new key cannot decrypt the old state.
+	var keyB [secrets.KeySize]byte
+	for i := range keyB {
+		keyB[i] = byte(i + 1)
+	}
+	if err := os.WriteFile(resolvedKeyPath, keyB[:], 0o600); err != nil {
+		t.Fatalf("write mismatched key: %v", err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	profile := installer.RURecommendedProfile{Username: "fresh", Password: "fresh", WebBasePath: "/fresh/"}
+
+	err = applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar})
+	if err == nil {
+		t.Fatal("expected an error when existing state cannot be decrypted")
+	}
+	if !strings.Contains(err.Error(), "could not read it with the encryption key") {
+		t.Fatalf("error should guide recovery, got: %v", err)
+	}
+	if applyCalled {
+		t.Fatal("install must not write generated files when existing state is unreadable")
+	}
+}
+
 func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
 	if !shouldPrepareInstallHost(defaultSystemdDir) {
 		t.Fatal("canonical native install must prepare the service account and permissions")

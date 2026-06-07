@@ -63,23 +63,34 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		stateExists = true
 	}
 
+	reusedExistingState := false
 	if stateExists {
-		// Load the existing state.json to preserve the WebBasePath and credentials
+		// Reuse the existing state.json so an in-place reinstall keeps the admin
+		// login and the secret web base path.
 		store := managementstate.NewStore(resolvedStatePath, cipher)
 		snapshot, ok, err := store.Load()
-		if err == nil && ok {
-			if snapshot.Settings.WebBasePath != "" {
-				profile.WebBasePath = snapshot.Settings.WebBasePath
-			}
-			// Use the first admin user's username
-			for _, u := range snapshot.Users {
-				if u.Role == "admin" {
-					profile.Username = u.Username
-					break
-				}
-			}
-			profile.Password = "" // clear it, as we didn't generate a new one
+		if err != nil || !ok {
+			// State is present but unreadable (corrupted, or the key no longer
+			// matches). Stop instead of silently leaving a panel nobody can log
+			// into or overwriting potentially recoverable data.
+			return fmt.Errorf(
+				"found existing Veil state at %s but could not read it with the encryption key at %s (corrupted state or a mismatched key).\n"+
+					"To start fresh: run `sudo veil uninstall` to remove the old state, then reinstall.\n"+
+					"To keep the existing data: restore the matching %s before reinstalling",
+				resolvedStatePath, resolvedKeyPath, filepath.Base(resolvedKeyPath))
 		}
+		if snapshot.Settings.WebBasePath != "" {
+			profile.WebBasePath = snapshot.Settings.WebBasePath
+		}
+		// Use the first admin user's username
+		for _, u := range snapshot.Users {
+			if u.Role == "admin" {
+				profile.Username = u.Username
+				break
+			}
+		}
+		profile.Password = "" // clear it, as we didn't generate a new one
+		reusedExistingState = true
 	} else {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(profile.Password), 10)
 		if err != nil {
@@ -141,6 +152,11 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", resolvedStatePath)
 	fmt.Fprintln(cmd.OutOrStdout())
 	fmt.Fprint(cmd.OutOrStdout(), installflow.CredentialSummary(profile))
+	if reusedExistingState {
+		fmt.Fprintf(cmd.OutOrStdout(), "Reused the existing admin login and panel path from %s; your previous password still applies.\n", resolvedStatePath)
+		fmt.Fprintf(cmd.OutOrStdout(), "To set a new password: sudo veil admin set --username %s --password 'NEW' --role admin\n", profile.Username)
+		fmt.Fprintln(cmd.OutOrStdout(), "To wipe and start fresh instead: run sudo veil uninstall, then reinstall.")
+	}
 	if err := writeAuditInstall(opts.AuditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {
 		return fmt.Errorf("audit log write failed after successful install: %w", err)
 	}

@@ -324,7 +324,7 @@ func TestPrivilegeBoundaryDocumentation(t *testing.T) {
 		},
 		"../../CONTEXT.md": {
 			"Privileged helper",
-			"preserves `/etc/veil` and `/var/lib/veil`",
+			"`--keep-data`",
 			"`--purge`",
 		},
 	}

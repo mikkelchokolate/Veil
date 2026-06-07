@@ -37,7 +37,7 @@ The CLI readiness flow that checks required and optional host commands and rende
 _Avoid_: doctor print helper, dependency checklist glue
 
 **Veil uninstall**:
-The CLI flow that previews and removes Veil managed units and binary material while preserving `/etc/veil` and `/var/lib/veil` by default. Destructive state removal requires explicit `--purge`. The uninstall CLI workflow package owns the plan, ordering, and concrete side-effect actions; Cobra only adapts flags and writers.
+The CLI flow that previews and removes Veil managed units and binary material. By default it also removes configuration and state in `/etc/veil` and `/var/lib/veil` so a later install starts fresh with a new password and panel path; `--keep-data` preserves them, while `--purge` is an explicit alias for the default full removal that always overrides `--keep-data`. The locked `veil` account is always preserved. The uninstall CLI workflow package owns the plan, ordering, and concrete side-effect actions; Cobra only adapts flags and writers.
 _Avoid_: remove command script, cleanup helper
 
 **Veil rollback**:
@@ -230,7 +230,7 @@ _Avoid_: logging, masking
 - **Veil serve** owns listen/auth/path/TLS/Web base path resolution outside the Cobra command Adapter.
 - **Veil status** owns Panel status fetch, generated local Panel TLS trust, and human/JSON rendering outside the Cobra command Adapter.
 - **Veil doctor** owns command readiness checks and human/JSON readiness rendering outside the Cobra command Adapter.
-- **Veil uninstall** owns preview, service stop/disable actions, binary removal, optional `--purge`, and daemon reload outside the Cobra command Adapter; normal removal preserves `/etc/veil` and `/var/lib/veil`.
+- **Veil uninstall** owns preview, service stop/disable actions, binary removal, `--keep-data`/`--purge` handling, and daemon reload outside the Cobra command Adapter; default removal clears `/etc/veil` and `/var/lib/veil`, while `--keep-data` preserves them.
 - **Veil rollback** owns backup listing, restore, cleanup, and rollback audit event ordering outside the Cobra command Adapter.
 - **Veil repair** owns profile selection, repair plan preview, dry-run, and apply ordering outside the Cobra command Adapter.
 - A **Panel URL** contains exactly one **Web base path**.
