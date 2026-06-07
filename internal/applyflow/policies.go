@@ -13,7 +13,13 @@ func NewConfigValidationPassPolicy() ConfigValidationPassPolicy { return ConfigV
 
 func (ConfigValidationPassPolicy) RequirePassed(validations []model.ConfigValidationResult) error {
 	for _, validation := range validations {
-		if validation.Skipped || !validation.Valid {
+		// A skipped validation (the validator binary is absent or the protocol has
+		// no standalone checker) must not block the apply — the post-restart
+		// service health check is the real gate and rolls back on failure.
+		if validation.Skipped {
+			continue
+		}
+		if !validation.Valid {
 			if validation.Error != "" {
 				return errors.New(validation.Error)
 			}
