@@ -20,15 +20,21 @@ func CredentialSummary(profile installer.RURecommendedProfile) string {
 }
 
 func PanelURL(profile installer.RURecommendedProfile) string {
-	if profile.Domain != "" && profile.WebBasePath != "" {
-		return "https://" + profile.Domain + profile.WebBasePath
+	// The web base path is a secret prefix the panel is actually served under;
+	// it must be part of the URL or the printed address returns 404.
+	basePath := profile.WebBasePath
+	if basePath == "" {
+		basePath = "/"
+	}
+	if profile.Domain != "" {
+		return "https://" + profile.Domain + basePath
 	}
 	if profile.PanelListen != "" {
 		scheme := "http"
 		if profile.PanelTLSEnabled {
 			scheme = "https"
 		}
-		return scheme + "://" + profile.PanelListen + "/"
+		return scheme + "://" + profile.PanelListen + basePath
 	}
-	return "https://" + profile.Domain + profile.WebBasePath
+	return "https://" + profile.Domain + basePath
 }

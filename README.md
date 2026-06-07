@@ -114,7 +114,8 @@ All secrets are stored encrypted at rest.
 veil status
 veil version --check
 veil update --yes --staged
-veil uninstall --yes
+veil uninstall --yes              # also removes config/state; reinstall starts fresh
+veil uninstall --yes --keep-data  # preserve credentials and config across a reinstall
 ```
 
 ### Panel UX controls

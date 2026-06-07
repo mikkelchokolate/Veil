@@ -8,6 +8,7 @@ SYSTEMD_DIR="${VEIL_SYSTEMD_DIR:-/etc/systemd/system}"
 YES=""
 DRY_RUN=""
 PURGE=""
+KEEP_DATA=""
 
 usage() {
   cat <<USAGE
@@ -24,8 +25,12 @@ Options:
   --systemd-dir DIR    systemd unit directory, default /etc/systemd/system
   --yes                Confirm uninstall without prompt
   --dry-run            Preview what will be removed
-  --purge              Also remove configuration and state; preserves the veil system account
+  --keep-data          Preserve configuration and state so a reinstall reuses the existing credentials and panel path
+  --purge              Remove configuration and state (now the default; kept for compatibility)
   -h, --help           Show this help
+
+By default uninstall removes configuration and state in /etc/veil and /var/lib/veil
+so a later install starts fresh with a new password. The veil system account is preserved.
 USAGE
 }
 
@@ -47,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --purge) PURGE="1"; shift ;;
+    --keep-data) KEEP_DATA="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -61,6 +67,7 @@ fi
 VEIL_BIN="${INSTALL_DIR}/veil"
 args=(--install-dir "${INSTALL_DIR}" --etc-dir "${ETC_DIR}" --var-dir "${VAR_DIR}" --systemd-dir "${SYSTEMD_DIR}")
 if [[ -n "${PURGE}" ]]; then args+=(--purge); fi
+if [[ -n "${KEEP_DATA}" ]]; then args+=(--keep-data); fi
 
 if [[ -x "${VEIL_BIN}" ]]; then
   if [[ -n "${DRY_RUN}" ]]; then

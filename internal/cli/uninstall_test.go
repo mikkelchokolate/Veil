@@ -39,7 +39,7 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"Veil uninstall plan",
 		"Stop services:",
 		"Disable services:",
-		"Preserved state:",
+		"Remove configuration and state:",
 		"Remove systemd units:",
 		"/etc/systemd/system/veil.service",
 		"/etc/systemd/system/veil-olcrtc@.service",
@@ -126,8 +126,8 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		}
 	}
 
-	// Verify units and binary are removed while configuration and state are preserved.
-	for _, path := range []string{"/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil"} {
+	// Verify units, binary, configuration, and state are all removed by default.
+	for _, path := range []string{"/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil", "/etc/veil", "/var/lib/veil"} {
 		found := false
 		for _, r := range removed {
 			if filepath.ToSlash(r) == filepath.ToSlash(path) {
@@ -137,13 +137,6 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("path %s was not removed", path)
-		}
-	}
-	for _, preserved := range []string{"/etc/veil", "/var/lib/veil"} {
-		for _, removedPath := range removed {
-			if filepath.ToSlash(removedPath) == preserved {
-				t.Fatalf("normal uninstall removed preserved path %s", preserved)
-			}
 		}
 	}
 
@@ -187,9 +180,51 @@ func TestUninstallHasCorrectHelp(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "uninstall") || !strings.Contains(got, "--yes") || !strings.Contains(got, "--dry-run") || !strings.Contains(got, "--purge") {
+	if !strings.Contains(got, "uninstall") || !strings.Contains(got, "--yes") || !strings.Contains(got, "--dry-run") || !strings.Contains(got, "--purge") || !strings.Contains(got, "--keep-data") {
 		t.Fatalf("help output missing expected content:\n%s", got)
 	}
+}
+
+func TestUninstallKeepDataPreservesState(t *testing.T) {
+	origStop := uninstallServiceStopper
+	origRemove := uninstallFileRemover
+	origReload := uninstallSystemdReloader
+	t.Cleanup(func() {
+		uninstallServiceStopper = origStop
+		uninstallFileRemover = origRemove
+		uninstallSystemdReloader = origReload
+	})
+	var removed []string
+	uninstallServiceStopper = func(string) error { return nil }
+	uninstallFileRemover = func(path string) error {
+		removed = append(removed, filepath.ToSlash(path))
+		return nil
+	}
+	uninstallSystemdReloader = func() error { return nil }
+	cmd := NewRootCommand("test")
+	cmd.SetArgs([]string{"uninstall", "--yes", "--keep-data"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, preserved := range []string{"/etc/veil", "/var/lib/veil"} {
+		for _, path := range removed {
+			if path == preserved {
+				t.Fatalf("--keep-data removed preserved path %s: %v", preserved, removed)
+			}
+		}
+	}
+	if !contains(removed, "/usr/local/bin/veil") {
+		t.Fatalf("--keep-data must still remove the binary: %v", removed)
+	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestUninstallPurgeRemovesState(t *testing.T) {

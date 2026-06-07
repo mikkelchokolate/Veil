@@ -13,10 +13,18 @@ type Options struct {
 	DryRun     bool
 	Yes        bool
 	Purge      bool
+	KeepData   bool
 	EtcDir     string
 	VarDir     string
 	SystemdDir string
 	InstallDir string
+}
+
+// PreservesData reports whether configuration and state directories are kept.
+// Uninstall removes them by default so a subsequent install starts fresh;
+// --keep-data preserves them, and an explicit --purge always removes them.
+func (opts Options) PreservesData() bool {
+	return opts.KeepData && !opts.Purge
 }
 
 type Dependencies struct {
@@ -49,6 +57,12 @@ func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error
 		fmt.Fprintf(errOut, "warning: systemd daemon-reload: %v\n", err)
 	}
 	fmt.Fprintln(out, "Uninstalled Veil")
+	if opts.PreservesData() {
+		fmt.Fprintf(out, "Kept configuration and state in %s and %s; the next install reuses the existing admin login and panel path.\n", opts.EtcDir, opts.VarDir)
+	} else {
+		fmt.Fprintf(out, "Removed configuration and state in %s and %s; the next install generates a fresh password and panel path.\n", opts.EtcDir, opts.VarDir)
+		fmt.Fprintln(out, "Re-run with --keep-data to preserve credentials and configuration across reinstalls.")
+	}
 	return nil
 }
 
@@ -63,15 +77,15 @@ func Plan(opts Options) string {
 		b.WriteString(fmt.Sprintf("  - %s\n", svc))
 	}
 	opts = opts.WithDefaults()
-	if opts.Purge {
+	if opts.PreservesData() {
+		b.WriteString("Preserved state:\n")
+		b.WriteString(fmt.Sprintf("  - %s\n", opts.EtcDir))
+		b.WriteString(fmt.Sprintf("  - %s\n", opts.VarDir))
+	} else {
 		b.WriteString("Remove configuration and state:\n")
 		for _, path := range []string{opts.EtcDir, opts.VarDir} {
 			b.WriteString(fmt.Sprintf("  - %s\n", path))
 		}
-	} else {
-		b.WriteString("Preserved state:\n")
-		b.WriteString(fmt.Sprintf("  - %s\n", opts.EtcDir))
-		b.WriteString(fmt.Sprintf("  - %s\n", opts.VarDir))
 	}
 	b.WriteString("Remove systemd units:\n")
 	for _, path := range SystemdUnitPaths(opts) {
@@ -105,7 +119,7 @@ func (opts Options) WithDefaults() Options {
 func Paths(opts Options) []string {
 	opts = opts.WithDefaults()
 	paths := []string{}
-	if opts.Purge {
+	if !opts.PreservesData() {
 		paths = append(paths, filepath.ToSlash(opts.EtcDir), filepath.ToSlash(opts.VarDir))
 	}
 	paths = append(paths, SystemdUnitPaths(opts)...)

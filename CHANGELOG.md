@@ -4,6 +4,28 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.4] - 2026-06-07
+
+### Changed
+
+- `veil uninstall` now removes configuration and state in `/etc/veil` and
+  `/var/lib/veil` by default, so a reinstall starts fresh with a new password and
+  panel path. Pass `--keep-data` to preserve credentials and configuration across
+  reinstalls; `--purge` remains accepted as an alias for the default full removal
+  and always overrides `--keep-data`. The locked `veil` account is still preserved.
+
+### Fixed
+
+- The install credential summary now prints the panel URL with its secret web
+  base path for local/direct access (e.g. `https://127.0.0.1:2096/a1b2c3d4e5f6/`)
+  instead of the bare root, which returned `404` and made the panel look
+  unreachable after install.
+- Reinstalling over an existing but unreadable state (corrupted state file or a
+  state key that no longer matches) now fails with recovery guidance instead of
+  silently leaving a panel that cannot be logged into. Reinstalls that reuse
+  existing credentials also print how to reset the password or wipe and start
+  fresh.
+
 ## [v0.6.3] - 2026-06-05
 
 ### Fixed
