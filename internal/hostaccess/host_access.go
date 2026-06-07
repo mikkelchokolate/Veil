@@ -142,6 +142,11 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "tls"), 0o750, 0o640, paths.RootUID, panel.GID); err != nil {
 		return err
 	}
+	// The panel's self-signed TLS material (local/direct access) lives here and is
+	// read by the veil-owned Panel process, so it must be group-readable by veil.
+	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "panel"), 0o750, 0o640, paths.RootUID, panel.GID); err != nil {
+		return err
+	}
 	for _, name := range []string{"state.key", "veil.env"} {
 		if err := setOptionalFile(filepath.Join(paths.EtcDir, name), 0o640, paths.RootUID, panel.GID); err != nil {
 			return err

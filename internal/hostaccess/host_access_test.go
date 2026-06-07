@@ -103,6 +103,40 @@ func TestMigrateCreatesSafetyCopiesAndScopedPermissions(t *testing.T) {
 	}
 }
 
+func TestMigrateMakesPanelTLSGroupReadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	panelDir := filepath.Join(etcDir, "panel")
+	if err := os.MkdirAll(panelDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Mirror how the installer writes panel TLS: cert readable, key root-only (0600).
+	if err := os.WriteFile(filepath.Join(panelDir, "tls.crt"), []byte("cert"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(panelDir, "tls.key"), []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid, _ := strconv.Atoi(current.Uid)
+	gid, _ := strconv.Atoi(current.Gid)
+	if err := Migrate(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid}, Identity{UID: uid, GID: gid}, time.Now); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// The veil-owned Panel process reads its TLS key via the veil group, so the key
+	// must be group-readable (0640), not the installer's root-only 0600.
+	assertMode(t, panelDir, 0o750)
+	assertMode(t, filepath.Join(panelDir, "tls.key"), 0o640)
+	assertMode(t, filepath.Join(panelDir, "tls.crt"), 0o640)
+}
+
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)
