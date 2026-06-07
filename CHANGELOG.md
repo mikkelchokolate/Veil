@@ -4,6 +4,15 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.10] - 2026-06-07
+
+### Fixed
+
+- Client-link QR codes now display. The panel renders the QR PNG from a `blob:`
+  object URL, but the Content-Security-Policy `img-src` directive omitted `blob:`,
+  so the browser blocked the image even though `/api/client-links/qr` returned it
+  successfully. Added `blob:` to `img-src`.
+
 ## [v0.6.9] - 2026-06-07
 
 ### Fixed
