@@ -82,10 +82,13 @@ type GeneratedConfigArtifactCatalog = ArtifactCatalog
 func NewArtifactCatalog() ArtifactCatalog {
 	return ArtifactCatalog{artifacts: []ArtifactSpec{
 		{Subpath: CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
-		{Subpath: Hysteria2ConfigSubpath, ValidationName: "hysteria2", ValidationCommand: func(path string) []string { return []string{"hysteria", "server", "--config", path, "--check"} }},
-		{Subpath: MieruConfigSubpath, ValidationName: "mieru", ValidationCommand: func(path string) []string { return []string{"mieru", "check", "-c", path} }},
+		// Hysteria2 (hysteria), Mieru (mita) and olcRTC have no standalone config
+		// check command, so they get no pre-stage syntax validation; a bad config
+		// is caught by the post-restart service health check, which rolls back.
+		{Subpath: Hysteria2ConfigSubpath, ValidationName: "hysteria2"},
+		{Subpath: MieruConfigSubpath, ValidationName: "mieru"},
 		{Subpath: WarpConfigSubpath, ValidationName: "warp", ValidationCommand: func(path string) []string { return []string{"sing-box", "check", "-c", path} }},
-		{Subpath: OlcrtcConfigSubpath, ValidationName: "olcrtc", ValidationCommand: func(path string) []string { return []string{"olcrtc", "--config", path, "--check"} }},
+		{Subpath: OlcrtcConfigSubpath, ValidationName: "olcrtc"},
 	}}
 }
 

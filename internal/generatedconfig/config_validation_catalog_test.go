@@ -9,10 +9,9 @@ func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
 		name string
 		cmd  []string
 	}{
+		// Only protocols with a working standalone checker have a validation command.
 		{"/etc/veil/generated/caddy/Caddyfile", "caddy", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"}},
-		{"/etc/veil/generated/hysteria2/server.yaml", "hysteria2", []string{"hysteria", "server", "--config", "/etc/veil/generated/hysteria2/server.yaml", "--check"}},
 		{"/etc/veil/generated/sing-box/warp.json", "warp", []string{"sing-box", "check", "-c", "/etc/veil/generated/sing-box/warp.json"}},
-		{"/etc/veil/generated/mieru/server_config.json", "mieru", []string{"mieru", "check", "-c", "/etc/veil/generated/mieru/server_config.json"}},
 	}
 	for _, tc := range cases {
 		validation, ok := catalog.Match(tc.path)
@@ -26,6 +25,15 @@ func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
 			if validation.Command[i] != tc.cmd[i] {
 				t.Fatalf("command = %+v, want %+v", validation.Command, tc.cmd)
 			}
+		}
+	}
+	// Hysteria2 and Mieru have no standalone checker, so no validation command runs.
+	for _, path := range []string{
+		"/etc/veil/generated/hysteria2/server.yaml",
+		"/etc/veil/generated/mieru/server_config.json",
+	} {
+		if _, ok := catalog.Match(path); ok {
+			t.Fatalf("Match(%q) should be false (no standalone checker)", path)
 		}
 	}
 	if validation, ok := catalog.Match("/tmp/other.txt"); ok || validation.Name != "" || validation.Config != "" || len(validation.Command) != 0 {

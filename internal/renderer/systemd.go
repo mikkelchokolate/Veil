@@ -254,13 +254,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=MITA_CONFIG_FILE=/var/lib/mita/server.conf.pb
-Environment=MITA_UDS_PATH=/var/lib/mita/mita.sock
+Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
+Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
 Environment=MITA_LOG_NO_TIMESTAMP=true
+RuntimeDirectory=veil-mieru
 StateDirectory=mita
 ExecStart=` + cfg.MieruBinary + ` run
-ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /var/lib/mita/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

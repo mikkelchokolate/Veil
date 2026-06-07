@@ -39,13 +39,13 @@ func TestStagedConfigValidatorBuildsExpectedCommands(t *testing.T) {
 
 	results := validator.Validate([]string{
 		filepath.Join(root, "generated", "caddy", "Caddyfile"),
-		filepath.Join(root, "generated", "hysteria2", "server.yaml"),
+		filepath.Join(root, "generated", "hysteria2", "server.yaml"), // no standalone checker: no validation produced
 		filepath.Join(root, "generated", "sing-box", "warp.json"),
 	})
-	if len(results) != 3 || len(commands) != 3 {
+	if len(results) != 2 || len(commands) != 2 {
 		t.Fatalf("results=%+v commands=%+v", results, commands)
 	}
-	if commands[0][0] != "caddy" || commands[1][0] != "hysteria" || commands[2][0] != "sing-box" {
+	if commands[0][0] != "caddy" || commands[1][0] != "sing-box" {
 		t.Fatalf("commands = %+v", commands)
 	}
 }

@@ -11,11 +11,11 @@ func TestStagedValidatorMatchesGeneratedConfigCatalog(t *testing.T) {
 		commands = append(commands, command)
 		return ConfigValidationResult{Name: name, Config: config, Command: command, Valid: true}
 	})
-	results := validator.Validate([]string{"/etc/veil/generated/mieru/server_config.json", "/etc/veil/other.txt"})
-	if len(results) != 1 || results[0].Name != "mieru" || !strings.Contains(results[0].Config, "server_config.json") {
+	results := validator.Validate([]string{"/etc/veil/generated/caddy/Caddyfile", "/etc/veil/other.txt"})
+	if len(results) != 1 || results[0].Name != "caddy" || !strings.Contains(results[0].Config, "Caddyfile") {
 		t.Fatalf("results = %+v", results)
 	}
-	if len(commands) != 1 || commands[0][0] != "mieru" {
+	if len(commands) != 1 || commands[0][0] != "caddy" {
 		t.Fatalf("commands = %+v", commands)
 	}
 }

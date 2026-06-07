@@ -16,9 +16,10 @@ func TestRenderSystemdUnitsIncludesMieruUnit(t *testing.T) {
 		// mita (mieru's server binary) is a daemon controlled over its RPC socket:
 		// start the daemon, then apply the generated config and start the proxy.
 		"ExecStart=/usr/local/bin/mita run",
-		"Environment=MITA_CONFIG_FILE=/var/lib/mita/server.conf.pb",
-		"Environment=MITA_UDS_PATH=/var/lib/mita/mita.sock",
-		"StateDirectory=mita",
+		// Ephemeral runtime dir so each apply starts mita fresh on the configured port.
+		"Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb",
+		"Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock",
+		"RuntimeDirectory=veil-mieru",
 		"/usr/local/bin/mita apply config /etc/veil/generated/mieru/server_config.json",
 		"/usr/local/bin/mita start",
 	} {

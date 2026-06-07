@@ -4,6 +4,26 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.8] - 2026-06-07
+
+### Fixed
+
+- Applying an inbound no longer fails for protocols without a standalone config
+  checker. The apply gate treated a skipped validation as a failure, and the
+  Hysteria2 (`hysteria server … --check`) and Mieru (`mieru check`) validation
+  commands referenced flags/binaries that do not exist, so those inbounds could
+  never go live. Hysteria2, Mieru and olcRTC now skip pre-stage syntax
+  validation (relying on the post-restart health check, which rolls back), and a
+  skipped validation no longer blocks the apply.
+- Mieru's mita daemon now runs from an ephemeral `RuntimeDirectory` instead of a
+  persistent `StateDirectory`, so each apply starts mita fresh and binds the
+  inbound's configured port. Previously mita resumed a stale persisted config and
+  kept serving the old port after a port change.
+- A fresh install now defaults `settings.mode` to `server`. It was empty, and the
+  settings validation requires a non-empty mode, so saving global settings (for
+  example to set a `domain` for client connection links) failed with
+  "panelListen and mode are required".
+
 ## [v0.6.7] - 2026-06-07
 
 ### Fixed
