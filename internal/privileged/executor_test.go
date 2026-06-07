@@ -142,6 +142,53 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	}
 }
 
+func TestProductionExecutorServiceStatusSkipsTemplatesAndToleratesFailures(t *testing.T) {
+	var shown []string
+	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
+		if len(command) > 2 && command[0] == "systemctl" && command[1] == "show" {
+			unit := command[2]
+			shown = append(shown, unit)
+			if unit == "veil-mieru.service" {
+				return "Failed to get properties: Unit veil-mieru.service not loaded", fmt.Errorf("exit status 1")
+			}
+			return "LoadState=loaded\nActiveState=active\nSubState=running\n", nil
+		}
+		return "", nil
+	}
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run})
+
+	result, err := executor.ServiceStatus(context.Background(), ServiceStatusRequest{
+		Units: []string{"veil.service", "veil-hysteria2@.service", "veil-mieru.service"},
+	})
+	if err != nil {
+		t.Fatalf("a single unit failure must not abort the batch: %v", err)
+	}
+	if len(result.Services) != 3 {
+		t.Fatalf("want 3 services, got %d: %+v", len(result.Services), result.Services)
+	}
+	byUnit := map[string]ServiceStatus{}
+	for _, s := range result.Services {
+		byUnit[s.Unit] = s
+	}
+	// Template units are reported inactive and never queried via systemctl show.
+	if got := byUnit["veil-hysteria2@.service"]; got.ActiveState != "inactive" || got.Error != "" {
+		t.Fatalf("template unit should be inactive without error: %+v", got)
+	}
+	for _, u := range shown {
+		if u == "veil-hysteria2@.service" {
+			t.Fatal("template unit must not be queried with systemctl show")
+		}
+	}
+	// Healthy unit parsed normally.
+	if got := byUnit["veil.service"]; got.ActiveState != "active" {
+		t.Fatalf("veil.service should be active: %+v", got)
+	}
+	// A failing unit records its error but does not break the batch.
+	if got := byUnit["veil-mieru.service"]; got.ActiveState != "unknown" || got.Error == "" {
+		t.Fatalf("failed unit should carry an error and unknown state: %+v", got)
+	}
+}
+
 func TestProductionExecutorMapsBackupUpdateAndRotationHooks(t *testing.T) {
 	var gotBackup ResolvedBackup
 	var gotUpdate ResolvedUpdate
