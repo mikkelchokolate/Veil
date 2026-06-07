@@ -25,6 +25,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
+RestrictAddressFamilies=AF_NETLINK
 ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]

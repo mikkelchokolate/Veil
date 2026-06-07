@@ -242,7 +242,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `RestrictAddressFamilies=AF_NETLINK
+ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

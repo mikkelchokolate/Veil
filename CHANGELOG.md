@@ -4,6 +4,23 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.13] - 2026-06-07
+
+### Fixed
+
+- WARP now actually starts and applies, completing one-click WARP (v0.6.12 only
+  provisioned the account):
+  - Apply **restarts** the WARP unit instead of reloading it. On first enable the
+    unit is inactive, where `systemctl reload` fails outright; and the unit's
+    `ExecReload` only validates, so a reload never applied a new config anyway.
+  - The WARP unit now permits the `AF_NETLINK` socket family. sing-box's
+    WireGuard endpoint subscribes to route updates over netlink; without it
+    sing-box died at startup with "subscribe route updates: address family not
+    supported by protocol".
+  - Apply no longer aborts when the panel cannot read a root-owned generated
+    subdirectory while scanning for orphaned configs — permission errors there
+    are skipped (best-effort cleanup) instead of failing the whole apply.
+
 ## [v0.6.12] - 2026-06-07
 
 ### Added

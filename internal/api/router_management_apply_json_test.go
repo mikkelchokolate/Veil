@@ -222,7 +222,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 			t.Fatalf("WARP config missing %q: %s", want, string(warpBody))
 		}
 	}
-	if !containsString(response.Plan.Configs, "/etc/veil/generated/sing-box/warp.json") || !containsString(response.Plan.Actions, "reload veil-warp.service") {
+	if !containsString(response.Plan.Configs, "/etc/veil/generated/sing-box/warp.json") || !containsString(response.Plan.Actions, "restart veil-warp.service") {
 		t.Fatalf("plan missing WARP config/action: %+v", response.Plan)
 	}
 }
