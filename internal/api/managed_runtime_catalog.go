@@ -161,11 +161,14 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 	// 4. sing-box / warp
 	if warp.Enabled || len(inbounds) == 0 {
 		runtimes = append(runtimes, ManagedRuntime{
-			Name:             "sing-box",
-			ActionName:       "sing-box",
-			Unit:             renderer.UnitWarp,
-			PromotedSubpath:  generatedconfig.WarpConfigSubpath,
-			PromotedVerb:     "reload",
+			Name:            "sing-box",
+			ActionName:      "sing-box",
+			Unit:            renderer.UnitWarp,
+			PromotedSubpath: generatedconfig.WarpConfigSubpath,
+			// restart, not reload: on first enable the unit is inactive (reload
+			// fails), and the warp unit's ExecReload only validates — restart is
+			// what actually applies a new WARP config.
+			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})

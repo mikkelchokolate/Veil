@@ -119,8 +119,8 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "reload warp",
-			command: []string{"systemctl", "reload", "veil-warp.service"},
+			name:    "restart warp",
+			command: []string{"systemctl", "restart", "veil-warp.service"},
 			want:    true,
 		},
 		{

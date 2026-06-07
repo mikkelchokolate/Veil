@@ -112,7 +112,10 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 		dirPath := filepath.Join(liveRoot, d.subpath)
 		entries, err := os.ReadDir(dirPath)
 		if err != nil {
-			if os.IsNotExist(err) {
+			// Skip missing dirs, and root-owned generated subdirs the panel
+			// can't read: they hold no panel-removable orphans, so a permission
+			// error there must not abort the whole apply.
+			if os.IsNotExist(err) || os.IsPermission(err) {
 				continue
 			}
 			return nil, err

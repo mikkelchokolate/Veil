@@ -30,13 +30,18 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 }
 
 func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T) {
-	catalog := NewManagedRuntimeCatalog()
+	catalog := NewManagedRuntimeCatalogFor([]Inbound{
+		{Name: "n", Protocol: "naiveproxy", Enabled: true},
+		{Name: "h", Protocol: "hysteria2", Enabled: true},
+		{Name: "m", Protocol: "mieru", Enabled: true},
+		{Name: "o", Protocol: "olcrtc", Enabled: true},
+	}, WarpConfig{Enabled: true})
 	for _, tc := range []struct{ key, action string }{
-		{"naiveproxy", "reload veil-caddy@panel.service"},
-		{"hysteria2", "reload veil-hysteria2@.service"},
+		{"naiveproxy", "reload veil-caddy@n.service"},
+		{"hysteria2", "reload veil-hysteria2@h.service"},
 		{"mieru", "restart veil-mieru.service"},
-		{"sing-box", "reload veil-warp.service"},
-		{"olcrtc", "restart veil-olcrtc@.service"},
+		{"sing-box", "restart veil-warp.service"},
+		{"olcrtc", "restart veil-olcrtc@o.service"},
 	} {
 		action, ok := catalog.ApplyAction(tc.key)
 		if !ok || action != tc.action {
@@ -81,7 +86,7 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 	for _, command := range [][]string{
 		{"systemctl", "reload", "veil-caddy@panel.service"},
 		{"systemctl", "reload", "veil-hysteria2@.service"},
-		{"systemctl", "reload", "veil-warp.service"},
+		{"systemctl", "restart", "veil-warp.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
 		{"systemctl", "restart", "veil-olcrtc@.service"},
 	} {

@@ -111,7 +111,7 @@ func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *t
 			Action:   "restart veil-mieru.service",
 		}},
 		RuntimeUnits: []string{"veil-mieru.service", "veil-warp.service"},
-		WarpAction:   "reload veil-warp.service",
+		WarpAction:   "restart veil-warp.service",
 	})
 	if !plan.Valid {
 		t.Fatalf("plan errors = %+v", plan.Errors)
@@ -121,7 +121,7 @@ func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *t
 			t.Fatalf("configs missing %q: %+v", want, plan.Configs)
 		}
 	}
-	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-caddy@panel.service", "restart veil-mieru.service", "reload veil-warp.service"} {
+	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-caddy@panel.service", "restart veil-mieru.service", "restart veil-warp.service"} {
 		if !contains(plan.Actions, want) {
 			t.Fatalf("actions missing %q: %+v", want, plan.Actions)
 		}
