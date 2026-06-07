@@ -109,9 +109,11 @@ func IsEncrypted(value string) bool {
 }
 
 // LoadOrCreateKey reads a 32-byte key from path. If the file does not exist,
-// a new random key is generated and written with mode 0600. If the file exists
-// but has wrong permissions, they are fixed to 0600. If the file exists but
-// is not exactly 32 bytes, an error is returned.
+// a new random key is generated and written with mode 0600. Modes 0600 and
+// 0640 (owner plus group-read, so a group-scoped service account can read a
+// root-owned key) are accepted as secure; any other mode is tightened to 0600
+// on a best-effort basis. If the file exists but is not exactly 32 bytes, an
+// error is returned.
 func LoadOrCreateKey(path string) (*[KeySize]byte, error) {
 	return NewKeyFileStore(path).LoadOrCreate()
 }

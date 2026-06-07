@@ -4,6 +4,23 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.5] - 2026-06-07
+
+### Fixed
+
+- The panel TLS material in `/etc/veil/panel/` (self-signed cert and key used by
+  `local`/`direct` access) is now given `root:veil` group-readable ownership
+  during install, like the rest of `/etc/veil`. Previously `panel/tls.key`
+  stayed `root:root 0600`, so the veil-owned Panel process could not read it and
+  the service crash-looped with `open /etc/veil/panel/tls.key: permission
+  denied` — the port never opened and the panel was unreachable
+  (`ERR_CONNECTION_REFUSED`).
+- The encryption-key loader now accepts `0640` (owner plus group-read) as a
+  secure mode for `/etc/veil/state.key`, so a group-scoped veil service can read
+  a root-owned key without the loader trying — and failing — to re-chmod it to
+  `0600` on the read-only `/etc/veil` mount. This removes the spurious "error
+  loading encryption key … read-only file system" startup log.
+
 ## [v0.6.4] - 2026-06-07
 
 ### Changed
