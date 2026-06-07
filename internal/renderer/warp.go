@@ -63,6 +63,18 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 	if len(localAddresses) == 0 {
 		return "", errors.New("WARP local address is required")
 	}
+	// sing-box >= 1.11 models WireGuard as an "endpoint" (not an outbound), and
+	// since 1.12 the inline geoip/geosite route rules were removed in favour of
+	// ip_is_private and rule_set. Emit the modern schema.
+	peer := map[string]any{
+		"address":     host,
+		"port":        port,
+		"public_key":  cfg.PeerPublicKey,
+		"allowed_ips": []string{"0.0.0.0/0", "::/0"},
+	}
+	if len(cfg.Reserved) > 0 {
+		peer["reserved"] = cfg.Reserved
+	}
 	body := map[string]any{
 		"log": map[string]any{"level": "info"},
 		"inbounds": []map[string]any{
@@ -73,26 +85,23 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 				"listen_port": cfg.SocksPort,
 			},
 		},
-		"outbounds": []map[string]any{
+		"endpoints": []map[string]any{
 			{
-				"type":            "wireguard",
-				"tag":             "warp",
-				"server":          host,
-				"server_port":     port,
-				"local_address":   localAddresses,
-				"private_key":     cfg.PrivateKey,
-				"peer_public_key": cfg.PeerPublicKey,
-				"reserved":        cfg.Reserved,
-				"mtu":             cfg.MTU,
+				"type":        "wireguard",
+				"tag":         "warp",
+				"mtu":         cfg.MTU,
+				"address":     localAddresses,
+				"private_key": cfg.PrivateKey,
+				"peers":       []map[string]any{peer},
 			},
+		},
+		"outbounds": []map[string]any{
 			{
 				"type": "direct",
 				"tag":  "direct",
 			},
 		},
-	}
-	if route := renderWarpRoute(cfg.RoutingRules); route != nil {
-		body["route"] = route
+		"route": renderWarpRoute(cfg.RoutingRules),
 	}
 	encoded, err := json.MarshalIndent(body, "", "  ")
 	if err != nil {
@@ -101,30 +110,68 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 	return string(encoded) + "\n", nil
 }
 
+// renderWarpRoute builds the sing-box >= 1.12 route. Traffic defaults to the
+// WARP endpoint (final="warp"); rules bypass or redirect specific traffic.
+// geoip:private maps to ip_is_private, and country geoip/geosite matches become
+// remote rule_set references (the inline geoip/geosite fields were removed).
 func renderWarpRoute(rules []WarpRoutingRule) map[string]any {
 	rendered := []map[string]any{}
+	ruleSets := []map[string]any{}
+	seen := map[string]bool{}
+	final := "warp"
 	for _, rule := range rules {
 		if rule.Outbound == "" || rule.Match == "" {
 			continue
 		}
 		if rule.Match == "all" {
-			return map[string]any{"rules": rendered, "final": rule.Outbound}
+			final = rule.Outbound
+			continue
 		}
 		item := map[string]any{"outbound": rule.Outbound}
 		switch {
+		case rule.Match == "geoip:private":
+			item["ip_is_private"] = true
 		case strings.HasPrefix(rule.Match, "geoip:"):
-			item["geoip"] = strings.TrimPrefix(rule.Match, "geoip:")
+			code := strings.TrimPrefix(rule.Match, "geoip:")
+			tag := "geoip-" + code
+			item["rule_set"] = tag
+			if !seen[tag] {
+				seen[tag] = true
+				ruleSets = append(ruleSets, geoRuleSet(tag, "geoip", code))
+			}
 		case strings.HasPrefix(rule.Match, "geosite:"):
-			item["geosite"] = strings.TrimPrefix(rule.Match, "geosite:")
+			code := strings.TrimPrefix(rule.Match, "geosite:")
+			tag := "geosite-" + code
+			item["rule_set"] = tag
+			if !seen[tag] {
+				seen[tag] = true
+				ruleSets = append(ruleSets, geoRuleSet(tag, "geosite", code))
+			}
 		default:
 			item["domain"] = rule.Match
 		}
 		rendered = append(rendered, item)
 	}
-	if len(rendered) == 0 {
-		return nil
+	route := map[string]any{"final": final}
+	if len(rendered) > 0 {
+		route["rules"] = rendered
 	}
-	return map[string]any{"rules": rendered}
+	if len(ruleSets) > 0 {
+		route["rule_set"] = ruleSets
+	}
+	return route
+}
+
+// geoRuleSet references the official SagerNet remote rule-sets, downloaded via
+// the direct outbound so resolution does not depend on the WARP tunnel itself.
+func geoRuleSet(tag, kind, code string) map[string]any {
+	return map[string]any{
+		"type":            "remote",
+		"tag":             tag,
+		"format":          "binary",
+		"url":             fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs", kind, kind, code),
+		"download_detour": "direct",
+	}
 }
 
 func splitCSV(value string) []string {

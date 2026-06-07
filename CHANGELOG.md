@@ -4,6 +4,25 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.11] - 2026-06-07
+
+### Fixed
+
+- WARP no longer fails on current sing-box. The generated config used the legacy
+  `wireguard` outbound with `local_address` (rejected by sing-box >= 1.11, which
+  models WireGuard as an `endpoint`) and inline `geoip`/`geosite` route rules
+  (removed in sing-box 1.12). The config now emits a `wireguard` endpoint
+  (`address`/`peers`/`public_key`/`allowed_ips`), routes everything through WARP
+  by default (`final: warp`), maps `geoip:private` to `ip_is_private`, and turns
+  country `geoip`/`geosite` matches into remote `rule_set` references downloaded
+  via the direct outbound. Validated against sing-box v1.13.
+
+### Verified
+
+- Reviewed each protocol runtime against current upstream: Hysteria2 (v2.9),
+  NaiveProxy/Caddy (v2.11 with forwardproxy), and Mieru/mita (v3.33) configs
+  still load/validate cleanly; only WARP/sing-box needed updating.
+
 ## [v0.6.10] - 2026-06-07
 
 ### Fixed
