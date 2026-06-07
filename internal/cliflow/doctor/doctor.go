@@ -40,7 +40,7 @@ func (d Readiness) Summary() Summary {
 		Ready:   true,
 	}
 	required := []string{"systemctl"}
-	optional := []string{"caddy", "hysteria", "mieru", "sing-box", "ufw"}
+	optional := []string{"caddy", "hysteria", "mita", "sing-box", "ufw"}
 	for _, name := range required {
 		status := CommandStatus{Name: name}
 		path, err := d.lookup(name)

@@ -60,7 +60,7 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 		cfg.SingBoxBinary = "/usr/local/bin/sing-box"
 	}
 	if cfg.MieruBinary == "" {
-		cfg.MieruBinary = "/usr/local/bin/mieru"
+		cfg.MieruBinary = "/usr/local/bin/mita"
 	}
 	if cfg.OlcrtcBinary == "" {
 		cfg.OlcrtcBinary = "/usr/local/bin/olcrtc"
@@ -254,7 +254,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=` + cfg.MieruBinary + ` run -c ` + mieruConfig + `
+Environment=MITA_CONFIG_FILE=/var/lib/mita/server.conf.pb
+Environment=MITA_UDS_PATH=/var/lib/mita/mita.sock
+Environment=MITA_INSECURE_UDS=1
+Environment=MITA_LOG_NO_TIMESTAMP=true
+StateDirectory=mita
+ExecStart=` + cfg.MieruBinary + ` run
+ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /var/lib/mita/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
