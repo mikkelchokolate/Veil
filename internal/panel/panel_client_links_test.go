@@ -47,4 +47,9 @@ func TestPanelClientLinksCardModuleRendersCredentialDisclosureControls(t *testin
 	if strings.Contains(panelClientLinksActionsJS(), "api.qrserver.com") {
 		t.Fatalf("Client links QR rendering must not send secrets to third-party QR services")
 	}
+	// The QR image is shown from a blob: object URL, so the panel CSP must allow
+	// blob: in img-src or the browser blocks the rendered QR.
+	if !strings.Contains(panelClientLinksActionsJS(), "createObjectURL") {
+		t.Fatalf("QR rendering expected to use a blob object URL")
+	}
 }
