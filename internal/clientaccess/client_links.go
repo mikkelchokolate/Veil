@@ -3,6 +3,8 @@ package clientaccess
 import (
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 )
 
 // BuildClientLinks creates user-facing client connection links from settings and enabled inbounds.
@@ -39,6 +41,22 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	fragment := url.QueryEscape(name)
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)
+}
+
+// MieruClientURI builds mieru's "simple" share URI (mierus://), which the mieru
+// client imports via `mieru import config`. Example:
+// mierus://user:pass@host?port=3453&profile=name&protocol=UDP
+func MieruClientURI(domain string, port int, username, password, profile, transport string) string {
+	proto := strings.ToUpper(strings.TrimSpace(transport))
+	if proto != "UDP" {
+		proto = "TCP"
+	}
+	query := url.Values{}
+	query.Set("port", strconv.Itoa(port))
+	query.Set("profile", profile)
+	query.Set("protocol", proto)
+	userinfo := url.UserPassword(username, password).String()
+	return fmt.Sprintf("mierus://%s@%s?%s", userinfo, domain, query.Encode())
 }
 
 func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {

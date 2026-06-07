@@ -60,8 +60,14 @@ func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
 	if subscriptionRecorder.Code != http.StatusOK {
 		t.Fatalf("subscription expected 200, got %d: %s", subscriptionRecorder.Code, subscriptionRecorder.Body.String())
 	}
-	if strings.TrimSpace(subscriptionRecorder.Body.String()) != "" {
-		t.Fatalf("Mieru config artifacts must not leak into URI subscription: %q", subscriptionRecorder.Body.String())
+	sub := strings.TrimSpace(subscriptionRecorder.Body.String())
+	// Mieru now exports an importable mierus:// URI, so it belongs in the subscription...
+	if !strings.Contains(sub, "mierus://") {
+		t.Fatalf("Mieru mierus:// URIs must appear in the URI subscription: %q", sub)
+	}
+	// ...but the raw JSON client config must never leak into the URI subscription.
+	if strings.Contains(sub, "portBindings") || strings.Contains(sub, "profileName") || strings.Contains(sub, "{") {
+		t.Fatalf("Mieru JSON config must not leak into URI subscription: %q", sub)
 	}
 
 	planRecorder := httptest.NewRecorder()

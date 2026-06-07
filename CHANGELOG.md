@@ -4,6 +4,23 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.9] - 2026-06-07
+
+### Fixed
+
+- Mieru client links now include an importable `mierus://` share URI. Previously
+  the link only carried a JSON config with an empty `uri`, so QR generation
+  failed with "uri is required" and Mieru was excluded from URI subscriptions.
+  The URI is validated against `mieru import config` / `mieru explain config`.
+
+### Tests
+
+- Raised apply-pipeline coverage substantially (`internal/applyflow` 19% → 95%):
+  the apply workflow's confirm/plan/validation-gate/promote/services/health/
+  rollback branches are now each exercised, so a regression in protocol
+  deployment is caught. Added output-verification tests for the Mieru URI and
+  client-link generation.
+
 ## [v0.6.8] - 2026-06-07
 
 ### Fixed
