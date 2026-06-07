@@ -70,7 +70,7 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected staged WARP config: %v", err)
 	}
-	for _, want := range []string{`"route":`, `"geoip": "ru-blocked"`, `"geosite": "ru-blocked"`} {
+	for _, want := range []string{`"route":`, `"rule_set": "geoip-ru-blocked"`, `"rule_set": "geosite-ru-blocked"`} {
 		if !strings.Contains(string(warpConfig), want) {
 			t.Fatalf("staged WARP config missing routing preset fragment %q:\n%s", want, string(warpConfig))
 		}

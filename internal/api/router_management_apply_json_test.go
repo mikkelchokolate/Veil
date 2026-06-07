@@ -217,7 +217,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read WARP config: %v", err)
 	}
-	for _, want := range []string{`"type": "wireguard"`, `"tag": "warp"`, `"server": "engage.cloudflareclient.com"`, `"server_port": 2408`, `"private_key": "warp-private-key"`, `"type": "socks"`, `"listen_port": 40000`} {
+	for _, want := range []string{`"endpoints":`, `"type": "wireguard"`, `"tag": "warp"`, `"address": "engage.cloudflareclient.com"`, `"port": 2408`, `"private_key": "warp-private-key"`, `"type": "socks"`, `"listen_port": 40000`} {
 		if !strings.Contains(string(warpBody), want) {
 			t.Fatalf("WARP config missing %q: %s", want, string(warpBody))
 		}
