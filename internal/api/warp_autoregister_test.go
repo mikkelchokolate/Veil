@@ -65,6 +65,50 @@ func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 	}
 }
 
+// TestManagementAPIWarpReEnableWithRedactedPlaceholderReRegisters guards the
+// re-enable path: a stale UI re-sends "[REDACTED]" for the key, but if the
+// stored key was cleared (e.g. after a previous disable) resolving the
+// placeholder yields an empty key. WARP must re-register rather than enable an
+// empty, non-functional config.
+func TestManagementAPIWarpReEnableWithRedactedPlaceholderReRegisters(t *testing.T) {
+	orig := warpRegisterFunc
+	t.Cleanup(func() { warpRegisterFunc = orig })
+	var calls int
+	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
+		calls++
+		return veilwarp.Registration{
+			PrivateKey:    "auto-private",
+			PeerPublicKey: "auto-peer",
+			Endpoint:      "engage.cloudflareclient.com:2408",
+			LocalAddress:  "172.16.0.2/32,2606:4700:110::1/128",
+			Reserved:      []int{1, 2, 3},
+			License:       "auto-license",
+		}, nil
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	// Enable, then disable clearing the key (a minimal client sends empty).
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true}`)))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":false,"privateKey":"","peerPublicKey":""}`)))
+
+	// Re-enable the way a stale UI does: enabled=true with the redacted sentinel.
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"privateKey":"[REDACTED]","licenseKey":"[REDACTED]"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-enable should auto-register and return 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if calls != 2 {
+		t.Fatalf("expected re-registration on re-enable, registrar called %d time(s)", calls)
+	}
+	var resp WarpConfig
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode warp response: %v", err)
+	}
+	if resp.PeerPublicKey != "auto-peer" || resp.LocalAddress == "" {
+		t.Fatalf("re-enabled WARP has empty credentials: %+v", resp)
+	}
+}
+
 func TestManagementAPIWarpEnableSurfacesRegistrationFailure(t *testing.T) {
 	orig := warpRegisterFunc
 	t.Cleanup(func() { warpRegisterFunc = orig })
