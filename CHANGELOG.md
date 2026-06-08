@@ -4,6 +4,21 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.16] - 2026-06-08
+
+### Fixed
+
+- Enabling WARP is now robust against partial or stale form data. Re-enabling
+  could still produce a non-functional config when the submitted payload was
+  missing non-secret fields (peer public key, local address, reserved):
+  - WARP update now preserves provisioned fields from stored state when the
+    request omits them, so a re-enable keeps the existing account instead of
+    wiping its peer/address details.
+  - Auto-registration now triggers whenever the toggle is on but the effective
+    config is incomplete (missing key, peer, or address) — not only when the key
+    is empty — so flipping the toggle always yields a working WARP, and a config
+    left half-populated by an earlier bug self-heals on the next enable.
+
 ## [v0.6.15] - 2026-06-08
 
 ### Fixed
