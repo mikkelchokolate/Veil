@@ -4,7 +4,21 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-## [v0.6.13] - 2026-06-07
+## [v0.6.14] - 2026-06-08
+
+### Fixed
+
+- Turning WARP off now actually stops it. Disabling WARP and applying tears the
+  egress down: the live `sing-box/warp.json` is removed and `veil-warp.service`
+  is stopped and disabled, so traffic stops routing through WARP.
+  - The panel runs as an unprivileged user and cannot read the root-owned live
+    `sing-box` directory, so its orphan scan never saw `warp.json`. WARP teardown
+    is now driven from desired state: when WARP is disabled and the unit is still
+    running, apply removes the artifact (which maps to `veil-warp.service`) so the
+    existing stop-and-disable path runs. Gating on the running unit keeps the
+    teardown to exactly once and leaves applies that never used WARP untouched.
+  - `veil-warp.service` stays in the managed-unit set even while WARP is
+    disabled, so apply is permitted to query its status and stop/disable it.
 
 ### Fixed
 
