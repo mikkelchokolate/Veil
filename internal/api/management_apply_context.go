@@ -141,6 +141,15 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		if !containsCleanPath(liveFiles, want) {
 			continue
 		}
+		// Re-enable WARP for boot persistence: teardown disables the unit, so a
+		// later restart alone would leave it disabled and gone after a reboot.
+		if runtime.Unit == renderer.UnitWarp && ctx.state.warp.Enabled {
+			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
+			results = append(results, enable)
+			if !enable.Success {
+				return results
+			}
+		}
 		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
 		results = append(results, result)
 		if !result.Success {

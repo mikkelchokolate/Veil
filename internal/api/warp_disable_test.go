@@ -1,6 +1,7 @@
 package api
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -44,6 +45,30 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 	}
 	if !reflect.DeepEqual(client.serviceActions, wantActions) {
 		t.Fatalf("service actions = %+v, want %+v", client.serviceActions, wantActions)
+	}
+}
+
+func TestReloadEnablesWarpUnitForBootPersistenceWhenWarpEnabled(t *testing.T) {
+	client := &recordingPrivilegedClient{}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
+	state.warp = WarpConfig{Enabled: true}
+	ctx := NewManagementApplyContext(state)
+
+	warpLive := filepath.Join(state.liveRoot, "sing-box", "warp.json")
+	ctx.reloadPromotedServicesLocked([]string{warpLive})
+
+	wantWarp := []privileged.ServiceActionRequest{
+		{Unit: "veil-warp.service", Action: privileged.ServiceActionEnable},
+		{Unit: "veil-warp.service", Action: privileged.ServiceActionRestart},
+	}
+	var gotWarp []privileged.ServiceActionRequest
+	for _, a := range client.serviceActions {
+		if a.Unit == "veil-warp.service" {
+			gotWarp = append(gotWarp, a)
+		}
+	}
+	if !reflect.DeepEqual(gotWarp, wantWarp) {
+		t.Fatalf("warp actions = %+v, want enable then restart", gotWarp)
 	}
 }
 

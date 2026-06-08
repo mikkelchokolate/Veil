@@ -4,6 +4,22 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.15] - 2026-06-08
+
+### Fixed
+
+- Turning WARP back on now works again. Re-enabling could leave WARP "on" with an
+  empty, non-functional config:
+  - The auto-register check inspected the raw request, so a UI re-sending the
+    `[REDACTED]` key placeholder skipped registration; if the stored key had been
+    cleared, resolving the placeholder produced an empty key and WARP came up with
+    no credentials. Enable now resolves the placeholder against the stored key
+    first and provisions a fresh account whenever the effective key is empty,
+    repopulating every field from the registration.
+  - Apply now also `enable`s `veil-warp.service` when WARP is on, so it survives a
+    reboot. Disable (v0.6.14) leaves the unit disabled, and a plain restart alone
+    would not re-enable it.
+
 ## [v0.6.14] - 2026-06-08
 
 ### Fixed

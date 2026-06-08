@@ -155,9 +155,14 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
 			}
-			// First-time enable: provision a free Cloudflare WARP account so the
-			// operator only flips the toggle — no key or license to enter.
-			if warp.Enabled && warp.PrivateKey == "" && s.warp.PrivateKey == "" {
+			// Enable provisions a free Cloudflare WARP account whenever there is
+			// no usable key, so the operator only flips the toggle — no key or
+			// license to enter. Resolve the incoming "[REDACTED]" placeholder
+			// against the stored key first: a stale UI re-sends the placeholder,
+			// and if the stored key was cleared (e.g. after a previous disable)
+			// that would otherwise enable WARP with an empty config.
+			effectiveKey := veilwarp.PreserveRedacted(warp, s.warp).PrivateKey
+			if warp.Enabled && effectiveKey == "" {
 				reg, err := warpRegisterFunc(r.Context())
 				if err != nil {
 					s.logUserAction(r, "update_warp", "warp", false, "registration failed")
