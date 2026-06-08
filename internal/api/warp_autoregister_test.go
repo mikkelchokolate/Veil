@@ -109,6 +109,47 @@ func TestManagementAPIWarpReEnableWithRedactedPlaceholderReRegisters(t *testing.
 	}
 }
 
+// TestManagementAPIWarpEnableRegistersWhenConfigIncomplete guards an enable
+// whose stored config has a key but is missing peer/address details: WARP must
+// re-provision rather than enable a config that cannot connect.
+func TestManagementAPIWarpEnableRegistersWhenConfigIncomplete(t *testing.T) {
+	orig := warpRegisterFunc
+	t.Cleanup(func() { warpRegisterFunc = orig })
+	var calls int
+	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
+		calls++
+		return veilwarp.Registration{
+			PrivateKey: "auto-private", PeerPublicKey: "auto-peer",
+			Endpoint: "engage.cloudflareclient.com:2408", LocalAddress: "172.16.0.2/32",
+			Reserved: []int{1, 2, 3}, License: "auto-license",
+		}, nil
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+
+	// Store a key but leave peer/address empty (an incomplete config), disabled.
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/warp",
+		strings.NewReader(`{"enabled":false,"privateKey":"manual-key","peerPublicKey":"","localAddress":""}`)))
+	calls = 0
+
+	// Enable with the redacted key placeholder and still no peer/address.
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/warp",
+		strings.NewReader(`{"enabled":true,"privateKey":"[REDACTED]"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("enable should auto-register and return 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if calls != 1 {
+		t.Fatalf("incomplete config should re-register, registrar called %d time(s)", calls)
+	}
+	var resp WarpConfig
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.PeerPublicKey != "auto-peer" || resp.LocalAddress != "172.16.0.2/32" {
+		t.Fatalf("incomplete WARP config not healed: %+v", resp)
+	}
+}
+
 func TestManagementAPIWarpEnableSurfacesRegistrationFailure(t *testing.T) {
 	orig := warpRegisterFunc
 	t.Cleanup(func() { warpRegisterFunc = orig })

@@ -155,14 +155,25 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
 			}
-			// Enable provisions a free Cloudflare WARP account whenever there is
-			// no usable key, so the operator only flips the toggle — no key or
-			// license to enter. Resolve the incoming "[REDACTED]" placeholder
-			// against the stored key first: a stale UI re-sends the placeholder,
-			// and if the stored key was cleared (e.g. after a previous disable)
-			// that would otherwise enable WARP with an empty config.
-			effectiveKey := veilwarp.PreserveRedacted(warp, s.warp).PrivateKey
-			if warp.Enabled && effectiveKey == "" {
+			// Resolve provisioned fields against stored state. A stale or partial
+			// form submit can re-send the "[REDACTED]" key placeholder and omit
+			// non-secret fields (peer key, address, reserved); fill those from
+			// what we already hold so re-enabling keeps the existing account
+			// instead of coming up with an empty, non-functional config.
+			warp = veilwarp.PreserveRedacted(warp, s.warp)
+			if warp.PeerPublicKey == "" {
+				warp.PeerPublicKey = s.warp.PeerPublicKey
+			}
+			if warp.LocalAddress == "" {
+				warp.LocalAddress = s.warp.LocalAddress
+			}
+			if len(warp.Reserved) == 0 {
+				warp.Reserved = s.warp.Reserved
+			}
+			// Provision a free Cloudflare WARP account whenever the toggle is on
+			// but the config is still incomplete, so the operator only flips the
+			// toggle — no key, license, or peer details to enter.
+			if warp.Enabled && (warp.PrivateKey == "" || warp.PeerPublicKey == "" || warp.LocalAddress == "") {
 				reg, err := warpRegisterFunc(r.Context())
 				if err != nil {
 					s.logUserAction(r, "update_warp", "warp", false, "registration failed")
