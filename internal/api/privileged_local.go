@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -15,6 +16,9 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	for _, runtime := range catalog.Runtimes() {
 		units[runtime.Unit] = struct{}{}
 	}
+	// veil-warp.service stays managed even when WARP is disabled so apply can
+	// query its status and stop/disable it when the operator turns WARP off.
+	units[renderer.UnitWarp] = struct{}{}
 	stateRoot := filepath.Dir(state.statePath)
 	if state.statePath == "" {
 		stateRoot = filepath.Join(state.applyRoot, "state")

@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -87,6 +90,17 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 			return nil, nil, nil, relErr
 		}
 		removeIDs = append(removeIDs, filepath.ToSlash(relative))
+	}
+	// When WARP is disabled its config is never staged, and the live sing-box
+	// directory is root-owned so the panel's orphan scan can't see warp.json.
+	// Drive teardown from desired state instead: if the unit is still running,
+	// remove the artifact, which both deletes the live config and (via
+	// UnitForArtifactID) stops and disables veil-warp.service so the egress
+	// actually turns off. Gating on the running unit keeps the teardown to
+	// exactly once and leaves applies that never used WARP untouched.
+	if !ctx.state.warp.Enabled && ctx.warpUnitActiveLocked() &&
+		!slices.Contains(removeIDs, generatedconfig.WarpConfigSubpath) {
+		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
 	if ctx.state.privileged == nil {
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
@@ -205,6 +219,26 @@ func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action
 	}
 	result.Success = true
 	return result
+}
+
+// warpUnitActiveLocked reports whether veil-warp.service is currently running,
+// so a WARP teardown only happens when there is actually something to stop.
+func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
+	if ctx.state.privileged == nil {
+		return false
+	}
+	statuses, err := ctx.state.privileged.ServiceStatus(context.Background(), privileged.ServiceStatusRequest{
+		Units: []string{renderer.UnitWarp},
+	})
+	if err != nil {
+		return false
+	}
+	for _, status := range statuses.Services {
+		if status.Unit == renderer.UnitWarp && status.ActiveState == "active" {
+			return true
+		}
+	}
+	return false
 }
 
 func livePathsForArtifactIDs(liveRoot string, ids []string) []string {

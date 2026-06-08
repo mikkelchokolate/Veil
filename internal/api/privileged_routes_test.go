@@ -18,16 +18,17 @@ import (
 )
 
 type recordingPrivilegedClient struct {
-	serviceActions []privileged.ServiceActionRequest
-	promotions     []privileged.PromoteRequest
-	promoteResult  privileged.PromoteResult
-	statusRequests []privileged.ServiceStatusRequest
-	journals       []privileged.JournalRequest
-	backups        []privileged.BackupRequest
-	updates        []privileged.UpdateRequest
-	rotateCalls    int
-	restartCalls   atomic.Int32
-	err            error
+	serviceActions    []privileged.ServiceActionRequest
+	promotions        []privileged.PromoteRequest
+	promoteResult     privileged.PromoteResult
+	statusRequests    []privileged.ServiceStatusRequest
+	statusActiveState string
+	journals          []privileged.JournalRequest
+	backups           []privileged.BackupRequest
+	updates           []privileged.UpdateRequest
+	rotateCalls       int
+	restartCalls      atomic.Int32
+	err               error
 }
 
 func (c *recordingPrivilegedClient) Promote(_ context.Context, request privileged.PromoteRequest) (privileged.PromoteResult, error) {
@@ -45,6 +46,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive", // WARP is not running in this caddy-only scenario
 		promoteResult: privileged.PromoteResult{
 			BackupID:         "20260605T120000.000000000Z",
 			WrittenArtifacts: []string{"caddy/edge.Caddyfile"},
@@ -107,10 +109,18 @@ func (c *recordingPrivilegedClient) ServiceStatus(_ context.Context, request pri
 	if c.err != nil {
 		return privileged.ServiceStatusResult{}, c.err
 	}
+	activeState := c.statusActiveState
+	if activeState == "" {
+		activeState = "active"
+	}
+	subState := "running"
+	if activeState != "active" {
+		subState = "dead"
+	}
 	result := privileged.ServiceStatusResult{}
 	for _, unit := range request.Units {
 		result.Services = append(result.Services, privileged.ServiceStatus{
-			Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running",
+			Unit: unit, LoadState: "loaded", ActiveState: activeState, SubState: subState,
 		})
 	}
 	return result, nil

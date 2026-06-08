@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 type LiveConfigPromotion struct {
@@ -142,6 +143,11 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 
 func UnitForArtifactID(id string) (string, bool) {
 	slashPath := filepath.ToSlash(id)
+	// WARP is a single, fixed config (not a per-inbound instance): removing it
+	// (operator disables WARP) must stop and disable the sing-box unit.
+	if slashPath == generatedconfig.WarpConfigSubpath {
+		return renderer.UnitWarp, true
+	}
 	for _, spec := range []struct {
 		prefix  string
 		suffix  string
