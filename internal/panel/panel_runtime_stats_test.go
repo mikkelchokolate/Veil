@@ -25,6 +25,26 @@ func TestPanelRuntimeStatsActionsModuleRendersRuntimeLoadActions(t *testing.T) {
 	}
 }
 
+// TestPanelTelemetryAutoRefreshesEverySecondByDefault guards that the system
+// telemetry (CPU/mem/disk) refreshes once per second and that this auto-refresh
+// is started automatically on page load, without the user clicking anything.
+func TestPanelTelemetryAutoRefreshesEverySecondByDefault(t *testing.T) {
+	actions := panelRuntimeStatsActionsJS()
+	for _, want := range []string{
+		`async function refreshSystemTelemetry`,
+		`setInterval(refreshSystemTelemetry, 1000)`,
+		`startTelemetryAutoRefresh()`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("telemetry auto-refresh actions missing %q", want)
+		}
+	}
+	cards := panelRuntimeStatsCardsHTML()
+	if !strings.Contains(cards, `id="toggle-telemetry-refresh"`) {
+		t.Fatal("telemetry card missing auto-refresh toggle button")
+	}
+}
+
 func TestPanelRuntimeStatsCardsModuleRendersRuntimeControls(t *testing.T) {
 	cards := panelRuntimeStatsCardsHTML()
 	for _, want := range []string{

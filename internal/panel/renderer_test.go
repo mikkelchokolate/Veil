@@ -29,6 +29,23 @@ func TestRendererInjectsCSRFAfterPlaceholderCleanup(t *testing.T) {
 	}
 }
 
+// TestSwitchTabReloadsActiveTabData guards that switching to a tab refreshes
+// that tab's data, so a change made in one tab (e.g. enabling WARP adds a
+// routing rule) is visible after switching without a full page reload.
+func TestSwitchTabReloadsActiveTabData(t *testing.T) {
+	html := NewRenderer(nil).HTML("/", "", LocaleEnglish)
+	for _, want := range []string{
+		`const tabLoaders = {`,
+		`routing: ['loadRoutingRules']`,
+		`warp: ['loadWarpIntoForm']`,
+		`inbounds: ['loadInboundsIntoOutput']`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("switchTab dispatch missing %q", want)
+		}
+	}
+}
+
 func TestRendererIncludesLocalizedShell(t *testing.T) {
 	html := NewRenderer(nil).HTML("/", "csrf-token", "ru")
 	for _, want := range []string{

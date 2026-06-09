@@ -75,6 +75,7 @@ func panelRuntimeStatsCardsHTML() string {
       <p>CPU, memory, disk, load average from <code>/api/system</code>.</p>
       <div style="display: flex; gap: 8px;">
         <button id="load-system-stats" type="button">Refresh telemetry</button>
+        <button id="toggle-telemetry-refresh" class="danger" type="button">Auto-refresh: ON (1s)</button>
         <button onclick="toggleRawView('system-stats-output')" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="system-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>

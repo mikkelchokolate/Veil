@@ -1127,12 +1127,22 @@ __VEIL_LOCALIZATION_RUNTIME__
         'users': veilT('nav.users')
       };
       document.getElementById('current-page-title').innerText = pageNames[tabId] || veilT('nav.dashboard');
-      if (tabId === 'users' && typeof loadUsers === 'function') {
-        loadUsers();
-      }
-      if (tabId === 'backups' && typeof loadBackups === 'function') {
-        loadBackups();
-      }
+      // Reload the active tab's data on every switch so a change made in
+      // another tab (e.g. enabling WARP adds a routing rule) shows up
+      // immediately, without the user reloading the whole page.
+      const tabLoaders = {
+        dashboard: ['loadServiceStatus', 'refreshSystemTelemetry'],
+        inbounds: ['loadInboundsIntoOutput'],
+        routing: ['loadRoutingRules'],
+        warp: ['loadWarpIntoForm'],
+        backups: ['loadBackups'],
+        users: ['loadUsers']
+      };
+      (tabLoaders[tabId] || []).forEach((fn) => {
+        if (typeof window[fn] === 'function') {
+          window[fn]();
+        }
+      });
       window.scrollTo(0, 0);
     }
 

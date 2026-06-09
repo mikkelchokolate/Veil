@@ -4,6 +4,19 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.18] - 2026-06-09
+
+### Changed
+
+- Switching tabs now refreshes that tab's data automatically. Previously a
+  change made in one tab (e.g. enabling WARP adds the `geosite:openai -> warp`
+  routing rule) only appeared after a full page reload; the Routing Rules,
+  WARP, Inbounds, Dashboard, Backups, and Users tabs now reload their data on
+  every switch.
+- System telemetry (CPU / memory / disk) now auto-refreshes once per second and
+  is enabled by default on page load, so the dashboard gauges are always live.
+  A toggle on the "System resources" card turns the auto-refresh off and on.
+
 ## [v0.6.17] - 2026-06-09
 
 ### Fixed
