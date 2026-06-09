@@ -35,6 +35,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
+	mux.HandleFunc("/api/olcrtc/room", s.handleOlcrtcRoom)
 	mux.HandleFunc("/api/client-links/qr", s.handleClientLinkQR)
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)

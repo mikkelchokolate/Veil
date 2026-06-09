@@ -6,6 +6,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
@@ -84,17 +85,13 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// olcrtcDefaultRoomBase is the community Jitsi instance olcRTC tunnels through.
-// A random suffix per inbound gives each one its own room without the operator
-// creating one by hand.
-const olcrtcDefaultRoomBase = "https://meet.small-dm.ru/veil-"
-
 // autofillOlcrtcInbound makes olcRTC a one-click protocol: the operator only
 // picks "olcrtc" and we provision a working config. olcRTC disguises traffic as
 // a WebRTC "meet" call, so it needs a provider, a room URL both ends share, a
-// channel transport, and a single shared crypto key. The room id is just an
-// arbitrary URL (Jitsi rooms are created on join), so we generate a random one;
-// the 64-hex shared key lives in the inbound password slot.
+// channel transport, and a single shared crypto key. For providers that support
+// auto-rooms (Jitsi rooms are created on join) we generate the room; for
+// providers that need a manually created room we leave it for the operator. The
+// 64-hex shared key lives in the inbound password slot.
 func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
 	if inbound.Protocol != "olcrtc" {
 		return inbound, nil
@@ -105,12 +102,12 @@ func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
 	if inbound.OlcrtcTransport == "" {
 		inbound.OlcrtcTransport = "datachannel"
 	}
-	if inbound.OlcrtcRoomID == "" {
-		suffix, err := generateRandomHex(8)
+	if inbound.OlcrtcRoomID == "" && protocols.OlcrtcProviderSupportsAutoRoom(inbound.OlcrtcAuth) {
+		room, err := protocols.GenerateOlcrtcRoom(inbound.OlcrtcAuth)
 		if err != nil {
 			return inbound, err
 		}
-		inbound.OlcrtcRoomID = olcrtcDefaultRoomBase + suffix
+		inbound.OlcrtcRoomID = room
 	}
 	if !isOlcrtcKey(inbound.Password) {
 		key, err := generateRandomHex(64)
@@ -120,6 +117,32 @@ func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
 		inbound.Password = key
 	}
 	return inbound, nil
+}
+
+// handleOlcrtcRoom backs the panel's "Generate" room button. It returns a fresh
+// auto-generated room id for providers that support it, and refuses (400) for
+// providers that require a manually created room — the same rule the panel uses
+// to enable/disable the button, enforced server-side.
+func (s *managementState) handleOlcrtcRoom(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	var req struct {
+		Provider string `json:"provider"`
+	}
+	if !decodeJSONRequest(w, r, &req) {
+		return
+	}
+	if req.Provider == "" {
+		req.Provider = "jitsi"
+	}
+	room, err := protocols.GenerateOlcrtcRoom(req.Provider)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]any{"provider": req.Provider, "roomID": room})
 }
 
 // isOlcrtcKey reports whether s is a 64-char lowercase hex string, the crypto
