@@ -1,8 +1,6 @@
 package protocols
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 )
 
@@ -39,20 +37,23 @@ func OlcrtcProviderSupportsAutoRoom(name string) bool {
 }
 
 // olcrtcJitsiRoomBase is the community Jitsi instance olcRTC tunnels through.
-// A random per-room suffix is appended; both ends share the resulting URL.
-const olcrtcJitsiRoomBase = "https://meet.small-dm.ru/veil-"
+// The room name appended to it is a natural Jitsi-style name (see
+// jitsiStyleRoomName), so the URL looks like an ordinary meeting and carries no
+// hint that a panel generated it.
+const olcrtcJitsiRoomBase = "https://meet.small-dm.ru/"
 
 // GenerateOlcrtcRoom returns a fresh room id for a provider that supports
 // automatic room creation, or an error for a provider that requires a manually
 // created room (so callers — the API and inbound auto-fill — refuse rather
-// than emit a broken config).
+// than emit a broken config). The generated URL is indistinguishable from a
+// room a person created in the Jitsi UI.
 func GenerateOlcrtcRoom(provider string) (string, error) {
 	if !OlcrtcProviderSupportsAutoRoom(provider) {
 		return "", fmt.Errorf("olcRTC provider %q requires a room created on the service first", provider)
 	}
-	b := make([]byte, 6)
-	if _, err := rand.Read(b); err != nil {
+	name, err := jitsiStyleRoomName()
+	if err != nil {
 		return "", err
 	}
-	return olcrtcJitsiRoomBase + hex.EncodeToString(b), nil
+	return olcrtcJitsiRoomBase + name, nil
 }
