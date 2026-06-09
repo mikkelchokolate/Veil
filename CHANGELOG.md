@@ -4,6 +4,16 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.21] - 2026-06-09
+
+### Fixed
+
+- Auto-generated olcRTC rooms no longer reveal that a panel created them. The
+  room URL previously used a `veil-<hex>` suffix; it now uses a natural
+  Jitsi-style name (e.g. `https://meet.small-dm.ru/WittyWolvesWanderBravely`),
+  built from random capitalised words exactly like the names the Jitsi UI
+  suggests, so the link is indistinguishable from an ordinary meeting.
+
 ## [v0.6.20] - 2026-06-09
 
 ### Changed

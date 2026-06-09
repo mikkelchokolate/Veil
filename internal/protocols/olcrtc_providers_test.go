@@ -34,6 +34,37 @@ func TestGenerateOlcrtcRoomJitsiProducesURL(t *testing.T) {
 	}
 }
 
+func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
+	// Generate several rooms and assert none leak a tool/panel marker and each
+	// looks like a normal Jitsi room name (CamelCase words after the base URL).
+	for i := 0; i < 20; i++ {
+		room, err := GenerateOlcrtcRoom("jitsi")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lower := strings.ToLower(room)
+		for _, marker := range []string{"veil", "panel", "olcrtc", "room-", "generated"} {
+			if strings.Contains(lower, marker) {
+				t.Fatalf("room URL %q leaks marker %q", room, marker)
+			}
+		}
+		name := strings.TrimPrefix(room, "https://meet.small-dm.ru/")
+		if name == room || name == "" {
+			t.Fatalf("unexpected room URL shape: %q", room)
+		}
+		// Natural name: starts with an uppercase letter, only letters, no digits
+		// or dashes (unlike the old "veil-<hex>" pattern).
+		if name[0] < 'A' || name[0] > 'Z' {
+			t.Fatalf("room name should start uppercase like a Jitsi room: %q", name)
+		}
+		for _, c := range name {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+				t.Fatalf("room name should be letters only (natural Jitsi style), got %q", name)
+			}
+		}
+	}
+}
+
 func TestGenerateOlcrtcRoomRefusesManualProviders(t *testing.T) {
 	for _, provider := range []string{"telemost", "wbstream", "unknown"} {
 		if _, err := GenerateOlcrtcRoom(provider); err == nil {
