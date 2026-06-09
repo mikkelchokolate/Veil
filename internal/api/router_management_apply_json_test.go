@@ -165,7 +165,9 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read hysteria2 config: %v", err)
 	}
-	if !strings.Contains(string(hy2Body), "listen: :443") || !strings.Contains(string(hy2Body), "password: hy2-secret") || !strings.Contains(string(hy2Body), "vpn.example.com") {
+	// Self-signed TLS now (no ACME/domain in the server config); the cert path
+	// is Veil's managed panel cert.
+	if !strings.Contains(string(hy2Body), "listen: :443") || !strings.Contains(string(hy2Body), "password: hy2-secret") || !strings.Contains(string(hy2Body), "/etc/veil/panel/tls.crt") {
 		t.Fatalf("unexpected hysteria2 config: %s", string(hy2Body))
 	}
 }
