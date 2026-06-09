@@ -186,10 +186,10 @@ func hysteria2Capability() Capability {
 
 func olcrtcCapability() Capability {
 	return Capability{
-		Protocol:               "olcrtc",
-		DisplayName:            "olcRTC",
-		Transports:             []string{"udp"},
-		FirewallService:        "",
+		Protocol:        "olcrtc",
+		DisplayName:     "olcRTC",
+		Transports:      []string{"udp"},
+		FirewallService: "",
 		// olcRTC has no offline config-check subcommand (the binary takes a
 		// positional config path and immediately runs as a tunnel), so there is
 		// no safe validation command to run; rely on render-time YAML validity.
