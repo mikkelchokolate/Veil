@@ -51,7 +51,7 @@ func GenerateOlcrtcRoom(provider string) (string, error) {
 	if !OlcrtcProviderSupportsAutoRoom(provider) {
 		return "", fmt.Errorf("olcRTC provider %q requires a room created on the service first", provider)
 	}
-	name, err := jitsiStyleRoomName()
+	name, err := randomRoomName()
 	if err != nil {
 		return "", err
 	}
