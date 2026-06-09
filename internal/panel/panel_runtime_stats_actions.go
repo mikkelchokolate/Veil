@@ -171,11 +171,60 @@ func panelRuntimeStatsActionsJS() string {
       }
     });
 
-    // Auto load telemetry on load
+    // System telemetry auto-refresh: re-fetch CPU/mem/disk once per second and
+    // update the gauges directly, without the manual button's loading-text
+    // flicker. Runs by default so the dashboard is always live.
+    async function refreshSystemTelemetry() {
+      try {
+        const resp = await fetch('/api/system', { headers: authHeaders() });
+        if (!resp.ok) {
+          return;
+        }
+        const stats = await resp.json();
+        updateSystemTelemetry(stats);
+      } catch (_) {
+      }
+    }
+
+    let telemetryRefreshInterval = null;
+    function startTelemetryAutoRefresh() {
+      if (telemetryRefreshInterval) {
+        return;
+      }
+      telemetryRefreshInterval = setInterval(refreshSystemTelemetry, 1000);
+    }
+    function stopTelemetryAutoRefresh() {
+      if (telemetryRefreshInterval) {
+        clearInterval(telemetryRefreshInterval);
+        telemetryRefreshInterval = null;
+      }
+    }
+
+    const telemetryToggleBtn = document.getElementById('toggle-telemetry-refresh');
+    if (telemetryToggleBtn) {
+      telemetryToggleBtn.addEventListener('click', function() {
+        if (telemetryRefreshInterval) {
+          stopTelemetryAutoRefresh();
+          this.textContent = veilT('telemetry.autoRefreshOff');
+          this.classList.remove('danger');
+          this.classList.add('secondary');
+        } else {
+          refreshSystemTelemetry();
+          startTelemetryAutoRefresh();
+          this.textContent = veilT('telemetry.autoRefreshOn');
+          this.classList.remove('secondary');
+          this.classList.add('danger');
+        }
+      });
+    }
+    window.addEventListener('beforeunload', stopTelemetryAutoRefresh);
+
+    // Start telemetry auto-refresh automatically on page load (default ON).
     window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(() => {
-        const loadBtn = document.getElementById('load-system-stats');
-        if (loadBtn) loadBtn.click();
-      }, 500);
+      if (telemetryToggleBtn) {
+        telemetryToggleBtn.textContent = veilT('telemetry.autoRefreshOn');
+      }
+      refreshSystemTelemetry();
+      startTelemetryAutoRefresh();
     });`
 }
