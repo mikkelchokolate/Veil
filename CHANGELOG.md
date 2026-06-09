@@ -4,6 +4,28 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.19] - 2026-06-09
+
+### Fixed
+
+- olcRTC inbounds now produce a working configuration and are one-click. Several
+  bugs made olcRTC unusable:
+  - The systemd unit ran `olcrtc --config <file>`, but the binary takes the
+    config path as a positional argument (`olcrtc <file>`); the `--config` flag
+    was treated as the config path and the service never started. Fixed in both
+    the rendered and packaged units.
+  - The config validation command (`olcrtc --config <path> --check`) was unsafe
+    — olcRTC has no offline check subcommand and would try to run as a tunnel —
+    so it is removed; render-time YAML validity is relied on instead.
+  - The rendered config put the server domain in `net.dns` (which must be a DNS
+    resolver) and could set `net.transport` to the inbound's L4 transport
+    (`udp`) instead of a WebRTC channel type. `net.dns` now defaults to a public
+    resolver and `net.transport` defaults to `datachannel`.
+  - Creating an olcRTC inbound now auto-provisions a working setup: provider
+    `jitsi`, an auto-generated room URL (Jitsi rooms are created on join, so no
+    manual room is needed), `datachannel` transport, and a 64-hex shared crypto
+    key. Client links carry that same shared key.
+
 ## [v0.6.18] - 2026-06-09
 
 ### Changed

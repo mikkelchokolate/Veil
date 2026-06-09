@@ -149,27 +149,32 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 		}
 		password = hex.EncodeToString(bytes)
 	}
+	// olcRTC transport is a WebRTC channel type (datachannel, vp8channel, …),
+	// never the inbound's L4 transport ("udp"). Leave empty so the renderer
+	// defaults to "datachannel".
 	transport := inbound.OlcrtcTransport
 	if transport == "" {
 		transport = r.settings.OlcrtcTransport
-		if transport == "" {
-			transport = inbound.Transport
-		}
 	}
 	auth := inbound.OlcrtcAuth
 	if auth == "" {
 		auth = r.settings.OlcrtcAuth
 	}
+	if auth == "" {
+		auth = "jitsi"
+	}
 	roomID := inbound.OlcrtcRoomID
 	if roomID == "" {
 		roomID = r.settings.OlcrtcRoomID
 	}
+	// net.dns is a DNS *resolver* (host:port), not our server domain. Leave
+	// empty so the renderer defaults to a public resolver (1.1.1.1:53).
 	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
 		Auth:      auth,
 		RoomID:    roomID,
 		Key:       password,
 		Transport: transport,
-		DNS:       r.settings.Domain,
+		DNS:       "",
 	})
 }
 

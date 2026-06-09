@@ -154,7 +154,10 @@ func TestOlcrtcClientLinkGeneration(t *testing.T) {
 			t.Errorf("fallback URI = %q", byName["olc-fallback"].URI)
 		}
 
-		if byName["olc-profile/alice"].URI != "olcrtc://customauth?customtransport@myroom#mykey$mymimo" {
+		// olcRTC uses one shared crypto key (the inbound key), not a per-profile
+		// secret, so the profile link carries the inbound key and only the
+		// profile username as the "mimo" tag.
+		if byName["olc-profile/alice"].URI != "olcrtc://customauth?customtransport@myroom#fallbackkey$mymimo" {
 			t.Errorf("profile URI = %q", byName["olc-profile/alice"].URI)
 		}
 	})

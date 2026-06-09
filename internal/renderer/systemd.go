@@ -215,7 +215,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=` + cfg.OlcrtcBinary + ` --config ` + olcrtcConfig + `
+ExecStart=` + cfg.OlcrtcBinary + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

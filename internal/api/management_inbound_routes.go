@@ -53,6 +53,12 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			if !decodeJSONRequest(w, r, &inbound) {
 				return nil
 			}
+			inbound, autoErr := autofillOlcrtcInbound(inbound)
+			if autoErr != nil {
+				s.logUserAction(r, "create_inbound", inbound.Name, false, "olcrtc provisioning failed")
+				writeError(w, autoErr.Error(), http.StatusInternalServerError)
+				return nil
+			}
 			created, candidate, err := inbounds.NewInboundCatalog(s.inbounds).Create(inbound)
 			if err != nil {
 				s.logUserAction(r, "create_inbound", inbound.Name, false, "")
@@ -76,6 +82,58 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 		}
 		return nil
 	})
+}
+
+// olcrtcDefaultRoomBase is the community Jitsi instance olcRTC tunnels through.
+// A random suffix per inbound gives each one its own room without the operator
+// creating one by hand.
+const olcrtcDefaultRoomBase = "https://meet.small-dm.ru/veil-"
+
+// autofillOlcrtcInbound makes olcRTC a one-click protocol: the operator only
+// picks "olcrtc" and we provision a working config. olcRTC disguises traffic as
+// a WebRTC "meet" call, so it needs a provider, a room URL both ends share, a
+// channel transport, and a single shared crypto key. The room id is just an
+// arbitrary URL (Jitsi rooms are created on join), so we generate a random one;
+// the 64-hex shared key lives in the inbound password slot.
+func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
+	if inbound.Protocol != "olcrtc" {
+		return inbound, nil
+	}
+	if inbound.OlcrtcAuth == "" {
+		inbound.OlcrtcAuth = "jitsi"
+	}
+	if inbound.OlcrtcTransport == "" {
+		inbound.OlcrtcTransport = "datachannel"
+	}
+	if inbound.OlcrtcRoomID == "" {
+		suffix, err := generateRandomHex(8)
+		if err != nil {
+			return inbound, err
+		}
+		inbound.OlcrtcRoomID = olcrtcDefaultRoomBase + suffix
+	}
+	if !isOlcrtcKey(inbound.Password) {
+		key, err := generateRandomHex(64)
+		if err != nil {
+			return inbound, err
+		}
+		inbound.Password = key
+	}
+	return inbound, nil
+}
+
+// isOlcrtcKey reports whether s is a 64-char lowercase hex string, the crypto
+// key format olcRTC requires.
+func isOlcrtcKey(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {

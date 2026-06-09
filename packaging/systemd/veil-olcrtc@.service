@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/olcrtc --config /etc/veil/generated/olcrtc/%i.yaml
+ExecStart=/usr/local/bin/olcrtc /etc/veil/generated/olcrtc/%i.yaml
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

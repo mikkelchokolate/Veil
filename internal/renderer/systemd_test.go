@@ -110,7 +110,7 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 
 	// veil-olcrtc@.service: default OlcrtcBinary and EtcDir config path
 	olcrtcUnit := units["veil-olcrtc@.service"]
-	if !strings.Contains(olcrtcUnit, "ExecStart=/usr/local/bin/olcrtc --config /etc/veil/generated/olcrtc/%i.yaml") {
+	if !strings.Contains(olcrtcUnit, "ExecStart=/usr/local/bin/olcrtc /etc/veil/generated/olcrtc/%i.yaml") {
 		t.Fatalf("veil-olcrtc@.service: expected default OlcrtcBinary and EtcDir, got:\n%s", olcrtcUnit)
 	}
 

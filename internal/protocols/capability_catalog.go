@@ -190,7 +190,10 @@ func olcrtcCapability() Capability {
 		DisplayName:            "olcRTC",
 		Transports:             []string{"udp"},
 		FirewallService:        "",
-		GeneratedConfig:        generatedconfig.ArtifactSpec{Subpath: generatedconfig.OlcrtcConfigSubpath, ValidationName: "olcrtc", ValidationCommand: func(path string) []string { return []string{"olcrtc", "--config", path, "--check"} }},
+		// olcRTC has no offline config-check subcommand (the binary takes a
+		// positional config path and immediately runs as a tunnel), so there is
+		// no safe validation command to run; rely on render-time YAML validity.
+		GeneratedConfig:        generatedconfig.ArtifactSpec{Subpath: generatedconfig.OlcrtcConfigSubpath, ValidationName: "olcrtc"},
 		ApplyAction:            "restart " + renderer.UnitOlcrtc,
 		RuntimeName:            "olcrtc",
 		RuntimeActionName:      "olcrtc",
