@@ -4,6 +4,23 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.20] - 2026-06-09
+
+### Changed
+
+- olcRTC inbounds now have a per-inbound room "Generate" button that is enabled
+  only for providers that support automatic rooms. Jitsi rooms are created on
+  join, so the button generates a fresh room URL; Telemost and WbStream require
+  a room created on the service first, so the button is disabled for them (with
+  a tooltip explaining why). Room generation is served by a new
+  `POST /api/olcrtc/room` endpoint that enforces the same rule server-side
+  (400 for providers that cannot auto-generate), so the panel and backend share
+  one source of truth.
+- The olcRTC inbound form now lists the real providers (jitsi, telemost,
+  wbstream) and transports (datachannel, vp8channel, seichannel, videochannel)
+  instead of placeholder values, and generates a valid Jitsi room URL instead
+  of a bare name.
+
 ## [v0.6.19] - 2026-06-09
 
 ### Fixed

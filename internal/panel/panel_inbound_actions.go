@@ -360,19 +360,35 @@ func panelInboundActionsJS() string {
       scheduleInboundValidation();
     };
 
-    window.genInboundOlcrtcRoomID = function() {
+    // updateOlcrtcGenerateButton enables the room "Generate" button only for
+    // providers that support automatic rooms (Jitsi). Telemost/WbStream require
+    // a room created on the service first, so the button is disabled for them.
+    window.updateOlcrtcGenerateButton = function() {
       const authSelect = document.getElementById('inbound-olcrtc-auth');
-      const auth = authSelect ? authSelect.value : 'jitsi';
+      const btn = document.getElementById('gen-olcrtc-room-btn');
+      if (!authSelect || !btn) return;
+      const opt = authSelect.selectedOptions[0];
+      const auto = !!(opt && opt.dataset.autoroom === 'true');
+      btn.disabled = !auto;
+      btn.title = auto ? '' : 'This provider needs a room created on its website first; auto-generate is unavailable.';
+    };
+
+    window.genInboundOlcrtcRoomID = async function() {
+      const authSelect = document.getElementById('inbound-olcrtc-auth');
+      const provider = authSelect ? authSelect.value : 'jitsi';
       const el = document.getElementById('inbound-olcrtc-room-id');
       if (!el) return;
-      if (auth === 'jitsi') {
-        el.value = 'jitsi-room-' + Math.floor(100000 + Math.random() * 900000);
-      } else if (auth === 'livekit') {
-        el.value = 'livekit-room-' + Math.floor(100000 + Math.random() * 900000);
-      } else {
-        el.value = 'room-' + Math.floor(100000 + Math.random() * 900000);
-      }
-      scheduleInboundValidation();
+      try {
+        const resp = await fetch('/api/olcrtc/room', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ provider })
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        el.value = data.roomID || '';
+        scheduleInboundValidation();
+      } catch (_) {}
     };
 
     window.renderDynamicProtocolFields = function(inbound) {
@@ -418,25 +434,26 @@ func panelInboundActionsJS() string {
         html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
           '<div>' +
             '<label for="inbound-olcrtc-auth">olcRTC Auth Provider</label>' +
-            '<select id="inbound-olcrtc-auth" onchange="genInboundOlcrtcRoomID()">' +
-              '<option value="jitsi">jitsi</option>' +
-              '<option value="livekit">livekit</option>' +
-              '<option value="external">external</option>' +
+            '<select id="inbound-olcrtc-auth" onchange="updateOlcrtcGenerateButton()">' +
+              '<option value="jitsi" data-autoroom="true">jitsi</option>' +
+              '<option value="telemost" data-autoroom="false">telemost</option>' +
+              '<option value="wbstream" data-autoroom="false">wbstream</option>' +
             '</select>' +
           '</div>' +
           '<div>' +
             '<label for="inbound-olcrtc-transport">olcRTC Transport</label>' +
             '<select id="inbound-olcrtc-transport">' +
               '<option value="datachannel">datachannel</option>' +
-              '<option value="websocket">websocket</option>' +
-              '<option value="quic">quic</option>' +
+              '<option value="vp8channel">vp8channel</option>' +
+              '<option value="seichannel">seichannel</option>' +
+              '<option value="videochannel">videochannel</option>' +
             '</select>' +
           '</div>' +
           '<div style="grid-column: 1 / -1">' +
             '<label for="inbound-olcrtc-room-id">olcRTC Room ID</label>' +
             '<div style="display:flex;gap:8px">' +
               '<input id="inbound-olcrtc-room-id" autocomplete="off" placeholder="Room ID" style="flex:1">' +
-              '<button type="button" class="secondary" onclick="genInboundOlcrtcRoomID()" style="white-space:nowrap; padding: 12px 14px;">Generate Room ID</button>' +
+              '<button type="button" class="secondary" id="gen-olcrtc-room-btn" onclick="genInboundOlcrtcRoomID()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -472,6 +489,12 @@ func panelInboundActionsJS() string {
           document.getElementById('inbound-olcrtc-transport').value = 'datachannel';
           genInboundOlcrtcRoomID();
         }
+      }
+      // Reflect the selected olcRTC provider in the room "Generate" button
+      // (enabled for auto-room providers, disabled otherwise). No-op for other
+      // protocols.
+      if (typeof updateOlcrtcGenerateButton === 'function') {
+        updateOlcrtcGenerateButton();
       }
       scheduleInboundValidation();
     };
