@@ -81,6 +81,7 @@ func (c SliceCatalog) Slices() []Slice {
 			Name:        "warp",
 			RenderSlots: []RenderSlot{{Placeholder: panelWarpCardPlaceholder, Render: panelWarpCardHTML}, {Placeholder: panelWarpActionsPlaceholder, Render: panelWarpActionsJS}},
 			EventBindings: []EventBinding{
+				{ElementID: "warp-enabled", Handler: "applyWarpToggle", Event: "change"},
 				{ElementID: "warp-form", Handler: "saveWarpConfig", Event: "submit"},
 				{ElementID: "load-warp-config", Handler: "loadWarpIntoForm", Event: "click"},
 			},

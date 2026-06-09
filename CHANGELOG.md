@@ -4,6 +4,25 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.6.17] - 2026-06-09
+
+### Fixed
+
+- The WARP on/off slider now actually turns WARP on and off. The toggle looked
+  like an instant switch but was an inert checkbox: nothing happened until the
+  user found and pressed the separate "Save WARP config" button, and even then
+  the change was only saved, not applied. The result was that flipping the
+  toggle appeared to do nothing, the state "reset" on page reload, and the WARP
+  routing rule was never added or removed.
+  - Flipping the slider now immediately saves the desired state (which adds or
+    removes the `geosite:openai -> warp` routing rule) and applies it (which
+    starts or stops `veil-warp.service`), so the switch behaves like a real
+    one-click control and the change persists across reloads.
+  - The "Save WARP config" button routes through the same save-then-apply path,
+    so editing credentials and saving also takes effect immediately.
+  - If the save is rejected the slider snaps back to its true state and the
+    error stays visible in the console.
+
 ## [v0.6.16] - 2026-06-08
 
 ### Fixed
