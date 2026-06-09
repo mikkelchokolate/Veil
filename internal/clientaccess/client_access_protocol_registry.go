@@ -207,11 +207,13 @@ func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if roomID == "" {
 		roomID = input.Settings.OlcrtcRoomID
 	}
+	// olcRTC authenticates with a single shared crypto key (the inbound key),
+	// not a per-profile secret, so every client link carries the inbound key.
 	link.URI = OlcrtcClientURI(
 		auth,
 		transport,
 		roomID,
-		input.Credential.Password,
+		input.Inbound.Password,
 		input.Credential.Username,
 	)
 	return link, true
