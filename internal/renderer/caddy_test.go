@@ -22,7 +22,9 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		"servers {",
 		"protocols h1 h2",
 		":443, example.com",
-		"tls admin@example.com",
+		"issuer acme",
+		"email admin@example.com",
+		"issuer internal",
 		"basic_auth alice secret",
 		"hide_ip",
 		"hide_via",
@@ -192,7 +194,7 @@ func TestRenderNaiveCaddyfileWithPanelReverseProxy(t *testing.T) {
 	if !strings.Contains(cfg, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("Caddyfile missing reverse_proxy:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "handle_path /a1b2c3d4e5f6/*") {
+	if !strings.Contains(cfg, "handle /a1b2c3d4e5f6/*") {
 		t.Fatalf("Caddyfile missing handle_path for web base path:\n%s", cfg)
 	}
 }

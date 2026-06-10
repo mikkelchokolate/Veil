@@ -20,7 +20,7 @@ func TestInboundRendererRendersNaiveWithClientProfilesAndPanelCaddyRoute(t *test
 	if err != nil {
 		t.Fatalf("RenderNaive: %v", err)
 	}
-	for _, want := range []string{"basic_auth alice alice-pass", "reverse_proxy 127.0.0.1:2096", "handle_path /panel-secret/*"} {
+	for _, want := range []string{"basic_auth alice alice-pass", "reverse_proxy 127.0.0.1:2096", "handle /panel-secret/*"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
