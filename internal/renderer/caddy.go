@@ -66,7 +66,12 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 }
 
 :{{ .ListenPort }}, {{ .Domain }} {
-  tls {{ .Email }}
+  tls {
+    issuer acme{{ if .Email }} {
+      email {{ .Email }}
+    }{{ end }}
+    issuer internal
+  }
 
   forward_proxy {
 {{- range .Users }}
@@ -84,7 +89,7 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
   file_server
 {{- if .PanelPort }}
 {{ if .WebBasePath }}
-  handle_path {{ .WebBasePath }}* {
+  handle {{ .WebBasePath }}* {
     reverse_proxy 127.0.0.1:{{ .PanelPort }}
   }
 {{- end }}
