@@ -144,6 +144,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return err
 		}
+		installRuntimesFunc(cmd, opts)
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
 	for _, path := range result.WrittenFiles {
