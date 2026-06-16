@@ -1,0 +1,487 @@
+// Package runtimeinstall acquires and installs the external protocol runtime
+// binaries that Veil's managed systemd units invoke: caddy (NaiveProxy),
+// hysteria (Hysteria2), mita (Mieru server), sing-box (WARP), and olcrtc.
+//
+// Veil install only writes the Panel and the dormant managed unit files; before
+// this package, those units pointed at /usr/local/bin/<binary> paths that were
+// never created, so every protocol failed to start with systemd status
+// 203/EXEC ("Failed to locate executable"). This package fills that gap by
+// downloading each runtime from its upstream GitHub release (verifying SHA256
+// checksums where the project publishes them) or, for olcRTC which ships no
+// release binaries, building it from source with `go install`.
+package runtimeinstall
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Method describes how a runtime binary is acquired.
+type Method string
+
+const (
+	// MethodRawBinary downloads a single executable file directly.
+	MethodRawBinary Method = "raw-binary"
+	// MethodArchive downloads a .tar.gz and extracts a single named binary.
+	MethodArchive Method = "archive"
+	// MethodGoInstall builds the binary from source with `go install`.
+	MethodGoInstall Method = "go-install"
+)
+
+// Runtime describes one protocol runtime binary Veil installs.
+type Runtime struct {
+	// Name is the protocol-facing label (e.g. "mieru", "hysteria2").
+	Name string
+	// Binary is the installed binary filename under the bin directory
+	// (e.g. "mita", "hysteria", "sing-box", "caddy", "olcrtc").
+	Binary string
+	// Method selects the acquisition strategy.
+	Method Method
+	// Repo is the GitHub "owner/name" for release-based methods.
+	Repo string
+	// AssetMatch selects the release asset for the current platform.
+	AssetMatch func(assetName string) bool
+	// ChecksumMatch selects the checksums asset, when the project ships one.
+	ChecksumMatch func(assetName string) bool
+	// SourcePackage is the Go package path for MethodGoInstall.
+	SourcePackage string
+}
+
+// Catalog returns the runtime install descriptors for linux/amd64 and
+// linux/arm64. Asset matchers are written against the upstream release naming
+// conventions verified against each project's GitHub releases.
+func Catalog(arch string) []Runtime {
+	return []Runtime{
+		{
+			Name:   "naiveproxy",
+			Binary: "caddy",
+			Method: MethodArchive,
+			Repo:   "caddyserver/caddy",
+			AssetMatch: func(name string) bool {
+				return strings.HasPrefix(name, "caddy_") &&
+					strings.HasSuffix(name, "_linux_"+arch+".tar.gz")
+			},
+			ChecksumMatch: func(name string) bool {
+				return strings.HasPrefix(name, "caddy_") && strings.HasSuffix(name, "_checksums.txt")
+			},
+		},
+		{
+			Name:   "hysteria2",
+			Binary: "hysteria",
+			Method: MethodRawBinary,
+			Repo:   "apernet/hysteria",
+			AssetMatch: func(name string) bool {
+				return name == "hysteria-linux-"+arch
+			},
+			ChecksumMatch: func(name string) bool {
+				return name == "hashes.txt"
+			},
+		},
+		{
+			Name:   "mieru",
+			Binary: "mita",
+			Method: MethodArchive,
+			Repo:   "enfein/mieru",
+			AssetMatch: func(name string) bool {
+				return strings.HasPrefix(name, "mita_") &&
+					strings.HasSuffix(name, "_linux_"+arch+".tar.gz")
+			},
+			ChecksumMatch: func(name string) bool {
+				return strings.HasPrefix(name, "mita_") &&
+					strings.HasSuffix(name, "_linux_"+arch+".tar.gz.sha256.txt")
+			},
+		},
+		{
+			Name:   "warp",
+			Binary: "sing-box",
+			Method: MethodArchive,
+			Repo:   "SagerNet/sing-box",
+			AssetMatch: func(name string) bool {
+				return strings.HasPrefix(name, "sing-box-") &&
+					strings.HasSuffix(name, "-linux-"+arch+".tar.gz") &&
+					!strings.Contains(name, "-musl") && !strings.Contains(name, "-glibc")
+			},
+		},
+		{
+			Name:          "olcrtc",
+			Binary:        "olcrtc",
+			Method:        MethodGoInstall,
+			SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+		},
+	}
+}
+
+// Release is a subset of the GitHub Releases API response.
+type Release struct {
+	TagName string  `json:"tag_name"`
+	Assets  []Asset `json:"assets"`
+}
+
+// Asset is a single release asset.
+type Asset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+// Options configures an installation run.
+type Options struct {
+	// BinDir is where binaries are written (default /usr/local/bin).
+	BinDir string
+	// Arch is the normalized architecture ("amd64" or "arm64").
+	Arch string
+	// HTTPClient performs release-metadata and download requests.
+	HTTPClient *http.Client
+	// FetchRelease resolves the latest release for a repo. Injectable for tests.
+	FetchRelease func(ctx context.Context, repo string) (*Release, error)
+	// Download fetches a URL's bytes. Injectable for tests.
+	Download func(ctx context.Context, url string) ([]byte, error)
+	// GoInstall builds a source package into BinDir. Injectable for tests.
+	GoInstall func(ctx context.Context, binDir, sourcePackage string) error
+	// LookPath resolves an executable in PATH. Injectable for tests; defaults
+	// to exec.LookPath. Used to detect whether a Go toolchain is present.
+	LookPath func(string) (string, error)
+	// Now supplies the clock (unused today, reserved for retry/backoff).
+	Now func() time.Time
+}
+
+// Result records the outcome for a single runtime.
+type Result struct {
+	Name       string
+	Binary     string
+	Path       string
+	Method     Method
+	Version    string
+	Installed  bool
+	Skipped    bool
+	SkipReason string
+	Err        error
+}
+
+const defaultBinDir = "/usr/local/bin"
+
+// DefaultBinDir is the canonical install directory for runtime binaries.
+func DefaultBinDir() string { return defaultBinDir }
+
+func (o Options) withDefaults() Options {
+	if o.BinDir == "" {
+		o.BinDir = defaultBinDir
+	}
+	if o.Arch == "" {
+		o.Arch = "amd64"
+	}
+	if o.HTTPClient == nil {
+		o.HTTPClient = &http.Client{Timeout: 60 * time.Second}
+	}
+	if o.FetchRelease == nil {
+		o.FetchRelease = func(ctx context.Context, repo string) (*Release, error) {
+			return fetchLatestRelease(ctx, o.HTTPClient, repo)
+		}
+	}
+	if o.Download == nil {
+		o.Download = func(ctx context.Context, url string) ([]byte, error) {
+			return downloadURL(ctx, o.HTTPClient, url)
+		}
+	}
+	if o.GoInstall == nil {
+		o.GoInstall = runGoInstall
+	}
+	if o.LookPath == nil {
+		o.LookPath = exec.LookPath
+	}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	return o
+}
+
+// goAvailable reports whether a Go toolchain is on PATH.
+func (o Options) goAvailable() bool {
+	lookup := o.LookPath
+	if lookup == nil {
+		lookup = exec.LookPath
+	}
+	_, err := lookup("go")
+	return err == nil
+}
+
+// InstallAll installs every runtime in the catalog and returns per-runtime
+// results. It does not stop at the first failure: each runtime is independent,
+// so a single broken upstream release should not block the others.
+func InstallAll(ctx context.Context, opts Options) []Result {
+	opts = opts.withDefaults()
+	runtimes := Catalog(opts.Arch)
+	results := make([]Result, 0, len(runtimes))
+	for _, runtime := range runtimes {
+		results = append(results, Install(ctx, opts, runtime))
+	}
+	return results
+}
+
+// Install acquires and installs a single runtime binary.
+func Install(ctx context.Context, opts Options, runtime Runtime) Result {
+	opts = opts.withDefaults()
+	result := Result{Name: runtime.Name, Binary: runtime.Binary, Method: runtime.Method}
+	if err := os.MkdirAll(opts.BinDir, 0o755); err != nil {
+		result.Err = fmt.Errorf("create bin dir: %w", err)
+		return result
+	}
+	switch runtime.Method {
+	case MethodRawBinary:
+		path, version, err := installFromRelease(ctx, opts, runtime, false)
+		result.Path, result.Version, result.Err = path, version, err
+	case MethodArchive:
+		path, version, err := installFromRelease(ctx, opts, runtime, true)
+		result.Path, result.Version, result.Err = path, version, err
+	case MethodGoInstall:
+		if !opts.goAvailable() {
+			result.Skipped = true
+			result.SkipReason = "go toolchain not found; install Go to build olcrtc from source, then run: veil runtime install --only olcrtc"
+			return result
+		}
+		path, err := installFromSource(ctx, opts, runtime)
+		result.Path, result.Err = path, err
+	default:
+		result.Err = fmt.Errorf("unsupported method %q", runtime.Method)
+	}
+	result.Installed = result.Err == nil
+	return result
+}
+
+func installFromRelease(ctx context.Context, opts Options, runtime Runtime, archive bool) (string, string, error) {
+	release, err := opts.FetchRelease(ctx, runtime.Repo)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve %s release: %w", runtime.Repo, err)
+	}
+	asset, ok := findAsset(release.Assets, runtime.AssetMatch)
+	if !ok {
+		return "", "", fmt.Errorf("release %s has no asset for linux/%s", release.TagName, opts.Arch)
+	}
+	body, err := opts.Download(ctx, asset.BrowserDownloadURL)
+	if err != nil {
+		return "", "", fmt.Errorf("download %s: %w", asset.Name, err)
+	}
+	if runtime.ChecksumMatch != nil {
+		checksumAsset, ok := findAsset(release.Assets, runtime.ChecksumMatch)
+		if ok {
+			checksums, err := opts.Download(ctx, checksumAsset.BrowserDownloadURL)
+			if err != nil {
+				return "", "", fmt.Errorf("download checksums: %w", err)
+			}
+			if err := VerifyChecksum(body, asset.Name, runtime.Binary, checksums); err != nil {
+				return "", "", err
+			}
+		}
+	}
+	payload := body
+	if archive {
+		payload, err = ExtractArchiveBinary(body, runtime.Binary)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	path := filepath.Join(opts.BinDir, runtime.Binary)
+	if err := writeBinaryAtomic(path, payload); err != nil {
+		return "", "", err
+	}
+	return path, release.TagName, nil
+}
+
+func installFromSource(ctx context.Context, opts Options, runtime Runtime) (string, error) {
+	if err := opts.GoInstall(ctx, opts.BinDir, runtime.SourcePackage); err != nil {
+		return "", err
+	}
+	return filepath.Join(opts.BinDir, runtime.Binary), nil
+}
+
+func writeBinaryAtomic(path string, body []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".veil-runtime-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o755); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
+// findAsset returns the first asset accepted by match.
+func findAsset(assets []Asset, match func(string) bool) (Asset, bool) {
+	if match == nil {
+		return Asset{}, false
+	}
+	candidates := make([]Asset, 0, len(assets))
+	for _, asset := range assets {
+		if match(asset.Name) {
+			candidates = append(candidates, asset)
+		}
+	}
+	if len(candidates) == 0 {
+		return Asset{}, false
+	}
+	// Deterministic selection: shortest name wins, then lexical. This favors the
+	// plain asset (e.g. "sing-box-...-linux-amd64.tar.gz") over decorated
+	// variants when the matcher is intentionally permissive.
+	sort.Slice(candidates, func(i, j int) bool {
+		if len(candidates[i].Name) != len(candidates[j].Name) {
+			return len(candidates[i].Name) < len(candidates[j].Name)
+		}
+		return candidates[i].Name < candidates[j].Name
+	})
+	return candidates[0], true
+}
+
+// ExtractArchiveBinary returns the named binary's bytes from a .tar.gz archive,
+// matching on the base filename so archives that nest the binary in a versioned
+// directory (sing-box) and those that don't (mieru) both work.
+func ExtractArchiveBinary(body []byte, binary string) ([]byte, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("gzip: %w", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("tar: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		if filepath.Base(hdr.Name) == binary {
+			const maxBinary = 200 * 1024 * 1024
+			return io.ReadAll(io.LimitReader(tr, maxBinary))
+		}
+	}
+	return nil, fmt.Errorf("binary %q not found in archive", binary)
+}
+
+// VerifyChecksum confirms body's checksum matches the value recorded for the
+// asset. Upstream checksum files reference either the asset filename (mieru,
+// caddy) or a build path ending in the binary name (hysteria's hashes.txt), so
+// both forms are accepted. The digest algorithm is selected by the recorded
+// hex length: 64 chars -> SHA-256 (mieru, hysteria), 128 chars -> SHA-512
+// (caddy).
+func VerifyChecksum(body []byte, assetName, binary string, checksums []byte) error {
+	want := extractChecksum(string(checksums), assetName, binary)
+	if want == "" {
+		return fmt.Errorf("no checksum recorded for %s", assetName)
+	}
+	var got string
+	switch len(want) {
+	case 64:
+		sum := sha256.Sum256(body)
+		got = hex.EncodeToString(sum[:])
+	case 128:
+		sum := sha512.Sum512(body)
+		got = hex.EncodeToString(sum[:])
+	default:
+		return fmt.Errorf("unsupported checksum length %d for %s", len(want), assetName)
+	}
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", assetName, want, got)
+	}
+	return nil
+}
+
+func extractChecksum(checksums, assetName, binary string) string {
+	for _, line := range strings.Split(checksums, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		hash := fields[0]
+		file := fields[len(fields)-1]
+		base := file
+		if idx := strings.LastIndexAny(file, "/\\"); idx != -1 {
+			base = file[idx+1:]
+		}
+		if file == assetName || base == assetName || (binary != "" && base == binary) {
+			return hash
+		}
+	}
+	return ""
+}
+
+func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (*Release, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "veil")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API %s: %s", repo, resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	return parseRelease(body)
+}
+
+func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "veil")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %s", resp.Status)
+	}
+	const maxDownload = 200 * 1024 * 1024
+	return io.ReadAll(io.LimitReader(resp.Body, maxDownload))
+}
+
+func runGoInstall(ctx context.Context, binDir, sourcePackage string) error {
+	cmd := exec.CommandContext(ctx, "go", "install", sourcePackage)
+	cmd.Env = append(os.Environ(), "GOBIN="+binDir, "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		trimmed := strings.TrimSpace(string(out))
+		if trimmed != "" {
+			return fmt.Errorf("go install %s: %s: %w", sourcePackage, trimmed, err)
+		}
+		return fmt.Errorf("go install %s: %w", sourcePackage, err)
+	}
+	return nil
+}
