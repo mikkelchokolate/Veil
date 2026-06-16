@@ -17,21 +17,28 @@ func TestBuildClientLinksAggregatesMieruTransportBindingsForClientProfile(t *tes
 		t.Fatalf("Mieru TCP/UDP profile should be delivered as one client config: %+v", response)
 	}
 	var config struct {
-		ProfileName string `json:"profileName"`
-		Servers     []struct {
-			PortBindings []struct {
-				Port     int    `json:"port"`
-				Protocol string `json:"protocol"`
-			} `json:"portBindings"`
-		} `json:"servers"`
+		ActiveProfile string `json:"activeProfile"`
+		Profiles      []struct {
+			ProfileName string `json:"profileName"`
+			Servers     []struct {
+				PortBindings []struct {
+					Port     int    `json:"port"`
+					Protocol string `json:"protocol"`
+				} `json:"portBindings"`
+			} `json:"servers"`
+		} `json:"profiles"`
 	}
 	if err := json.Unmarshal([]byte(response.Links[0].Config), &config); err != nil {
 		t.Fatalf("invalid Mieru client config: %v\n%s", err, response.Links[0].Config)
 	}
-	if config.ProfileName != "mieru/alice" || len(config.Servers) != 1 || len(config.Servers[0].PortBindings) != 2 {
+	if config.ActiveProfile != "mieru/alice" || len(config.Profiles) != 1 {
 		t.Fatalf("config = %+v", config)
 	}
-	if config.Servers[0].PortBindings[0].Protocol != "TCP" || config.Servers[0].PortBindings[1].Protocol != "UDP" {
-		t.Fatalf("port bindings = %+v", config.Servers[0].PortBindings)
+	p := config.Profiles[0]
+	if p.ProfileName != "mieru/alice" || len(p.Servers) != 1 || len(p.Servers[0].PortBindings) != 2 {
+		t.Fatalf("profile = %+v", p)
+	}
+	if p.Servers[0].PortBindings[0].Protocol != "TCP" || p.Servers[0].PortBindings[1].Protocol != "UDP" {
+		t.Fatalf("port bindings = %+v", p.Servers[0].PortBindings)
 	}
 }

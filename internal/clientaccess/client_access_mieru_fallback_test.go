@@ -14,20 +14,24 @@ func TestBuildClientLinksIncludesMieruClientConfigForInboundPasswordFallback(t *
 		t.Fatalf("response = %+v", response)
 	}
 	var config struct {
-		User struct {
-			Name     string `json:"name"`
-			Password string `json:"password"`
-		} `json:"user"`
-		Servers []struct {
-			PortBindings []struct {
-				Protocol string `json:"protocol"`
-			} `json:"portBindings"`
-		} `json:"servers"`
+		ActiveProfile string `json:"activeProfile"`
+		Profiles      []struct {
+			User struct {
+				Name     string `json:"name"`
+				Password string `json:"password"`
+			} `json:"user"`
+			Servers []struct {
+				PortBindings []struct {
+					Protocol string `json:"protocol"`
+				} `json:"portBindings"`
+			} `json:"servers"`
+		} `json:"profiles"`
 	}
 	if err := json.Unmarshal([]byte(response.Links[0].Config), &config); err != nil {
 		t.Fatalf("invalid config: %v\n%s", err, response.Links[0].Config)
 	}
-	if config.User.Name != "mieru" || config.User.Password != "inbound-pass" || config.Servers[0].PortBindings[0].Protocol != "UDP" {
+	p := config.Profiles[0]
+	if config.ActiveProfile != "mieru" || p.User.Name != "mieru" || p.User.Password != "inbound-pass" || p.Servers[0].PortBindings[0].Protocol != "UDP" {
 		t.Fatalf("config = %+v", config)
 	}
 }
