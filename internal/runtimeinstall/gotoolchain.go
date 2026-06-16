@@ -20,8 +20,8 @@ import (
 const defaultGoVersion = "1.25.0"
 
 var defaultGoSHA256 = map[string]string{
-	"linux-amd64": "a5ba65558636a57c45b70312d9950916a1abec1af1fdfebf9aa8c6b20af45fda",
-	"linux-arm64": "5b2e4d8c7f3225dc4a1a5547e6315e59e9c4b5c242c4cee8162c584a833da757",
+	"linux-amd64": "2852af0cb20a13139b3448992e69b868e50ed0f8a1e5940ee1de9e19a123b613",
+	"linux-arm64": "05de75d6994a2783699815ee553bd5a9327d8b79991de36e38b66862782f54ae",
 }
 
 // GoToolchain manages a self-contained Go installation cached under CacheDir/go.

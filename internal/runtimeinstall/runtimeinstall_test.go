@@ -420,3 +420,79 @@ func TestInstallAllContinuesPastFailures(t *testing.T) {
 		t.Fatalf("expected 3 release-based runtimes to fail, got %d", releaseFailures)
 	}
 }
+
+// fakeGoScript writes a shell script that mimics the subset of the `go`
+// command used by runCaddyNaiveBuild. `go mod init` creates a go.mod (and
+// fails if one already exists, like the real tool), other mod subcommands
+// no-op, and `go build -o <out>` writes a stub binary. It lets us drive the
+// real build twice to prove idempotency without any network access.
+func fakeGoScript(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "go")
+	script := `#!/usr/bin/env bash
+set -e
+case "$1" in
+  mod)
+    case "$2" in
+      init)
+        if [ -f go.mod ]; then
+          echo "go: go.mod already exists" >&2
+          exit 1
+        fi
+        echo "module caddy" > go.mod
+        ;;
+      *)
+        : # edit / tidy: no-op
+        ;;
+    esac
+    ;;
+  build)
+    out=""
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = "-o" ]; then out="$2"; shift 2; continue; fi
+      shift
+    done
+    printf 'caddy-stub' > "$out"
+    chmod 0755 "$out"
+    ;;
+  *)
+    : # ignore anything else
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRunCaddyNaiveBuildIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	goBin := fakeGoScript(t, dir)
+	cacheDir := filepath.Join(dir, "cache")
+	outPath := filepath.Join(dir, "bin", "caddy")
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// First build: clean slate.
+	if err := runCaddyNaiveBuild(context.Background(), goBin, cacheDir, outPath); err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	// A leftover go.mod now exists in build-caddy from this run.
+	if _, err := os.Stat(filepath.Join(cacheDir, "build-caddy", "go.mod")); err != nil {
+		t.Fatalf("expected go.mod after first build: %v", err)
+	}
+
+	// Second build must succeed despite the stale build dir (this is the
+	// regression: without cleaning, `go mod init` fails on the existing
+	// go.mod).
+	if err := runCaddyNaiveBuild(context.Background(), goBin, cacheDir, outPath); err != nil {
+		t.Fatalf("second build (idempotency): %v", err)
+	}
+	body, _ := os.ReadFile(outPath)
+	if string(body) != "caddy-stub" {
+		t.Fatalf("rebuilt binary content = %q", string(body))
+	}
+}

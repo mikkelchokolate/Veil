@@ -379,6 +379,12 @@ func runCaddyNaiveBuild(ctx context.Context, goBin, cacheDir, outPath string) er
 		goBin = resolved
 	}
 	buildDir := filepath.Join(cacheDir, "build-caddy")
+	// Ensure a clean build dir so the build is idempotent: a leftover
+	// go.mod from a previous run makes `go mod init` fail, breaking
+	// re-runs of `veil runtime install`.
+	if err := os.RemoveAll(buildDir); err != nil {
+		return fmt.Errorf("clean caddy build dir: %w", err)
+	}
 	if err := os.MkdirAll(buildDir, 0o755); err != nil {
 		return fmt.Errorf("create caddy build dir: %w", err)
 	}
