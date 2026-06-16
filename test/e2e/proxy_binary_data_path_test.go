@@ -162,7 +162,7 @@ func TestMieruDataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["links"])
+	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
 	var artifacts []struct {
 		Protocol string `json:"protocol"`
 		Kind     string `json:"kind"`
@@ -464,13 +464,13 @@ func TestNaiveProxyDataPath(t *testing.T) {
 
 	// Configure settings and inbound
 	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"test@example.com","naiveUsername":"test-user","naivePassword":"test-pass"}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"password":"secret-pass"}`, inboundPort))
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"password":"secret-pass","naiveUsername":"naive-user","naivePassword":"naive-pass"}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
