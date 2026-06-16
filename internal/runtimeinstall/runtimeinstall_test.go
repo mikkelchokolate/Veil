@@ -69,7 +69,6 @@ func TestCatalogAssetMatchersMatchUpstreamNames(t *testing.T) {
 		binary string
 		asset  string
 	}{
-		{"caddy", "caddy_2.11.4_linux_amd64.tar.gz"},
 		{"hysteria", "hysteria-linux-amd64"},
 		{"mita", "mita_3.34.0_linux_amd64.tar.gz"},
 		{"sing-box", "sing-box-1.13.13-linux-amd64.tar.gz"},
@@ -79,6 +78,44 @@ func TestCatalogAssetMatchersMatchUpstreamNames(t *testing.T) {
 		if r.AssetMatch == nil || !r.AssetMatch(c.asset) {
 			t.Fatalf("%s asset matcher did not match %q", c.binary, c.asset)
 		}
+	}
+}
+
+func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+
+	var caddyNaive Runtime
+	for _, r := range Catalog("amd64") {
+		if r.Binary == "caddy" {
+			caddyNaive = r
+		}
+	}
+	if caddyNaive.Method != MethodCaddyNaive {
+		t.Fatalf("expected naiveproxy method=caddy-naive, got %s", caddyNaive.Method)
+	}
+
+	var gotOutPath string
+	opts := Options{
+		BinDir: binDir,
+		Arch:   "amd64",
+		BuildCaddy: func(ctx context.Context, outPath string) error {
+			gotOutPath = outPath
+			return os.WriteFile(outPath, []byte("caddy-with-forwardproxy"), 0o755)
+		},
+	}
+
+	result := Install(context.Background(), opts, caddyNaive)
+	if result.Err != nil {
+		t.Fatalf("Install: %v", result.Err)
+	}
+	wantPath := filepath.Join(binDir, "caddy")
+	if gotOutPath != wantPath {
+		t.Fatalf("BuildCaddy outPath = %q, want %q", gotOutPath, wantPath)
+	}
+	body, _ := os.ReadFile(wantPath)
+	if string(body) != "caddy-with-forwardproxy" {
+		t.Fatalf("installed binary = %q", string(body))
 	}
 }
 
@@ -358,24 +395,28 @@ func TestInstallAllContinuesPastFailures(t *testing.T) {
 		GoInstall: func(ctx context.Context, binDir, sourcePackage string) error {
 			return os.WriteFile(filepath.Join(binDir, "olcrtc"), []byte("built"), 0o755)
 		},
+		BuildCaddy: func(ctx context.Context, outPath string) error {
+			return os.WriteFile(outPath, []byte("caddy-built"), 0o755)
+		},
+		EnsureGo: func(ctx context.Context) (string, error) { return "/usr/local/go/bin/go", nil },
 	}
 	results := InstallAll(context.Background(), opts)
 	if len(results) != len(Catalog("amd64")) {
 		t.Fatalf("expected one result per runtime, got %d", len(results))
 	}
-	var olcrtcOK, releaseFailures int
+	var builtOK, releaseFailures int
 	for _, r := range results {
-		if r.Method == MethodGoInstall && r.Installed {
-			olcrtcOK++
+		if (r.Method == MethodGoInstall || r.Method == MethodCaddyNaive) && r.Installed {
+			builtOK++
 		}
-		if r.Method != MethodGoInstall && r.Err != nil {
+		if r.Method != MethodGoInstall && r.Method != MethodCaddyNaive && r.Err != nil {
 			releaseFailures++
 		}
 	}
-	if olcrtcOK != 1 {
-		t.Fatalf("expected olcrtc go-install to succeed despite release failures")
+	if builtOK != 2 {
+		t.Fatalf("expected olcrtc + caddy builds to succeed (2), got %d", builtOK)
 	}
-	if releaseFailures == 0 {
-		t.Fatalf("expected release-based runtimes to record failures")
+	if releaseFailures != 3 {
+		t.Fatalf("expected 3 release-based runtimes to fail, got %d", releaseFailures)
 	}
 }

@@ -9,6 +9,10 @@
 // downloading each runtime from its upstream GitHub release (verifying SHA256
 // checksums where the project publishes them) or, for olcRTC which ships no
 // release binaries, building it from source with `go install`.
+//
+// NaiveProxy requires a Caddy build with the forward_proxy plugin (klzgrad's
+// naive fork). Vanilla Caddy releases do not include it, so the runtime is
+// built from source via a self-contained Go build.
 package runtimeinstall
 
 import (
@@ -40,6 +44,9 @@ const (
 	MethodArchive Method = "archive"
 	// MethodGoInstall builds the binary from source with `go install`.
 	MethodGoInstall Method = "go-install"
+	// MethodCaddyNaive builds Caddy from source with the klzgrad/forwardproxy
+	// (naive) fork, which vanilla Caddy releases do not include.
+	MethodCaddyNaive Method = "caddy-naive"
 )
 
 // Runtime describes one protocol runtime binary Veil installs.
@@ -69,15 +76,7 @@ func Catalog(arch string) []Runtime {
 		{
 			Name:   "naiveproxy",
 			Binary: "caddy",
-			Method: MethodArchive,
-			Repo:   "caddyserver/caddy",
-			AssetMatch: func(name string) bool {
-				return strings.HasPrefix(name, "caddy_") &&
-					strings.HasSuffix(name, "_linux_"+arch+".tar.gz")
-			},
-			ChecksumMatch: func(name string) bool {
-				return strings.HasPrefix(name, "caddy_") && strings.HasSuffix(name, "_checksums.txt")
-			},
+			Method: MethodCaddyNaive,
 		},
 		{
 			Name:   "hysteria2",
@@ -141,6 +140,9 @@ type Asset struct {
 type Options struct {
 	// BinDir is where binaries are written (default /usr/local/bin).
 	BinDir string
+	// CaddyCacheDir is where the Caddy build workspace is cached. Defaults to
+	// a directory under the OS cache (e.g. /var/cache/veil or /tmp/veil-runtime).
+	CaddyCacheDir string
 	// Arch is the normalized architecture ("amd64" or "arm64").
 	Arch string
 	// HTTPClient performs release-metadata and download requests.
@@ -151,6 +153,13 @@ type Options struct {
 	Download func(ctx context.Context, url string) ([]byte, error)
 	// GoInstall builds a source package into BinDir. Injectable for tests.
 	GoInstall func(ctx context.Context, binDir, sourcePackage string) error
+	// BuildCaddy builds a Caddy binary with the naive forwardproxy fork.
+	// Injectable for tests.
+	BuildCaddy func(ctx context.Context, outPath string) error
+	// EnsureGo provisions a Go toolchain if system go is unavailable, returning
+	// the path to the go binary. If nil, methods requiring Go are skipped when
+	// no system go is found.
+	EnsureGo func(ctx context.Context) (string, error)
 	// LookPath resolves an executable in PATH. Injectable for tests; defaults
 	// to exec.LookPath. Used to detect whether a Go toolchain is present.
 	LookPath func(string) (string, error)
@@ -180,11 +189,14 @@ func (o Options) withDefaults() Options {
 	if o.BinDir == "" {
 		o.BinDir = defaultBinDir
 	}
+	if o.CaddyCacheDir == "" {
+		o.CaddyCacheDir = filepath.Join(os.TempDir(), "veil-runtime")
+	}
 	if o.Arch == "" {
 		o.Arch = "amd64"
 	}
 	if o.HTTPClient == nil {
-		o.HTTPClient = &http.Client{Timeout: 60 * time.Second}
+		o.HTTPClient = &http.Client{Timeout: 120 * time.Second}
 	}
 	if o.FetchRelease == nil {
 		o.FetchRelease = func(ctx context.Context, repo string) (*Release, error) {
@@ -197,7 +209,32 @@ func (o Options) withDefaults() Options {
 		}
 	}
 	if o.GoInstall == nil {
-		o.GoInstall = runGoInstall
+		o.GoInstall = func(ctx context.Context, binDir, sourcePackage string) error {
+			goBin, err := resolveGo(ctx, o.CaddyCacheDir, o.EnsureGo)
+			if err != nil {
+				return err
+			}
+			if goBin == "" {
+				return fmt.Errorf("go toolchain not found")
+			}
+			return runGoInstall(ctx, goBin, binDir, sourcePackage)
+		}
+	}
+	if o.BuildCaddy == nil {
+		o.BuildCaddy = func(ctx context.Context, outPath string) error {
+			goBin, err := resolveGo(ctx, o.CaddyCacheDir, o.EnsureGo)
+			if err != nil {
+				return err
+			}
+			if goBin == "" {
+				return fmt.Errorf("go toolchain not found")
+			}
+			return runCaddyNaiveBuild(ctx, goBin, o.CaddyCacheDir, outPath)
+		}
+	}
+	if o.EnsureGo == nil {
+		tc := NewGoToolchain(o.CaddyCacheDir)
+		o.EnsureGo = tc.Ensure
 	}
 	if o.LookPath == nil {
 		o.LookPath = exec.LookPath
@@ -247,12 +284,30 @@ func Install(ctx context.Context, opts Options, runtime Runtime) Result {
 		path, version, err := installFromRelease(ctx, opts, runtime, true)
 		result.Path, result.Version, result.Err = path, version, err
 	case MethodGoInstall:
-		if !opts.goAvailable() {
+		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
+		if err != nil {
+			result.Err = err
+			return result
+		}
+		if goBin == "" {
 			result.Skipped = true
 			result.SkipReason = "go toolchain not found; install Go to build olcrtc from source, then run: veil runtime install --only olcrtc"
 			return result
 		}
 		path, err := installFromSource(ctx, opts, runtime)
+		result.Path, result.Err = path, err
+	case MethodCaddyNaive:
+		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
+		if err != nil {
+			result.Err = err
+			return result
+		}
+		if goBin == "" {
+			result.Skipped = true
+			result.SkipReason = "go toolchain not found; install Go to build Caddy with forward_proxy, then run: veil runtime install --only naiveproxy"
+			return result
+		}
+		path, err := installCaddyNaive(ctx, opts, runtime)
 		result.Path, result.Err = path, err
 	default:
 		result.Err = fmt.Errorf("unsupported method %q", runtime.Method)
@@ -305,6 +360,73 @@ func installFromSource(ctx context.Context, opts Options, runtime Runtime) (stri
 		return "", err
 	}
 	return filepath.Join(opts.BinDir, runtime.Binary), nil
+}
+
+func installCaddyNaive(ctx context.Context, opts Options, runtime Runtime) (string, error) {
+	path := filepath.Join(opts.BinDir, runtime.Binary)
+	if err := opts.BuildCaddy(ctx, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// runCaddyNaiveBuild builds a Caddy binary with the klzgrad/forwardproxy
+// (naive) fork. It creates a self-contained Go module in cacheDir/build-caddy,
+// pins Caddy v2.10.0 and the naive forwardproxy fork via a replace directive,
+// and compiles a static binary to outPath.
+func runCaddyNaiveBuild(ctx context.Context, goBin, cacheDir, outPath string) error {
+	if resolved, err := exec.LookPath(goBin); err == nil {
+		goBin = resolved
+	}
+	buildDir := filepath.Join(cacheDir, "build-caddy")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		return fmt.Errorf("create caddy build dir: %w", err)
+	}
+
+	// Write main.go — imports caddy and the naive forwardproxy module.
+	mainGo := filepath.Join(buildDir, "main.go")
+	if err := os.WriteFile(mainGo, []byte(`package main
+
+import (
+	caddycmd "github.com/caddyserver/caddy/v2/cmd"
+	_ "github.com/caddyserver/caddy/v2/modules/standard"
+	_ "github.com/caddyserver/forwardproxy"
+)
+
+func main() {
+	caddycmd.Main()
+}
+`), 0o644); err != nil {
+		return fmt.Errorf("write main.go: %w", err)
+	}
+
+	// Initialize module, pin caddy and the naive forwardproxy fork.
+	cmds := [][]string{
+		{goBin, "mod", "init", "caddy"},
+		{goBin, "mod", "edit", "-require", "github.com/caddyserver/caddy/v2@v2.10.0"},
+		{goBin, "mod", "edit", "-replace", "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317"},
+		{goBin, "mod", "tidy"},
+	}
+	for _, args := range cmds {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = buildDir
+		cmd.Env = goBuildEnv(goBin)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
+		}
+	}
+
+	// Build the binary.
+	buildArgs := []string{goBin, "build", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."}
+	cmd := exec.CommandContext(ctx, buildArgs[0], buildArgs[1:]...)
+	cmd.Dir = buildDir
+	cmd.Env = append(goBuildEnv(goBin), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("caddy build: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 func writeBinaryAtomic(path string, body []byte) error {
@@ -472,9 +594,9 @@ func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, 
 	return io.ReadAll(io.LimitReader(resp.Body, maxDownload))
 }
 
-func runGoInstall(ctx context.Context, binDir, sourcePackage string) error {
-	cmd := exec.CommandContext(ctx, "go", "install", sourcePackage)
-	cmd.Env = append(os.Environ(), "GOBIN="+binDir, "CGO_ENABLED=0")
+func runGoInstall(ctx context.Context, goBin, binDir, sourcePackage string) error {
+	cmd := exec.CommandContext(ctx, goBin, "install", sourcePackage)
+	cmd.Env = append(goBuildEnv(goBin), "GOBIN="+binDir, "CGO_ENABLED=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		trimmed := strings.TrimSpace(string(out))
