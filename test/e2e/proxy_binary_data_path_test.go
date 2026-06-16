@@ -89,8 +89,13 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 	return nil
 }
 
-// TestMieruDataPath tests data flow through a real Mieru server/client if Mieru binary is installed.
+// TestMieruDataPath tests data flow through a real Mieru server/client if mita/mieru binaries are installed.
 func TestMieruDataPath(t *testing.T) {
+	mitaPath, err := exec.LookPath("mita")
+	if err != nil {
+		t.Skip("mita binary not found in PATH, skipping data-path test")
+	}
+
 	mieruPath, err := exec.LookPath("mieru")
 	if err != nil {
 		t.Skip("mieru binary not found in PATH, skipping data-path test")
@@ -134,11 +139,16 @@ func TestMieruDataPath(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Start Mieru server using the generated config
+	// 3. Start Mieru server (mita) using the generated config
 	serverConfig := filepath.Join(srv.applyRoot, "live", "mieru", "server_config.json")
-	cmdServer := exec.Command(mieruPath, "run", "-c", serverConfig)
+	// mita run uses MITA_CONFIG_JSON_FILE env var, needs /var/run/mita dir
+	if err := os.MkdirAll("/var/run/mita", 0755); err != nil {
+		t.Fatalf("create /var/run/mita: %v", err)
+	}
+	cmdServer := exec.Command(mitaPath, "run")
+	cmdServer.Env = append(os.Environ(), "MITA_CONFIG_JSON_FILE="+serverConfig)
 	if err := cmdServer.Start(); err != nil {
-		t.Fatalf("start mieru server: %v", err)
+		t.Fatalf("start mita server: %v", err)
 	}
 	defer func() {
 		if cmdServer.Process != nil {
@@ -202,7 +212,12 @@ func TestMieruDataPath(t *testing.T) {
 	}
 
 	// 6. Start Mieru client
-	cmdClient := exec.Command(mieruPath, "run", "-c", tempClientFile)
+	// mieru run uses MIERU_CONFIG_JSON_FILE env var, needs /var/run/mieru dir
+	if err := os.MkdirAll("/var/run/mieru", 0755); err != nil {
+		t.Fatalf("create /var/run/mieru: %v", err)
+	}
+	cmdClient := exec.Command(mieruPath, "run")
+	cmdClient.Env = append(os.Environ(), "MIERU_CONFIG_JSON_FILE="+tempClientFile)
 	if err := cmdClient.Start(); err != nil {
 		t.Fatalf("start mieru client: %v", err)
 	}
@@ -295,7 +310,7 @@ func TestHysteria2DataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Modify generated Hysteria2 server config to use self-signed TLS cert
-	serverConfig := filepath.Join(srv.applyRoot, "live", "hysteria2", "hy2-udp.yaml")
+	serverConfig := filepath.Join(srv.applyRoot, "live", "hysteria2", "server.yaml")
 	yamlContent, err := os.ReadFile(serverConfig)
 	if err != nil {
 		t.Fatalf("read server yaml: %v", err)
