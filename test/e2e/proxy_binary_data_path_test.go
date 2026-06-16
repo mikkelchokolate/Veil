@@ -140,7 +140,7 @@ func TestMieruDataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Start Mieru server (mita) using the generated config
-	serverConfig := filepath.Join(srv.applyRoot, "live", "mieru", "server_config.json")
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
 	// mita run uses MITA_CONFIG_JSON_FILE env var, needs /var/run/mita dir
 	if err := os.MkdirAll("/var/run/mita", 0755); err != nil {
 		t.Fatalf("create /var/run/mita: %v", err)
@@ -162,7 +162,7 @@ func TestMieruDataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
+	artifactsRaw, _ := json.Marshal(linksBody["links"])
 	var artifacts []struct {
 		Protocol string `json:"protocol"`
 		Kind     string `json:"kind"`
@@ -310,7 +310,7 @@ func TestHysteria2DataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Modify generated Hysteria2 server config to use self-signed TLS cert
-	serverConfig := filepath.Join(srv.applyRoot, "live", "hysteria2", "server.yaml")
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "hysteria2", "hy2-udp.yaml")
 	yamlContent, err := os.ReadFile(serverConfig)
 	if err != nil {
 		t.Fatalf("read server yaml: %v", err)
@@ -349,7 +349,7 @@ func TestHysteria2DataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
+	artifactsRaw, _ := json.Marshal(linksBody["links"])
 	var artifacts []struct {
 		Name     string `json:"name"`
 		Protocol string `json:"protocol"`
@@ -490,7 +490,7 @@ func TestNaiveProxyDataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Modify generated Caddyfile to run over HTTP (remove domain name and tls directives)
-	serverConfig := filepath.Join(srv.applyRoot, "live", "caddy", "Caddyfile")
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "caddy", "naive-tcp.Caddyfile")
 	caddyfileContent, err := os.ReadFile(serverConfig)
 	if err != nil {
 		t.Fatalf("read caddyfile: %v", err)
@@ -533,7 +533,7 @@ func TestNaiveProxyDataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
+	artifactsRaw, _ := json.Marshal(linksBody["links"])
 	var artifacts []struct {
 		Name     string `json:"name"`
 		Protocol string `json:"protocol"`
