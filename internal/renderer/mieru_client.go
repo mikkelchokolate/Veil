@@ -3,21 +3,21 @@ package renderer
 import "encoding/json"
 
 type MieruClientConfig struct {
-	ProfileName  string
-	DomainName   string
-	PortBindings []MieruPortBinding
-	User         MieruUser
-	Socks5Port   int
+	ProfileName   string
+	DomainName    string
+	PortBindings  []MieruPortBinding
+	User          MieruUser
+	Socks5Port    int
 	HTTPProxyPort int
-	RPCPort      int
+	RPCPort       int
 }
 
 type mieruClientConfigJSON struct {
 	ActiveProfile string                   `json:"activeProfile"`
-	Profiles      []mieruClientProfileJSON  `json:"profiles"`
-	Socks5Port    int                       `json:"socks5Port"`
-	HTTPProxyPort int                       `json:"httpProxyPort"`
-	RPCPort       int                       `json:"rpcPort"`
+	Profiles      []mieruClientProfileJSON `json:"profiles"`
+	Socks5Port    int                      `json:"socks5Port"`
+	HTTPProxyPort int                      `json:"httpProxyPort"`
+	RPCPort       int                      `json:"rpcPort"`
 }
 
 type mieruClientProfileJSON struct {

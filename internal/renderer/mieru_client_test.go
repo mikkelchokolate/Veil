@@ -7,13 +7,13 @@ import (
 
 func TestRenderMieruClientConfigBuildsClientJSON(t *testing.T) {
 	body, err := RenderMieruClient(MieruClientConfig{
-		ProfileName:  "mieru/alice",
-		DomainName:   "vpn.example.com",
-		PortBindings: []MieruPortBinding{{Port: 443, Protocol: "tcp"}},
-		User:         MieruUser{Name: "alice", Password: "alice-pass"},
-		Socks5Port:   1080,
+		ProfileName:   "mieru/alice",
+		DomainName:    "vpn.example.com",
+		PortBindings:  []MieruPortBinding{{Port: 443, Protocol: "tcp"}},
+		User:          MieruUser{Name: "alice", Password: "alice-pass"},
+		Socks5Port:    1080,
 		HTTPProxyPort: 0,
-		RPCPort:      0,
+		RPCPort:       0,
 	})
 	if err != nil {
 		t.Fatalf("RenderMieruClient: %v", err)
