@@ -282,6 +282,10 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 		if rel == "" {
 			continue
 		}
+		rel = filepath.ToSlash(rel)
+		if !filepath.IsLocal(rel) {
+			return fmt.Errorf("tar Go: invalid path %q", hdr.Name)
+		}
 		target := filepath.Join(goDir, rel)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
