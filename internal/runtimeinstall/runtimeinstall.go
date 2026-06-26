@@ -26,9 +26,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -573,6 +576,9 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+			return fetchLatestReleaseWeb(ctx, client, repo)
+		}
 		return nil, fmt.Errorf("GitHub API %s: %s", repo, resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -580,6 +586,103 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (
 		return nil, err
 	}
 	return parseRelease(body)
+}
+
+// fetchLatestReleaseWeb is a fallback for GitHub API rate limits. It follows
+// the /releases/latest redirect to discover the tag, then scrapes the
+// expanded_assets page for asset names and download URLs.
+func fetchLatestReleaseWeb(ctx context.Context, client *http.Client, repo string) (*Release, error) {
+	tag, err := resolveLatestTagWeb(ctx, client, repo)
+	if err != nil {
+		return nil, err
+	}
+	url := fmt.Sprintf("https://github.com/%s/releases/expanded_assets/%s", repo, tag)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "text/html")
+	req.Header.Set("User-Agent", "veil")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub web %s expanded assets: %s", repo, resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	assets, err := parseExpandedAssets(string(body), tag, repo)
+	if err != nil {
+		return nil, err
+	}
+	return &Release{TagName: tag, Assets: assets}, nil
+}
+
+// resolveLatestTagWeb follows the GitHub /releases/latest redirect and returns
+// the URL-encoded tag name (e.g. "app%2Fv2.9.2" or "v3.34.0").
+func resolveLatestTagWeb(ctx context.Context, client *http.Client, repo string) (string, error) {
+	latestURL := fmt.Sprintf("https://github.com/%s/releases/latest", repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, latestURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "veil")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	if loc == "" && resp.Request != nil && resp.Request.URL != nil {
+		loc = resp.Request.URL.String()
+	}
+	if loc == "" {
+		return "", fmt.Errorf("GitHub web %s latest: no redirect location", repo)
+	}
+	locURL, err := url.Parse(loc)
+	if err != nil {
+		return "", fmt.Errorf("GitHub web %s latest: parse location %q: %w", repo, loc, err)
+	}
+	parts := strings.Split(strings.Trim(locURL.Path, "/"), "/")
+	// Expected path: owner/repo/releases/tag/<tag>
+	if len(parts) < 5 || parts[2] != "releases" || parts[3] != "tag" {
+		return "", fmt.Errorf("GitHub web %s latest: unexpected location path %q", repo, locURL.Path)
+	}
+	// The tag is everything after /tag/; join it back in case the tag contains slashes.
+	return path.Join(parts[4:]...), nil
+}
+
+// parseExpandedAssets extracts asset names and download URLs from the GitHub
+// expanded_assets HTML page. Asset paths are relative ("/owner/repo/releases/...").
+func parseExpandedAssets(html, tag, repo string) ([]Asset, error) {
+	// Match hrefs that point at a release download for this tag.
+	// Example: href="/apernet/hysteria/releases/download/app%2Fv2.9.2/hysteria-linux-amd64"
+	pattern := fmt.Sprintf(`href="/(%s/releases/download/%s/([^"]+))"`, regexp.QuoteMeta(repo), regexp.QuoteMeta(tag))
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	var assets []Asset
+	for _, m := range re.FindAllStringSubmatch(html, -1) {
+		name := m[2]
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		assets = append(assets, Asset{
+			Name:               name,
+			BrowserDownloadURL: "https://github.com/" + m[1],
+		})
+	}
+	if len(assets) == 0 {
+		return nil, fmt.Errorf("GitHub web %s release %s: no assets found", repo, tag)
+	}
+	return assets, nil
 }
 
 func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, error) {
