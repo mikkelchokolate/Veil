@@ -1,5 +1,7 @@
 package generatedconfig
 
+import "os"
+
 type ConfigValidationRunner func(name string, config string, command []string) ConfigValidationResult
 
 type StagedConfigValidator struct {
@@ -27,7 +29,10 @@ func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult
 
 func RunFixedConfigValidation(name string, config string, command []string) ConfigValidationResult {
 	result := ConfigValidationResult{Name: name, Config: config, Command: append([]string(nil), command...)}
-	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command})
+	// Caddy's internal CA needs a writable home directory; veil's locked user
+	// has HOME=/nonexistent, so point validation at the writable state dir.
+	env := append(os.Environ(), "HOME=/var/lib/veil", "XDG_DATA_HOME=/var/lib/veil")
+	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command, Env: env})
 	result.Output = output.Output
 	if output.Empty {
 		result.Skipped = true

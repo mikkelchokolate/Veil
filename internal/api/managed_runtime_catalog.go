@@ -69,7 +69,7 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 					Transport:        "tcp",
 					Unit:             "veil-caddy@" + inbound.Name + ".service",
 					PromotedSubpath:  "caddy/" + inbound.Name + ".Caddyfile",
-					PromotedVerb:     "reload",
+					PromotedVerb:     "restart",
 					ManualRestart:    true,
 					HealthCheckAfter: true,
 				})
@@ -83,7 +83,7 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 				Transport:        "tcp",
 				Unit:             "veil-caddy@panel.service",
 				PromotedSubpath:  "caddy/panel.Caddyfile",
-				PromotedVerb:     "reload",
+				PromotedVerb:     "restart",
 				ManualRestart:    true,
 				HealthCheckAfter: true,
 			})
@@ -103,7 +103,7 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 					Transport:        "udp",
 					Unit:             "veil-hysteria2@" + inbound.Name + ".service",
 					PromotedSubpath:  "hysteria2/" + inbound.Name + ".yaml",
-					PromotedVerb:     "reload",
+					PromotedVerb:     "restart",
 					ManualRestart:    true,
 					HealthCheckAfter: true,
 				})
@@ -117,7 +117,7 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 				Transport:        "udp",
 				Unit:             renderer.UnitHysteria2,
 				PromotedSubpath:  generatedconfig.Hysteria2ConfigSubpath,
-				PromotedVerb:     "reload",
+				PromotedVerb:     "restart",
 				ManualRestart:    true,
 				HealthCheckAfter: true,
 			})

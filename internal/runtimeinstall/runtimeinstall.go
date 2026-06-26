@@ -409,7 +409,7 @@ func main() {
 	// Initialize module, pin caddy and the naive forwardproxy fork.
 	cmds := [][]string{
 		{goBin, "mod", "init", "caddy"},
-		{goBin, "mod", "edit", "-require", "github.com/caddyserver/caddy/v2@v2.10.0"},
+		{goBin, "mod", "edit", "-require", "github.com/caddyserver/caddy/v2@v2.11.4"},
 		{goBin, "mod", "edit", "-replace", "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317"},
 		{goBin, "mod", "tidy"},
 	}

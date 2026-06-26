@@ -37,8 +37,8 @@ func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T
 		{Name: "o", Protocol: "olcrtc", Enabled: true},
 	}, WarpConfig{Enabled: true})
 	for _, tc := range []struct{ key, action string }{
-		{"naiveproxy", "reload veil-caddy@n.service"},
-		{"hysteria2", "reload veil-hysteria2@h.service"},
+		{"naiveproxy", "restart veil-caddy@n.service"},
+		{"hysteria2", "restart veil-hysteria2@h.service"},
 		{"mieru", "restart veil-mieru.service"},
 		{"sing-box", "restart veil-warp.service"},
 		{"olcrtc", "restart veil-olcrtc@o.service"},
@@ -68,7 +68,7 @@ func TestManagedRuntimeCatalogBuildsPromotedCommandsFromLiveFiles(t *testing.T) 
 		filepath.Join(root, "live", "mieru", "server_config.json"),
 	})
 	want := [][]string{
-		{"systemctl", "reload", "veil-caddy@panel.service"},
+		{"systemctl", "restart", "veil-caddy@panel.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
 	}
 	if len(commands) != len(want) {
@@ -84,8 +84,8 @@ func TestManagedRuntimeCatalogBuildsPromotedCommandsFromLiveFiles(t *testing.T) 
 func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 	catalog := NewManagedRuntimeCatalog()
 	for _, command := range [][]string{
-		{"systemctl", "reload", "veil-caddy@panel.service"},
-		{"systemctl", "reload", "veil-hysteria2@.service"},
+		{"systemctl", "restart", "veil-caddy@panel.service"},
+		{"systemctl", "restart", "veil-hysteria2@.service"},
 		{"systemctl", "restart", "veil-warp.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
 		{"systemctl", "restart", "veil-olcrtc@.service"},
@@ -143,11 +143,11 @@ func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	}
 
 	// Verify status action rules & health check checks
-	if !catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-hysteria2@vip.service"}) {
-		t.Error("expected reload allowed for veil-hysteria2@vip.service")
+	if !catalog.AllowsPromotedAction([]string{"systemctl", "restart", "veil-hysteria2@vip.service"}) {
+		t.Error("expected restart allowed for veil-hysteria2@vip.service")
 	}
-	if !catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-hysteria2@public.service"}) {
-		t.Error("expected reload allowed for veil-hysteria2@public.service")
+	if !catalog.AllowsPromotedAction([]string{"systemctl", "restart", "veil-hysteria2@public.service"}) {
+		t.Error("expected restart allowed for veil-hysteria2@public.service")
 	}
 	if catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-olcrtc@rtc1.service"}) {
 		t.Error("expected reload NOT allowed for veil-olcrtc@rtc1.service (restart only)")
