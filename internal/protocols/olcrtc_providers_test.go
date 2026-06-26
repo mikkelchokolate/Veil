@@ -51,7 +51,7 @@ func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
 				t.Fatalf("room URL %q leaks marker %q", room, marker)
 			}
 		}
-		name := strings.TrimPrefix(room, "https://meet.small-dm.ru/")
+		name := strings.TrimPrefix(room, "https://meet.handyweb.org/")
 		if name == room || name == "" {
 			t.Fatalf("unexpected room URL shape: %q", room)
 		}
