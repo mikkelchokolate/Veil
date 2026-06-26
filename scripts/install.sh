@@ -12,6 +12,7 @@ PANEL_PORT=""
 YES=""
 DRY_RUN=""
 FORCE=""
+LOCAL_BIN=""
 
 usage() {
   cat <<USAGE
@@ -30,6 +31,7 @@ Options:
   --email EMAIL        ACME email for Panel Caddy access
   --panel-access MODE  local, direct, or caddy; prompted interactively when omitted
   --panel-port PORT    Panel TCP port; prompted interactively when omitted; 0 means random high port
+  --local-bin PATH     Use a local veil binary instead of downloading a release
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
   --force              Force re-install even if veil is already installed
@@ -39,6 +41,7 @@ Environment:
   VEIL_REPO            GitHub repo, default mikkelchokolate/Veil
   VEIL_VERSION         Release tag, default latest
   VEIL_INSTALL_DIR     Binary install directory, default /usr/local/bin
+  VEIL_LOCAL_BIN       Same as --local-bin
 USAGE
 }
 
@@ -113,6 +116,8 @@ version_is_newer() {
   (( candidate_patch > current_patch ))
 }
 
+LOCAL_BIN="${VEIL_LOCAL_BIN:-${LOCAL_BIN:-}}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
@@ -122,6 +127,7 @@ while [[ $# -gt 0 ]]; do
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
+    --local-bin) require_value "$1" "${2:-}"; LOCAL_BIN="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --force) FORCE="1"; shift ;;
@@ -137,10 +143,37 @@ require_cmd tar
 require_cmd sha256sum
 require_cmd uname
 
+if [[ -n "${LOCAL_BIN}" && ! -f "${LOCAL_BIN}" ]]; then
+  echo "Local binary not found: ${LOCAL_BIN}" >&2
+  exit 1
+fi
+
 if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
   echo "Veil installer must run as root because Panel install writes systemd units and starts services." >&2
   echo "Run with sudo." >&2
   exit 1
+fi
+
+# When a local binary is requested, skip version checks and downloads entirely.
+if [[ -n "${LOCAL_BIN}" ]]; then
+  if [[ -n "${DRY_RUN}" ]]; then
+    RUN_BIN="${LOCAL_BIN}"
+    echo "Dry run: using local Veil binary ${RUN_BIN} without installing it."
+  else
+    mkdir -p "${INSTALL_DIR}"
+    install -m 0755 "${LOCAL_BIN}" "${INSTALL_DIR}/veil"
+    RUN_BIN="${INSTALL_DIR}/veil"
+    echo "Installed local binary ${LOCAL_BIN} to ${RUN_BIN}"
+  fi
+  args=(--profile "${PROFILE}")
+  if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
+  if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
+  if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
+  if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+  if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
+  if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
+  run_veil_install
+  exit $?
 fi
 
 # Idempotency: skip download only when the installed binary already matches the target.
