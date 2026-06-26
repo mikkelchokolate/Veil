@@ -142,12 +142,12 @@ func TestClientLinksUsesPerInboundPassword(t *testing.T) {
 	for _, link := range response.Links {
 		links[link.Name] = link
 	}
-	// Original hysteria2 uses global password
-	if links["hysteria2"].URI != "hysteria2://hy2-secret@vpn.example.com:443/?sni=vpn.example.com#hysteria2" {
+	// Original hysteria2 uses global password (insecure=1: self-signed server cert)
+	if links["hysteria2"].URI != "hysteria2://hy2-secret@vpn.example.com:443/?insecure=1&sni=vpn.example.com#hysteria2" {
 		t.Fatalf("original hysteria2 should use global password, got: %s", links["hysteria2"].URI)
 	}
 	// New inbound uses its own password
-	if links["hysteria2-alt"].URI != "hysteria2://alt-hy2-secret@vpn.example.com:8443/?sni=vpn.example.com#hysteria2-alt" {
+	if links["hysteria2-alt"].URI != "hysteria2://alt-hy2-secret@vpn.example.com:8443/?insecure=1&sni=vpn.example.com#hysteria2-alt" {
 		t.Fatalf("new hysteria2 should use per-inbound password, got: %s", links["hysteria2-alt"].URI)
 	}
 }

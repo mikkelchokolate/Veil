@@ -35,15 +35,18 @@ func TestGenerateOlcrtcRoomJitsiProducesURL(t *testing.T) {
 }
 
 func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
-	// Generate several rooms and assert none leak a tool/panel marker and each
-	// looks like a normal Jitsi room name (CamelCase words after the base URL).
-	for i := 0; i < 20; i++ {
+	// Generate many rooms: none may leak a tool/panel marker, each must be a
+	// valid room path segment (letters/digits/dashes), and across the sample we
+	// should observe more than one format (words, hex, dashes, …) so there is no
+	// single fingerprintable pattern.
+	shapes := map[string]bool{}
+	for i := 0; i < 200; i++ {
 		room, err := GenerateOlcrtcRoom("jitsi")
 		if err != nil {
 			t.Fatal(err)
 		}
 		lower := strings.ToLower(room)
-		for _, marker := range []string{"veil", "panel", "olcrtc", "room-", "generated"} {
+		for _, marker := range []string{"veil", "panel", "olcrtc", "generated"} {
 			if strings.Contains(lower, marker) {
 				t.Fatalf("room URL %q leaks marker %q", room, marker)
 			}
@@ -52,16 +55,22 @@ func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
 		if name == room || name == "" {
 			t.Fatalf("unexpected room URL shape: %q", room)
 		}
-		// Natural name: starts with an uppercase letter, only letters, no digits
-		// or dashes (unlike the old "veil-<hex>" pattern).
-		if name[0] < 'A' || name[0] > 'Z' {
-			t.Fatalf("room name should start uppercase like a Jitsi room: %q", name)
-		}
 		for _, c := range name {
-			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-				t.Fatalf("room name should be letters only (natural Jitsi style), got %q", name)
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') {
+				t.Fatalf("room name has an invalid path char in %q", name)
 			}
 		}
+		switch {
+		case strings.Contains(name, "-"):
+			shapes["dash"] = true
+		case name[0] >= 'a' && name[0] <= 'z':
+			shapes["lowerOrHexOrAlnum"] = true
+		default:
+			shapes["camel"] = true
+		}
+	}
+	if len(shapes) < 2 {
+		t.Fatalf("expected varied room formats, only saw: %v", shapes)
 	}
 }
 
