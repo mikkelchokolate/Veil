@@ -59,10 +59,6 @@ func (v goVersion) atLeast(other goVersion) bool {
 	return v.Patch >= other.Patch
 }
 
-func versionString(v goVersion) string {
-	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
-}
-
 // knownGoBins returns a list of likely Go binary paths, including the one on
 // PATH, common installation prefixes, and versioned /usr/lib/go-* packages.
 func knownGoBins() []string {
@@ -258,7 +254,7 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 	f.Close()
 
 	if hex.EncodeToString(hasher.Sum(nil)) != wantHash {
-		return fmt.Errorf("Go download checksum mismatch")
+		return fmt.Errorf("go download checksum mismatch")
 	}
 
 	f2, err := os.Open(tmpFile)

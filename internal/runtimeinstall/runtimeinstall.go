@@ -248,16 +248,6 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// goAvailable reports whether a Go toolchain is on PATH.
-func (o Options) goAvailable() bool {
-	lookup := o.LookPath
-	if lookup == nil {
-		lookup = exec.LookPath
-	}
-	_, err := lookup("go")
-	return err == nil
-}
-
 // InstallAll installs every runtime in the catalog and returns per-runtime
 // results. It does not stop at the first failure: each runtime is independent,
 // so a single broken upstream release should not block the others.
