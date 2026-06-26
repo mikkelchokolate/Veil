@@ -10,7 +10,7 @@ func TestRenderPanelCaddyfileProxiesOnlyPanelBasePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderPanelCaddyfile: %v", err)
 	}
-	for _, want := range []string{"example.com", "tls admin@example.com", "handle_path /panel-secret/*", "reverse_proxy 127.0.0.1:2096"} {
+	for _, want := range []string{"example.com", "issuer acme", "email admin@example.com", "issuer internal", "handle /panel-secret/*", "reverse_proxy 127.0.0.1:2096"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("panel Caddyfile missing %q:\n%s", want, body)
 		}
