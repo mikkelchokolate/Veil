@@ -104,18 +104,18 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "reload naive",
-			command: []string{"systemctl", "reload", "veil-caddy@panel.service"},
+			name:    "restart naive",
+			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
 			want:    true,
 		},
 		{
-			name:    "reload hysteria2 template",
-			command: []string{"systemctl", "reload", "veil-hysteria2@.service"},
+			name:    "restart hysteria2 template",
+			command: []string{"systemctl", "restart", "veil-hysteria2@.service"},
 			want:    true,
 		},
 		{
-			name:    "reload hysteria2 instance",
-			command: []string{"systemctl", "reload", "veil-hysteria2@default.service"},
+			name:    "restart hysteria2 instance",
+			command: []string{"systemctl", "restart", "veil-hysteria2@default.service"},
 			want:    true,
 		},
 		{
@@ -129,8 +129,8 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 			want:    false,
 		},
 		{
-			name:    "non-reload",
-			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			name:    "non-allowed verb",
+			command: []string{"systemctl", "status", "veil-caddy@panel.service"},
 			want:    false,
 		},
 		{
