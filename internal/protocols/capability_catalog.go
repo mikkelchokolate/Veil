@@ -159,7 +159,7 @@ func hysteria2Capability() Capability {
 		RuntimeUnit:            renderer.UnitHysteria2,
 		RuntimeTransport:       "udp",
 		RuntimeOrder:           20,
-		PromotedVerb:           "reload",
+		PromotedVerb:           "restart",
 		ValidateInboundRender:  true,
 		RequiresRenderSettings: true,
 		MaxEnabled:             0,
