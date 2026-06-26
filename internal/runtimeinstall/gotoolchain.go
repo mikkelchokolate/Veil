@@ -114,7 +114,14 @@ func findBestGo(minVersion string) (string, error) {
 		if err != nil || info.IsDir() {
 			continue
 		}
-		out, err := exec.Command(candidate, "version").CombinedOutput()
+		// Probe with a clean environment: a parent Go 1.26+ process may have
+		// set GOROOT to its own toolchain path (via go.mod toolchain
+		// auto-download), which would make a 1.22 system go binary report the
+		// newer version while still running 1.22 code. That breaks version
+		// selection and leads to "requires go >= 1.25 (running go 1.22)" errors.
+		cmd := exec.Command(candidate, "version")
+		cmd.Env = goLocalEnv()
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			continue
 		}
@@ -142,6 +149,35 @@ func findBestGo(minVersion string) (string, error) {
 		return "", nil
 	}
 	return best.path, nil
+}
+
+// goLocalEnv returns the current environment with Go-specific variables
+// stripped and GOTOOLCHAIN=local appended. This prevents a parent Go process
+// (or a go.mod in the current working directory) from auto-switching to a
+// different toolchain, which would make an older system go binary report a
+// newer version while still running older code.
+func goLocalEnv() []string {
+	var out []string
+	hasToolchain := false
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "GOROOT=") || strings.HasPrefix(e, "GOPATH=") ||
+			strings.HasPrefix(e, "GOMODCACHE=") || strings.HasPrefix(e, "GOBIN=") ||
+			strings.HasPrefix(e, "GOCACHE=") || strings.HasPrefix(e, "GOENV=") ||
+			strings.HasPrefix(e, "GOFLAGS=") || strings.HasPrefix(e, "GONOSUMDB=") ||
+			strings.HasPrefix(e, "GOSUMDB=") || strings.HasPrefix(e, "GOPRIVATE=") ||
+			strings.HasPrefix(e, "GONOSUMCHECK=") || strings.HasPrefix(e, "GOPROXY=") {
+			continue
+		}
+		if strings.HasPrefix(e, "GOTOOLCHAIN=") {
+			hasToolchain = true
+			continue
+		}
+		out = append(out, e)
+	}
+	if !hasToolchain {
+		out = append(out, "GOTOOLCHAIN=local")
+	}
+	return out
 }
 
 // GoToolchain manages a self-contained Go installation cached under CacheDir/go.
@@ -333,6 +369,8 @@ func goBuildEnv(goBin string) []string {
 		case strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path="):
 			filtered = append(filtered, e+":"+goBinDir)
 			hasPath = true
+		case strings.HasPrefix(e, "GOTOOLCHAIN="):
+			// Ignore inherited toolchain policy; we explicitly pin below.
 		default:
 			filtered = append(filtered, e)
 		}
@@ -346,6 +384,10 @@ func goBuildEnv(goBin string) []string {
 	if !hasPath {
 		filtered = append(filtered, "PATH="+os.Getenv("PATH")+":"+goBinDir)
 	}
+	// Force the selected go binary to use its own toolchain. Without this, a
+	// go.mod in the current working directory can trigger GOTOOLCHAIN=auto to
+	// switch to a different toolchain, breaking version detection and builds.
+	filtered = append(filtered, "GOTOOLCHAIN=local")
 	if !hasGonosumdb {
 		filtered = append(filtered, "GONOSUMDB=*")
 	}
