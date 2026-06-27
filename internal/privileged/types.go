@@ -24,9 +24,9 @@ const (
 	OperationBackupRestore Operation = "backup_restore"
 	OperationRotateKey     Operation = "rotate_key"
 	OperationFirewallApply Operation = "firewall_apply"
-	OperationStageUpdate    Operation = "stage_update"
-	OperationRestartPanel   Operation = "restart_panel"
-	OperationSyncCaddyCert  Operation = "sync_caddy_cert"
+	OperationStageUpdate   Operation = "stage_update"
+	OperationRestartPanel  Operation = "restart_panel"
+	OperationSyncCaddyCert Operation = "sync_caddy_cert"
 )
 
 func (o Operation) Valid() bool {
@@ -172,8 +172,8 @@ type UpdateResult struct {
 type RestartPanelRequest struct{}
 
 type SyncCaddyCertRequest struct {
-	Domain  string `json:"domain"`
-	OutDir  string `json:"outDir"`
+	Domain string `json:"domain"`
+	OutDir string `json:"outDir"`
 }
 
 type SyncCaddyCertResult struct {
@@ -193,9 +193,9 @@ type RequestEnvelope struct {
 	Backup        *BackupRequest        `json:"backup,omitempty"`
 	RotateKey     *RotateKeyRequest     `json:"rotateKey,omitempty"`
 	Firewall      *FirewallRequest      `json:"firewall,omitempty"`
-	Update        *UpdateRequest         `json:"update,omitempty"`
-	RestartPanel  *RestartPanelRequest   `json:"restartPanel,omitempty"`
-	SyncCaddyCert *SyncCaddyCertRequest  `json:"syncCaddyCert,omitempty"`
+	Update        *UpdateRequest        `json:"update,omitempty"`
+	RestartPanel  *RestartPanelRequest  `json:"restartPanel,omitempty"`
+	SyncCaddyCert *SyncCaddyCertRequest `json:"syncCaddyCert,omitempty"`
 }
 
 type ResponseEnvelope struct {
