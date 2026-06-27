@@ -738,12 +738,15 @@ type SessionInfo struct {
 
 // Settings defines model for Settings.
 type Settings struct {
-	Domain            *string              `json:"domain,omitempty"`
-	Email             *openapi_types.Email `json:"email,omitempty"`
-	FallbackRoot      *string              `json:"fallbackRoot,omitempty"`
-	Hysteria2Password *string              `json:"hysteria2Password,omitempty"`
-	MasqueradeURL     *string              `json:"masqueradeURL,omitempty"`
-	Mode              string               `json:"mode"`
+	Domain       *string              `json:"domain,omitempty"`
+	Email        *openapi_types.Email `json:"email,omitempty"`
+	FallbackRoot *string              `json:"fallbackRoot,omitempty"`
+
+	// FirewallManagement When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
+	FirewallManagement *bool   `json:"firewallManagement,omitempty"`
+	Hysteria2Password  *string `json:"hysteria2Password,omitempty"`
+	MasqueradeURL      *string `json:"masqueradeURL,omitempty"`
+	Mode               string  `json:"mode"`
 
 	// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
 	NaivePassword   *string              `json:"naivePassword,omitempty"`

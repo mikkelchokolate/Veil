@@ -8,12 +8,22 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
+
+// firewallApplier is the UFW rule applier used by apply. Tests can override it
+// to avoid running real ufw commands.
+type firewallApplier interface {
+	EnsureActive() error
+	ApplyRules(rules []firewall.Rule) error
+}
+
+var firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
 
 type ManagementApplyContext struct {
 	state *managementState
@@ -176,6 +186,12 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			}
 		}
 	}
+
+	// Synchronize firewall rules for the panel and enabled inbounds. This is
+	// intentionally non-fatal: a firewall misconfiguration should not roll back
+	// an otherwise successful apply.
+	results = append(results, ctx.syncFirewallLocked()...)
+
 	return results
 }
 
@@ -259,6 +275,33 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2() ServiceActionResul
 	return result
 }
 
+func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
+	// Firewall management is enabled by default. A nil pointer means the setting
+	// is absent from an older state file, which we treat as enabled.
+	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
+		return nil
+	}
+	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
+	rules := firewall.UFWRulesFromResponses(responses)
+	if len(rules) == 0 {
+		return nil
+	}
+	result := ServiceActionResult{
+		Name:    "sync-firewall",
+		Command: []string{"ufw", "sync-rules"},
+	}
+	if err := firewallApplierInstance.EnsureActive(); err != nil {
+		result.Error = err.Error()
+		return []ServiceActionResult{result}
+	}
+	if err := firewallApplierInstance.ApplyRules(rules); err != nil {
+		result.Error = err.Error()
+		return []ServiceActionResult{result}
+	}
+	result.Success = true
+	return []ServiceActionResult{result}
+}
+
 func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action privileged.ServiceAction) ServiceActionResult {
 	result := ServiceActionResult{
 		Name: unit, Command: []string{"systemctl", string(action), unit},
@@ -320,11 +363,22 @@ func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success
 	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }
 
+func filterHealthCheckableActions(actions []ServiceActionResult) []ServiceActionResult {
+	catalog := NewManagedRuntimeCatalog()
+	out := make([]ServiceActionResult, 0, len(actions))
+	for _, action := range actions {
+		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
+			out = append(out, action)
+		}
+	}
+	return out
+}
+
 func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
-		}).Check(actions)
+		}).Check(filterHealthCheckableActions(actions))
 	}
 	units := []string{}
 	for _, action := range actions {

@@ -3,11 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -23,6 +26,13 @@ var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 
 var installExecutableFunc = os.Executable
 var installPrepareHostFunc = hostaccess.Prepare
+var installFirewallApplyFunc = func(rules []firewall.Rule) error {
+	applier := firewall.NewUFWApplier()
+	if err := applier.EnsureActive(); err != nil {
+		return fmt.Errorf("enable firewall: %w", err)
+	}
+	return applier.ApplyRules(rules)
+}
 
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
 	actualBackupDir := opts.BackupDir
@@ -147,6 +157,16 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
 	}
+
+	// 3a. Ensure the firewall is active and open ports required by the panel.
+	installPlan, planErr := buildInstallPlan(profile, opts)
+	if planErr == nil && len(installPlan.FirewallActions) > 0 {
+		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+			return fmt.Errorf("apply firewall rules: %w", err)
+		}
+	}
+
 	if shouldPrepareInstallHost(systemdDir) {
 		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
@@ -179,3 +199,28 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 func shouldPrepareInstallHost(systemdDir string) bool {
 	return filepath.Clean(systemdDir) == filepath.Clean(defaultSystemdDir)
 }
+
+func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) (installer.InstallPlan, error) {
+	platform := hostenv.CurrentPlatform()
+	if platform.OS != "linux" {
+		platform.OS = "linux"
+	}
+	caddyBinary := opts.CaddyBinary
+	if profile.InstallPanelCaddy && caddyBinary == "" {
+		if path, err := execLookPath("caddy"); err == nil {
+			caddyBinary = path
+		}
+	}
+	panelPort := opts.PanelPort
+	if profile.InstallPanelCaddy {
+		panelPort = 0
+	}
+	return installer.BuildInstallPlan(profile, installer.InstallPlanInput{
+		Platform:     platform,
+		SystemdUnits: installer.PanelSystemdUnits(profile),
+		PanelPort:    panelPort,
+		CaddyBinary:  caddyBinary,
+	})
+}
+
+var execLookPath = exec.LookPath
