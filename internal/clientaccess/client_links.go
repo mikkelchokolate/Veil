@@ -28,22 +28,24 @@ func NaiveClientURI(domain string, port int, username string, password string) s
 	return fmt.Sprintf("naive+https://%s@%s:%d", userinfo, domain, port)
 }
 
-func Hysteria2ClientURI(domain string, port int, password string, name string) string {
+func Hysteria2ClientURI(domain string, port int, password string, name string, insecure bool) string {
 	query := url.Values{}
 	query.Set("sni", domain)
-	// The server serves a self-signed cert, so the client must skip cert
-	// verification (pinning by SNI). This is what lets Hysteria2 work without
-	// a publicly-trusted (ACME) certificate.
-	query.Set("insecure", "1")
+	if insecure {
+		// Allow clients to skip verification when the server is using a
+		// self-signed certificate instead of a publicly-trusted one.
+		query.Set("insecure", "1")
+	}
 	fragment := url.QueryEscape(name)
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", url.QueryEscape(password), domain, port, query.Encode(), fragment)
 }
 
-func Hysteria2UserPassClientURI(domain string, port int, username string, password string, name string) string {
+func Hysteria2UserPassClientURI(domain string, port int, username string, password string, name string, insecure bool) string {
 	query := url.Values{}
 	query.Set("sni", domain)
-	// Self-signed server cert: client skips verification (see above).
-	query.Set("insecure", "1")
+	if insecure {
+		query.Set("insecure", "1")
+	}
 	fragment := url.QueryEscape(name)
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)

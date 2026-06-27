@@ -39,6 +39,7 @@ func panelInboundActionsJS() string {
         password: 'inbound-password',
         naivePassword: 'inbound-naive-password',
         hysteria2Password: 'inbound-hysteria2-password',
+        hysteria2Insecure: 'inbound-hysteria2-insecure',
         olcrtcRoomID: 'inbound-olcrtc-room-id'
       };
       return document.getElementById(ids[normalized] || '');
@@ -106,8 +107,10 @@ func panelInboundActionsJS() string {
       } else if (protocol === 'hysteria2') {
         const passwordEl = document.getElementById('inbound-hysteria2-password');
         const masqueradeEl = document.getElementById('inbound-masquerade-url');
+        const insecureEl = document.getElementById('inbound-hysteria2-insecure');
         if (passwordEl) payload.hysteria2Password = passwordEl.value.trim();
         if (masqueradeEl) payload.masqueradeURL = masqueradeEl.value.trim();
+        if (insecureEl) payload.hysteria2Insecure = insecureEl.checked;
       } else if (protocol === 'olcrtc') {
         const authEl = document.getElementById('inbound-olcrtc-auth');
         const transportEl = document.getElementById('inbound-olcrtc-transport');
@@ -429,6 +432,12 @@ func panelInboundActionsJS() string {
             '<label for="inbound-masquerade-url">Masquerade URL</label>' +
             '<input id="inbound-masquerade-url" autocomplete="off" placeholder="https://example.com">' +
           '</div>' +
+          '<div>' +
+            '<label for="inbound-hysteria2-insecure" style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
+              '<input id="inbound-hysteria2-insecure" type="checkbox" style="width:auto">' +
+              'Insecure mode (allow self-signed server certificate)' +
+            '</label>' +
+          '</div>' +
         '</div>';
       } else if (protocol === 'olcrtc') {
         html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
@@ -470,6 +479,7 @@ func panelInboundActionsJS() string {
         } else if (protocol === 'hysteria2') {
           document.getElementById('inbound-hysteria2-password').value = inbound.hysteria2Password || '';
           document.getElementById('inbound-masquerade-url').value = inbound.masqueradeURL || '';
+          document.getElementById('inbound-hysteria2-insecure').checked = !!inbound.hysteria2Insecure;
         } else if (protocol === 'olcrtc') {
           document.getElementById('inbound-olcrtc-auth').value = inbound.olcrtcAuth || 'jitsi';
           document.getElementById('inbound-olcrtc-transport').value = inbound.olcrtcTransport || 'datachannel';
