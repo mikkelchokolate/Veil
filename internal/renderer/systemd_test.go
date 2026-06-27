@@ -150,7 +150,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"PrivateNetwork=true",
 		"RestrictAddressFamilies=AF_UNIX",
 		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER\n",
-		"ReadWritePaths=/etc/veil/generated /etc/veil/state.key /var/lib/veil /usr/local/bin",
+		"ReadWritePaths=/etc/veil/generated /etc/veil/certs /etc/veil/state.key /var/lib/veil /usr/local/bin",
 	} {
 		if !strings.Contains(helper, want) {
 			t.Fatalf("veil-helper.service missing %q:\n%s", want, helper)

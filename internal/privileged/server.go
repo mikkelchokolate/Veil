@@ -143,6 +143,8 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 			return nil, err
 		}
 		return struct{}{}, nil
+	case OperationSyncCaddyCert:
+		return s.client.SyncCaddyCert(ctx, *request.SyncCaddyCert)
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}

@@ -73,6 +73,12 @@ func (c *SocketClient) RestartPanel(ctx context.Context) error {
 	return c.call(ctx, RequestEnvelope{Operation: OperationRestartPanel, RestartPanel: &request}, nil)
 }
 
+func (c *SocketClient) SyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+	var result SyncCaddyCertResult
+	err := c.call(ctx, RequestEnvelope{Operation: OperationSyncCaddyCert, SyncCaddyCert: &request}, &result)
+	return result, err
+}
+
 func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result any) error {
 	request.Version = ProtocolVersion
 	request.RequestID = newRequestID()

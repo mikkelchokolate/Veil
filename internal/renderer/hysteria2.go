@@ -53,8 +53,10 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	}
 	const tpl = `listen: :{{ .ListenPort }}
 
-# Self-signed TLS from Veil's managed cert — no ACME, works on any host.
-# Clients connect with insecure + SNI (see the generated client link).
+# TLS certificate served by Hysteria2. When Panel access is set to "caddy",
+# Veil copies Caddy's managed Let's Encrypt certificate here automatically.
+# Otherwise Veil's self-signed panel certificate is used and clients connect
+# with insecure + SNI (see the generated client link).
 tls:
   cert: {{ .CertPath }}
   key: {{ .KeyPath }}
