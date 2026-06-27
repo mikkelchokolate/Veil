@@ -11,15 +11,15 @@ import (
 
 func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	statePath := filepath.Join(t.TempDir(), "state.json")
+	applyRoot := t.TempDir()
+	statePath := filepath.Join(applyRoot, "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"inbounds":[],"warp":{}}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client, StatePath: statePath})
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client, StatePath: statePath, ApplyRoot: applyRoot})
 	state.settings.PanelAccess = "caddy"
 	state.settings.Domain = "vpn.example.com"
 	state.settings.Email = "admin@example.com"
-	state.liveRoot = filepath.Join(state.applyRoot, "live")
 
 	liveRoot := state.liveRoot
 	hyPath := filepath.Join(liveRoot, "hysteria2", "server.yaml")
@@ -47,14 +47,14 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 
 func TestReloadPromotedServicesSkipsCertSyncWhenPanelAccessIsLocal(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	statePath := filepath.Join(t.TempDir(), "state.json")
+	applyRoot := t.TempDir()
+	statePath := filepath.Join(applyRoot, "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"inbounds":[],"warp":{}}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client, StatePath: statePath})
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client, StatePath: statePath, ApplyRoot: applyRoot})
 	state.settings.PanelAccess = "local"
 	state.settings.Domain = "vpn.example.com"
-	state.liveRoot = filepath.Join(state.applyRoot, "live")
 
 	liveRoot := state.liveRoot
 	hyPath := filepath.Join(liveRoot, "hysteria2", "server.yaml")
