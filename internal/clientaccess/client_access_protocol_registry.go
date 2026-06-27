@@ -142,12 +142,19 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	return link, true
 }
 
+func hysteria2Insecure(input ClientAccessLinkInput) bool {
+	if input.Inbound.Hysteria2Insecure {
+		return true
+	}
+	return input.Settings.Hysteria2Insecure
+}
+
 func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if !hasClientEndpoint(input.Settings) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = Hysteria2UserPassClientURI(clientEndpoint(input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name)
+	link.URI = Hysteria2UserPassClientURI(clientEndpoint(input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, hysteria2Insecure(input))
 	return link, true
 }
 
@@ -163,7 +170,7 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 			password = input.Settings.Hysteria2Password
 		}
 	}
-	link.URI = Hysteria2ClientURI(clientEndpoint(input.Settings), input.Inbound.Port, password, input.Inbound.Name)
+	link.URI = Hysteria2ClientURI(clientEndpoint(input.Settings), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
 	return link, true
 }
 

@@ -50,6 +50,12 @@ func panelSettingsCardHTML() string {
               <input id="settings-hysteria2-password" type="password" autocomplete="off" placeholder="Hysteria2 password">
             </div>
             <div>
+              <label for="settings-hysteria2-insecure" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input id="settings-hysteria2-insecure" type="checkbox" style="width:auto">
+                Hysteria2 insecure mode (allow self-signed cert)
+              </label>
+            </div>
+            <div>
               <label for="settings-masquerade-url">Masquerade URL</label>
               <input id="settings-masquerade-url" autocomplete="off" placeholder="https://example.com">
             </div>

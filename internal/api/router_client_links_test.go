@@ -142,13 +142,49 @@ func TestClientLinksUsesPerInboundPassword(t *testing.T) {
 	for _, link := range response.Links {
 		links[link.Name] = link
 	}
-	// Original hysteria2 uses global password (insecure=1: self-signed server cert)
-	if links["hysteria2"].URI != "hysteria2://hy2-secret@vpn.example.com:443/?insecure=1&sni=vpn.example.com#hysteria2" {
-		t.Fatalf("original hysteria2 should use global password, got: %s", links["hysteria2"].URI)
+	// Original hysteria2 uses global password (secure by default, no insecure=1)
+	if links["hysteria2"].URI != "hysteria2://hy2-secret@vpn.example.com:443/?sni=vpn.example.com#hysteria2" {
+		t.Fatalf("original hysteria2 should use global password securely, got: %s", links["hysteria2"].URI)
 	}
 	// New inbound uses its own password
-	if links["hysteria2-alt"].URI != "hysteria2://alt-hy2-secret@vpn.example.com:8443/?insecure=1&sni=vpn.example.com#hysteria2-alt" {
-		t.Fatalf("new hysteria2 should use per-inbound password, got: %s", links["hysteria2-alt"].URI)
+	if links["hysteria2-alt"].URI != "hysteria2://alt-hy2-secret@vpn.example.com:8443/?sni=vpn.example.com#hysteria2-alt" {
+		t.Fatalf("new hysteria2 should use per-inbound password securely, got: %s", links["hysteria2-alt"].URI)
+	}
+}
+
+func TestClientLinksHysteria2InsecureFlag(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	// Enable insecure mode globally.
+	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret","hysteria2Insecure":true}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+	var response ClientLinksResponse
+	if err := json.NewDecoder(w2.Body).Decode(&response); err != nil {
+		t.Fatalf("decode client links: %v", err)
+	}
+	links := map[string]ClientLink{}
+	for _, link := range response.Links {
+		links[link.Name] = link
+	}
+	if !strings.Contains(links["hysteria2"].URI, "insecure=1") {
+		t.Fatalf("hysteria2 link should contain insecure=1 when enabled, got: %s", links["hysteria2"].URI)
 	}
 }
 

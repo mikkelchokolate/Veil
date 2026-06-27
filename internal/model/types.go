@@ -10,6 +10,7 @@ type Settings struct {
 	NaiveUsername     string `json:"naiveUsername,omitempty"`
 	NaivePassword     string `json:"naivePassword,omitempty"`
 	Hysteria2Password string `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure bool   `json:"hysteria2Insecure,omitempty"`
 	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
 	FallbackRoot      string `json:"fallbackRoot,omitempty"`
 	OlcrtcAuth        string `json:"olcrtcAuth,omitempty"`
@@ -35,6 +36,7 @@ type Inbound struct {
 	NaiveUsername     string          `json:"naiveUsername,omitempty"`
 	NaivePassword     string          `json:"naivePassword,omitempty"`
 	Hysteria2Password string          `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure bool            `json:"hysteria2Insecure,omitempty"`
 	MasqueradeURL     string          `json:"masqueradeURL,omitempty"`
 	FallbackRoot      string          `json:"fallbackRoot,omitempty"`
 	OlcrtcAuth        string          `json:"olcrtcAuth,omitempty"`
