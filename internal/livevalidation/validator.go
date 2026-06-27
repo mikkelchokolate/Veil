@@ -176,7 +176,7 @@ func (v Validator) validateInbound(
 	}
 
 	issues = append(issues, requiredFieldIssues(request.Settings, inbound)...)
-	if supported {
+	if supported && strings.TrimSpace(inbound.Name) != "" {
 		issues = append(issues, v.runtimeIssues(ctx, inbound)...)
 	}
 	return issues
