@@ -326,7 +326,7 @@ func panelInboundActionsJS() string {
                 '<button type="button" class="dropdown-btn" style="padding: 6px 12px; font-size: 0.8rem;">Actions ▾</button>' +
                 '<div class="dropdown-content">' +
                   '<button type="button" data-admin-only="true" onclick="openEditInboundModal(\'' + inbound.name + '\')">Edit Inbound</button>' +
-                  '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\')">Client Links</button>' +
+                  '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\', \'' + inbound.protocol + '\')">Client Links</button>' +
                   '<button type="button" data-admin-only="true" onclick="directDeleteInbound(\'' + inbound.name + '\')" style="color: var(--accent-danger);">Delete</button>' +
                 '</div>' +
               '</div>' +
