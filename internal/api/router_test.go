@@ -78,7 +78,8 @@ func writeRenderableManagementState(path string, inboundSet string) error {
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret",
 			"masqueradeURL":"https://www.bing.com/",
-			"fallbackRoot":"/var/lib/veil/www"
+			"fallbackRoot":"/var/lib/veil/www",
+			"firewallManagement":false
 		},
 		"inbounds":`+inbounds+`,
 		"routingRules":[],
@@ -88,7 +89,7 @@ func writeRenderableManagementState(path string, inboundSet string) error {
 
 func writeRenderableMieruManagementState(path string) error {
 	return os.WriteFile(path, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","firewallManagement":false},
 		"inbounds":[{"name":"mieru","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"password":"mieru-secret"}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}

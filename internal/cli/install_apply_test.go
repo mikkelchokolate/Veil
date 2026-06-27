@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -263,5 +264,66 @@ func TestApplyRURecommendedInstallPreservesExistingState(t *testing.T) {
 	}
 	if !strings.Contains(got, "Password: [preserved existing password]") {
 		t.Fatalf("expected output to contain preserved password message: %s", got)
+	}
+}
+
+func TestApplyRURecommendedInstallAppliesFirewallRules(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	oldFirewall := installFirewallApplyFunc
+
+	var gotRules []firewall.Rule
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		return installer.ApplyResult{BackupID: "backup-fw", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	installFirewallApplyFunc = func(rules []firewall.Rule) error {
+		gotRules = rules
+		return nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+		installFirewallApplyFunc = oldFirewall
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+
+	profile := installer.RURecommendedProfile{
+		Domain:      "example.com",
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelPort: 3000}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+
+	if len(gotRules) == 0 {
+		t.Fatal("expected firewall rules to be applied")
+	}
+	foundPanel := false
+	for _, r := range gotRules {
+		if len(r.Args) >= 1 && r.Args[0] == "allow" && strings.Contains(r.Args[1], "3000/tcp") {
+			foundPanel = true
+			break
+		}
+	}
+	if !foundPanel {
+		t.Fatalf("expected panel port firewall rule, got %+v", gotRules)
 	}
 }
