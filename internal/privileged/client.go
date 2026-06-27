@@ -12,4 +12,5 @@ type Client interface {
 	FirewallApply(context.Context, FirewallRequest) (FirewallResult, error)
 	StageUpdate(context.Context, UpdateRequest) (UpdateResult, error)
 	RestartPanel(context.Context) error
+	SyncCaddyCert(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
 }

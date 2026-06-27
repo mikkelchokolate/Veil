@@ -133,6 +133,12 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
+	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.hysteria2ConfigReloadNeeded(liveFiles) {
+		results = append(results, ctx.syncCaddyCertForHysteria2())
+		if !results[len(results)-1].Success {
+			return results
+		}
+	}
 	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
@@ -210,6 +216,47 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}
 	}
 	return rollbackFiles, rollbackActions
+}
+
+func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
+	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+		if runtime.Protocol != "hysteria2" {
+			continue
+		}
+		if runtime.PromotedSubpath == "" {
+			continue
+		}
+		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
+		if containsCleanPath(liveFiles, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ctx ManagementApplyContext) syncCaddyCertForHysteria2() ServiceActionResult {
+	result := ServiceActionResult{
+		Name:    "sync-caddy-cert",
+		Command: []string{"helper", "sync_caddy_cert", ctx.state.settings.Domain},
+	}
+	if ctx.state.privileged == nil {
+		result.Error = "privileged helper is unavailable"
+		return result
+	}
+	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
+		Domain: ctx.state.settings.Domain,
+		OutDir: "/etc/veil/certs",
+	})
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if !syncResult.Found {
+		result.Error = "Caddy has not yet issued a certificate for " + ctx.state.settings.Domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
+		return result
+	}
+	result.Success = true
+	return result
 }
 
 func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action privileged.ServiceAction) ServiceActionResult {

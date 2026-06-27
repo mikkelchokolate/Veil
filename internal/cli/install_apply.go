@@ -42,6 +42,9 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if err := os.MkdirAll(opts.EtcDir, 0755); err != nil {
 		return fmt.Errorf("create etc directory: %w", err)
 	}
+	if err := os.MkdirAll(filepath.Join(opts.EtcDir, "certs"), 0700); err != nil {
+		return fmt.Errorf("create certs directory: %w", err)
+	}
 	if err := os.MkdirAll(opts.VarDir, 0755); err != nil {
 		return fmt.Errorf("create var directory: %w", err)
 	}

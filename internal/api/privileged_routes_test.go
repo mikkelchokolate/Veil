@@ -18,17 +18,18 @@ import (
 )
 
 type recordingPrivilegedClient struct {
-	serviceActions    []privileged.ServiceActionRequest
-	promotions        []privileged.PromoteRequest
-	promoteResult     privileged.PromoteResult
-	statusRequests    []privileged.ServiceStatusRequest
-	statusActiveState string
-	journals          []privileged.JournalRequest
-	backups           []privileged.BackupRequest
-	updates           []privileged.UpdateRequest
-	rotateCalls       int
-	restartCalls      atomic.Int32
-	err               error
+	serviceActions        []privileged.ServiceActionRequest
+	promotions            []privileged.PromoteRequest
+	promoteResult         privileged.PromoteResult
+	statusRequests        []privileged.ServiceStatusRequest
+	statusActiveState     string
+	journals              []privileged.JournalRequest
+	backups               []privileged.BackupRequest
+	updates               []privileged.UpdateRequest
+	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
+	rotateCalls           int
+	restartCalls          atomic.Int32
+	err                   error
 }
 
 func (c *recordingPrivilegedClient) Promote(_ context.Context, request privileged.PromoteRequest) (privileged.PromoteResult, error) {
@@ -178,6 +179,11 @@ func (c *recordingPrivilegedClient) StageUpdate(_ context.Context, request privi
 func (c *recordingPrivilegedClient) RestartPanel(context.Context) error {
 	c.restartCalls.Add(1)
 	return c.err
+}
+
+func (c *recordingPrivilegedClient) SyncCaddyCert(_ context.Context, request privileged.SyncCaddyCertRequest) (privileged.SyncCaddyCertResult, error) {
+	c.syncCaddyCertRequests = append(c.syncCaddyCertRequests, request)
+	return privileged.SyncCaddyCertResult{Found: true, CertPath: "/etc/veil/certs/test.crt", KeyPath: "/etc/veil/certs/test.key"}, c.err
 }
 
 func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {

@@ -24,8 +24,9 @@ const (
 	OperationBackupRestore Operation = "backup_restore"
 	OperationRotateKey     Operation = "rotate_key"
 	OperationFirewallApply Operation = "firewall_apply"
-	OperationStageUpdate   Operation = "stage_update"
-	OperationRestartPanel  Operation = "restart_panel"
+	OperationStageUpdate    Operation = "stage_update"
+	OperationRestartPanel   Operation = "restart_panel"
+	OperationSyncCaddyCert  Operation = "sync_caddy_cert"
 )
 
 func (o Operation) Valid() bool {
@@ -43,7 +44,8 @@ func (o Operation) Valid() bool {
 		OperationRotateKey,
 		OperationFirewallApply,
 		OperationStageUpdate,
-		OperationRestartPanel:
+		OperationRestartPanel,
+		OperationSyncCaddyCert:
 		return true
 	default:
 		return false
@@ -169,6 +171,17 @@ type UpdateResult struct {
 
 type RestartPanelRequest struct{}
 
+type SyncCaddyCertRequest struct {
+	Domain  string `json:"domain"`
+	OutDir  string `json:"outDir"`
+}
+
+type SyncCaddyCertResult struct {
+	CertPath string `json:"certPath,omitempty"`
+	KeyPath  string `json:"keyPath,omitempty"`
+	Found    bool   `json:"found"`
+}
+
 type RequestEnvelope struct {
 	Version       int                   `json:"version"`
 	RequestID     string                `json:"requestId"`
@@ -180,8 +193,9 @@ type RequestEnvelope struct {
 	Backup        *BackupRequest        `json:"backup,omitempty"`
 	RotateKey     *RotateKeyRequest     `json:"rotateKey,omitempty"`
 	Firewall      *FirewallRequest      `json:"firewall,omitempty"`
-	Update        *UpdateRequest        `json:"update,omitempty"`
-	RestartPanel  *RestartPanelRequest  `json:"restartPanel,omitempty"`
+	Update        *UpdateRequest         `json:"update,omitempty"`
+	RestartPanel  *RestartPanelRequest   `json:"restartPanel,omitempty"`
+	SyncCaddyCert *SyncCaddyCertRequest  `json:"syncCaddyCert,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -212,6 +226,7 @@ func (r RequestEnvelope) Validate() error {
 		r.Firewall != nil,
 		r.Update != nil,
 		r.RestartPanel != nil,
+		r.SyncCaddyCert != nil,
 	}
 	count := 0
 	for _, present := range payloads {
@@ -248,6 +263,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.Update != nil
 	case OperationRestartPanel:
 		return r.RestartPanel != nil
+	case OperationSyncCaddyCert:
+		return r.SyncCaddyCert != nil
 	default:
 		return false
 	}
