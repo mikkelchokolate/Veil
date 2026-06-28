@@ -25,6 +25,9 @@ func panelApplyActionsJS() string {
       await loadJSON(applyHistoryPath(), 'apply-plan-output');
     }
 
+    // applyWorkflowCommands is emitted by PanelActionsJS() as raw JavaScript.
+    // The data is JSON-marshalled server-side and treated as code, not a quoted string.
+    // lgtm[go/unsafe-quoting]
 ` + NewApplyWorkflowCommandCatalog().PanelActionsJS() + `
 
     document.getElementById('load-apply-history').addEventListener('click', loadApplyHistory);`

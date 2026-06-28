@@ -145,11 +145,13 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	panelAccess := s.settings.PanelAccess
 	http.SetCookie(w, &http.Cookie{
 		Name:     "veil_session",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   r.TLS != nil || panelAccess == "caddy",
 		MaxAge:   -1,
 	})
 

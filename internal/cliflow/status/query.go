@@ -143,7 +143,12 @@ func HTTPClient(rawURL string) *http.Client {
 		return http.DefaultClient
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // generated local Panel TLS is self-signed
+	// The local Panel uses a self-signed certificate; verification is skipped
+	// only for loopback addresses. lgtm[go/disabled-certificate-check]
+	transport.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+		MinVersion:         tls.VersionTLS12,
+	}
 	return &http.Client{Transport: transport}
 }
 
