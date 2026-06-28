@@ -2,13 +2,10 @@ package status
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -138,25 +135,5 @@ func Fetch(ctx context.Context, url string, token string) (*Response, error) {
 }
 
 func HTTPClient(rawURL string) *http.Client {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme != "https" || !IsLocalHost(parsed.Hostname()) {
-		return http.DefaultClient
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	// The local Panel uses a self-signed certificate; verification is skipped
-	// only for loopback addresses. lgtm[go/disabled-certificate-check]
-	transport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS12,
-	}
-	return &http.Client{Transport: transport}
-}
-
-func IsLocalHost(host string) bool {
-	host = strings.TrimSpace(strings.ToLower(host))
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return http.DefaultClient
 }
