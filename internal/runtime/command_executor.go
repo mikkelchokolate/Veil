@@ -11,6 +11,7 @@ import (
 type RuntimeCommandInput struct {
 	Command []string
 	Timeout time.Duration
+	Env     []string
 }
 
 type RuntimeCommandOutput struct {
@@ -47,6 +48,9 @@ func (RuntimeCommandExecutor) Run(input RuntimeCommandInput) RuntimeCommandOutpu
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, command[1:]...)
+	if len(input.Env) > 0 {
+		cmd.Env = input.Env
+	}
 	out, err := cmd.CombinedOutput()
 	result.Output = strings.TrimSpace(string(out))
 	if ctx.Err() == context.DeadlineExceeded {

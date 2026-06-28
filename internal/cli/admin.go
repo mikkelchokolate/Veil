@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"syscall"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -271,6 +272,11 @@ func newAdminCommand() *cobra.Command {
 				return fmt.Errorf("encrypt state snapshot: %w", err)
 			}
 
+			// Capture ownership/permissions of existing files so the rotated files
+			// keep the same access rights (e.g. root:veil 640).
+			statePerm := captureFilePermissions(resolvedState)
+			keyPerm := captureFilePermissions(targetKeyPath)
+
 			// Write new state to temporary file
 			tempStatePath := resolvedState + ".tmp"
 			if err := os.WriteFile(tempStatePath, encryptedBytes, 0o600); err != nil {
@@ -324,6 +330,10 @@ func newAdminCommand() *cobra.Command {
 				_ = os.Remove(backupKeyPath)
 			}
 
+			// Restore ownership/permissions on the rotated files.
+			statePerm.apply(resolvedState)
+			keyPerm.apply(targetKeyPath)
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "New key written to: %s\n", targetKeyPath)
 			return nil
@@ -347,4 +357,37 @@ func generateRandomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// filePermissions captures ownership and mode of an existing file so that a
+// replacement file can inherit them. Missing files are represented by a zero
+// value that does nothing when applied.
+type filePermissions struct {
+	uid  int
+	gid  int
+	mode os.FileMode
+	ok   bool
+}
+
+func captureFilePermissions(path string) filePermissions {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return filePermissions{}
+	}
+	p := filePermissions{mode: fi.Mode().Perm(), ok: true}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		p.uid = int(st.Uid)
+		p.gid = int(st.Gid)
+	}
+	return p
+}
+
+func (p filePermissions) apply(path string) {
+	if !p.ok {
+		return
+	}
+	_ = os.Chmod(path, p.mode)
+	if p.uid >= 0 && p.gid >= 0 {
+		_ = os.Chown(path, p.uid, p.gid)
+	}
 }

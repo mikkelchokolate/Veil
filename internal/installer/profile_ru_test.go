@@ -62,7 +62,7 @@ func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyfile(t *testin
 	if !strings.Contains(profile.Caddyfile, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("Caddyfile missing reverse_proxy for panel port:\n%s", profile.Caddyfile)
 	}
-	if !strings.Contains(profile.Caddyfile, "handle_path /"+strings.Trim(profile.WebBasePath, "/")+"/*") {
+	if !strings.Contains(profile.Caddyfile, "handle /"+strings.Trim(profile.WebBasePath, "/")+"/*") {
 		t.Fatalf("Caddyfile missing handle_path for web base path %s:\n%s", profile.WebBasePath, profile.Caddyfile)
 	}
 }

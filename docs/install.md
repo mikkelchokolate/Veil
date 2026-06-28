@@ -94,7 +94,39 @@ Exposes the Panel directly on all interfaces on the configured port using self-s
 
 ---
 
-## 3. Manual Building from Source
+## 3. Protocol Runtime Binaries
+
+Veil's managed systemd units invoke external runtime binaries:
+
+| Protocol | Binary | Unit | Source |
+|---|---|---|---|
+| NaiveProxy | `caddy` | `veil-caddy@.service` | `caddyserver/caddy` GitHub release |
+| Hysteria2 | `hysteria` | `veil-hysteria2@.service` | `apernet/hysteria` GitHub release |
+| Mieru | `mita` | `veil-mieru.service` | `enfein/mieru` GitHub release |
+| WARP | `sing-box` | `veil-warp.service` | `SagerNet/sing-box` GitHub release |
+| olcRTC | `olcrtc` | `veil-olcrtc@.service` | built from source with `go install` |
+
+`veil install` provisions these automatically after the Panel is configured.
+Release binaries are downloaded for your architecture and verified against the
+upstream checksums (SHA-256 or SHA-512) where the project publishes them. olcRTC
+ships no release binaries, so it is built from source and requires a Go
+toolchain on the host; if `go` is not present that runtime is skipped with a
+warning and the rest still install.
+
+Install or repair the runtimes at any time:
+
+```bash
+sudo veil runtime install                  # all runtimes
+sudo veil runtime install --only mieru,hysteria2
+```
+
+Without these binaries, protocol services fail to start with systemd status
+`203/EXEC` ("Failed to locate executable"). Run `veil doctor` to confirm each
+runtime is present.
+
+---
+
+## 4. Manual Building from Source
 
 If you prefer to compile Veil from source, follow these instructions.
 
@@ -131,7 +163,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ---
 
-## 4. File and Directory Structure
+## 5. File and Directory Structure
 
 When installed natively on a Linux host, Veil manages the following directories and configurations:
 

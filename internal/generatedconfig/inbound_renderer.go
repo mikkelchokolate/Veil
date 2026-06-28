@@ -130,6 +130,10 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: masqueradeURL,
 	}
+	if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
+		hystConfig.CertPath = "/etc/veil/certs/" + r.settings.Domain + ".crt"
+		hystConfig.KeyPath = "/etc/veil/certs/" + r.settings.Domain + ".key"
+	}
 	if r.warp.Enabled {
 		socksPort := r.warp.SocksPort
 		if socksPort == 0 {

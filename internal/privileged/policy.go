@@ -87,6 +87,7 @@ type ResolvedBackup struct {
 
 type ResolvedFirewall struct {
 	RuleIDs []string
+	Rules   []FirewallRule
 }
 
 type ResolvedUpdate struct {
@@ -273,7 +274,17 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	return resolved, nil
 }
 
+var ufwAllowRulePattern = regexp.MustCompile(`^(\d{1,5})/(tcp|udp)$`)
+
 func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, error) {
+	if len(request.Rules) > 0 {
+		for _, rule := range request.Rules {
+			if err := validateUFWRule(rule); err != nil {
+				return ResolvedFirewall{}, newError(ErrorInvalidRequest, err.Error())
+			}
+		}
+		return ResolvedFirewall{Rules: request.Rules}, nil
+	}
 	if len(request.RuleIDs) == 0 {
 		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "at least one firewall rule is required")
 	}
@@ -285,6 +296,35 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 		rules = append(rules, id)
 	}
 	return ResolvedFirewall{RuleIDs: rules}, nil
+}
+
+func validateUFWRule(rule FirewallRule) error {
+	if rule.Command != "ufw" {
+		return fmt.Errorf("unsupported firewall command %q", rule.Command)
+	}
+	if len(rule.Args) < 2 {
+		return fmt.Errorf("ufw rule is too short")
+	}
+	if rule.Args[0] != "allow" {
+		return fmt.Errorf("unsupported ufw action %q", rule.Args[0])
+	}
+	if !ufwAllowRulePattern.MatchString(rule.Args[1]) {
+		return fmt.Errorf("invalid ufw allow target %q", rule.Args[1])
+	}
+	// Only allow an optional trailing "comment <free text>" clause.
+	for i, arg := range rule.Args[2:] {
+		if strings.ContainsAny(arg, ";|&$`\"'\\") {
+			return fmt.Errorf("disallowed character in firewall rule argument")
+		}
+		if arg == "comment" {
+			// comment must be followed by exactly one argument and be the penultimate token.
+			if i != len(rule.Args[2:])-2 {
+				return fmt.Errorf("comment must be the final clause")
+			}
+			break
+		}
+	}
+	return nil
 }
 
 func (p Policy) ResolveUpdate(request UpdateRequest) (ResolvedUpdate, error) {

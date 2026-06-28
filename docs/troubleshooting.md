@@ -27,6 +27,25 @@ veil doctor
 ```
 If some binaries (like `caddy`, `hysteria`, or `mieru`) are missing, `veil doctor` will output them as warnings.
 
+### Protocol fails with status 203/EXEC ("Failed to locate executable")
+
+A protocol unit that fails to start with `status=203/EXEC` means its runtime
+binary is not present at the path the systemd unit invokes (for example
+`/usr/local/bin/mita` for Mieru, `/usr/local/bin/hysteria` for Hysteria2).
+`veil install` provisions these runtimes automatically, but if a download was
+skipped or failed you can (re)install them at any time:
+
+```bash
+sudo veil runtime install
+# or a single protocol:
+sudo veil runtime install --only mieru
+```
+
+This downloads `caddy`, `hysteria`, `mita`, and `sing-box` from their upstream
+GitHub releases (verifying published checksums) and builds `olcrtc` from source
+with the Go toolchain. Re-run `veil doctor` afterward to confirm the binaries
+are present, then restart the affected unit.
+
 ---
 
 ## 2. Check Log Locations

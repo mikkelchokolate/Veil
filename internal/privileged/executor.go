@@ -15,6 +15,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -35,6 +36,7 @@ type Executor struct {
 	Firewall      func(context.Context, ResolvedFirewall) (FirewallResult, error)
 	Update        func(context.Context, ResolvedUpdate) (UpdateResult, error)
 	RestartPanel  func(context.Context) error
+	SyncCaddyCert func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
@@ -163,12 +165,20 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				}
 				result.AppliedRuleIDs = append(result.AppliedRuleIDs, id)
 			}
+			rulesResult, err := runFirewallRules(ctx, config.RunCommand, ResolvedFirewall{Rules: request.Rules})
+			if err != nil {
+				return FirewallResult{}, err
+			}
+			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rulesResult.AppliedRuleIDs...)
 			return result, nil
 		},
 		Update: config.UpdateWorkflow,
 		RestartPanel: func(ctx context.Context) error {
 			_, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second)
 			return err
+		},
+		SyncCaddyCert: func(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+			return runSyncCaddyCert(ctx, request, config)
 		},
 	}
 }
@@ -247,6 +257,39 @@ func runProductionCommand(ctx context.Context, command []string, timeout time.Du
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func runFirewallRules(ctx context.Context, runCommand CommandRunner, request ResolvedFirewall) (FirewallResult, error) {
+	result := FirewallResult{}
+	for _, id := range request.RuleIDs {
+		_ = id
+	}
+	if len(request.Rules) == 0 {
+		return result, nil
+	}
+	status, err := runCommand(ctx, []string{"ufw", "status"}, 15*time.Second)
+	if err != nil {
+		return FirewallResult{}, fmt.Errorf("read ufw status: %w", err)
+	}
+	if !strings.Contains(status, "Status: active") {
+		if _, err := runCommand(ctx, []string{"ufw", "--force", "enable"}, 15*time.Second); err != nil {
+			return FirewallResult{}, fmt.Errorf("enable ufw: %w", err)
+		}
+	}
+	for _, rule := range request.Rules {
+		output, err := runCommand(ctx, append([]string{"ufw"}, rule.Args...), 15*time.Second)
+		if err != nil && !isUFWDuplicateRule(output) {
+			return FirewallResult{}, fmt.Errorf("ufw %v: %w", rule.Args, err)
+		}
+		if len(rule.Args) >= 2 {
+			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rule.Args[1])
+		}
+	}
+	return result, nil
+}
+
+func isUFWDuplicateRule(output string) bool {
+	return strings.Contains(output, "Skipping adding existing rule") || strings.Contains(output, "already exists")
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
@@ -464,5 +507,73 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}, nil
 	default:
 		return BackupResult{}, errors.New("unsupported backup operation")
+	}
+}
+
+// runSyncCaddyCert copies a Caddy-managed ACME certificate for domain into
+// OutDir so that non-Caddy runtimes (Hysteria2, etc.) can serve a real
+// Let's Encrypt certificate. It polls briefly because Caddy may still be
+// issuing the certificate when the apply workflow runs.
+func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config ProductionConfig) (SyncCaddyCertResult, error) {
+	if request.Domain == "" {
+		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain is required")
+	}
+	if request.OutDir == "" {
+		request.OutDir = "/etc/veil/certs"
+	}
+	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
+	if err != nil {
+		return SyncCaddyCertResult{Found: false}, nil
+	}
+	certData, err := os.ReadFile(pair.CertPath)
+	if err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy certificate: %w", err)
+	}
+	keyData, err := os.ReadFile(pair.KeyPath)
+	if err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy key: %w", err)
+	}
+	if err := os.MkdirAll(request.OutDir, 0o700); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("create cert output directory: %w", err)
+	}
+	certOut := filepath.Join(request.OutDir, request.Domain+".crt")
+	keyOut := filepath.Join(request.OutDir, request.Domain+".key")
+	if err := atomicfile.Write(certOut, certData, 0o600, 0o700); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("write certificate: %w", err)
+	}
+	if err := atomicfile.Write(keyOut, keyData, 0o600, 0o700); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("write key: %w", err)
+	}
+	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
+}
+
+func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair, error) {
+	caddyDataDir := "/var/lib/caddy"
+	// Fast path: cert already exists.
+	if pair, err := caddycert.FindPair(caddyDataDir, domain); err == nil {
+		return pair, nil
+	}
+	// Caddy may still be issuing; poll briefly.
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	deadline, hasDeadline := ctx.Deadline()
+	if !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		deadline, _ = ctx.Deadline()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return caddycert.Pair{}, ctx.Err()
+		case <-ticker.C:
+			if pair, err := caddycert.FindPair(caddyDataDir, domain); err == nil {
+				return pair, nil
+			}
+			if time.Now().After(deadline.Add(-500 * time.Millisecond)) {
+				return caddycert.Pair{}, caddycert.ErrCertificateNotFound
+			}
+		}
 	}
 }

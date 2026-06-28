@@ -4,6 +4,26 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Protocol inbounds no longer fail to start with systemd status `203/EXEC`
+  ("Failed to locate executable"). Veil previously wrote managed units that
+  invoked `/usr/local/bin/{caddy,hysteria,mita,sing-box,olcrtc}` but never
+  installed those runtime binaries, so every protocol (NaiveProxy, Hysteria2,
+  Mieru, olcRTC, and WARP) failed to launch. `veil install` now provisions the
+  runtimes automatically after the Panel is installed. (#20)
+
+### Added
+
+- New `veil runtime install` command (with `--only` and `--bin-dir` flags) that
+  downloads `caddy`, `hysteria`, `mita`, and `sing-box` from their upstream
+  GitHub releases — verifying published SHA-256/SHA-512 checksums — and builds
+  `olcrtc` from source with the Go toolchain. Runtime acquisition is implemented
+  in the new `internal/runtimeinstall` package and is non-fatal during install:
+  a failed download is reported as a warning and can be retried later.
+- `veil doctor` now reports `olcrtc` alongside the other optional runtime
+  binaries.
+
 ## [v0.6.21] - 2026-06-09
 
 ### Fixed

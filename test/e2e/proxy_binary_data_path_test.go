@@ -89,8 +89,13 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 	return nil
 }
 
-// TestMieruDataPath tests data flow through a real Mieru server/client if Mieru binary is installed.
+// TestMieruDataPath tests data flow through a real Mieru server/client if mita/mieru binaries are installed.
 func TestMieruDataPath(t *testing.T) {
+	mitaPath, err := exec.LookPath("mita")
+	if err != nil {
+		t.Skip("mita binary not found in PATH, skipping data-path test")
+	}
+
 	mieruPath, err := exec.LookPath("mieru")
 	if err != nil {
 		t.Skip("mieru binary not found in PATH, skipping data-path test")
@@ -134,11 +139,16 @@ func TestMieruDataPath(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Start Mieru server using the generated config
-	serverConfig := filepath.Join(srv.applyRoot, "live", "mieru", "server_config.json")
-	cmdServer := exec.Command(mieruPath, "run", "-c", serverConfig)
+	// 3. Start Mieru server (mita) using the generated config
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
+	// mita run uses MITA_CONFIG_JSON_FILE env var, needs /var/run/mita dir
+	if err := os.MkdirAll("/var/run/mita", 0755); err != nil {
+		t.Fatalf("create /var/run/mita: %v", err)
+	}
+	cmdServer := exec.Command(mitaPath, "run")
+	cmdServer.Env = append(os.Environ(), "MITA_CONFIG_JSON_FILE="+serverConfig)
 	if err := cmdServer.Start(); err != nil {
-		t.Fatalf("start mieru server: %v", err)
+		t.Fatalf("start mita server: %v", err)
 	}
 	defer func() {
 		if cmdServer.Process != nil {
@@ -202,7 +212,12 @@ func TestMieruDataPath(t *testing.T) {
 	}
 
 	// 6. Start Mieru client
-	cmdClient := exec.Command(mieruPath, "run", "-c", tempClientFile)
+	// mieru run uses MIERU_CONFIG_JSON_FILE env var, needs /var/run/mieru dir
+	if err := os.MkdirAll("/var/run/mieru", 0755); err != nil {
+		t.Fatalf("create /var/run/mieru: %v", err)
+	}
+	cmdClient := exec.Command(mieruPath, "run")
+	cmdClient.Env = append(os.Environ(), "MIERU_CONFIG_JSON_FILE="+tempClientFile)
 	if err := cmdClient.Start(); err != nil {
 		t.Fatalf("start mieru client: %v", err)
 	}
@@ -295,7 +310,7 @@ func TestHysteria2DataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Modify generated Hysteria2 server config to use self-signed TLS cert
-	serverConfig := filepath.Join(srv.applyRoot, "live", "hysteria2", "hy2-udp.yaml")
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "hysteria2", "hy2-udp.yaml")
 	yamlContent, err := os.ReadFile(serverConfig)
 	if err != nil {
 		t.Fatalf("read server yaml: %v", err)
@@ -334,7 +349,7 @@ func TestHysteria2DataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
+	artifactsRaw, _ := json.Marshal(linksBody["links"])
 	var artifacts []struct {
 		Name     string `json:"name"`
 		Protocol string `json:"protocol"`
@@ -449,13 +464,13 @@ func TestNaiveProxyDataPath(t *testing.T) {
 
 	// Configure settings and inbound
 	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"test@example.com","naiveUsername":"test-user","naivePassword":"test-pass"}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"password":"secret-pass"}`, inboundPort))
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"password":"secret-pass","naiveUsername":"naive-user","naivePassword":"naive-pass"}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
@@ -475,7 +490,7 @@ func TestNaiveProxyDataPath(t *testing.T) {
 	drain(resp)
 
 	// 3. Modify generated Caddyfile to run over HTTP (remove domain name and tls directives)
-	serverConfig := filepath.Join(srv.applyRoot, "live", "caddy", "Caddyfile")
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "caddy", "naive-tcp.Caddyfile")
 	caddyfileContent, err := os.ReadFile(serverConfig)
 	if err != nil {
 		t.Fatalf("read caddyfile: %v", err)
@@ -518,7 +533,7 @@ func TestNaiveProxyDataPath(t *testing.T) {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["artifacts"])
+	artifactsRaw, _ := json.Marshal(linksBody["links"])
 	var artifacts []struct {
 		Name     string `json:"name"`
 		Protocol string `json:"protocol"`

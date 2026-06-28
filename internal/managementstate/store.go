@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -56,11 +57,46 @@ func (s Store) Save(snapshot model.ManagementSnapshot) error {
 	if err != nil {
 		return err
 	}
+
+	// Preserve ownership and permissions of an existing state file so that
+	// CLI commands (e.g. `veil admin reset`) do not lock out the veil user.
+	var prev *fileInfo
+	if fi, err := os.Stat(s.path); err == nil {
+		prev = &fileInfo{uid: fileOwnerUID(fi), gid: fileOwnerGID(fi), mode: fi.Mode().Perm()}
+	}
+
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	if err := os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	if prev != nil {
+		_ = os.Chmod(s.path, prev.mode)
+		_ = os.Chown(s.path, prev.uid, prev.gid)
+	}
+	return nil
+}
+
+type fileInfo struct {
+	uid  int
+	gid  int
+	mode os.FileMode
+}
+
+func fileOwnerUID(fi os.FileInfo) int {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(st.Uid)
+	}
+	return -1
+}
+
+func fileOwnerGID(fi os.FileInfo) int {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(st.Gid)
+	}
+	return -1
 }
 
 func (s Store) Marshal(snapshot model.ManagementSnapshot) ([]byte, error) {

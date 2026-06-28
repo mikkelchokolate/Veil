@@ -1,10 +1,12 @@
 package installer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/managedfiles"
 )
 
@@ -26,12 +28,18 @@ type ApplyResult struct {
 }
 
 type InstallApply struct {
-	profile RURecommendedProfile
-	paths   ApplyPaths
+	profile         RURecommendedProfile
+	paths           ApplyPaths
+	firewallActions []firewall.Rule
 }
 
 func NewInstallApply(profile RURecommendedProfile, paths ApplyPaths) InstallApply {
 	return InstallApply{profile: profile, paths: paths}
+}
+
+// NewInstallApplyWithPlan creates an installer that also applies firewall rules.
+func NewInstallApplyWithPlan(profile RURecommendedProfile, paths ApplyPaths, plan InstallPlan) InstallApply {
+	return InstallApply{profile: profile, paths: paths, firewallActions: plan.FirewallActions}
 }
 
 func (a InstallApply) Apply() (ApplyResult, error) {
@@ -61,11 +69,27 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		}
 		result.WrittenFiles = append(result.WrittenFiles, file.Path)
 	}
+
+	if len(a.firewallActions) > 0 {
+		applier := firewall.NewUFWApplier()
+		if err := applier.EnsureActive(); err != nil {
+			return result, fmt.Errorf("enable firewall: %w", err)
+		}
+		if err := applier.ApplyRules(a.firewallActions); err != nil {
+			return result, fmt.Errorf("apply firewall rules: %w", err)
+		}
+	}
+
 	return result, nil
 }
 
 func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (ApplyResult, error) {
 	return NewInstallApply(profile, paths).Apply()
+}
+
+// ApplyRURecommendedProfileWithPlan applies the install profile and executes the firewall rules from the install plan.
+func ApplyRURecommendedProfileWithPlan(profile RURecommendedProfile, paths ApplyPaths, plan InstallPlan) (ApplyResult, error) {
+	return NewInstallApplyWithPlan(profile, paths, plan).Apply()
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {

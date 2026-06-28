@@ -18,6 +18,13 @@ type Hysteria2Config struct {
 	Users         []Hysteria2User
 	MasqueradeURL string
 	Upstream      string
+	// CertPath/KeyPath point at a TLS cert/key Hysteria2 serves. Defaults to
+	// Veil's managed self-signed panel cert, so Hysteria2 works on any host
+	// (bare IP, no domain, ports 80/443 taken) without ACME — the client
+	// connects with insecure/SNI. This is what makes "enter a domain and it
+	// just works" hold for Hysteria2.
+	CertPath string
+	KeyPath  string
 }
 
 func RenderHysteria2(cfg Hysteria2Config) (string, error) {
@@ -38,11 +45,21 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	if cfg.MasqueradeURL == "" {
 		cfg.MasqueradeURL = "https://www.bing.com/"
 	}
+	if cfg.CertPath == "" {
+		cfg.CertPath = "/etc/veil/panel/tls.crt"
+	}
+	if cfg.KeyPath == "" {
+		cfg.KeyPath = "/etc/veil/panel/tls.key"
+	}
 	const tpl = `listen: :{{ .ListenPort }}
 
-acme:
-  domains:
-    - {{ .Domain }}
+# TLS certificate served by Hysteria2. When Panel access is set to "caddy",
+# Veil copies Caddy's managed Let's Encrypt certificate here automatically.
+# Otherwise Veil's self-signed panel certificate is used and clients connect
+# with insecure + SNI (see the generated client link).
+tls:
+  cert: {{ .CertPath }}
+  key: {{ .KeyPath }}
 
 # Password authentication is simple and broadly compatible with Hysteria2 clients.
 auth:
