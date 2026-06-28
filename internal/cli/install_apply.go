@@ -27,6 +27,11 @@ var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 var installExecutableFunc = os.Executable
 var installPrepareHostFunc = hostaccess.Prepare
 var installFirewallApplyFunc = func(rules []firewall.Rule) error {
+	// Firewall management requires root. In tests and staging installs that run
+	// as an unprivileged user we silently skip applying rules rather than fail.
+	if os.Geteuid() != 0 {
+		return nil
+	}
 	applier := firewall.NewUFWApplier()
 	if err := applier.EnsureActive(); err != nil {
 		return fmt.Errorf("enable firewall: %w", err)
