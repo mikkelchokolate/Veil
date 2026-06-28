@@ -9,7 +9,7 @@ Veil is a management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru. It inst
 One command, answer a few questions, done:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash
 ```
 
 The installer asks for the Panel exposure mode (`local`, `direct`, or `caddy`)
@@ -36,7 +36,7 @@ The HTTPS Panel URL path is randomly generated — only you know it. Direct/loca
 Panel-only local access:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash -s -- \
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- \
   --panel-access local \
   --yes
 ```
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/i
 Panel HTTPS access through Caddy on a domain, without exposing the Panel port:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash -s -- \
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- \
   --panel-access caddy \
   --domain vpn.example.com \
   --email admin@example.com \

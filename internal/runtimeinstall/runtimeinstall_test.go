@@ -214,6 +214,22 @@ func TestFindAssetPrefersShortestName(t *testing.T) {
 	}
 }
 
+func TestParseExpandedAssetsHandlesSlashTag(t *testing.T) {
+	// hysteria uses tags like "app/v2.9.3"; GitHub URL-encodes the slash.
+	html := `<a href="/apernet/hysteria/releases/download/app%2Fv2.9.3/hysteria-linux-amd64">amd64</a>`
+	assets, err := parseExpandedAssets(html, "app/v2.9.3", "apernet/hysteria")
+	if err != nil {
+		t.Fatalf("parseExpandedAssets: %v", err)
+	}
+	if len(assets) != 1 || assets[0].Name != "hysteria-linux-amd64" {
+		t.Fatalf("assets = %+v", assets)
+	}
+	wantURL := "https://github.com/apernet/hysteria/releases/download/app%2Fv2.9.3/hysteria-linux-amd64"
+	if assets[0].BrowserDownloadURL != wantURL {
+		t.Fatalf("download URL = %q, want %q", assets[0].BrowserDownloadURL, wantURL)
+	}
+}
+
 func TestInstallArchiveRuntimeWritesExecutableBinary(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
