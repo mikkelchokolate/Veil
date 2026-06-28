@@ -149,8 +149,15 @@ type BackupResult struct {
 
 type RotateKeyRequest struct{}
 
+// FirewallRule is a single firewall allow rule executed by the privileged helper.
+type FirewallRule struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
 type FirewallRequest struct {
-	RuleIDs []string `json:"ruleIds"`
+	RuleIDs []string       `json:"ruleIds,omitempty"`
+	Rules   []FirewallRule `json:"rules,omitempty"`
 }
 
 type FirewallResult struct {

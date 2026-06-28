@@ -165,6 +165,11 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				}
 				result.AppliedRuleIDs = append(result.AppliedRuleIDs, id)
 			}
+			rulesResult, err := runFirewallRules(ctx, config.RunCommand, ResolvedFirewall{Rules: request.Rules})
+			if err != nil {
+				return FirewallResult{}, err
+			}
+			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rulesResult.AppliedRuleIDs...)
 			return result, nil
 		},
 		Update: config.UpdateWorkflow,
@@ -252,6 +257,39 @@ func runProductionCommand(ctx context.Context, command []string, timeout time.Du
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func runFirewallRules(ctx context.Context, runCommand CommandRunner, request ResolvedFirewall) (FirewallResult, error) {
+	result := FirewallResult{}
+	for _, id := range request.RuleIDs {
+		_ = id
+	}
+	if len(request.Rules) == 0 {
+		return result, nil
+	}
+	status, err := runCommand(ctx, []string{"ufw", "status"}, 15*time.Second)
+	if err != nil {
+		return FirewallResult{}, fmt.Errorf("read ufw status: %w", err)
+	}
+	if !strings.Contains(status, "Status: active") {
+		if _, err := runCommand(ctx, []string{"ufw", "--force", "enable"}, 15*time.Second); err != nil {
+			return FirewallResult{}, fmt.Errorf("enable ufw: %w", err)
+		}
+	}
+	for _, rule := range request.Rules {
+		output, err := runCommand(ctx, append([]string{"ufw"}, rule.Args...), 15*time.Second)
+		if err != nil && !isUFWDuplicateRule(output) {
+			return FirewallResult{}, fmt.Errorf("ufw %v: %w", rule.Args, err)
+		}
+		if len(rule.Args) >= 2 {
+			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rule.Args[1])
+		}
+	}
+	return result, nil
+}
+
+func isUFWDuplicateRule(output string) bool {
+	return strings.Contains(output, "Skipping adding existing rule") || strings.Contains(output, "already exists")
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {

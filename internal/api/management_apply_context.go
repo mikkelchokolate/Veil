@@ -290,13 +290,26 @@ func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
 		Name:    "sync-firewall",
 		Command: []string{"ufw", "sync-rules"},
 	}
-	if err := firewallApplierInstance.EnsureActive(); err != nil {
-		result.Error = err.Error()
-		return []ServiceActionResult{result}
-	}
-	if err := firewallApplierInstance.ApplyRules(rules); err != nil {
-		result.Error = err.Error()
-		return []ServiceActionResult{result}
+	// Use the privileged helper when available (production). It runs as root and
+	// can execute ufw. Fall back to the local applier in dev/test mode.
+	if ctx.state.privileged != nil && !ctx.state.privilegedLocal {
+		reqRules := make([]privileged.FirewallRule, len(rules))
+		for i, r := range rules {
+			reqRules[i] = privileged.FirewallRule{Command: r.Command, Args: r.Args}
+		}
+		if _, err := ctx.state.privileged.FirewallApply(context.Background(), privileged.FirewallRequest{Rules: reqRules}); err != nil {
+			result.Error = err.Error()
+			return []ServiceActionResult{result}
+		}
+	} else {
+		if err := firewallApplierInstance.EnsureActive(); err != nil {
+			result.Error = err.Error()
+			return []ServiceActionResult{result}
+		}
+		if err := firewallApplierInstance.ApplyRules(rules); err != nil {
+			result.Error = err.Error()
+			return []ServiceActionResult{result}
+		}
 	}
 	result.Success = true
 	return []ServiceActionResult{result}

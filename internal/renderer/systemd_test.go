@@ -148,8 +148,10 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"User=root",
 		"ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation",
 		"PrivateNetwork=true",
-		"RestrictAddressFamilies=AF_UNIX",
-		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER\n",
+		"RestrictAddressFamilies=AF_UNIX AF_NETLINK",
+		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n",
+		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW",
+		"Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"",
 		"ReadWritePaths=/etc/veil/generated /etc/veil/certs /etc/veil/state.key /var/lib/veil /usr/local/bin",
 	} {
 		if !strings.Contains(helper, want) {
