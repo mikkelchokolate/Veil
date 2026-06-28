@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/subtle"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -18,7 +19,16 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
 		w.Header()["Server"] = nil // hide Go version from Server header
 		if r.TLS != nil {
-			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			// Only set HSTS for real domain names. Sending HSTS for a bare IP
+			// (common in direct Panel access) causes Chrome to loop/reject the
+			// self-signed certificate instead of showing the certificate warning.
+			host, _, _ := net.SplitHostPort(r.Host)
+			if host == "" {
+				host = r.Host
+			}
+			if net.ParseIP(host) == nil {
+				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			}
 		}
 		next.ServeHTTP(w, r)
 	})

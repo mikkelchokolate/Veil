@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -404,5 +405,37 @@ func TestConstantTimeCompareCSRF(t *testing.T) {
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte("correct-token")) != 1 {
 		t.Fatalf("expected comparison to succeed")
+	}
+}
+
+func TestSecurityHeadersSkipsHSTSForIPHosts(t *testing.T) {
+	handler := securityHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	cases := []struct {
+		host      string
+		wantHSTS bool
+	}{
+		{"45.157.233.54:25500", false},
+		{"192.0.2.1", false},
+		{"::1", false},
+		{"panel.example.com", true},
+		{"panel.example.com:443", true},
+	}
+
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = c.host
+		req.TLS = &tls.ConnectionState{}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		got := w.Header().Get("Strict-Transport-Security")
+		if c.wantHSTS && got == "" {
+			t.Fatalf("host %q: expected HSTS header", c.host)
+		}
+		if !c.wantHSTS && got != "" {
+			t.Fatalf("host %q: expected no HSTS header, got %q", c.host, got)
+		}
 	}
 }
