@@ -10,20 +10,34 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
-func TestPanelOnlyInstallPlanDoesNotOpenProxyFirewallPort(t *testing.T) {
+func TestPanelOnlyLocalInstallPlanDoesNotOpenFirewallPort(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}
-	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") || hasFirewallAction(plan, "31874/tcp") || hasFirewallAction(plan, "31874/udp") {
-		t.Fatalf("panel-only install must not open proxy ports: %+v", plan.FirewallActions)
+	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") || hasFirewallAction(plan, "31874/tcp") || hasFirewallAction(plan, "31874/udp") || hasFirewallAction(plan, "2096/tcp") {
+		t.Fatalf("local panel install must not open any firewall ports: %+v", plan.FirewallActions)
+	}
+}
+
+func TestPanelDirectInstallPlanOpensPanelFirewallPort(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "direct", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("BuildRURecommendedProfile direct: %v", err)
+	}
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("BuildInstallPlan: %v", err)
+	}
+	if hasFirewallAction(plan, "443/tcp") || hasFirewallAction(plan, "443/udp") {
+		t.Fatalf("direct panel install must not open HTTPS proxy ports: %+v", plan.FirewallActions)
 	}
 	if !hasFirewallAction(plan, "2096/tcp") {
-		t.Fatalf("expected panel firewall rule: %+v", plan.FirewallActions)
+		t.Fatalf("direct panel install should open panel port: %+v", plan.FirewallActions)
 	}
 }
 

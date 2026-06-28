@@ -7,25 +7,40 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
-func TestBuildInstallPlanSummaryIncludesPanelSystemdAndFirewall(t *testing.T) {
+func TestBuildInstallPlanSummaryIncludesPanelSystemdNoLocalFirewall(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{Secret: func(label string) string { return "secret-" + label }})
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
 	}
 	text := plan.Summary()
-	for _, want := range []string{"systemctl daemon-reload", "systemctl restart veil.service", "ufw allow 2096/tcp comment Veil panel", "Panel speedtest tool: speedtest-cli or speedtest"} {
+	for _, want := range []string{"systemctl daemon-reload", "systemctl restart veil.service", "Panel speedtest tool: speedtest-cli or speedtest"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)
 		}
 	}
-	for _, unwanted := range []string{"Shared port:", "Hysteria2 asset:", "Caddy/NaiveProxy build:", "ufw allow 443/tcp comment Veil NaiveProxy", "ufw allow 443/udp comment Veil Hysteria2"} {
+	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "Shared port:", "Hysteria2 asset:", "Caddy/NaiveProxy build:", "ufw allow 443/tcp comment Veil NaiveProxy", "ufw allow 443/udp comment Veil Hysteria2"} {
 		if strings.Contains(text, unwanted) {
 			t.Fatalf("summary should not contain %q:\n%s", unwanted, text)
 		}
+	}
+}
+
+func TestBuildInstallPlanSummaryDirectIncludesPanelFirewall(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "direct", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("build profile: %v", err)
+	}
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	text := plan.Summary()
+	if !strings.Contains(text, "ufw allow 2096/tcp comment Veil panel") {
+		t.Fatalf("direct mode summary missing panel firewall rule:\n%s", text)
 	}
 }
 

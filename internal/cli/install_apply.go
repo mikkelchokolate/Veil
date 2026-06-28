@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -216,16 +217,30 @@ func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommended
 			caddyBinary = path
 		}
 	}
+	// The actual panel port is embedded in the rendered profile (e.g.
+	// "0.0.0.0:25500"); opts.PanelPort is 0 when a random port was chosen.
 	panelPort := opts.PanelPort
+	if _, port, err := net.SplitHostPort(profile.PanelListen); err == nil {
+		if parsed, parseErr := parsePort(port); parseErr == nil {
+			panelPort = parsed
+		}
+	}
 	if profile.InstallPanelCaddy {
 		panelPort = 0
 	}
 	return installer.BuildInstallPlan(profile, installer.InstallPlanInput{
 		Platform:     platform,
 		SystemdUnits: installer.PanelSystemdUnits(profile),
+		PanelAccess:  profile.PanelAccess,
 		PanelPort:    panelPort,
 		CaddyBinary:  caddyBinary,
 	})
+}
+
+func parsePort(s string) (int, error) {
+	var port int
+	_, err := fmt.Sscanf(s, "%d", &port)
+	return port, err
 }
 
 var execLookPath = exec.LookPath

@@ -66,13 +66,12 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 		"Install scope: Panel",
 		"Panel port: 2096",
 		"Panel access: https://127.0.0.1:2096/",
-		"ufw allow 2096/tcp comment Veil panel",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"NaiveProxy TCP port:", "Hysteria2 UDP port:", "NaiveProxy client URL:", "Hysteria2 client URI:", "Generated Hysteria2 server.yaml", "Shared port:"} {
+	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "NaiveProxy TCP port:", "Hysteria2 UDP port:", "NaiveProxy client URL:", "Hysteria2 client URI:", "Generated Hysteria2 server.yaml", "Shared port:"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("Panel install should not contain %q:\n%s", unwanted, got)
 		}

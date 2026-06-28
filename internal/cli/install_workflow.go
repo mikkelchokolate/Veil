@@ -158,6 +158,7 @@ func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile
 	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
 		Platform:     platform,
 		SystemdUnits: installer.PanelSystemdUnits(profile),
+		PanelAccess:  profile.PanelAccess,
 		PanelPort:    panelPort,
 		CaddyBinary:  installPlanCaddyBinary(profile),
 	})
