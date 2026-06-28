@@ -3,6 +3,7 @@ package firewall
 import "fmt"
 
 type Config struct {
+	PanelAccess    string
 	PanelPort      int
 	PanelHTTPSPort int
 }
@@ -17,7 +18,9 @@ func UFWPlan(config Config) []Rule {
 		return nil
 	}
 	rules := []Rule{}
-	if config.PanelPort > 0 {
+	// The panel port only needs to be opened when the panel is exposed publicly.
+	// In local mode the panel listens on loopback, so a firewall rule is useless.
+	if config.PanelPort > 0 && config.PanelAccess != "local" {
 		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.PanelPort), "comment", "Veil panel"}})
 	}
 	if config.PanelHTTPSPort > 0 {

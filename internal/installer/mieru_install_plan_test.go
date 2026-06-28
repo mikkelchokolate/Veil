@@ -16,7 +16,7 @@ func TestPanelInstallDoesNotPlanMieruRuntime(t *testing.T) {
 	if profile.InstallPanelCaddy {
 		t.Fatalf("Panel-only install should keep Mieru runtime under Panel Inbounds: %+v", profile)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}

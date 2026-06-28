@@ -33,6 +33,7 @@ func PanelSystemdUnits(profile RURecommendedProfile) []string {
 type InstallPlanInput struct {
 	Platform     hostenv.Platform
 	SystemdUnits []string
+	PanelAccess  string
 	PanelPort    int
 	CaddyBinary  string
 }
@@ -77,6 +78,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		CaddyBuild:     caddyBuild,
 		SystemdActions: service.SystemdApplyPlan(input.SystemdUnits),
 		FirewallActions: firewall.UFWPlan(firewall.Config{
+			PanelAccess:    profile.PanelAccess,
 			PanelPort:      panelPort,
 			PanelHTTPSPort: panelHTTPSPort,
 		}),
