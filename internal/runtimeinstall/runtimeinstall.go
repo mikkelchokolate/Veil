@@ -586,7 +586,7 @@ func fetchLatestReleaseWeb(ctx context.Context, client *http.Client, repo string
 	if err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("https://github.com/%s/releases/expanded_assets/%s", repo, tag)
+	url := fmt.Sprintf("https://github.com/%s/releases/expanded_assets/%s", repo, url.PathEscape(tag))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -651,7 +651,7 @@ func resolveLatestTagWeb(ctx context.Context, client *http.Client, repo string) 
 func parseExpandedAssets(html, tag, repo string) ([]Asset, error) {
 	// Match hrefs that point at a release download for this tag.
 	// Example: href="/apernet/hysteria/releases/download/app%2Fv2.9.2/hysteria-linux-amd64"
-	pattern := fmt.Sprintf(`href="/(%s/releases/download/%s/([^"]+))"`, regexp.QuoteMeta(repo), regexp.QuoteMeta(tag))
+	pattern := fmt.Sprintf(`href="/(%s/releases/download/%s/([^"]+))"`, regexp.QuoteMeta(repo), regexp.QuoteMeta(url.PathEscape(tag)))
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, err

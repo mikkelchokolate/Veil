@@ -19,8 +19,8 @@ usage() {
 Veil installer
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash
-  curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install.sh | sudo bash -s -- --profile ru-recommended --panel-access caddy --domain example.com --email admin@example.com
+  curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash
+  curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- --profile ru-recommended --panel-access caddy --domain example.com --email admin@example.com
 
 Options:
   Veil install only installs Panel; configure protocols as Panel Inbounds
