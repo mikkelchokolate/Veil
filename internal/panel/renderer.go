@@ -753,16 +753,14 @@ const panelHTMLBase = `<!doctype html>
     }
     .dropdown-content {
       display: none;
-      position: absolute;
-      right: 0;
+      position: fixed;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 0;
       min-width: 160px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      z-index: 150;
+      z-index: 1000;
       overflow: hidden;
-      margin-top: 4px;
     }
     .dropdown-content button, .dropdown-content a {
       color: var(--text-main);
@@ -791,7 +789,7 @@ const panelHTMLBase = `<!doctype html>
       background: var(--bg-hover);
       color: #fff;
     }
-    .dropdown:hover .dropdown-content {
+    .dropdown.open .dropdown-content {
       display: block;
     }
 
