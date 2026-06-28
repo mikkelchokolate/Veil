@@ -576,7 +576,7 @@ func panelInboundActionsJS() string {
       if (left < 8) {
         left = 8;
       }
-      menu.style.top = (rect.bottom + window.scrollY) + 'px';
+      menu.style.top = rect.bottom + 'px';
       menu.style.left = left + 'px';
       menu.style.minWidth = minWidth + 'px';
     }
