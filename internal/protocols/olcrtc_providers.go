@@ -40,7 +40,7 @@ func OlcrtcProviderSupportsAutoRoom(name string) bool {
 // The room name appended to it is a natural Jitsi-style name (see
 // jitsiStyleRoomName), so the URL looks like an ordinary meeting and carries no
 // hint that a panel generated it.
-const olcrtcJitsiRoomBase = "https://meet.small-dm.ru/"
+const olcrtcJitsiRoomBase = "https://meet.handyweb.org/"
 
 // GenerateOlcrtcRoom returns a fresh room id for a provider that supports
 // automatic room creation, or an error for a provider that requires a manually
@@ -51,7 +51,7 @@ func GenerateOlcrtcRoom(provider string) (string, error) {
 	if !OlcrtcProviderSupportsAutoRoom(provider) {
 		return "", fmt.Errorf("olcRTC provider %q requires a room created on the service first", provider)
 	}
-	name, err := jitsiStyleRoomName()
+	name, err := randomRoomName()
 	if err != nil {
 		return "", err
 	}

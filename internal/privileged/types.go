@@ -26,6 +26,7 @@ const (
 	OperationFirewallApply Operation = "firewall_apply"
 	OperationStageUpdate   Operation = "stage_update"
 	OperationRestartPanel  Operation = "restart_panel"
+	OperationSyncCaddyCert Operation = "sync_caddy_cert"
 )
 
 func (o Operation) Valid() bool {
@@ -43,7 +44,8 @@ func (o Operation) Valid() bool {
 		OperationRotateKey,
 		OperationFirewallApply,
 		OperationStageUpdate,
-		OperationRestartPanel:
+		OperationRestartPanel,
+		OperationSyncCaddyCert:
 		return true
 	default:
 		return false
@@ -147,8 +149,15 @@ type BackupResult struct {
 
 type RotateKeyRequest struct{}
 
+// FirewallRule is a single firewall allow rule executed by the privileged helper.
+type FirewallRule struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
 type FirewallRequest struct {
-	RuleIDs []string `json:"ruleIds"`
+	RuleIDs []string       `json:"ruleIds,omitempty"`
+	Rules   []FirewallRule `json:"rules,omitempty"`
 }
 
 type FirewallResult struct {
@@ -169,6 +178,17 @@ type UpdateResult struct {
 
 type RestartPanelRequest struct{}
 
+type SyncCaddyCertRequest struct {
+	Domain string `json:"domain"`
+	OutDir string `json:"outDir"`
+}
+
+type SyncCaddyCertResult struct {
+	CertPath string `json:"certPath,omitempty"`
+	KeyPath  string `json:"keyPath,omitempty"`
+	Found    bool   `json:"found"`
+}
+
 type RequestEnvelope struct {
 	Version       int                   `json:"version"`
 	RequestID     string                `json:"requestId"`
@@ -182,6 +202,7 @@ type RequestEnvelope struct {
 	Firewall      *FirewallRequest      `json:"firewall,omitempty"`
 	Update        *UpdateRequest        `json:"update,omitempty"`
 	RestartPanel  *RestartPanelRequest  `json:"restartPanel,omitempty"`
+	SyncCaddyCert *SyncCaddyCertRequest `json:"syncCaddyCert,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -212,6 +233,7 @@ func (r RequestEnvelope) Validate() error {
 		r.Firewall != nil,
 		r.Update != nil,
 		r.RestartPanel != nil,
+		r.SyncCaddyCert != nil,
 	}
 	count := 0
 	for _, present := range payloads {
@@ -248,6 +270,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.Update != nil
 	case OperationRestartPanel:
 		return r.RestartPanel != nil
+	case OperationSyncCaddyCert:
+		return r.SyncCaddyCert != nil
 	default:
 		return false
 	}

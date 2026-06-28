@@ -80,7 +80,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		}
 	}
 	caddyfile := repairActionContent(plan, "panel.Caddyfile")
-	if !strings.Contains(caddyfile, "handle_path /panel-secret/*") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") {
+	if !strings.Contains(caddyfile, "handle /panel-secret/*") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") {
 		t.Fatalf("Panel state Caddyfile not repaired from settings:\n%s", caddyfile)
 	}
 	env := repairActionContent(plan, "veil.env")

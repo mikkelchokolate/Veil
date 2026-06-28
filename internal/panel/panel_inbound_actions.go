@@ -39,6 +39,7 @@ func panelInboundActionsJS() string {
         password: 'inbound-password',
         naivePassword: 'inbound-naive-password',
         hysteria2Password: 'inbound-hysteria2-password',
+        hysteria2Insecure: 'inbound-hysteria2-insecure',
         olcrtcRoomID: 'inbound-olcrtc-room-id'
       };
       return document.getElementById(ids[normalized] || '');
@@ -106,8 +107,10 @@ func panelInboundActionsJS() string {
       } else if (protocol === 'hysteria2') {
         const passwordEl = document.getElementById('inbound-hysteria2-password');
         const masqueradeEl = document.getElementById('inbound-masquerade-url');
+        const insecureEl = document.getElementById('inbound-hysteria2-insecure');
         if (passwordEl) payload.hysteria2Password = passwordEl.value.trim();
         if (masqueradeEl) payload.masqueradeURL = masqueradeEl.value.trim();
+        if (insecureEl) payload.hysteria2Insecure = insecureEl.checked;
       } else if (protocol === 'olcrtc') {
         const authEl = document.getElementById('inbound-olcrtc-auth');
         const transportEl = document.getElementById('inbound-olcrtc-transport');
@@ -326,7 +329,7 @@ func panelInboundActionsJS() string {
                 '<button type="button" class="dropdown-btn" style="padding: 6px 12px; font-size: 0.8rem;">Actions ▾</button>' +
                 '<div class="dropdown-content">' +
                   '<button type="button" data-admin-only="true" onclick="openEditInboundModal(\'' + inbound.name + '\')">Edit Inbound</button>' +
-                  '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\')">Client Links</button>' +
+                  '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\', \'' + inbound.protocol + '\')">Client Links</button>' +
                   '<button type="button" data-admin-only="true" onclick="directDeleteInbound(\'' + inbound.name + '\')" style="color: var(--accent-danger);">Delete</button>' +
                 '</div>' +
               '</div>' +
@@ -429,6 +432,12 @@ func panelInboundActionsJS() string {
             '<label for="inbound-masquerade-url">Masquerade URL</label>' +
             '<input id="inbound-masquerade-url" autocomplete="off" placeholder="https://example.com">' +
           '</div>' +
+          '<div>' +
+            '<label for="inbound-hysteria2-insecure" style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
+              '<input id="inbound-hysteria2-insecure" type="checkbox" style="width:auto">' +
+              'Insecure mode (allow self-signed server certificate)' +
+            '</label>' +
+          '</div>' +
         '</div>';
       } else if (protocol === 'olcrtc') {
         html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
@@ -470,6 +479,7 @@ func panelInboundActionsJS() string {
         } else if (protocol === 'hysteria2') {
           document.getElementById('inbound-hysteria2-password').value = inbound.hysteria2Password || '';
           document.getElementById('inbound-masquerade-url').value = inbound.masqueradeURL || '';
+          document.getElementById('inbound-hysteria2-insecure').checked = !!inbound.hysteria2Insecure;
         } else if (protocol === 'olcrtc') {
           document.getElementById('inbound-olcrtc-auth').value = inbound.olcrtcAuth || 'jitsi';
           document.getElementById('inbound-olcrtc-transport').value = inbound.olcrtcTransport || 'datachannel';
@@ -546,6 +556,70 @@ func panelInboundActionsJS() string {
         loadInboundsIntoOutput();
       }
     }
+
+    const inboundDropdownClones = new Map();
+
+    function closeAllInboundDropdowns() {
+      inboundDropdownClones.forEach((clone) => {
+        if (clone.parentNode) {
+          clone.parentNode.removeChild(clone);
+        }
+      });
+      inboundDropdownClones.clear();
+      document.querySelectorAll('#inbounds-table .dropdown.open').forEach((dropdown) => {
+        dropdown.classList.remove('open');
+      });
+    }
+
+    function openInboundDropdown(dropdown) {
+      closeAllInboundDropdowns();
+      const original = dropdown.querySelector('.dropdown-content');
+      const btn = dropdown.querySelector('.dropdown-btn');
+      if (!original || !btn) return;
+      const clone = original.cloneNode(true);
+      clone.style.display = 'block';
+      clone.style.position = 'fixed';
+      clone.style.zIndex = '1000';
+      document.body.appendChild(clone);
+      inboundDropdownClones.set(dropdown, clone);
+      dropdown.classList.add('open');
+
+      const rect = btn.getBoundingClientRect();
+      const minWidth = Math.max(160, rect.width);
+      let left = rect.right - minWidth;
+      if (left + minWidth > window.innerWidth - 8) {
+        left = window.innerWidth - minWidth - 8;
+      }
+      if (left < 8) {
+        left = 8;
+      }
+      clone.style.top = rect.bottom + 'px';
+      clone.style.left = left + 'px';
+      clone.style.minWidth = minWidth + 'px';
+    }
+
+    document.addEventListener('click', (event) => {
+      const btn = event.target.closest('#inbounds-table .dropdown-btn');
+      if (btn) {
+        const dropdown = btn.closest('.dropdown');
+        const wasOpen = dropdown && dropdown.classList.contains('open');
+        if (dropdown && !wasOpen) {
+          openInboundDropdown(dropdown);
+        } else {
+          closeAllInboundDropdowns();
+        }
+        event.stopPropagation();
+        return;
+      }
+      if (event.target.closest('.dropdown-content') && event.target.closest('button')) {
+        closeAllInboundDropdowns();
+        return;
+      }
+      closeAllInboundDropdowns();
+    });
+
+    window.addEventListener('resize', closeAllInboundDropdowns);
+    window.addEventListener('scroll', closeAllInboundDropdowns, true);
 
     // Auto load inbounds list on startup
     window.addEventListener('DOMContentLoaded', () => {

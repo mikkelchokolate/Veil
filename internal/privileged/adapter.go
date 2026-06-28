@@ -106,4 +106,12 @@ func (a *LocalAdapter) RestartPanel(ctx context.Context) error {
 	return wrapOperationError(a.executor.RestartPanel(ctx))
 }
 
+func (a *LocalAdapter) SyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+	if a.executor.SyncCaddyCert == nil {
+		return SyncCaddyCertResult{}, newError(ErrorOperationFailed, "sync caddy cert executor is unavailable")
+	}
+	result, err := a.executor.SyncCaddyCert(ctx, request)
+	return result, wrapOperationError(err)
+}
+
 var _ Client = (*LocalAdapter)(nil)

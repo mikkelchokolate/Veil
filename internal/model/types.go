@@ -10,11 +10,16 @@ type Settings struct {
 	NaiveUsername     string `json:"naiveUsername,omitempty"`
 	NaivePassword     string `json:"naivePassword,omitempty"`
 	Hysteria2Password string `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure bool   `json:"hysteria2Insecure,omitempty"`
 	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
 	FallbackRoot      string `json:"fallbackRoot,omitempty"`
 	OlcrtcAuth        string `json:"olcrtcAuth,omitempty"`
 	OlcrtcTransport   string `json:"olcrtcTransport,omitempty"`
 	OlcrtcRoomID      string `json:"olcrtcRoomID,omitempty"`
+	// FirewallManagement controls whether Veil syncs UFW rules during apply.
+	// A nil pointer means "enabled" for backward compatibility with states created
+	// before this field existed.
+	FirewallManagement *bool `json:"firewallManagement,omitempty"`
 }
 
 type ClientProfile struct {
@@ -35,6 +40,7 @@ type Inbound struct {
 	NaiveUsername     string          `json:"naiveUsername,omitempty"`
 	NaivePassword     string          `json:"naivePassword,omitempty"`
 	Hysteria2Password string          `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure bool            `json:"hysteria2Insecure,omitempty"`
 	MasqueradeURL     string          `json:"masqueradeURL,omitempty"`
 	FallbackRoot      string          `json:"fallbackRoot,omitempty"`
 	OlcrtcAuth        string          `json:"olcrtcAuth,omitempty"`

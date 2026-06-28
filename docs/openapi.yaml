@@ -2296,6 +2296,9 @@ components:
           type: string
         olcrtcRoomID:
           type: string
+        firewallManagement:
+          type: boolean
+          description: When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
     ClientProfile:
       type: object
       required: [name, enabled]

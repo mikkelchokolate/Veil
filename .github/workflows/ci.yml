@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.25.11'
+          go-version: '1.26.4'
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.25.11'
+          go-version: '1.26.4'
       - name: staticcheck
         uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.25.11'
+          go-version: '1.26.4'
       - name: Verify systemd socket activation
         run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
       - name: Verify helper socket and filesystem access matrix
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.25.11'
+          go-version: '1.26.4'
       - name: End-to-end tests (real binary over a socket)
         run: go test -tags e2e ./test/e2e/... -count=1 -v
 

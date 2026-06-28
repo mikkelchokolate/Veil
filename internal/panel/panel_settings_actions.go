@@ -18,6 +18,7 @@ func panelSettingsActionsJS() string {
       document.getElementById('settings-naive-username').value = data.naiveUsername || '';
       document.getElementById('settings-naive-password').value = data.naivePassword || '';
       document.getElementById('settings-hysteria2-password').value = data.hysteria2Password || '';
+      document.getElementById('settings-hysteria2-insecure').checked = !!data.hysteria2Insecure;
       document.getElementById('settings-masquerade-url').value = data.masqueradeURL || '';
       document.getElementById('settings-fallback-root').value = data.fallbackRoot || '';
       document.getElementById('settings-olcrtc-auth').value = data.olcrtcAuth || '';
@@ -41,6 +42,7 @@ func panelSettingsActionsJS() string {
           naiveUsername: document.getElementById('settings-naive-username').value,
           naivePassword: document.getElementById('settings-naive-password').value,
           hysteria2Password: document.getElementById('settings-hysteria2-password').value,
+          hysteria2Insecure: document.getElementById('settings-hysteria2-insecure').checked,
           masqueradeURL: document.getElementById('settings-masquerade-url').value,
           fallbackRoot: document.getElementById('settings-fallback-root').value,
           olcrtcAuth: document.getElementById('settings-olcrtc-auth').value,

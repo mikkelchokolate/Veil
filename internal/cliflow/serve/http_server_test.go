@@ -45,7 +45,7 @@ func TestServeHTTPServerReportsMissingHelperSocketAsRepairable(t *testing.T) {
 		StatePath:    filepath.Join(t.TempDir(), "state.json"),
 		ApplyRoot:    filepath.Join(t.TempDir(), "apply"),
 		KeyPath:      filepath.Join(t.TempDir(), "state.key"),
-		HelperSocket: privileged.DefaultSocketPath,
+		HelperSocket: filepath.Join(t.TempDir(), "helper.sock"),
 		WebBasePath:  "/",
 	}).Build()
 	request := httptest.NewRequest(http.MethodPost, "/api/services/veil/restart", strings.NewReader(`{"confirm":true}`))

@@ -5,6 +5,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Caddy stores its cert/key material and local CA root here. The hardening
+# below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
+# Caddy (root) cannot write there; give it a dedicated state dir it owns
+# (systemd creates /var/lib/caddy) for both ACME storage and the self-signed
+# internal-CA fallback.
+StateDirectory=caddy
+Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/%i.Caddyfile --adapter caddyfile
 ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/%i.Caddyfile --adapter caddyfile
 Restart=on-failure

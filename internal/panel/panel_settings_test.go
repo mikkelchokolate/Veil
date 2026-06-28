@@ -13,6 +13,7 @@ func TestPanelSettingsActionsModuleRendersLoadAndSaveActions(t *testing.T) {
 		`/api/settings`,
 		`settings-naive-password`,
 		`hysteria2Password`,
+		`hysteria2Insecure`,
 		`fallbackRoot`,
 	} {
 		if !strings.Contains(actions, want) {

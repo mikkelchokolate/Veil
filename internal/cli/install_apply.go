@@ -3,10 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -22,6 +26,18 @@ var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 
 var installExecutableFunc = os.Executable
 var installPrepareHostFunc = hostaccess.Prepare
+var installFirewallApplyFunc = func(rules []firewall.Rule) error {
+	// Firewall management requires root. In tests and staging installs that run
+	// as an unprivileged user we silently skip applying rules rather than fail.
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	applier := firewall.NewUFWApplier()
+	if err := applier.EnsureActive(); err != nil {
+		return fmt.Errorf("enable firewall: %w", err)
+	}
+	return applier.ApplyRules(rules)
+}
 
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
 	actualBackupDir := opts.BackupDir
@@ -40,6 +56,9 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	// 1. Ensure configuration and state directories exist before running install and writing files
 	if err := os.MkdirAll(opts.EtcDir, 0755); err != nil {
 		return fmt.Errorf("create etc directory: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(opts.EtcDir, "certs"), 0700); err != nil {
+		return fmt.Errorf("create certs directory: %w", err)
 	}
 	if err := os.MkdirAll(opts.VarDir, 0755); err != nil {
 		return fmt.Errorf("create var directory: %w", err)
@@ -80,6 +99,14 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 				resolvedStatePath, resolvedKeyPath, filepath.Base(resolvedKeyPath))
 		}
 		if snapshot.Settings.WebBasePath != "" {
+			// The panel Caddyfile was already rendered with a freshly-generated
+			// base path before we knew we'd reuse the existing one. Rewrite it to
+			// the reused base path so Caddy routes the same path the panel actually
+			// serves (VEIL_WEB_BASE_PATH); otherwise an in-place switch to caddy
+			// mode 404s.
+			if profile.Caddyfile != "" && profile.WebBasePath != "" {
+				profile.Caddyfile = strings.ReplaceAll(profile.Caddyfile, profile.WebBasePath, snapshot.Settings.WebBasePath)
+			}
 			profile.WebBasePath = snapshot.Settings.WebBasePath
 		}
 		// Use the first admin user's username
@@ -135,6 +162,16 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
 	}
+
+	// 3a. Ensure the firewall is active and open ports required by the panel.
+	installPlan, planErr := buildInstallPlan(profile, opts)
+	if planErr == nil && len(installPlan.FirewallActions) > 0 {
+		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+			return fmt.Errorf("apply firewall rules: %w", err)
+		}
+	}
+
 	if shouldPrepareInstallHost(systemdDir) {
 		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
@@ -144,6 +181,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return err
 		}
+		installRuntimesFunc(cmd, opts)
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
 	for _, path := range result.WrittenFiles {
@@ -166,3 +204,28 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 func shouldPrepareInstallHost(systemdDir string) bool {
 	return filepath.Clean(systemdDir) == filepath.Clean(defaultSystemdDir)
 }
+
+func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) (installer.InstallPlan, error) {
+	platform := hostenv.CurrentPlatform()
+	if platform.OS != "linux" {
+		platform.OS = "linux"
+	}
+	caddyBinary := opts.CaddyBinary
+	if profile.InstallPanelCaddy && caddyBinary == "" {
+		if path, err := execLookPath("caddy"); err == nil {
+			caddyBinary = path
+		}
+	}
+	panelPort := opts.PanelPort
+	if profile.InstallPanelCaddy {
+		panelPort = 0
+	}
+	return installer.BuildInstallPlan(profile, installer.InstallPlanInput{
+		Platform:     platform,
+		SystemdUnits: installer.PanelSystemdUnits(profile),
+		PanelPort:    panelPort,
+		CaddyBinary:  caddyBinary,
+	})
+}
+
+var execLookPath = exec.LookPath

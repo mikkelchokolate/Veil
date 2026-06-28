@@ -136,9 +136,9 @@ PrivateDevices=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=yes
-CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER
-AmbientCapabilities=
-RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
 SystemCallArchitectures=native
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -151,8 +151,9 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ReadOnlyPaths=` + cfg.EtcDir + `
-ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin
+ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "certs") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket
@@ -176,6 +177,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Caddy stores its cert/key material and local CA root here. The hardening
+# below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
+# Caddy (root) cannot write there; give it a dedicated state dir it owns
+# (systemd creates /var/lib/caddy) for both ACME storage and the self-signed
+# internal-CA fallback.
+StateDirectory=caddy
+Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyfile + ` --adapter caddyfile
 ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyfile + ` --adapter caddyfile
 Restart=on-failure

@@ -13,7 +13,7 @@ func TestRenderOlcrtcUsesResolverDNSNotServerDomain(t *testing.T) {
 	settings := Settings{Domain: "45.157.233.54"}
 	inbound := Inbound{
 		Name: "olc", Protocol: "olcrtc", Transport: "udp", Port: 6523,
-		OlcrtcAuth: "jitsi", OlcrtcRoomID: "https://meet.small-dm.ru/veil-abcd1234",
+		OlcrtcAuth: "jitsi", OlcrtcRoomID: "https://meet.handyweb.org/veil-abcd1234",
 		Password: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
 	}
 	out, err := RenderOlcrtcInbound(settings, inbound, WarpConfig{})
@@ -32,7 +32,7 @@ func TestRenderOlcrtcUsesResolverDNSNotServerDomain(t *testing.T) {
 	if !strings.Contains(out, "provider: jitsi") {
 		t.Fatalf("olcrtc provider missing:\n%s", out)
 	}
-	if !strings.Contains(out, "https://meet.small-dm.ru/veil-abcd1234") {
+	if !strings.Contains(out, "https://meet.handyweb.org/veil-abcd1234") {
 		t.Fatalf("olcrtc room id missing:\n%s", out)
 	}
 	if !strings.Contains(out, inbound.Password) {

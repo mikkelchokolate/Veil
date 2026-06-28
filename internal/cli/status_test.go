@@ -71,16 +71,16 @@ func TestFetchStatusJSON(t *testing.T) {
 	}
 }
 
-func TestStatusListenWithoutSchemeTriesGeneratedPanelTLSOnLoopback(t *testing.T) {
+func TestStatusListenWithoutSchemeTriesHTTPFallbackOnLoopback(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/status" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1", Name: "Veil", Version: "tls-noscheme", Mode: "server"})
+		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1", Name: "Veil", Version: "http-noscheme", Mode: "server"})
 	})
-	server := httptest.NewTLSServer(handler)
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	cmd := NewRootCommand("test")
@@ -90,36 +90,10 @@ func TestStatusListenWithoutSchemeTriesGeneratedPanelTLSOnLoopback(t *testing.T)
 	cmd.SetArgs([]string{"status", "--listen", server.Listener.Addr().String(), "--json"})
 
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("status should try generated Panel TLS on loopback listen without scheme: %v\n%s", err, out.String())
+		t.Fatalf("status should fall back to HTTP on loopback listen without scheme: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "tls-noscheme") {
-		t.Fatalf("TLS status output missing response:\n%s", out.String())
-	}
-}
-
-func TestFetchStatusSupportsGeneratedPanelTLSOnLoopback(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/status" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusflow.Response{SchemaVersion: "v1", Name: "Veil", Version: "tls-test", Mode: "server"})
-	})
-	server := httptest.NewTLSServer(handler)
-	defer server.Close()
-
-	cmd := NewRootCommand("test")
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"status", "--listen", server.URL, "--json"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("status should trust generated Panel TLS on loopback: %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "tls-test") {
-		t.Fatalf("TLS status output missing response:\n%s", out.String())
+	if !strings.Contains(out.String(), "http-noscheme") {
+		t.Fatalf("HTTP status output missing response:\n%s", out.String())
 	}
 }
 

@@ -128,7 +128,7 @@ func panelClientLinksActionsJS() string {
       await window.openClientLinksModalFor('');
     };
 
-    window.openClientLinksModalFor = async function(inboundName) {
+    window.openClientLinksModalFor = async function(inboundName, inboundProtocol) {
       document.getElementById('client-links-modal-title').innerText = inboundName
         ? veilT('clientLinks.inboundTitle', { name: inboundName })
         : veilT('clientLinks.connectionTitle');
@@ -148,7 +148,13 @@ func panelClientLinksActionsJS() string {
 
         let links = body.links || [];
         if (inboundName) {
-          links = links.filter((link) => link.name === inboundName || link.name.indexOf(inboundName + '/') === 0);
+          links = links.filter((link) => {
+            if (link.name === inboundName) return true;
+            if (link.name.indexOf(inboundName + '/') === 0) return true;
+            // Aggregate links (e.g. Mieru) are named "protocol/profile"; match by protocol.
+            if (inboundProtocol && link.name.indexOf(inboundProtocol + '/') === 0) return true;
+            return false;
+          });
         }
         if (links.length === 0) {
           container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 24px;"></div>';

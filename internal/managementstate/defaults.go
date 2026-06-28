@@ -37,8 +37,9 @@ func BuildDefaultState(input DefaultInput) DefaultState {
 	if mode == "" {
 		mode = "server"
 	}
+	firewallManagement := true
 	return DefaultState{
-		Settings: model.Settings{PanelListen: panelListen, PanelAccess: panelAccess, WebBasePath: webBasePath, Mode: mode, Domain: input.Domain, Email: input.Email},
+		Settings: model.Settings{PanelListen: panelListen, PanelAccess: panelAccess, WebBasePath: webBasePath, Mode: mode, Domain: input.Domain, Email: input.Email, FirewallManagement: &firewallManagement},
 		Inbounds: []model.Inbound{},
 		Rules: []model.RoutingRule{
 			{Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true},
