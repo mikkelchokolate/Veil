@@ -557,16 +557,33 @@ func panelInboundActionsJS() string {
       }
     }
 
+    const inboundDropdownClones = new Map();
+
     function closeAllInboundDropdowns() {
+      inboundDropdownClones.forEach((clone) => {
+        if (clone.parentNode) {
+          clone.parentNode.removeChild(clone);
+        }
+      });
+      inboundDropdownClones.clear();
       document.querySelectorAll('#inbounds-table .dropdown.open').forEach((dropdown) => {
         dropdown.classList.remove('open');
       });
     }
 
-    function positionInboundDropdown(dropdown) {
+    function openInboundDropdown(dropdown) {
+      closeAllInboundDropdowns();
+      const original = dropdown.querySelector('.dropdown-content');
       const btn = dropdown.querySelector('.dropdown-btn');
-      const menu = dropdown.querySelector('.dropdown-content');
-      if (!btn || !menu) return;
+      if (!original || !btn) return;
+      const clone = original.cloneNode(true);
+      clone.style.display = 'block';
+      clone.style.position = 'fixed';
+      clone.style.zIndex = '1000';
+      document.body.appendChild(clone);
+      inboundDropdownClones.set(dropdown, clone);
+      dropdown.classList.add('open');
+
       const rect = btn.getBoundingClientRect();
       const minWidth = Math.max(160, rect.width);
       let left = rect.right - minWidth;
@@ -576,9 +593,9 @@ func panelInboundActionsJS() string {
       if (left < 8) {
         left = 8;
       }
-      menu.style.top = rect.bottom + 'px';
-      menu.style.left = left + 'px';
-      menu.style.minWidth = minWidth + 'px';
+      clone.style.top = rect.bottom + 'px';
+      clone.style.left = left + 'px';
+      clone.style.minWidth = minWidth + 'px';
     }
 
     document.addEventListener('click', (event) => {
@@ -586,21 +603,19 @@ func panelInboundActionsJS() string {
       if (btn) {
         const dropdown = btn.closest('.dropdown');
         const wasOpen = dropdown && dropdown.classList.contains('open');
-        closeAllInboundDropdowns();
         if (dropdown && !wasOpen) {
-          dropdown.classList.add('open');
-          positionInboundDropdown(dropdown);
+          openInboundDropdown(dropdown);
+        } else {
+          closeAllInboundDropdowns();
         }
         event.stopPropagation();
         return;
       }
-      if (event.target.closest('#inbounds-table .dropdown-content button')) {
+      if (event.target.closest('.dropdown-content') && event.target.closest('button')) {
         closeAllInboundDropdowns();
         return;
       }
-      if (!event.target.closest('#inbounds-table .dropdown-content')) {
-        closeAllInboundDropdowns();
-      }
+      closeAllInboundDropdowns();
     });
 
     window.addEventListener('resize', closeAllInboundDropdowns);

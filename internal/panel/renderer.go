@@ -789,9 +789,6 @@ const panelHTMLBase = `<!doctype html>
       background: var(--bg-hover);
       color: #fff;
     }
-    .dropdown.open .dropdown-content {
-      display: block;
-    }
 
     /* Toggle switches */
     .switch {
