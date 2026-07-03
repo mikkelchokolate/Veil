@@ -6,6 +6,11 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The privileged helper (`veil-helper.service`) can now write to `/etc/ufw`,
+  so firewall synchronization from the Panel (`/api/apply`) works in
+  production. Previously the helper ran as root but was confined by
+  `ProtectSystem=strict` without `/etc/ufw` in `ReadWritePaths`, causing
+  `ufw allow ...` to fail with "'/etc/ufw/user.rules' is not writable".
 - Protocol inbounds no longer fail to start with systemd status `203/EXEC`
   ("Failed to locate executable"). Veil previously wrote managed units that
   invoked `/usr/local/bin/{caddy,hysteria,mita,sing-box,olcrtc}` but never

@@ -153,7 +153,7 @@ MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ReadOnlyPaths=` + cfg.EtcDir + `
-ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "certs") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin
+ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "certs") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin /etc/ufw
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket
