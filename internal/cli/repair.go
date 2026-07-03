@@ -16,6 +16,9 @@ type repairWorkflowOptions struct {
 	BackupDir    string
 	BackupDirSet bool
 	AuditLog     string
+	LEIPCert     bool
+	LEIPCertPort int
+	PublicIP     string
 }
 
 func newRepairCommand() *cobra.Command {
@@ -27,6 +30,9 @@ func newRepairCommand() *cobra.Command {
 	var systemdDir string
 	var backupDir string
 	var auditLog string
+	var leIPCert bool
+	var leIPCertPort int
+	var publicIP string
 
 	cmd := &cobra.Command{
 		Use:   "repair",
@@ -42,6 +48,9 @@ func newRepairCommand() *cobra.Command {
 				BackupDir:    backupDir,
 				BackupDirSet: cmd.Flags().Changed("backup-dir"),
 				AuditLog:     auditLog,
+				LEIPCert:     leIPCert,
+				LEIPCertPort: leIPCertPort,
+				PublicIP:     publicIP,
 			})
 		},
 	}
@@ -53,11 +62,14 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", defaultSystemdDir, "systemd unit output directory")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
+	cmd.Flags().BoolVar(&leIPCert, "le-ip-cert", true, "re-issue Let's Encrypt IP certificate in direct mode if needed")
+	cmd.Flags().IntVar(&leIPCertPort, "le-ip-cert-port", 80, "port used for Let's Encrypt HTTP-01 validation")
+	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP; use auto to detect it")
 	return cmd
 }
 
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
-	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog}
+	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog, LEIPCert: opts.LEIPCert, LEIPCertPort: opts.LEIPCertPort, PublicIP: opts.PublicIP}
 	return repairflow.Run(flowOpts, cmd.OutOrStdout(), repairflow.Dependencies{
 		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
 			return repairflow.BuildPlanFromOptions(flowOpts, repairflow.PlanDependencies{Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath})

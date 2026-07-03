@@ -35,3 +35,11 @@ func TestUFWPlanOmitsZeroPorts(t *testing.T) {
 		t.Fatalf("expected no rules for zero ports, got %#v", plan)
 	}
 }
+
+func TestUFWPlanLEIPCertPort(t *testing.T) {
+	plan := UFWPlan(Config{LEIPCertPort: 80})
+	want := []Rule{{Command: "ufw", Args: []string{"allow", "80/tcp", "comment", "Veil ACME HTTP-01"}}}
+	if !reflect.DeepEqual(plan, want) {
+		t.Fatalf("unexpected plan:\n got: %#v\nwant: %#v", plan, want)
+	}
+}

@@ -93,7 +93,11 @@ func (p Profile) Build() (ProfileMaterial, error) {
 		material.Caddyfile = caddyfile
 		return material, nil
 	}
-	panelTLS, err := NewTLS().Generate(input.Domain)
+	var extraIPs []net.IP
+	if input.PanelAccess == "direct" {
+		extraIPs = nonLoopbackInterfaceIPs()
+	}
+	panelTLS, err := NewTLS().Generate(input.Domain, extraIPs)
 	if err != nil {
 		return ProfileMaterial{}, err
 	}
@@ -141,7 +145,7 @@ type TLSMaterial struct {
 
 func NewTLS() TLS { return TLS{} }
 
-func (TLS) Generate(domain string) (TLSMaterial, error) {
+func (TLS) Generate(domain string, extraIPs []net.IP) (TLSMaterial, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return TLSMaterial{}, err
@@ -161,6 +165,7 @@ func (TLS) Generate(domain string) (TLSMaterial, error) {
 		DNSNames:     []string{"localhost"},
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
 	}
+	cert.IPAddresses = append(cert.IPAddresses, extraIPs...)
 	if domain != "" {
 		if ip := net.ParseIP(domain); ip != nil {
 			cert.IPAddresses = append(cert.IPAddresses, ip)
@@ -175,4 +180,30 @@ func (TLS) Generate(domain string) (TLSMaterial, error) {
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	return TLSMaterial{CertPEM: string(certPEM), KeyPEM: string(keyPEM)}, nil
+}
+
+// nonLoopbackInterfaceIPs returns all non-loopback IP addresses assigned to
+// local network interfaces. For direct Panel access this lets the self-signed
+// certificate match the public interface IP, avoiding browser certificate
+// warnings that interact badly with cached HSTS policies.
+func nonLoopbackInterfaceIPs() []net.IP {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var ips []net.IP
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip == nil || ip.IsLoopback() {
+			continue
+		}
+		ips = append(ips, ip)
+	}
+	return ips
 }

@@ -1,6 +1,9 @@
 package panelaccess
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+	"net"
 	"strings"
 	"testing"
 )
@@ -73,4 +76,115 @@ func TestProfileBuildsDirectListenAddress(t *testing.T) {
 	if material.PanelListen != "0.0.0.0:9443" {
 		t.Fatalf("PanelListen = %q", material.PanelListen)
 	}
+}
+
+func TestProfileDirectTLSCertIncludesInterfaceIPs(t *testing.T) {
+	material, err := NewProfile(ProfileInput{PanelAccess: "direct", PanelPort: 9443}).Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !material.PanelTLSEnabled {
+		t.Fatal("expected direct mode to enable panel TLS")
+	}
+	block, _ := pem.Decode([]byte(material.PanelTLSCertPEM))
+	if block == nil {
+		t.Fatal("failed to decode generated certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+
+	hasLoopback := false
+	for _, ip := range cert.IPAddresses {
+		if ip.IsLoopback() {
+			hasLoopback = true
+			break
+		}
+	}
+	if !hasLoopback {
+		t.Fatalf("expected cert to include loopback IP, got %v", cert.IPAddresses)
+	}
+
+	// The direct-mode cert must include at least one non-loopback interface IP
+	// so browsers can validate it against the public IP.
+	extraIPs := nonLoopbackInterfaceIPs()
+	if len(extraIPs) == 0 {
+		t.Skip("no non-loopback interfaces available in test environment")
+	}
+	for _, want := range extraIPs {
+		found := false
+		for _, got := range cert.IPAddresses {
+			if got.Equal(want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected cert to include interface IP %v, got %v", want, cert.IPAddresses)
+		}
+	}
+}
+
+func TestProfileLocalTLSCertOmitsNonLoopbackInterfaceIPs(t *testing.T) {
+	material, err := NewProfile(ProfileInput{PanelAccess: "local", PanelPort: 2096}).Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	block, _ := pem.Decode([]byte(material.PanelTLSCertPEM))
+	if block == nil {
+		t.Fatal("failed to decode generated certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+	for _, ip := range cert.IPAddresses {
+		if !ip.IsLoopback() {
+			t.Fatalf("local-mode cert should not include non-loopback IP %v", ip)
+		}
+	}
+}
+
+func TestTLSGenerateIncludesExtraIPsAndDomain(t *testing.T) {
+	extra := net.ParseIP("203.0.113.10")
+	material, err := NewTLS().Generate("panel.example.com", []net.IP{extra})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	block, _ := pem.Decode([]byte(material.CertPEM))
+	if block == nil {
+		t.Fatal("failed to decode generated certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+	if !containsString(cert.DNSNames, "panel.example.com") {
+		t.Fatalf("expected DNSNames to include domain, got %v", cert.DNSNames)
+	}
+	if !containsIP(cert.IPAddresses, extra) {
+		t.Fatalf("expected IPAddresses to include extra IP %v, got %v", extra, cert.IPAddresses)
+	}
+	if !containsIP(cert.IPAddresses, net.ParseIP("127.0.0.1")) {
+		t.Fatalf("expected IPAddresses to include 127.0.0.1, got %v", cert.IPAddresses)
+	}
+}
+
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func containsIP(slice []net.IP, ip net.IP) bool {
+	for _, v := range slice {
+		if v.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }

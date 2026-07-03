@@ -15,6 +15,19 @@ All notable changes to Veil will be documented in this file.
 
 ### Added
 
+- Direct Panel access (`--panel-access direct`) now automatically obtains a
+  trusted Let's Encrypt IP certificate using the `shortlived` profile
+  (~6-day validity, auto-renewed by `acme.sh`). This eliminates the
+  self-signed certificate warning and the `ERR_TOO_MANY_REDIRECTS` / HSTS
+  loop some browsers show for bare-IP access. Port 80/tcp must be reachable
+  from the internet during the HTTP-01 challenge; if issuance fails, Veil
+  falls back to the previous self-signed certificate and prints a warning.
+  Use `--le-ip-cert` / `--le-ip-cert-port` to control the behavior.
+- Direct Panel access (`--panel-access direct`) now auto-fills the Settings
+  `domain` field with the server's public IP when it is empty. Client links,
+  subscriptions, and generated proxy configs therefore use the IP as the
+  endpoint instead of returning an empty link list. `veil repair` also
+  backfills the domain for existing direct-mode installations.
 - New `veil runtime install` command (with `--only` and `--bin-dir` flags) that
   downloads `caddy`, `hysteria`, `mita`, and `sing-box` from their upstream
   GitHub releases — verifying published SHA-256/SHA-512 checksums — and builds

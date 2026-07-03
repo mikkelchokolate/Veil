@@ -6,6 +6,7 @@ type Config struct {
 	PanelAccess    string
 	PanelPort      int
 	PanelHTTPSPort int
+	LEIPCertPort   int
 }
 
 type Rule struct {
@@ -14,7 +15,7 @@ type Rule struct {
 }
 
 func UFWPlan(config Config) []Rule {
-	if config.PanelPort <= 0 && config.PanelHTTPSPort <= 0 {
+	if config.PanelPort <= 0 && config.PanelHTTPSPort <= 0 && config.LEIPCertPort <= 0 {
 		return nil
 	}
 	rules := []Rule{}
@@ -25,6 +26,9 @@ func UFWPlan(config Config) []Rule {
 	}
 	if config.PanelHTTPSPort > 0 {
 		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.PanelHTTPSPort), "comment", "Veil panel HTTPS"}})
+	}
+	if config.LEIPCertPort > 0 {
+		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.LEIPCertPort), "comment", "Veil ACME HTTP-01"}})
 	}
 	return rules
 }

@@ -32,8 +32,10 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 |---|---|---|
 | `--panel-access MODE` | prompted interactively; `local` with `--yes` | Panel access mode: `local` (loopback only), `direct` (public interface), or `caddy` (automatic HTTPS on a domain). |
 | `--domain DOMAIN` | *(empty)* | Domain name to use (required if `--panel-access` is `caddy`). |
-| `--email EMAIL` | *(empty)* | ACME email for Let's Encrypt certificates (required for `caddy`). |
+| `--email EMAIL` | *(empty)* | ACME email for Let's Encrypt certificates (used for `caddy`; optional for `direct` IP certificates). |
 | `--panel-port PORT` | prompted interactively; `2096` with `--yes` | Port the Panel will listen on. Use `0` to select a random high port. |
+| `--le-ip-cert` | `true` for `direct`, otherwise ignored | Obtain a trusted Let's Encrypt IP certificate in `direct` mode. |
+| `--le-ip-cert-port PORT` | `80` | Port used for the Let's Encrypt HTTP-01 challenge listener. |
 | `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. Choices: `default` or `ru-recommended`. |
 | `--version TAG` | `latest` | Specify a targeted release tag to install (e.g. `v0.9.9`). |
 | `--force` | *(false)* | Force binary download and re-installation even if Veil is already present. |
@@ -81,11 +83,22 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 - **Auth:** Use a Panel user/session for browser access. Keep `VEIL_API_TOKEN` set for API clients and automation.
 
 ### Direct Mode
-Exposes the Panel directly on all interfaces on the configured port using self-signed TLS.
+Exposes the Panel directly on all interfaces on the configured port.
+
+By default, `direct` mode now obtains a trusted Let's Encrypt certificate for
+the server's public IP address (the `shortlived` profile, valid ~6 days and
+auto-renewed by `acme.sh`). This removes the browser certificate warning and
+prevents cached HSTS policies from causing redirect loops when accessing the
+panel by IP.
+
 - **URL:** `https://your-server-ip:<panel-port>/`
+- **Requirements:** Port `80/tcp` must be free and reachable from the internet
+  during install/repair so the Let's Encrypt HTTP-01 challenge can complete.
+- **Fallback:** If the IP certificate cannot be issued (for example, port 80 is
+  already in use), Veil falls back to a self-signed certificate and prints a
+  warning.
 - **Why:** Convenient for quick staging or internal networks.
-- **Warning:** Direct exposure with a self-signed certificate is prone to port
-  scanning and certificate bypass dialog warnings. `veil serve` refuses
+- **Warning:** Direct exposure is prone to port scanning. `veil serve` refuses
   non-loopback direct exposure unless TLS, `VEIL_API_TOKEN`, a Panel user, and
   authenticated metrics are configured. Plain public HTTP is rejected; the
   emergency `--unsafe-allow-public-http` /

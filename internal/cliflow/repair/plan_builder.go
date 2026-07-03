@@ -1,18 +1,23 @@
 package repair
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/panelmaterial"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/runtime"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -23,15 +28,50 @@ type PlanDependencies struct {
 	LookPath   func(string) (string, error)
 }
 
+var leIPCertIssueFunc = acmeip.IssueIPCert
+var repairPublicIPResolver = hostenv.ResolvePublicIP
+
 func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
 	secret := deps.secret()
+	// Read existing panel configuration so the regenerated TLS certificate
+	// matches the actual access mode (direct mode needs interface IPs in SANs).
+	existing := readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))
+	panelAccess := existing["VEIL_PANEL_ACCESS"]
+	if panelAccess == "" {
+		panelAccess = "local"
+	}
+	panelPort := panelPortFromListen(existing["VEIL_LISTEN"])
 	built, err := installer.BuildRURecommendedProfile(installer.RURecommendedInput{
-		Secret: secret,
+		Secret:      secret,
+		PanelAccess: panelAccess,
+		PanelPort:   panelPort,
+		Domain:      existing["VEIL_DOMAIN"],
+		Email:       existing["VEIL_EMAIL"],
 	})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
 	preserveExistingPanelRepairMaterial(&built, opts.EtcDir)
+
+	// Direct mode uses the public IP as the panel endpoint. Resolve it once so
+	// both veil.env and the encrypted panel state get a usable Domain.
+	resolvedIP := ""
+	if built.PanelAccess == "direct" && built.Domain == "" {
+		ip, err := repairPublicIPResolver(context.Background(), opts.PublicIP, nil, nil)
+		if err == nil && ip != nil {
+			resolvedIP = ip.String()
+			built.Domain = resolvedIP
+		}
+	}
+
+	if opts.LEIPCert && built.PanelAccess == "direct" {
+		if err := maybeIssueLEIPCert(context.Background(), &built, opts); err != nil {
+			// Repair should not fail because a certificate could not be renewed;
+			// the existing self-signed cert from the profile is still usable.
+			// The error is intentionally swallowed here; callers may log it later.
+			_ = err
+		}
+	}
 	veilBinary, executableErr := deps.executable()()
 	if executableErr != nil {
 		veilBinary = ""
@@ -40,7 +80,7 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
-	return addPanelStateRepairActions(plan, opts, deps)
+	return addPanelStateRepairActions(plan, opts, deps, resolvedIP)
 }
 
 func (d PlanDependencies) secret() installer.SecretFunc {
@@ -64,7 +104,7 @@ func (d PlanDependencies) lookPath() func(string) (string, error) {
 	return exec.LookPath
 }
 
-func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
+func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps PlanDependencies, resolvedIP string) (installer.RepairPlan, error) {
 	statePath := filepath.Join(opts.VarDir, "state.json")
 	if _, err := os.Stat(statePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -79,6 +119,14 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps Pl
 	}
 	if !ok {
 		return plan, nil
+	}
+	// Direct mode needs a domain for client links. Backfill it in the encrypted
+	// state when it is empty and we were able to resolve the public IP.
+	if resolvedIP != "" && snapshot.Settings.Domain == "" && !opts.DryRun {
+		snapshot.Settings.Domain = resolvedIP
+		if err := store.Save(snapshot); err != nil {
+			return installer.RepairPlan{}, fmt.Errorf("update panel state domain: %w", err)
+		}
 	}
 	return newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
 		Settings: snapshot.Settings,
@@ -303,4 +351,61 @@ func addRepairFileAction(plan *installer.RepairPlan, path string, content string
 		plan.Actions = append(plan.Actions, installer.RepairAction{Path: path, Reason: installer.RepairReasonDrifted, Content: content, Mode: mode})
 	}
 	return nil
+}
+
+func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedProfile, opts Options) error {
+	certPath := filepath.Join(opts.EtcDir, "panel", "tls.crt")
+	if !shouldRenewLEIPCert(certPath) {
+		return nil
+	}
+
+	publicIP := opts.PublicIP
+	if publicIP == "" {
+		publicIP = "auto"
+	}
+	resolvedIP, err := hostenv.ResolvePublicIP(ctx, publicIP, nil, nil)
+	if err != nil {
+		return fmt.Errorf("detect public IP: %w", err)
+	}
+	if resolvedIP == nil {
+		return fmt.Errorf("public IP detection returned empty")
+	}
+
+	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
+	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
+		PublicIPv4: resolvedIP.String(),
+		HTTPPort:   opts.LEIPCertPort,
+		Email:      profile.Email,
+		CertPath:   certPath,
+		KeyPath:    keyPath,
+	})
+	if err != nil {
+		return err
+	}
+
+	certPEM, err := os.ReadFile(cert.CertPath)
+	if err != nil {
+		return fmt.Errorf("read issued certificate: %w", err)
+	}
+	keyPEM, err := os.ReadFile(cert.KeyPath)
+	if err != nil {
+		return fmt.Errorf("read issued key: %w", err)
+	}
+	profile.PanelTLSCertPEM = string(certPEM)
+	profile.PanelTLSKeyPEM = string(keyPEM)
+	return nil
+}
+
+func shouldRenewLEIPCert(certPath string) bool {
+	info := runtime.ReadTLSCert(certPath)
+	if !info.Valid || info.Error != "" {
+		return true
+	}
+	if info.DaysRemaining <= 7 {
+		return true
+	}
+	if !strings.Contains(info.Issuer, "Let's Encrypt") {
+		return true
+	}
+	return false
 }

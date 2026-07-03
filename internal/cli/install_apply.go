@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
@@ -23,6 +25,10 @@ import (
 
 var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 	return service.RunSystemdActions(service.ExecRunner{}, actions)
+}
+
+var leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+	return acmeip.IssueIPCert(ctx, opts)
 }
 
 var installExecutableFunc = os.Executable
@@ -63,6 +69,13 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	}
 	if err := os.MkdirAll(opts.VarDir, 0755); err != nil {
 		return fmt.Errorf("create var directory: %w", err)
+	}
+
+	// 1a. In direct mode, the panel endpoint is the public IP. Resolve it once
+	// and use it both for the client-link domain and for the LE IP certificate.
+	resolvedIP, _ := resolvePublicIPForDirectInstall(cmd.Context(), opts)
+	if resolvedIP != nil && profile.PanelAccess == "direct" && profile.Domain == "" {
+		profile.Domain = resolvedIP.String()
 	}
 
 	// 2. Initialize state.key and encrypted state.json with generated credentials
@@ -119,6 +132,14 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		}
 		profile.Password = "" // clear it, as we didn't generate a new one
 		reusedExistingState = true
+		// Direct mode needs a domain for client links. If the existing state
+		// was created before auto-fill was implemented, backfill it now.
+		if resolvedIP != nil && snapshot.Settings.Domain == "" {
+			snapshot.Settings.Domain = resolvedIP.String()
+			if err := store.Save(snapshot); err != nil {
+				return fmt.Errorf("update existing panel state domain: %w", err)
+			}
+		}
 	} else {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(profile.Password), 10)
 		if err != nil {
@@ -147,6 +168,16 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		store := managementstate.NewStore(resolvedStatePath, cipher)
 		if err := store.Save(initialSnapshot); err != nil {
 			return fmt.Errorf("write initial state.json: %w", err)
+		}
+	}
+
+	// 2a. For direct panel access, try to obtain a trusted Let's Encrypt IP
+	// certificate. Fall back to the self-signed certificate already in the
+	// profile if detection or issuance fails.
+	if opts.PanelAccess == "direct" && opts.LEIPCert {
+		if err := issueLEIPCertForProfile(cmd.Context(), &profile, opts, resolvedIP); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: could not obtain Let's Encrypt IP certificate: %v\n", err)
+			fmt.Fprintln(cmd.ErrOrStderr(), "Falling back to the generated self-signed certificate.")
 		}
 	}
 
@@ -228,19 +259,83 @@ func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommended
 	if profile.InstallPanelCaddy {
 		panelPort = 0
 	}
+	leIPCertPort := 0
+	if profile.PanelAccess == "direct" && opts.LEIPCert {
+		leIPCertPort = opts.LEIPCertPort
+	}
 	return installer.BuildInstallPlan(profile, installer.InstallPlanInput{
 		Platform:     platform,
 		SystemdUnits: installer.PanelSystemdUnits(profile),
 		PanelAccess:  profile.PanelAccess,
 		PanelPort:    panelPort,
 		CaddyBinary:  caddyBinary,
+		LEIPCertPort: leIPCertPort,
 	})
+}
+
+func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, resolvedIP net.IP) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if resolvedIP == nil {
+		publicIP := opts.PublicIP
+		if publicIP == "" {
+			publicIP = "auto"
+		}
+		var err error
+		resolvedIP, err = hostenv.ResolvePublicIP(ctx, publicIP, installPublicIPClient, installPublicIPEndpoints)
+		if err != nil {
+			return fmt.Errorf("detect public IP: %w", err)
+		}
+		if resolvedIP == nil {
+			return fmt.Errorf("public IP detection returned empty")
+		}
+	}
+
+	certPath := filepath.Join(opts.EtcDir, "panel", "tls.crt")
+	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
+		return fmt.Errorf("create panel cert directory: %w", err)
+	}
+	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
+		PublicIPv4: resolvedIP.String(),
+		HTTPPort:   opts.LEIPCertPort,
+		Email:      opts.Email,
+		CertPath:   certPath,
+		KeyPath:    keyPath,
+	})
+	if err != nil {
+		return err
+	}
+
+	certPEM, err := os.ReadFile(cert.CertPath)
+	if err != nil {
+		return fmt.Errorf("read issued certificate: %w", err)
+	}
+	keyPEM, err := os.ReadFile(cert.KeyPath)
+	if err != nil {
+		return fmt.Errorf("read issued key: %w", err)
+	}
+	profile.PanelTLSCertPEM = string(certPEM)
+	profile.PanelTLSKeyPEM = string(keyPEM)
+	return nil
 }
 
 func parsePort(s string) (int, error) {
 	var port int
 	_, err := fmt.Sscanf(s, "%d", &port)
 	return port, err
+}
+
+func resolvePublicIPForDirectInstall(ctx context.Context, opts ruRecommendedInstallOptions) (net.IP, error) {
+	if opts.PanelAccess != "direct" {
+		return nil, nil
+	}
+	publicIP := opts.PublicIP
+	if publicIP == "" {
+		publicIP = "auto"
+	}
+	return hostenv.ResolvePublicIP(ctx, publicIP, installPublicIPClient, installPublicIPEndpoints)
 }
 
 var execLookPath = exec.LookPath

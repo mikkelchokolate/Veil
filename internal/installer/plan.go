@@ -36,6 +36,7 @@ type InstallPlanInput struct {
 	PanelAccess  string
 	PanelPort    int
 	CaddyBinary  string
+	LEIPCertPort int
 }
 
 type InstallPlan struct {
@@ -81,6 +82,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 			PanelAccess:    profile.PanelAccess,
 			PanelPort:      panelPort,
 			PanelHTTPSPort: panelHTTPSPort,
+			LEIPCertPort:   input.LEIPCertPort,
 		}),
 		PanelTools: []string{"speedtest-cli or speedtest"},
 	}, nil
