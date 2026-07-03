@@ -86,8 +86,10 @@ func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown JSON field, got %d: %s", w.Code, w.Body.String())
 	}
-	if body := w.Body.String(); !strings.Contains(body, `unknown field "typo"`) {
-		t.Fatalf("expected unknown field diagnostic, got %q", body)
+	var errResp struct{ Message string }
+	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
+	if !strings.Contains(errResp.Message, `unknown field "typo"`) {
+		t.Fatalf("expected unknown field diagnostic, got %q", w.Body.String())
 	}
 }
 
@@ -183,7 +185,9 @@ func TestManagementAPISettingsPutRejectsRemovedStackField(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for removed stack field, got %d: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `json: unknown field "stack"`) {
+	var errResp2 struct{ Message string }
+	_ = json.Unmarshal(w.Body.Bytes(), &errResp2)
+	if !strings.Contains(errResp2.Message, `json: unknown field "stack"`) {
 		t.Fatalf("expected unknown stack field error, got: %s", w.Body.String())
 	}
 }

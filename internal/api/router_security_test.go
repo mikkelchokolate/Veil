@@ -408,13 +408,13 @@ func TestConstantTimeCompareCSRF(t *testing.T) {
 	}
 }
 
-func TestSecurityHeadersSkipsHSTSForIPHosts(t *testing.T) {
+func TestSecurityHeadersHSTSForIPHosts(t *testing.T) {
 	handler := securityHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
 	cases := []struct {
-		host      string
+		host     string
 		wantHSTS bool
 	}{
 		{"45.157.233.54:25500", false},
@@ -431,11 +431,17 @@ func TestSecurityHeadersSkipsHSTSForIPHosts(t *testing.T) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		got := w.Header().Get("Strict-Transport-Security")
-		if c.wantHSTS && got == "" {
-			t.Fatalf("host %q: expected HSTS header", c.host)
-		}
-		if !c.wantHSTS && got != "" {
-			t.Fatalf("host %q: expected no HSTS header, got %q", c.host, got)
+		if c.wantHSTS {
+			if got == "" {
+				t.Fatalf("host %q: expected HSTS header", c.host)
+			}
+			if !strings.Contains(got, "max-age=63072000") {
+				t.Fatalf("host %q: expected long HSTS policy, got %q", c.host, got)
+			}
+		} else {
+			if got != "" {
+				t.Fatalf("host %q: expected no HSTS header, got %q", c.host, got)
+			}
 		}
 	}
 }

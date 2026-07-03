@@ -17,6 +17,9 @@ type Options struct {
 	BackupDir    string
 	BackupDirSet bool
 	AuditLog     string
+	LEIPCert     bool
+	LEIPCertPort int
+	PublicIP     string
 }
 
 type Dependencies struct {

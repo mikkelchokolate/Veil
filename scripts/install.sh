@@ -9,6 +9,8 @@ DOMAIN=""
 EMAIL=""
 PANEL_ACCESS=""
 PANEL_PORT=""
+LE_IP_CERT=""
+LE_IP_CERT_PORT=""
 YES=""
 DRY_RUN=""
 FORCE=""
@@ -29,9 +31,11 @@ Options:
   --profile NAME       default or ru-recommended, default ru-recommended
   --domain DOMAIN      Domain used for Panel Caddy access
   --email EMAIL        ACME email for Panel Caddy access
-  --panel-access MODE  local, direct, or caddy; prompted interactively when omitted
-  --panel-port PORT    Panel TCP port; prompted interactively when omitted; 0 means random high port
-  --local-bin PATH     Use a local veil binary instead of downloading a release
+  --panel-access MODE      local, direct, or caddy; prompted interactively when omitted
+  --panel-port PORT        Panel TCP port; prompted interactively when omitted; 0 means random high port
+  --le-ip-cert             Obtain a Let's Encrypt IP certificate in direct mode (default true)
+  --le-ip-cert-port PORT   Port used for Let's Encrypt HTTP-01 validation (default 80)
+  --local-bin PATH         Use a local veil binary instead of downloading a release
   --yes                Pass --yes to veil install for non-interactive apply
   --dry-run            Pass --dry-run to veil install
   --force              Force re-install even if veil is already installed
@@ -127,6 +131,8 @@ while [[ $# -gt 0 ]]; do
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
+    --le-ip-cert) LE_IP_CERT="1"; shift ;;
+    --le-ip-cert-port) require_value "$1" "${2:-}"; LE_IP_CERT_PORT="$2"; shift 2 ;;
     --local-bin) require_value "$1" "${2:-}"; LOCAL_BIN="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
@@ -170,6 +176,8 @@ if [[ -n "${LOCAL_BIN}" ]]; then
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+  if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+  if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
   if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
   run_veil_install
@@ -189,6 +197,8 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
     if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
     if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
     if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+    if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+    if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
     if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
     if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
     run_veil_install
@@ -273,6 +283,8 @@ if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
+if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
 if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
 if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
 

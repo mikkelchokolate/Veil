@@ -2,11 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -325,5 +328,245 @@ func TestApplyRURecommendedInstallAppliesFirewallRules(t *testing.T) {
 	}
 	if !foundPanel {
 		t.Fatalf("expected panel port firewall rule, got %+v", gotRules)
+	}
+}
+
+func TestApplyRURecommendedInstallDirectIssuesLEIPCert(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	oldIssue := leIPCertIssueFunc
+
+	var gotProfile installer.RURecommendedProfile
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		gotProfile = profile
+		return installer.ApplyResult{BackupID: "backup-le", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		if err := os.WriteFile(opts.CertPath, []byte("LE-CERT"), 0o644); err != nil {
+			t.Fatalf("write fake cert: %v", err)
+		}
+		if err := os.WriteFile(opts.KeyPath, []byte("LE-KEY"), 0o640); err != nil {
+			t.Fatalf("write fake key: %v", err)
+		}
+		return acmeip.IssuedCert{CertPath: opts.CertPath, KeyPath: opts.KeyPath}, nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+		leIPCertIssueFunc = oldIssue
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+
+	profile := installer.RURecommendedProfile{
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+		PanelAccess: "direct",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelAccess: "direct", LEIPCert: true, PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+	if gotProfile.PanelTLSCertPEM != "LE-CERT" {
+		t.Fatalf("expected issued cert in profile, got %q", gotProfile.PanelTLSCertPEM)
+	}
+	if gotProfile.PanelTLSKeyPEM != "LE-KEY" {
+		t.Fatalf("expected issued key in profile, got %q", gotProfile.PanelTLSKeyPEM)
+	}
+}
+
+func TestApplyRURecommendedInstallDirectFallsBackToSelfSignedOnLEIPCertFailure(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	oldIssue := leIPCertIssueFunc
+
+	var gotProfile installer.RURecommendedProfile
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		gotProfile = profile
+		return installer.ApplyResult{BackupID: "backup-fallback", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		return acmeip.IssuedCert{}, errors.New("port 80 blocked")
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+		leIPCertIssueFunc = oldIssue
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+
+	profile := installer.RURecommendedProfile{
+		Username:        "veil",
+		Password:        "test-password",
+		WebBasePath:     "/panel/",
+		PanelListen:     "0.0.0.0:3000",
+		PanelAccess:     "direct",
+		PanelTLSEnabled: true,
+		PanelTLSCertPEM: "SELF-SIGNED-CERT",
+		PanelTLSKeyPEM:  "SELF-SIGNED-KEY",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelAccess: "direct", LEIPCert: true, PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+	if gotProfile.PanelTLSCertPEM != "SELF-SIGNED-CERT" {
+		t.Fatalf("expected self-signed cert to be preserved, got %q", gotProfile.PanelTLSCertPEM)
+	}
+	if !strings.Contains(out.String(), "could not obtain Let's Encrypt IP certificate") {
+		t.Fatalf("expected warning about LE cert failure, got:\n%s", out.String())
+	}
+}
+
+func TestApplyRURecommendedInstallDirectOpensACMEPort(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	oldFirewall := installFirewallApplyFunc
+	oldIssue := leIPCertIssueFunc
+
+	var gotRules []firewall.Rule
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		return installer.ApplyResult{BackupID: "backup-acme", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	installFirewallApplyFunc = func(rules []firewall.Rule) error {
+		gotRules = rules
+		return nil
+	}
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		return acmeip.IssuedCert{CertPath: opts.CertPath, KeyPath: opts.KeyPath}, nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+		installFirewallApplyFunc = oldFirewall
+		leIPCertIssueFunc = oldIssue
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+
+	profile := installer.RURecommendedProfile{
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+		PanelAccess: "direct",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelAccess: "direct", PanelPort: 3000, LEIPCert: true, LEIPCertPort: 80, PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+
+	foundACME := false
+	for _, r := range gotRules {
+		if len(r.Args) >= 1 && r.Args[0] == "allow" && strings.Contains(r.Args[1], "80/tcp") {
+			foundACME = true
+			break
+		}
+	}
+	if !foundACME {
+		t.Fatalf("expected ACME port 80 firewall rule, got %+v", gotRules)
+	}
+}
+
+func TestApplyRURecommendedInstallDirectFillsDomainWithPublicIP(t *testing.T) {
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	var gotProfile installer.RURecommendedProfile
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		gotProfile = profile
+		return installer.ApplyResult{BackupID: "backup-domain", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func(actions []service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(paths hostaccess.Paths) error { return nil }
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+	profile := installer.RURecommendedProfile{
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+		PanelAccess: "direct",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelAccess: "direct", PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+	if gotProfile.Domain != "127.0.0.1" {
+		t.Fatalf("expected profile domain to be filled with public IP, got %q", gotProfile.Domain)
+	}
+
+	key, err := secrets.LoadOrCreateKey(filepath.Join(tempEtc, "state.key"))
+	if err != nil {
+		t.Fatalf("load state key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatalf("create cipher: %v", err)
+	}
+	snapshot, ok, err := managementstate.NewStore(filepath.Join(tempVar, "state.json"), cipher).Load()
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if !ok {
+		t.Fatal("state was not created")
+	}
+	if snapshot.Settings.Domain != "127.0.0.1" {
+		t.Fatalf("expected state domain to be filled with public IP, got %q", snapshot.Settings.Domain)
 	}
 }

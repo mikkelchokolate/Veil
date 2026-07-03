@@ -38,6 +38,9 @@ type ruRecommendedInstallOptions struct {
 	BackupDir      string
 	BackupDirSet   bool
 	CaddyBinary    string
+	LEIPCert       bool
+	LEIPCertSet    bool
+	LEIPCertPort   int
 }
 
 type RURecommendedInstallWorkflow struct {
@@ -124,7 +127,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		return err
 	}
 	fmt.Fprint(cmd.OutOrStdout(), installflow.NewPanelSummary(installflow.PanelSummaryInput{Profile: built, PanelPort: panelListenPort, PanelRandom: panelRandom, PanelPortSet: opts.PanelPortSet}).String())
-	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort)
+	planSummary, planErr := buildRURecommendedInstallPlanSummary(built, panelListenPort, opts.LEIPCertPort)
 	if planErr == nil {
 		fmt.Fprintln(cmd.OutOrStdout(), "Install plan")
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))
@@ -150,10 +153,14 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	return applyRURecommendedInstall(cmd, built, opts)
 }
 
-func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort int) (string, error) {
+func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile, panelPort, leIPCertPort int) (string, error) {
 	platform := hostenv.CurrentPlatform()
 	if platform.OS != "linux" {
 		platform.OS = "linux"
+	}
+	leIPCertPortArg := 0
+	if profile.PanelAccess == "direct" {
+		leIPCertPortArg = leIPCertPort
 	}
 	plan, err := installer.BuildInstallPlan(profile, installer.InstallPlanInput{
 		Platform:     platform,
@@ -161,6 +168,7 @@ func buildRURecommendedInstallPlanSummary(profile installer.RURecommendedProfile
 		PanelAccess:  profile.PanelAccess,
 		PanelPort:    panelPort,
 		CaddyBinary:  installPlanCaddyBinary(profile),
+		LEIPCertPort: leIPCertPortArg,
 	})
 	if err != nil {
 		return "", err

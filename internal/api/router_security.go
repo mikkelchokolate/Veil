@@ -19,16 +19,21 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
 		w.Header()["Server"] = nil // hide Go version from Server header
 		if r.TLS != nil {
-			// Only set HSTS for real domain names. Sending HSTS for a bare IP
-			// (common in direct Panel access) causes Chrome to loop/reject the
-			// self-signed certificate instead of showing the certificate warning.
 			host, _, _ := net.SplitHostPort(r.Host)
 			if host == "" {
 				host = r.Host
 			}
 			if net.ParseIP(host) == nil {
+				// Real domain name behind a trusted TLS certificate.
 				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 			}
+			// Bare IP (common in direct Panel access): do NOT send any
+			// Strict-Transport-Security header. HSTS is ignored for IP
+			// addresses by spec, but Chrome/Firefox still treat a self-signed
+			// certificate + any HSTS header (even max-age=0) as a hard error
+			// and can enter a redirect/reject loop instead of showing the
+			// certificate warning page. Omitting the header keeps curl and
+			// browsers on the same path: a one-time certificate exception.
 		}
 		next.ServeHTTP(w, r)
 	})

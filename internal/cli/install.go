@@ -31,6 +31,8 @@ func newInstallCommand() *cobra.Command {
 	var interactive bool
 	var auditLog string
 	var backupDir string
+	var leIPCert bool
+	var leIPCertPort int
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -54,6 +56,9 @@ func newInstallCommand() *cobra.Command {
 				AuditLog:       auditLog,
 				BackupDir:      backupDir,
 				BackupDirSet:   cmd.Flags().Changed("backup-dir"),
+				LEIPCert:       leIPCert,
+				LEIPCertSet:    cmd.Flags().Changed("le-ip-cert"),
+				LEIPCertPort:   leIPCertPort,
 			})
 		},
 	}
@@ -68,6 +73,8 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().IntVar(&panelPort, "panel-port", 2096, "panel TCP port; pass 0 to select a random high port")
 	cmd.Flags().StringVar(&panelAccess, "panel-access", "local", "panel access mode: local, direct, or caddy")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
+	cmd.Flags().BoolVar(&leIPCert, "le-ip-cert", true, "obtain a Let's Encrypt IP certificate in direct mode")
+	cmd.Flags().IntVar(&leIPCertPort, "le-ip-cert-port", 80, "port used for Let's Encrypt HTTP-01 validation")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")

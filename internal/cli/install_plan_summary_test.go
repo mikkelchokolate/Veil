@@ -16,7 +16,7 @@ func TestBuildRURecommendedInstallPlanSummaryUsesPanelOnlySystemdUnits(t *testin
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
 
-	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096)
+	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096, 0)
 	if err != nil {
 		t.Fatalf("buildRURecommendedInstallPlanSummary: %v", err)
 	}
@@ -42,11 +42,14 @@ func TestBuildRURecommendedInstallPlanSummaryDirectIncludesFirewallRule(t *testi
 		t.Fatalf("BuildRURecommendedProfile: %v", err)
 	}
 
-	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096)
+	summary, err := buildRURecommendedInstallPlanSummary(profile, 2096, 80)
 	if err != nil {
 		t.Fatalf("buildRURecommendedInstallPlanSummary: %v", err)
 	}
 	if !strings.Contains(summary, "ufw allow 2096/tcp comment Veil panel") {
 		t.Fatalf("direct mode summary missing panel firewall rule:\n%s", summary)
+	}
+	if !strings.Contains(summary, "ufw allow 80/tcp comment Veil ACME HTTP-01") {
+		t.Fatalf("direct mode summary missing ACME firewall rule:\n%s", summary)
 	}
 }
