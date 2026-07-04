@@ -12,8 +12,12 @@ import (
 
 const systemdListenFD = 3
 
+// newSystemdUnixListener is a test hook so ServeSystemd can be exercised
+// without taking over the real file descriptor 3.
+var newSystemdUnixListener = systemdUnixListener
+
 func (s *Server) ServeSystemd(ctx context.Context, allowedUID uint32, allowRoot bool) error {
-	listener, err := systemdUnixListener()
+	listener, err := newSystemdUnixListener()
 	if err != nil {
 		return err
 	}

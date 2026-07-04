@@ -30,6 +30,7 @@ type PlanDependencies struct {
 
 var leIPCertIssueFunc = acmeip.IssueIPCert
 var repairPublicIPResolver = hostenv.ResolvePublicIP
+var repairLEPublicIPResolver = hostenv.ResolvePublicIP
 
 func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
 	secret := deps.secret()
@@ -363,7 +364,7 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	if publicIP == "" {
 		publicIP = "auto"
 	}
-	resolvedIP, err := hostenv.ResolvePublicIP(ctx, publicIP, nil, nil)
+	resolvedIP, err := repairLEPublicIPResolver(ctx, publicIP, nil, nil)
 	if err != nil {
 		return fmt.Errorf("detect public IP: %w", err)
 	}

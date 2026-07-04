@@ -1,0 +1,73 @@
+package renderer
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRenderHysteria2RejectsEmptyUserInUsers(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		password string
+	}{
+		{"empty username", "", "pass"},
+		{"empty password", "alice", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RenderHysteria2(Hysteria2Config{
+				ListenPort: 443,
+				Users: []Hysteria2User{{
+					Username: tt.username,
+					Password: tt.password,
+				}},
+			})
+			if err == nil {
+				t.Fatal("expected error for empty user credential")
+			}
+			if !strings.Contains(err.Error(), "username and password are required") {
+				t.Fatalf("expected credential error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderHysteria2DefaultsCertPaths(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort: 443,
+		Password:   "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"cert: /etc/veil/panel/tls.crt",
+		"key: /etc/veil/panel/tls.key",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("expected %q in config:\n%s", want, cfg)
+		}
+	}
+}
+
+func TestRenderHysteria2Upstream(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort:    443,
+		Password:      "secret",
+		MasqueradeURL: "https://www.bing.com/",
+		Upstream:      "127.0.0.1:1080",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"outbound:",
+		"type: socks5",
+		"addr: 127.0.0.1:1080",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("expected %q in config:\n%s", want, cfg)
+		}
+	}
+}

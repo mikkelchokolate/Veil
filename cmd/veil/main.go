@@ -12,8 +12,12 @@ import (
 
 var version = "dev"
 
+// osExit is the process exit function used by main. It is overridable so that
+// main can be exercised in unit tests without terminating the test process.
+var osExit = os.Exit
+
 func main() {
-	os.Exit(run())
+	osExit(run())
 }
 
 // run executes the root command with signal-aware context and returns an exit
