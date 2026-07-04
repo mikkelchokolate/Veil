@@ -73,6 +73,10 @@ func NewProfile(input ProfileInput) Profile {
 	return Profile{input: input}
 }
 
+// newTLSFunc is overridable in tests so that Profile.Build TLS error paths can
+// be exercised without mocking the crypto/rand package.
+var newTLSFunc = NewTLS
+
 func (p Profile) Build() (ProfileMaterial, error) {
 	input := p.input
 	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
@@ -97,7 +101,7 @@ func (p Profile) Build() (ProfileMaterial, error) {
 	if input.PanelAccess == "direct" {
 		extraIPs = nonLoopbackInterfaceIPs()
 	}
-	panelTLS, err := NewTLS().Generate(input.Domain, extraIPs)
+	panelTLS, err := newTLSFunc().Generate(input.Domain, extraIPs)
 	if err != nil {
 		return ProfileMaterial{}, err
 	}
@@ -145,12 +149,20 @@ type TLSMaterial struct {
 
 func NewTLS() TLS { return TLS{} }
 
+// Crypto operation hooks are overridable in tests so the error branches inside
+// TLS.Generate can be exercised without depending on rand.Reader failures.
+var (
+	rsaGenerateKey        = rsa.GenerateKey
+	randInt               = rand.Int
+	x509CreateCertificate = x509.CreateCertificate
+)
+
 func (TLS) Generate(domain string, extraIPs []net.IP) (TLSMaterial, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	key, err := rsaGenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return TLSMaterial{}, err
 	}
-	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	serial, err := randInt(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		return TLSMaterial{}, err
 	}
@@ -173,7 +185,7 @@ func (TLS) Generate(domain string, extraIPs []net.IP) (TLSMaterial, error) {
 			cert.DNSNames = append(cert.DNSNames, domain)
 		}
 	}
-	der, err := x509.CreateCertificate(rand.Reader, &cert, &cert, &key.PublicKey, key)
+	der, err := x509CreateCertificate(rand.Reader, &cert, &cert, &key.PublicKey, key)
 	if err != nil {
 		return TLSMaterial{}, err
 	}
@@ -182,12 +194,16 @@ func (TLS) Generate(domain string, extraIPs []net.IP) (TLSMaterial, error) {
 	return TLSMaterial{CertPEM: string(certPEM), KeyPEM: string(keyPEM)}, nil
 }
 
+// interfaceAddrs is overridable in tests so error paths and unusual address
+// types can be exercised without depending on the host's network configuration.
+var interfaceAddrs = net.InterfaceAddrs
+
 // nonLoopbackInterfaceIPs returns all non-loopback IP addresses assigned to
 // local network interfaces. For direct Panel access this lets the self-signed
 // certificate match the public interface IP, avoiding browser certificate
 // warnings that interact badly with cached HSTS policies.
 func nonLoopbackInterfaceIPs() []net.IP {
-	addrs, err := net.InterfaceAddrs()
+	addrs, err := interfaceAddrs()
 	if err != nil {
 		return nil
 	}

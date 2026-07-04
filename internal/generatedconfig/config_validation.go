@@ -7,6 +7,13 @@ import (
 
 type ConfigValidationRunner func(name string, config string, command []string) ConfigValidationResult
 
+type runtimeCommandRunner interface {
+	Run(RuntimeCommandInput) RuntimeCommandOutput
+}
+
+// runtimeCommandExecutor is swapped in tests to avoid invoking real binaries.
+var runtimeCommandExecutor runtimeCommandRunner = NewRuntimeCommandExecutor()
+
 type StagedConfigValidator struct {
 	run ConfigValidationRunner
 }
@@ -46,7 +53,7 @@ func RunFixedConfigValidation(name string, config string, command []string) Conf
 		"XDG_DATA_HOME="+filepath.Join(tmpDir, "caddy"),
 		"XDG_CONFIG_HOME="+tmpDir,
 	)
-	output := NewRuntimeCommandExecutor().Run(RuntimeCommandInput{Command: command, Env: env})
+	output := runtimeCommandExecutor.Run(RuntimeCommandInput{Command: command, Env: env})
 	result.Output = output.Output
 	if output.Empty {
 		result.Skipped = true

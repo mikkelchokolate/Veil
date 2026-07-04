@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// fileSync is swapped in tests to exercise the file.Sync error path.
+var fileSync = (*os.File).Sync
+
 const (
 	defaultRecorderMaxBytes int64 = 5 * 1024 * 1024
 	defaultRecorderBackups        = 5
@@ -104,7 +107,7 @@ func (r *Recorder) Append(record Record) error {
 		_ = file.Close()
 		return err
 	}
-	if err := file.Sync(); err != nil {
+	if err := fileSync(file); err != nil {
 		_ = file.Close()
 		return err
 	}

@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+// jsonMarshal is swapped in tests to exercise the (normally unreachable)
+// json.Marshal error path for the concrete audit-event types.
+var jsonMarshal = json.Marshal
+
 // AuditEvent represents a single audit log entry for rollback operations.
 type AuditEvent struct {
 	Timestamp     string   `json:"timestamp"`
@@ -33,7 +37,7 @@ func AppendAuditEvent(path string, event AuditEvent) error {
 		return err
 	}
 
-	data, err := json.Marshal(event)
+	data, err := jsonMarshal(event)
 	if err != nil {
 		return err
 	}
@@ -74,7 +78,7 @@ func LogUserAction(path string, event UserAuditEvent) error {
 		return err
 	}
 
-	data, err := json.Marshal(event)
+	data, err := jsonMarshal(event)
 	if err != nil {
 		return err
 	}
