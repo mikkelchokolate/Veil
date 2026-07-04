@@ -1,12 +1,10 @@
 package secrets
 
 import (
-	"crypto/rand"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-
-	"errors"
 )
 
 type KeyFileStore struct {
@@ -47,7 +45,7 @@ func (s KeyFileStore) LoadOrCreate() (*[KeySize]byte, error) {
 
 func (s KeyFileStore) create() (*[KeySize]byte, error) {
 	var key [KeySize]byte
-	if _, err := rand.Read(key[:]); err != nil {
+	if _, err := randRead(key[:]); err != nil {
 		return nil, fmt.Errorf("secrets: generate key: %w", err)
 	}
 	if err := os.WriteFile(s.Path, key[:], 0o600); err != nil {

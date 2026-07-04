@@ -27,21 +27,27 @@ func NewActions(runner CommandRunner, fileRemover func(string) error) Actions {
 	return Actions{runner: runner, fileRemover: fileRemover}
 }
 
+// defaultActions constructs the Actions used by package-level helpers.
+// It is a variable so tests can substitute a mock and avoid invoking real systemctl.
+var defaultActions = func() Actions {
+	return NewActions(nil, nil)
+}
+
 func DefaultDependencies() Dependencies {
-	actions := NewActions(nil, nil)
+	actions := defaultActions()
 	return Dependencies{ServiceStopper: actions.StopAndDisableService, FileRemover: actions.RemovePath, SystemdReloader: actions.ReloadSystemdDaemon}
 }
 
 func StopAndDisableService(service string) error {
-	return NewActions(nil, nil).StopAndDisableService(service)
+	return defaultActions().StopAndDisableService(service)
 }
 
 func RemovePath(path string) error {
-	return NewActions(nil, nil).RemovePath(path)
+	return defaultActions().RemovePath(path)
 }
 
 func ReloadSystemdDaemon() error {
-	return NewActions(nil, nil).ReloadSystemdDaemon()
+	return defaultActions().ReloadSystemdDaemon()
 }
 
 func (a Actions) StopAndDisableService(service string) error {

@@ -9,9 +9,14 @@ import (
 	"strings"
 )
 
-type HostPortProbe struct{}
+type HostPortProbe struct {
+	// listenTCP and listenUDP are test hooks. When nil the probe uses the
+	// standard net.ListenConfig implementation.
+	listenTCP func(context.Context, *net.ListenConfig, string) (net.Listener, error)
+	listenUDP func(context.Context, *net.ListenConfig, string) (net.PacketConn, error)
+}
 
-func (HostPortProbe) Available(ctx context.Context, transport string, port int) (bool, error) {
+func (p HostPortProbe) Available(ctx context.Context, transport string, port int) (bool, error) {
 	if port < 1 || port > 65535 {
 		return false, fmt.Errorf("invalid port %d", port)
 	}
@@ -25,7 +30,13 @@ func (HostPortProbe) Available(ctx context.Context, transport string, port int) 
 	var listenConfig net.ListenConfig
 	switch strings.ToLower(strings.TrimSpace(transport)) {
 	case "tcp":
-		listener, err := listenConfig.Listen(ctx, "tcp", address)
+		listen := p.listenTCP
+		if listen == nil {
+			listen = func(ctx context.Context, lc *net.ListenConfig, addr string) (net.Listener, error) {
+				return lc.Listen(ctx, "tcp", addr)
+			}
+		}
+		listener, err := listen(ctx, &listenConfig, address)
 		if err != nil {
 			if ctx.Err() != nil {
 				return false, ctx.Err()
@@ -37,7 +48,13 @@ func (HostPortProbe) Available(ctx context.Context, transport string, port int) 
 		}
 		return true, nil
 	case "udp":
-		packet, err := listenConfig.ListenPacket(ctx, "udp", address)
+		listen := p.listenUDP
+		if listen == nil {
+			listen = func(ctx context.Context, lc *net.ListenConfig, addr string) (net.PacketConn, error) {
+				return lc.ListenPacket(ctx, "udp", addr)
+			}
+		}
+		packet, err := listen(ctx, &listenConfig, address)
 		if err != nil {
 			if ctx.Err() != nil {
 				return false, ctx.Err()
@@ -75,10 +92,16 @@ type CommandRunner func(context.Context, string, ...string) ([]byte, error)
 
 type SystemdUnitInspector struct {
 	Run CommandRunner
+	// defaultRun is a test hook used when Run is nil. It defaults to
+	// ExecCommandRunner so production code does not depend on the hook.
+	defaultRun CommandRunner
 }
 
 func (i SystemdUnitInspector) Exists(ctx context.Context, unit string) (bool, error) {
 	run := i.Run
+	if run == nil {
+		run = i.defaultRun
+	}
 	if run == nil {
 		run = ExecCommandRunner
 	}
@@ -89,6 +112,9 @@ func (i SystemdUnitInspector) Exists(ctx context.Context, unit string) (bool, er
 	return strings.TrimSpace(string(output)) == "loaded", nil
 }
 
-func ExecCommandRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
+// ExecCommandRunner is the production command runner. It is a variable so
+// tests can temporarily replace it to exercise the final fallback path in
+// SystemdUnitInspector.Exists.
+var ExecCommandRunner CommandRunner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +14,14 @@ import (
 type EndpointLimit struct {
 	RatePerMinute int
 	Burst         int
+}
+
+// cleanupInterval is the period between background bucket cleanups. It is an
+// atomic duration so tests can shorten it safely without changing production behavior.
+var cleanupInterval atomic.Int64
+
+func init() {
+	cleanupInterval.Store(int64(5 * time.Minute))
 }
 
 // RateLimiter is a per-IP token bucket rate limiter.
@@ -109,7 +118,7 @@ func extractClientIP(r *http.Request) string {
 }
 
 func (rl *RateLimiter) cleanupLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(time.Duration(cleanupInterval.Load()))
 	defer ticker.Stop()
 	for {
 		select {

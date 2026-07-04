@@ -1,7 +1,6 @@
 package olcrtc
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -41,7 +40,7 @@ func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error
 	password := inbound.Password
 	if password == "" {
 		bytes := make([]byte, 32)
-		if _, err := rand.Read(bytes); err != nil {
+		if _, err := randRead(bytes); err != nil {
 			return "", err
 		}
 		password = hex.EncodeToString(bytes)

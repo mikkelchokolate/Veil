@@ -24,11 +24,9 @@ func (r MetricsRequestRecorder) Record(method, path string, statusCode int, dura
 }
 
 func (MetricsRequestRecorder) increment(values *sync.Map, key string) {
-	if val, ok := values.Load(key); ok {
-		val.(*atomic.Int64).Add(1)
-		return
-	}
 	var counter atomic.Int64
 	counter.Store(1)
-	values.Store(key, &counter)
+	if actual, loaded := values.LoadOrStore(key, &counter); loaded {
+		actual.(*atomic.Int64).Add(1)
+	}
 }

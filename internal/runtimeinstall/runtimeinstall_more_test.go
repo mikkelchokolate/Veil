@@ -1,6 +1,7 @@
 package runtimeinstall
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -853,5 +854,436 @@ func TestCatalogArm64(t *testing.T) {
 		if r.Name == "mieru" && !r.AssetMatch("mita_3.0.0_linux_arm64.tar.gz") {
 			t.Error("mieru arm64 matcher failed")
 		}
+	}
+}
+
+// errorReader is an io.Reader that always returns a configured error.
+type errorReader struct {
+	err error
+}
+
+func (e *errorReader) Read([]byte) (int, error) {
+	return 0, e.err
+}
+
+// fakeAtomicFile satisfies the atomicFile interface for testing writeBinaryAtomic
+// error paths without needing a full filesystem.
+type fakeAtomicFile struct {
+	name     string
+	writeErr error
+	chmodErr error
+	closeErr error
+}
+
+func (f *fakeAtomicFile) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	return len(p), nil
+}
+
+func (f *fakeAtomicFile) Name() string            { return f.name }
+func (f *fakeAtomicFile) Chmod(os.FileMode) error { return f.chmodErr }
+func (f *fakeAtomicFile) Close() error            { return f.closeErr }
+
+func TestFetchLatestReleaseForbiddenFallsBack(t *testing.T) {
+	html := `<a href="/owner/repo/releases/download/v1.0.0/asset.tar.gz">asset</a>`
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host + req.URL.Path {
+		case "api.github.com/repos/owner/repo/releases/latest":
+			return &http.Response{StatusCode: 403, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+		case "github.com/owner/repo/releases/latest":
+			return &http.Response{
+				StatusCode: 302,
+				Header:     http.Header{"Location": []string{"https://github.com/owner/repo/releases/tag/v1.0.0"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		case "github.com/owner/repo/releases/expanded_assets/v1.0.0":
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(html)), Request: req}, nil
+		}
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+	}}
+	client := &http.Client{Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	release, err := fetchLatestRelease(context.Background(), client, "owner/repo")
+	if err != nil {
+		t.Fatalf("fetchLatestRelease: %v", err)
+	}
+	if release.TagName != "v1.0.0" {
+		t.Fatalf("tag = %q", release.TagName)
+	}
+}
+
+func TestFetchLatestReleaseAPIBodyReadError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(&errorReader{err: errors.New("read failed")}),
+			Request:    req,
+		}, nil
+	}}
+	client := &http.Client{Transport: tr}
+	_, err := fetchLatestRelease(context.Background(), client, "owner/repo")
+	if err == nil || !strings.Contains(err.Error(), "read failed") {
+		t.Fatalf("expected body read error, got %v", err)
+	}
+}
+
+func TestFetchLatestReleaseWebDoError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/owner/repo/releases/latest":
+			return &http.Response{
+				StatusCode: 302,
+				Header:     http.Header{"Location": []string{"https://github.com/owner/repo/releases/tag/v1.0.0"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		case "/owner/repo/releases/expanded_assets/v1.0.0":
+			return nil, errors.New("network down")
+		}
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+	}}
+	client := &http.Client{Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	_, err := fetchLatestReleaseWeb(context.Background(), client, "owner/repo")
+	if err == nil || !strings.Contains(err.Error(), "network down") {
+		t.Fatalf("expected network error, got %v", err)
+	}
+}
+
+func TestFetchLatestReleaseWebBodyReadError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/owner/repo/releases/latest":
+			return &http.Response{
+				StatusCode: 302,
+				Header:     http.Header{"Location": []string{"https://github.com/owner/repo/releases/tag/v1.0.0"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		case "/owner/repo/releases/expanded_assets/v1.0.0":
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(&errorReader{err: errors.New("read failed")}),
+				Request:    req,
+			}, nil
+		}
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+	}}
+	client := &http.Client{Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	_, err := fetchLatestReleaseWeb(context.Background(), client, "owner/repo")
+	if err == nil || !strings.Contains(err.Error(), "read failed") {
+		t.Fatalf("expected body read error, got %v", err)
+	}
+}
+
+func TestResolveLatestTagWebParseLocationError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+			// An invalid URL in the request forces url.Parse to fail in our code.
+			Request: &http.Request{URL: &url.URL{Scheme: "http", Host: "[::1]:namedport", Path: "/owner/repo/releases/tag/v1.0.0"}},
+		}, nil
+	}}
+	client := &http.Client{Transport: tr}
+	_, err := resolveLatestTagWeb(context.Background(), client, "owner/repo")
+	if err == nil || !strings.Contains(err.Error(), "parse location") {
+		t.Fatalf("expected parse location error, got %v", err)
+	}
+}
+
+func TestResolveLatestTagWebDoError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("network down")
+	}}
+	client := &http.Client{Transport: tr}
+	_, err := resolveLatestTagWeb(context.Background(), client, "owner/repo")
+	if err == nil || !strings.Contains(err.Error(), "network down") {
+		t.Fatalf("expected network error, got %v", err)
+	}
+}
+
+func TestParseExpandedAssetsSkipsDuplicates(t *testing.T) {
+	html := `
+		<a href="/owner/repo/releases/download/v1.0.0/asset.tar.gz">asset</a>
+		<a href="/owner/repo/releases/download/v1.0.0/asset.tar.gz">asset</a>
+	`
+	assets, err := parseExpandedAssets(html, "v1.0.0", "owner/repo")
+	if err != nil {
+		t.Fatalf("parseExpandedAssets: %v", err)
+	}
+	if len(assets) != 1 {
+		t.Fatalf("expected 1 asset, got %d", len(assets))
+	}
+}
+
+func TestFindAssetTieBreaksLexically(t *testing.T) {
+	assets := []Asset{{Name: "b"}, {Name: "a"}}
+	got, ok := findAsset(assets, func(n string) bool { return true })
+	if !ok || got.Name != "a" {
+		t.Fatalf("findAsset = %+v ok=%v", got, ok)
+	}
+}
+
+func TestExtractArchiveBinarySkipsNonRegularEntries(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	// Directory entry should be skipped.
+	if err := tw.WriteHeader(&tar.Header{Name: "dir/", Mode: 0o755, Typeflag: tar.TypeDir}); err != nil {
+		t.Fatal(err)
+	}
+	// Symlink entry should be skipped.
+	if err := tw.WriteHeader(&tar.Header{Name: "link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "bin"}); err != nil {
+		t.Fatal(err)
+	}
+	// The actual binary.
+	content := []byte("binary-data")
+	if err := tw.WriteHeader(&tar.Header{Name: "bin", Mode: 0o755, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ExtractArchiveBinary(buf.Bytes(), "bin")
+	if err != nil {
+		t.Fatalf("ExtractArchiveBinary: %v", err)
+	}
+	if string(got) != "binary-data" {
+		t.Fatalf("got %q", string(got))
+	}
+}
+
+func TestDownloadURLBodyReadError(t *testing.T) {
+	tr := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(&errorReader{err: errors.New("read failed")}),
+			Request:    req,
+		}, nil
+	}}
+	client := &http.Client{Transport: tr}
+	_, err := downloadURL(context.Background(), client, "https://example.com/file")
+	if err == nil || !strings.Contains(err.Error(), "read failed") {
+		t.Fatalf("expected body read error, got %v", err)
+	}
+}
+
+func TestWriteBinaryAtomicCreateTempError(t *testing.T) {
+	old := writeBinaryAtomicCreateTemp
+	writeBinaryAtomicCreateTemp = func(dir, pattern string) (atomicFile, error) {
+		return nil, errors.New("create temp failed")
+	}
+	defer func() { writeBinaryAtomicCreateTemp = old }()
+
+	err := writeBinaryAtomic(filepath.Join(t.TempDir(), "bin"), []byte("x"))
+	if err == nil || !strings.Contains(err.Error(), "create temp failed") {
+		t.Fatalf("expected create temp error, got %v", err)
+	}
+}
+
+func TestWriteBinaryAtomicWriteError(t *testing.T) {
+	dir := t.TempDir()
+	old := writeBinaryAtomicCreateTemp
+	writeBinaryAtomicCreateTemp = func(d, pattern string) (atomicFile, error) {
+		return &fakeAtomicFile{name: filepath.Join(dir, "tmp-write"), writeErr: errors.New("write failed")}, nil
+	}
+	defer func() { writeBinaryAtomicCreateTemp = old }()
+
+	err := writeBinaryAtomic(filepath.Join(dir, "dest"), []byte("x"))
+	if err == nil || !strings.Contains(err.Error(), "write failed") {
+		t.Fatalf("expected write error, got %v", err)
+	}
+}
+
+func TestWriteBinaryAtomicChmodError(t *testing.T) {
+	dir := t.TempDir()
+	old := writeBinaryAtomicCreateTemp
+	writeBinaryAtomicCreateTemp = func(d, pattern string) (atomicFile, error) {
+		return &fakeAtomicFile{name: filepath.Join(dir, "tmp-chmod"), chmodErr: errors.New("chmod failed")}, nil
+	}
+	defer func() { writeBinaryAtomicCreateTemp = old }()
+
+	err := writeBinaryAtomic(filepath.Join(dir, "dest"), []byte("x"))
+	if err == nil || !strings.Contains(err.Error(), "chmod failed") {
+		t.Fatalf("expected chmod error, got %v", err)
+	}
+}
+
+func TestWriteBinaryAtomicCloseError(t *testing.T) {
+	dir := t.TempDir()
+	old := writeBinaryAtomicCreateTemp
+	writeBinaryAtomicCreateTemp = func(d, pattern string) (atomicFile, error) {
+		return &fakeAtomicFile{name: filepath.Join(dir, "tmp-close"), closeErr: errors.New("close failed")}, nil
+	}
+	defer func() { writeBinaryAtomicCreateTemp = old }()
+
+	err := writeBinaryAtomic(filepath.Join(dir, "dest"), []byte("x"))
+	if err == nil || !strings.Contains(err.Error(), "close failed") {
+		t.Fatalf("expected close error, got %v", err)
+	}
+}
+
+func TestInstallGoInstallSkippedWhenNoGo(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:   dir,
+		Arch:     "amd64",
+		EnsureGo: func(ctx context.Context) (string, error) { return "", nil },
+	}
+	result := Install(context.Background(), opts, olcrtcRuntime(t))
+	if !result.Skipped || !strings.Contains(result.SkipReason, "go toolchain not found") {
+		t.Fatalf("expected skip, got %+v", result)
+	}
+}
+
+func TestInstallCaddyNaiveSkippedWhenNoGo(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:   dir,
+		Arch:     "amd64",
+		EnsureGo: func(ctx context.Context) (string, error) { return "", nil },
+	}
+	result := Install(context.Background(), opts, caddyRuntime(t))
+	if !result.Skipped || !strings.Contains(result.SkipReason, "go toolchain not found") {
+		t.Fatalf("expected skip, got %+v", result)
+	}
+}
+
+func TestInstallGoInstallResolveError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:   dir,
+		Arch:     "amd64",
+		EnsureGo: func(ctx context.Context) (string, error) { return "", errors.New("ensure failed") },
+	}
+	result := Install(context.Background(), opts, olcrtcRuntime(t))
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "ensure failed") {
+		t.Fatalf("expected ensure error, got %v", result.Err)
+	}
+}
+
+func TestInstallCaddyNaiveResolveError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:   dir,
+		Arch:     "amd64",
+		EnsureGo: func(ctx context.Context) (string, error) { return "", errors.New("ensure failed") },
+	}
+	result := Install(context.Background(), opts, caddyRuntime(t))
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "ensure failed") {
+		t.Fatalf("expected ensure error, got %v", result.Err)
+	}
+}
+
+func TestWithDefaultsGoInstallNoGo(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:        dir,
+		CaddyCacheDir: dir,
+		EnsureGo:      func(ctx context.Context) (string, error) { return "", nil },
+	}.withDefaults()
+	err := opts.GoInstall(context.Background(), dir, "example.com/pkg@latest")
+	if err == nil || !strings.Contains(err.Error(), "go toolchain not found") {
+		t.Fatalf("expected no go error, got %v", err)
+	}
+}
+
+func TestWithDefaultsBuildCaddyNoGo(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:        dir,
+		CaddyCacheDir: dir,
+		EnsureGo:      func(ctx context.Context) (string, error) { return "", nil },
+	}.withDefaults()
+	err := opts.BuildCaddy(context.Background(), filepath.Join(dir, "caddy"))
+	if err == nil || !strings.Contains(err.Error(), "go toolchain not found") {
+		t.Fatalf("expected no go error, got %v", err)
+	}
+}
+
+func TestWithDefaultsGoInstallEnsureError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:        dir,
+		CaddyCacheDir: dir,
+		EnsureGo:      func(ctx context.Context) (string, error) { return "", errors.New("ensure failed") },
+	}.withDefaults()
+	err := opts.GoInstall(context.Background(), dir, "example.com/pkg@latest")
+	if err == nil || !strings.Contains(err.Error(), "ensure failed") {
+		t.Fatalf("expected ensure error, got %v", err)
+	}
+}
+
+func TestWithDefaultsBuildCaddyEnsureError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	dir := t.TempDir()
+	opts := Options{
+		BinDir:        dir,
+		CaddyCacheDir: dir,
+		EnsureGo:      func(ctx context.Context) (string, error) { return "", errors.New("ensure failed") },
+	}.withDefaults()
+	err := opts.BuildCaddy(context.Background(), filepath.Join(dir, "caddy"))
+	if err == nil || !strings.Contains(err.Error(), "ensure failed") {
+		t.Fatalf("expected ensure error, got %v", err)
+	}
+}
+
+func TestRunCaddyNaiveBuildMkdirAllFails(t *testing.T) {
+	dir := t.TempDir()
+	cacheFile := filepath.Join(dir, "cache-file")
+	if err := os.WriteFile(cacheFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runCaddyNaiveBuild(context.Background(), "/bin/true", cacheFile, filepath.Join(dir, "caddy"))
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }

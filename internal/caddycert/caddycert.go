@@ -18,6 +18,10 @@ import (
 // systemd units (XDG_DATA_HOME=/var/lib/caddy).
 const DefaultCaddyDataDir = "/var/lib/caddy"
 
+// defaultDataDir mirrors DefaultCaddyDataDir but is overridable by tests so
+// the empty-data-dir branch can be exercised without relying on /var/lib/caddy.
+var defaultDataDir = DefaultCaddyDataDir
+
 // Pair holds the filesystem paths to a matched certificate and private key.
 type Pair struct {
 	CertPath string
@@ -30,7 +34,7 @@ type Pair struct {
 // ErrCertificateNotFound.
 func FindPair(caddyDataDir, domain string) (Pair, error) {
 	if caddyDataDir == "" {
-		caddyDataDir = DefaultCaddyDataDir
+		caddyDataDir = defaultDataDir
 	}
 	if domain == "" {
 		return Pair{}, errors.New("domain is required")

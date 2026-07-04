@@ -1,7 +1,6 @@
 package olcrtc
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -110,7 +109,7 @@ func isOlcrtcKey(s string) bool {
 
 func generateRandomHex(n int) (string, error) {
 	b := make([]byte, n/2)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

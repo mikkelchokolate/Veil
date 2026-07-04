@@ -20,6 +20,12 @@ import (
 	"time"
 )
 
+// test hooks (overridden by tests to avoid depending on the host toolchain).
+var (
+	knownGoBinsFn = knownGoBins
+	findBestGoFn  = findBestGo
+)
+
 const defaultGoVersion = "1.26.4"
 
 var defaultGoSHA256 = map[string]string{
@@ -105,7 +111,7 @@ func findBestGo(minVersion string) (string, error) {
 		version goVersion
 	}
 	var founds []found
-	for _, candidate := range knownGoBins() {
+	for _, candidate := range knownGoBinsFn() {
 		info, err := os.Stat(candidate)
 		if err != nil || info.IsDir() {
 			continue
@@ -310,7 +316,7 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 // returns ("", nil) when no toolchain is available and provisioning is
 // disabled (EnsureGo nil).
 func resolveGo(ctx context.Context, cacheDir string, ensureGo func(context.Context) (string, error)) (string, error) {
-	if p, err := findBestGo(defaultGoVersion); err != nil {
+	if p, err := findBestGoFn(defaultGoVersion); err != nil {
 		return "", err
 	} else if p != "" {
 		return p, nil

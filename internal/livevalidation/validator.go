@@ -14,6 +14,11 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
+// protocolRegistry is a test hook that returns the protocol registry used by
+// validation. It allows tests to inject protocol plugins with limited
+// capabilities to exercise defensive branches.
+var protocolRegistry = protocols.NewRegistry
+
 func (v Validator) Validate(ctx context.Context, request Request) Response {
 	now := time.Now
 	if v.Now != nil {
@@ -151,7 +156,7 @@ func (v Validator) validateInbound(
 }
 
 func protocolMetadata(protocol string) (protocols.Metadata, bool) {
-	p, ok := protocols.NewRegistry().Get(protocol)
+	p, ok := protocolRegistry().Get(protocol)
 	if !ok {
 		return protocols.Metadata{}, false
 	}
@@ -159,7 +164,7 @@ func protocolMetadata(protocol string) (protocols.Metadata, bool) {
 }
 
 func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []model.ValidationIssue {
-	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	p, ok := protocolRegistry().Get(inbound.Protocol)
 	if !ok {
 		return nil
 	}
@@ -235,7 +240,7 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 }
 
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
-	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	p, ok := protocolRegistry().Get(inbound.Protocol)
 	if !ok {
 		return false
 	}
@@ -247,7 +252,7 @@ func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {
-	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	p, ok := protocolRegistry().Get(inbound.Protocol)
 	if !ok {
 		return true
 	}
