@@ -58,6 +58,7 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelInboundFormPlaceholder, Render: panelInboundFormHTML},
 				{Placeholder: panelInboundActionsPlaceholder, Render: panelInboundActionsJS},
+				{Placeholder: panelDynamicFieldsPlaceholder, Render: panelDynamicFieldsJS},
 				{Placeholder: panelClientProfileControlsPlaceholder, Render: panelClientProfileControlsHTML},
 				{Placeholder: panelClientProfileActionsPlaceholder, Render: panelClientProfileActionsJS},
 			},

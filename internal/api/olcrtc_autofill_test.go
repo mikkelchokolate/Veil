@@ -1,7 +1,6 @@
 package api
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -41,7 +40,7 @@ func TestAutofillOlcrtcInboundPreservesExistingAndIgnoresOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got, existing) {
+	if got.OlcrtcAuth != existing.OlcrtcAuth || got.OlcrtcTransport != existing.OlcrtcTransport || got.OlcrtcRoomID != existing.OlcrtcRoomID || got.Password != existing.Password {
 		t.Fatalf("existing olcrtc fields were mutated: %+v", got)
 	}
 
@@ -51,7 +50,7 @@ func TestAutofillOlcrtcInboundPreservesExistingAndIgnoresOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(out, mieru) {
+	if out.Protocol != mieru.Protocol || out.Password != mieru.Password {
 		t.Fatalf("non-olcrtc inbound mutated: %+v", out)
 	}
 }

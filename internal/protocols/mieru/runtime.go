@@ -1,0 +1,61 @@
+package mieru
+
+import (
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
+	"github.com/mikkelchokolate/Veil/internal/service"
+)
+
+// RuntimeDescriptors returns the single aggregated mieru unit.
+func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.ManagedRuntime {
+	for _, inbound := range enabledInbounds {
+		if inbound.Protocol == p.Protocol() {
+			return []service.ManagedRuntime{{
+				Name:             "mieru",
+				ActionName:       "mieru",
+				Protocol:         p.Protocol(),
+				Unit:             "veil-mieru.service",
+				PromotedSubpath:  "mieru/server_config.json",
+				PromotedVerb:     "restart",
+				ManualRestart:    true,
+				HealthCheckAfter: true,
+			}}
+		}
+	}
+	// Always expose the aggregated unit so capability metadata and empty-state
+	// runtime catalogs can discover it.
+	return []service.ManagedRuntime{{
+		Name:             "mieru",
+		ActionName:       "mieru",
+		Protocol:         p.Protocol(),
+		Unit:             "veil-mieru.service",
+		PromotedSubpath:  "mieru/server_config.json",
+		PromotedVerb:     "restart",
+		ManualRestart:    true,
+		HealthCheckAfter: true,
+	}}
+}
+
+// RuntimeInstall returns the Mieru runtime descriptor.
+func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
+	return runtimeinstall.Runtime{
+		Name:   "mieru",
+		Binary: "mita",
+		Method: runtimeinstall.MethodArchive,
+		Repo:   "enfein/mieru",
+		AssetMatch: func(name string) bool {
+			return startsWith(name, "mita_") && endsWith(name, "_linux_"+arch+".tar.gz")
+		},
+		ChecksumMatch: func(name string) bool {
+			return startsWith(name, "mita_") && endsWith(name, "_linux_"+arch+".tar.gz.sha256.txt")
+		},
+	}
+}
+
+func startsWith(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func endsWith(s, suffix string) bool {
+	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}

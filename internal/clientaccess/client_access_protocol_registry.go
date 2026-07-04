@@ -2,6 +2,36 @@ package clientaccess
 
 import "strings"
 
+func protocolString(m map[string]any, key, fallback string) string {
+	if m == nil {
+		return fallback
+	}
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	s, ok := v.(string)
+	if !ok {
+		return fallback
+	}
+	return strings.TrimSpace(s)
+}
+
+func protocolBool(m map[string]any, key string, fallback bool) bool {
+	if m == nil {
+		return fallback
+	}
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return fallback
+	}
+	return b
+}
+
 type ClientAccessProtocolRegistry struct {
 	protocols map[string]ClientAccessProtocol
 }
@@ -129,14 +159,14 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
 	password := input.Inbound.Password
 	if password == "" {
-		password = input.Inbound.NaivePassword
+		password = protocolString(input.Inbound.ProtocolFields, "naivePassword", input.Inbound.NaivePassword)
 		if password == "" {
-			password = input.Settings.NaivePassword
+			password = protocolString(input.Settings.ProtocolFields, "naivePassword", input.Settings.NaivePassword)
 		}
 	}
-	username := input.Inbound.NaiveUsername
+	username := protocolString(input.Inbound.ProtocolFields, "naiveUsername", input.Inbound.NaiveUsername)
 	if username == "" {
-		username = input.Settings.NaiveUsername
+		username = protocolString(input.Settings.ProtocolFields, "naiveUsername", input.Settings.NaiveUsername)
 	}
 	link.URI = NaiveClientURI(clientEndpoint(input.Settings), input.Inbound.Port, username, password)
 	return link, true
@@ -146,7 +176,13 @@ func hysteria2Insecure(input ClientAccessLinkInput) bool {
 	if input.Inbound.Hysteria2Insecure {
 		return true
 	}
-	return input.Settings.Hysteria2Insecure
+	if protocolBool(input.Inbound.ProtocolFields, "hysteria2Insecure", false) {
+		return true
+	}
+	if input.Settings.Hysteria2Insecure {
+		return true
+	}
+	return protocolBool(input.Settings.ProtocolFields, "hysteria2Insecure", false)
 }
 
 func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
@@ -165,9 +201,9 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 	link := newProtocolClientLink(input)
 	password := input.Inbound.Password
 	if password == "" {
-		password = input.Inbound.Hysteria2Password
+		password = protocolString(input.Inbound.ProtocolFields, "hysteria2Password", input.Inbound.Hysteria2Password)
 		if password == "" {
-			password = input.Settings.Hysteria2Password
+			password = protocolString(input.Settings.ProtocolFields, "hysteria2Password", input.Settings.Hysteria2Password)
 		}
 	}
 	link.URI = Hysteria2ClientURI(clientEndpoint(input.Settings), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
@@ -202,17 +238,17 @@ func clientEndpoint(settings Settings) string {
 
 func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
-	auth := input.Inbound.OlcrtcAuth
+	auth := protocolString(input.Inbound.ProtocolFields, "olcrtcAuth", input.Inbound.OlcrtcAuth)
 	if auth == "" {
-		auth = input.Settings.OlcrtcAuth
+		auth = protocolString(input.Settings.ProtocolFields, "olcrtcAuth", input.Settings.OlcrtcAuth)
 	}
-	transport := input.Inbound.OlcrtcTransport
+	transport := protocolString(input.Inbound.ProtocolFields, "olcrtcTransport", input.Inbound.OlcrtcTransport)
 	if transport == "" {
-		transport = input.Settings.OlcrtcTransport
+		transport = protocolString(input.Settings.ProtocolFields, "olcrtcTransport", input.Settings.OlcrtcTransport)
 	}
-	roomID := input.Inbound.OlcrtcRoomID
+	roomID := protocolString(input.Inbound.ProtocolFields, "olcrtcRoomID", input.Inbound.OlcrtcRoomID)
 	if roomID == "" {
-		roomID = input.Settings.OlcrtcRoomID
+		roomID = protocolString(input.Settings.ProtocolFields, "olcrtcRoomID", input.Settings.OlcrtcRoomID)
 	}
 	// olcRTC authenticates with a single shared crypto key (the inbound key),
 	// not a per-profile secret, so every client link carries the inbound key.
@@ -228,17 +264,17 @@ func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 
 func olcrtcFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	link := newProtocolClientLink(input)
-	auth := input.Inbound.OlcrtcAuth
+	auth := protocolString(input.Inbound.ProtocolFields, "olcrtcAuth", input.Inbound.OlcrtcAuth)
 	if auth == "" {
-		auth = input.Settings.OlcrtcAuth
+		auth = protocolString(input.Settings.ProtocolFields, "olcrtcAuth", input.Settings.OlcrtcAuth)
 	}
-	transport := input.Inbound.OlcrtcTransport
+	transport := protocolString(input.Inbound.ProtocolFields, "olcrtcTransport", input.Inbound.OlcrtcTransport)
 	if transport == "" {
-		transport = input.Settings.OlcrtcTransport
+		transport = protocolString(input.Settings.ProtocolFields, "olcrtcTransport", input.Settings.OlcrtcTransport)
 	}
-	roomID := input.Inbound.OlcrtcRoomID
+	roomID := protocolString(input.Inbound.ProtocolFields, "olcrtcRoomID", input.Inbound.OlcrtcRoomID)
 	if roomID == "" {
-		roomID = input.Settings.OlcrtcRoomID
+		roomID = protocolString(input.Settings.ProtocolFields, "olcrtcRoomID", input.Settings.OlcrtcRoomID)
 	}
 	link.URI = OlcrtcClientURI(
 		auth,

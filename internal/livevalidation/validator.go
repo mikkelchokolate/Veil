@@ -11,40 +11,8 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
-
-type runtimeRequirement struct {
-	binary string
-	unit   func(model.Inbound) string
-}
-
-var runtimeRequirements = map[string]runtimeRequirement{
-	"naiveproxy": {
-		binary: "caddy",
-		unit: func(inbound model.Inbound) string {
-			return "veil-caddy@" + inbound.Name + ".service"
-		},
-	},
-	"hysteria2": {
-		binary: "hysteria",
-		unit: func(inbound model.Inbound) string {
-			return "veil-hysteria2@" + inbound.Name + ".service"
-		},
-	},
-	"olcrtc": {
-		binary: "olcrtc",
-		unit: func(inbound model.Inbound) string {
-			return "veil-olcrtc@" + inbound.Name + ".service"
-		},
-	},
-	"mieru": {
-		// mieru's server binary is "mita" (the "mieru" binary is the client).
-		binary: "mita",
-		unit: func(model.Inbound) string {
-			return "veil-mieru.service"
-		},
-	},
-}
 
 func (v Validator) Validate(ctx context.Context, request Request) Response {
 	now := time.Now
@@ -62,7 +30,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 		}
 		issues := v.validateInbound(ctx, request, inbound, panelPort, seen)
 		response.Issues = append(response.Issues, issues...)
-		if protocolNeedsDomain(inbound.Protocol) {
+		if protocolNeedsDomain(request.Settings, inbound) {
 			needsDNS = true
 		}
 	}
@@ -108,7 +76,7 @@ func (v Validator) validateInbound(
 		))
 	}
 
-	capability, supported := protocols.NewCapabilityCatalog().ForProtocol(inbound.Protocol)
+	meta, supported := protocolMetadata(inbound.Protocol)
 	if !supported {
 		issues = append(issues, issue(
 			"unsupported_protocol", SeverityError, "protocol", id,
@@ -122,7 +90,7 @@ func (v Validator) validateInbound(
 			"Enabled inbound requires a transport",
 			"Choose a transport supported by this protocol.", "candidate",
 		))
-	} else if supported && !contains(capability.Transports, inbound.Transport) {
+	} else if supported && !contains(meta.Transports, inbound.Transport) {
 		issues = append(issues, issue(
 			"unsupported_transport", SeverityError, "transport", id,
 			"Transport is not supported by this protocol",
@@ -169,7 +137,7 @@ func (v Validator) validateInbound(
 				issues = append(issues, issue(
 					"port_in_use", SeverityError, "port", id,
 					fmt.Sprintf("%s port %d is already in use", strings.ToUpper(inbound.Transport), inbound.Port),
-					"Stop the conflicting service or choose another port.", "live-host",
+					"Stop the conflicting service or choose another inbound port.", "live-host",
 				))
 			}
 		}
@@ -182,23 +150,37 @@ func (v Validator) validateInbound(
 	return issues
 }
 
+func protocolMetadata(protocol string) (protocols.Metadata, bool) {
+	p, ok := protocols.NewRegistry().Get(protocol)
+	if !ok {
+		return protocols.Metadata{}, false
+	}
+	return protocols.MetadataOf(p), true
+}
+
 func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []model.ValidationIssue {
-	requirement, ok := runtimeRequirements[inbound.Protocol]
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
 	if !ok {
 		return nil
 	}
+	rp, ok := protocols.AsRuntimeProvider(p)
+	if !ok {
+		return nil
+	}
+	install := rp.RuntimeInstall("amd64")
+	unit := unitForInbound(p.Protocol(), inbound, rp.RuntimeDescriptors([]model.Inbound{inbound}))
+
 	issues := []model.ValidationIssue{}
 	if v.Binaries != nil {
-		if _, err := v.Binaries.LookPath(requirement.binary); err != nil {
+		if _, err := v.Binaries.LookPath(install.Binary); err != nil {
 			issues = append(issues, issue(
 				"runtime_binary_missing", SeverityWarning, "protocol", inbound.Name,
-				fmt.Sprintf("Required runtime binary %s is not installed", requirement.binary),
+				fmt.Sprintf("Required runtime binary %s is not installed", install.Binary),
 				"Install the protocol runtime before applying.", "live-host",
 			))
 		}
 	}
 	if v.Units != nil {
-		unit := requirement.unit(inbound)
 		exists, err := v.Units.Exists(ctx, unit)
 		if err != nil || !exists {
 			issues = append(issues, issue(
@@ -211,9 +193,24 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 	return issues
 }
 
+func unitForInbound(protocol string, inbound model.Inbound, descriptors []service.ManagedRuntime) string {
+	exact := fmt.Sprintf("veil-%s@%s.service", protocol, inbound.Name)
+	for _, d := range descriptors {
+		if d.Unit == exact {
+			return d.Unit
+		}
+	}
+	for _, d := range descriptors {
+		if d.Unit != "" {
+			return d.Unit
+		}
+	}
+	return exact
+}
+
 func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	issues := []model.ValidationIssue{}
-	if protocolNeedsDomain(inbound.Protocol) && strings.TrimSpace(settings.Domain) == "" {
+	if protocolNeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
 		issues = append(issues, issue(
 			"domain_required", SeverityError, "settings.domain", inbound.Name,
 			"This protocol requires a public domain",
@@ -237,45 +234,28 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 	return issues
 }
 
-func protocolNeedsDomain(protocol string) bool {
-	switch protocol {
-	case "naiveproxy", "hysteria2":
-		return true
-	default:
+func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
 		return false
 	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	return validator.NeedsDomain(settings, inbound)
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {
-	for _, profile := range inbound.Profiles {
-		if !profile.Enabled || strings.TrimSpace(profile.Password) == "" {
-			continue
-		}
-		if inbound.Protocol != "naiveproxy" || strings.TrimSpace(profile.Username) != "" {
-			return true
-		}
-	}
-	switch inbound.Protocol {
-	case "naiveproxy":
-		username := firstNonEmpty(inbound.NaiveUsername, settings.NaiveUsername)
-		password := firstNonEmpty(inbound.Password, inbound.NaivePassword, settings.NaivePassword)
-		return username != "" && password != ""
-	case "hysteria2":
-		return firstNonEmpty(inbound.Password, inbound.Hysteria2Password, settings.Hysteria2Password) != ""
-	case "mieru", "olcrtc":
-		return strings.TrimSpace(inbound.Password) != ""
-	default:
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
 		return true
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return true
 	}
-	return ""
+	return validator.HasCredential(settings, inbound)
 }
 
 func ownedBinding(candidate model.Inbound, current []model.Inbound) bool {
@@ -335,6 +315,20 @@ func contains(values []string, wanted string) bool {
 	return false
 }
 
+func sortIssueKeys(keys []string) {
+	sort.SliceStable(keys, func(i, j int) bool {
+		return normalizeIssueSortKey(keys[i]) < normalizeIssueSortKey(keys[j])
+	})
+}
+
+func normalizeIssueSortKey(value string) string {
+	parts := strings.SplitN(value, ":", 4)
+	if len(parts) != 4 {
+		return value
+	}
+	return severityRank(parts[0]) + ":" + parts[1] + ":" + parts[2] + ":" + parts[3]
+}
+
 func sortIssues(issues []model.ValidationIssue) {
 	sort.SliceStable(issues, func(i, j int) bool {
 		left := issueSortKey(issues[i])
@@ -349,22 +343,8 @@ func sortIssues(issues []model.ValidationIssue) {
 	})
 }
 
-func sortIssueKeys(keys []string) {
-	sort.SliceStable(keys, func(i, j int) bool {
-		return normalizeIssueSortKey(keys[i]) < normalizeIssueSortKey(keys[j])
-	})
-}
-
 func issueSortKey(value model.ValidationIssue) [4]string {
 	return [4]string{severityRank(value.Severity), value.InboundID, value.Field, value.Code}
-}
-
-func normalizeIssueSortKey(value string) string {
-	parts := strings.SplitN(value, ":", 4)
-	if len(parts) != 4 {
-		return value
-	}
-	return severityRank(parts[0]) + ":" + parts[1] + ":" + parts[2] + ":" + parts[3]
 }
 
 func severityRank(severity string) string {

@@ -2,6 +2,7 @@ package managementstate
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -32,8 +33,8 @@ func TestDecodeWithLegacyFieldMigration(t *testing.T) {
 	}
 
 	// Verify the decoded snapshot has the updated schema version
-	if snapshot.SchemaVersion != 3 {
-		t.Errorf("expected SchemaVersion to be upgraded to 3, got %d", snapshot.SchemaVersion)
+	if snapshot.SchemaVersion != CurrentSchemaVersion {
+		t.Errorf("expected SchemaVersion to be upgraded to %d, got %d", CurrentSchemaVersion, snapshot.SchemaVersion)
 	}
 
 	// Verify the settings were parsed correctly
@@ -64,8 +65,8 @@ func TestDecodeWithMissingVersionDefaultsToV1(t *testing.T) {
 		t.Fatalf("unexpected error decoding unversioned state: %v", err)
 	}
 
-	if snapshot.SchemaVersion != 3 {
-		t.Errorf("expected SchemaVersion to migrate to 3, got %d", snapshot.SchemaVersion)
+	if snapshot.SchemaVersion != CurrentSchemaVersion {
+		t.Errorf("expected SchemaVersion to migrate to %d, got %d", CurrentSchemaVersion, snapshot.SchemaVersion)
 	}
 }
 
@@ -88,8 +89,78 @@ func TestDecodeV2MarksExistingAdminSetupComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if snapshot.SchemaVersion != 3 || !snapshot.Setup.Completed {
+	if snapshot.SchemaVersion != CurrentSchemaVersion || !snapshot.Setup.Completed {
 		t.Fatalf("expected migrated setup completion, got %+v", snapshot)
+	}
+}
+
+func TestDecodeV3MigratesProtocolFields(t *testing.T) {
+	inputJSON := `{
+		"schemaVersion": 3,
+		"settings": {
+			"panelListen": "127.0.0.1:2096",
+			"mode": "server",
+			"naiveUsername": "veil",
+			"naivePassword": "secret",
+			"hysteria2Password": "hy-secret",
+			"masqueradeURL": "https://example.com",
+			"fallbackRoot": "/var/lib/veil/www",
+			"olcrtcAuth": "jitsi",
+			"olcrtcTransport": "datachannel",
+			"olcrtcRoomID": "room-1"
+		},
+		"inbounds": [
+			{
+				"name": "naive",
+				"protocol": "naiveproxy",
+				"transport": "tcp",
+				"port": 443,
+				"enabled": true,
+				"naiveUsername": "u",
+				"naivePassword": "p",
+				"fallbackRoot": "/var/www"
+			}
+		],
+		"routingRules": [],
+		"warp": {},
+		"users": []
+	}`
+
+	snapshot, err := NewManagementStateCodec().Decode([]byte(inputJSON))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if snapshot.SchemaVersion != CurrentSchemaVersion {
+		t.Fatalf("expected schema version %d, got %d", CurrentSchemaVersion, snapshot.SchemaVersion)
+	}
+
+	wantSettingsPF := map[string]any{
+		"naiveUsername":     "veil",
+		"naivePassword":     "secret",
+		"hysteria2Password": "hy-secret",
+		"masqueradeURL":     "https://example.com",
+		"fallbackRoot":      "/var/lib/veil/www",
+		"olcrtcAuth":        "jitsi",
+		"olcrtcTransport":   "datachannel",
+		"olcrtcRoomID":      "room-1",
+	}
+	if !reflect.DeepEqual(snapshot.Settings.ProtocolFields, wantSettingsPF) {
+		t.Errorf("settings protocolFields = %+v, want %+v", snapshot.Settings.ProtocolFields, wantSettingsPF)
+	}
+	if snapshot.Settings.NaiveUsername != "" {
+		t.Errorf("expected legacy naiveUsername to be cleared, got %q", snapshot.Settings.NaiveUsername)
+	}
+
+	if len(snapshot.Inbounds) != 1 {
+		t.Fatalf("expected 1 inbound, got %d", len(snapshot.Inbounds))
+	}
+	wantInboundPF := map[string]any{
+		"naiveUsername": "u",
+		"naivePassword": "p",
+		"fallbackRoot":  "/var/www",
+	}
+	if !reflect.DeepEqual(snapshot.Inbounds[0].ProtocolFields, wantInboundPF) {
+		t.Errorf("inbound protocolFields = %+v, want %+v", snapshot.Inbounds[0].ProtocolFields, wantInboundPF)
 	}
 }
 

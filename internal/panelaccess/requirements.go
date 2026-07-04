@@ -14,6 +14,21 @@ func NewCaddyRequirement(requiresCaddy RequiresCaddyFunc) CaddyRequirement {
 	return CaddyRequirement{requiresCaddy: requiresCaddy}
 }
 
+func protocolString(m map[string]any, key, fallback string) string {
+	if m == nil {
+		return fallback
+	}
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	s, ok := v.(string)
+	if !ok {
+		return fallback
+	}
+	return strings.TrimSpace(s)
+}
+
 func (r CaddyRequirement) Required(settings model.Settings, inbounds []model.Inbound) bool {
 	if settings.PanelAccess == "caddy" {
 		return true
@@ -37,7 +52,9 @@ func NewNaiveCaddySettingsRequirement() NaiveCaddySettingsRequirement {
 }
 
 func (NaiveCaddySettingsRequirement) Validate(settings model.Settings) error {
-	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" || strings.TrimSpace(settings.NaiveUsername) == "" || strings.TrimSpace(settings.NaivePassword) == "" {
+	username := protocolString(settings.ProtocolFields, "naiveUsername", settings.NaiveUsername)
+	password := protocolString(settings.ProtocolFields, "naivePassword", settings.NaivePassword)
+	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" || strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
 		return errNaiveCaddySettingsRequired{}
 	}
 	return nil

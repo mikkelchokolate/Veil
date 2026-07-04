@@ -13,7 +13,8 @@ type Catalog struct {
 }
 
 func NewCatalog() Catalog {
-	return Catalog{choices: NewCapabilityCatalog().Choices()}
+	choices := NewRegistry().Choices()
+	return Catalog{choices: choices}
 }
 
 func (c Catalog) Choices() []Choice {

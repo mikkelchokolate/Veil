@@ -21,12 +21,12 @@ type firewallRuleResponse = RuleResponse
 
 func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []RuleResponse {
 	builder := NewFirewallRuleResponseBuilder()
-	catalog := protocols.NewCatalog()
+	registry := protocols.NewRegistry()
 	for _, inbound := range inbounds {
-		if !inbound.Enabled || !catalog.SupportsTransport(inbound.Protocol, inbound.Transport) {
+		if !inbound.Enabled || !registry.SupportsTransport(inbound.Protocol, inbound.Transport) {
 			continue
 		}
-		if service, ok := catalog.FirewallService(inbound.Protocol); ok {
+		if service, ok := registry.FirewallService(inbound.Protocol); ok {
 			builder.Add(inbound.Port, inbound.Transport, service)
 		}
 	}

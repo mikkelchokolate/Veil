@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
@@ -19,7 +21,14 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
+func withMockedInstallRuntimes(t *testing.T) {
+	old := installRuntimesFunc
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
+	t.Cleanup(func() { installRuntimesFunc = old })
+}
+
 func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -103,6 +112,7 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 }
 
 func TestApplyRURecommendedInstallFailsWhenExistingStateUnreadable(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -182,6 +192,7 @@ func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
 }
 
 func TestApplyRURecommendedInstallPreservesExistingState(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -271,6 +282,7 @@ func TestApplyRURecommendedInstallPreservesExistingState(t *testing.T) {
 }
 
 func TestApplyRURecommendedInstallAppliesFirewallRules(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -332,6 +344,7 @@ func TestApplyRURecommendedInstallAppliesFirewallRules(t *testing.T) {
 }
 
 func TestApplyRURecommendedInstallDirectIssuesLEIPCert(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -391,6 +404,7 @@ func TestApplyRURecommendedInstallDirectIssuesLEIPCert(t *testing.T) {
 }
 
 func TestApplyRURecommendedInstallDirectFallsBackToSelfSignedOnLEIPCertFailure(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -447,6 +461,7 @@ func TestApplyRURecommendedInstallDirectFallsBackToSelfSignedOnLEIPCertFailure(t
 }
 
 func TestApplyRURecommendedInstallDirectOpensACMEPort(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
@@ -510,6 +525,7 @@ func TestApplyRURecommendedInstallDirectOpensACMEPort(t *testing.T) {
 }
 
 func TestApplyRURecommendedInstallDirectFillsDomainWithPublicIP(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc

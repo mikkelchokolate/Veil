@@ -13,6 +13,7 @@ const SettingsCardPlaceholder = panelSettingsCardPlaceholder
 const WarpCardPlaceholder = panelWarpCardPlaceholder
 const ClientLinksActionsPlaceholder = panelClientLinksActionsPlaceholder
 const InboundActionsPlaceholder = panelInboundActionsPlaceholder
+const DynamicFieldsPlaceholder = panelDynamicFieldsPlaceholder
 const IntroActionsPlaceholder = panelIntroActionsPlaceholder
 const RoutingActionsPlaceholder = panelRoutingActionsPlaceholder
 const RuntimeStatsActionsPlaceholder = panelRuntimeStatsActionsPlaceholder
@@ -32,6 +33,7 @@ func ClientProfileControlsHTML() string       { return panelClientProfileControl
 func ClientProfileActionsJS() string          { return panelClientProfileActionsJS() }
 func InboundFormHTML() string                 { return panelInboundFormHTML() }
 func InboundActionsJS() string                { return panelInboundActionsJS() }
+func DynamicFieldsJS() string                 { return panelDynamicFieldsJS() }
 func InboundProtocolOptionsHTML() string      { return panelInboundProtocolOptionsHTML() }
 func InboundTransportOptionsHTML() string     { return panelInboundTransportOptionsHTML() }
 func InboundProtocolTransportRulesJS() string { return panelInboundProtocolTransportRulesJS() }

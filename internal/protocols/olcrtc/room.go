@@ -1,4 +1,4 @@
-package protocols
+package olcrtc
 
 import (
 	"crypto/rand"
@@ -15,7 +15,7 @@ import (
 // draw from sizable word lists — the resulting links share no single shape and
 // none carry a veil/panel/tool marker.
 var (
-	olcrtcRoomAdjectives = []string{
+	roomAdjectives = []string{
 		"Happy", "Brave", "Calm", "Clever", "Bright", "Gentle", "Bold", "Quiet",
 		"Swift", "Lucky", "Mighty", "Noble", "Proud", "Witty", "Eager", "Fancy",
 		"Jolly", "Kind", "Lively", "Merry", "Polite", "Quick", "Royal", "Shiny",
@@ -24,7 +24,7 @@ var (
 		"Ivory", "Jade", "Keen", "Lunar", "Mellow", "Nimble", "Olive", "Plucky",
 		"Radiant", "Stellar", "Tranquil", "Urban", "Vivid", "Wandering", "Zesty",
 	}
-	olcrtcRoomNouns = []string{
+	roomNouns = []string{
 		"Tigers", "Pandas", "Eagles", "Foxes", "Whales", "Otters", "Falcons",
 		"Dragons", "Wolves", "Lions", "Bears", "Hawks", "Dolphins", "Rabbits",
 		"Horses", "Comets", "Rivers", "Mountains", "Forests", "Gardens",
@@ -34,14 +34,14 @@ var (
 		"Marmots", "Narwhals", "Ospreys", "Pumas", "Quails", "Stags",
 		"Terns", "Vipers", "Walruses", "Yaks", "Zebras", "Bisons",
 	}
-	olcrtcRoomVerbs = []string{
+	roomVerbs = []string{
 		"Run", "Jump", "Dance", "Sing", "Dream", "Build", "Glide", "Wander",
 		"Gather", "Explore", "Wonder", "Travel", "Sparkle", "Flourish",
 		"Whisper", "Shine", "Drift", "Soar", "Bloom", "Gleam", "Roam", "Leap",
 		"Race", "Climb", "Dive", "Float", "Gallop", "Hover", "Mingle", "Prowl",
 		"Ramble", "Scatter", "Tumble", "Venture", "Wade", "Zoom",
 	}
-	olcrtcRoomAdverbs = []string{
+	roomAdverbs = []string{
 		"Quietly", "Boldly", "Gently", "Swiftly", "Brightly", "Calmly",
 		"Freely", "Happily", "Kindly", "Smoothly", "Warmly", "Wisely",
 		"Eagerly", "Gracefully", "Proudly", "Quickly", "Softly", "Bravely",
@@ -92,7 +92,7 @@ func randomRoomName() (string, error) {
 }
 
 func camelWords(n int) (string, error) {
-	lists := [][]string{olcrtcRoomAdjectives, olcrtcRoomNouns, olcrtcRoomVerbs, olcrtcRoomAdverbs}
+	lists := [][]string{roomAdjectives, roomNouns, roomVerbs, roomAdverbs}
 	var b strings.Builder
 	for i := 0; i < n && i < len(lists); i++ {
 		w, err := pickWord(lists[i])
@@ -105,7 +105,7 @@ func camelWords(n int) (string, error) {
 }
 
 func dashWords() (string, error) {
-	lists := [][]string{olcrtcRoomAdjectives, olcrtcRoomNouns, olcrtcRoomVerbs}
+	lists := [][]string{roomAdjectives, roomNouns, roomVerbs}
 	parts := make([]string, 0, len(lists))
 	for _, list := range lists {
 		w, err := pickWord(list)
