@@ -427,6 +427,15 @@ func backupChecksum(body []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// Filesystem hooks for restore staging; overridable in tests to inject failures.
+var (
+	restoreMkdirAll   = os.MkdirAll
+	restoreCreateTemp = os.CreateTemp
+	restoreChmod      = os.Chmod
+	restoreRename     = os.Rename
+	restoreRemove     = os.Remove
+)
+
 type stagedRestoreFile struct {
 	target      string
 	temp        string
@@ -436,30 +445,30 @@ type stagedRestoreFile struct {
 }
 
 func stageRestoreFile(target string, body []byte, safety string) (*stagedRestoreFile, error) {
-	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+	if err := restoreMkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return nil, err
 	}
-	temp, err := os.CreateTemp(filepath.Dir(target), ".veil-restore-*")
+	temp, err := restoreCreateTemp(filepath.Dir(target), ".veil-restore-*")
 	if err != nil {
 		return nil, err
 	}
 	tempPath := temp.Name()
 	if _, err := temp.Write(body); err != nil {
 		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		_ = restoreRemove(tempPath)
 		return nil, err
 	}
 	if err := temp.Sync(); err != nil {
 		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		_ = restoreRemove(tempPath)
 		return nil, err
 	}
 	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	if err := os.Chmod(tempPath, 0o600); err != nil {
-		_ = os.Remove(tempPath)
+	if err := restoreChmod(tempPath, 0o600); err != nil {
+		_ = restoreRemove(tempPath)
 		return nil, err
 	}
 	_, statErr := os.Stat(target)
@@ -473,13 +482,13 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 
 func (f *stagedRestoreFile) commit() error {
 	if f.hadOriginal {
-		if err := os.Rename(f.target, f.safety); err != nil {
+		if err := restoreRename(f.target, f.safety); err != nil {
 			return err
 		}
 	}
-	if err := os.Rename(f.temp, f.target); err != nil {
+	if err := restoreRename(f.temp, f.target); err != nil {
 		if f.hadOriginal {
-			_ = os.Rename(f.safety, f.target)
+			_ = restoreRename(f.safety, f.target)
 		}
 		return err
 	}
@@ -488,16 +497,16 @@ func (f *stagedRestoreFile) commit() error {
 }
 
 func (f *stagedRestoreFile) rollback() error {
-	_ = os.Remove(f.temp)
+	_ = restoreRemove(f.temp)
 	if f.committed {
-		_ = os.Remove(f.target)
+		_ = restoreRemove(f.target)
 	}
 	if f.hadOriginal {
-		return os.Rename(f.safety, f.target)
+		return restoreRename(f.safety, f.target)
 	}
 	return nil
 }
 
 func (f *stagedRestoreFile) cleanupStaged() error {
-	return os.Remove(f.temp)
+	return restoreRemove(f.temp)
 }

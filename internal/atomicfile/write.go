@@ -5,11 +5,18 @@ import (
 	"path/filepath"
 )
 
+// test hooks; replaced by tests to inject errors without changing logic.
+var (
+	createTemp = os.CreateTemp
+	chmod      = os.Chmod
+	closeFile  = func(f *os.File) error { return f.Close() }
+)
+
 func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	tmp, err := createTemp(filepath.Dir(path), ".tmp-*")
 	if err != nil {
 		return err
 	}
@@ -19,11 +26,11 @@ func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) erro
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := closeFile(tmp); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := os.Chmod(tmpPath, mode); err != nil {
+	if err := chmod(tmpPath, mode); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}

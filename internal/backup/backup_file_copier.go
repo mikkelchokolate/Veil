@@ -14,6 +14,9 @@ func NewFileCopier() FileCopier { return FileCopier{} }
 
 func NewBackupFileCopier() BackupFileCopier { return NewFileCopier() }
 
+// fileCopierSync is overridable in tests to avoid expensive fsync under the race detector.
+var fileCopierSync = (*os.File).Sync
+
 // Copy copies a file from src to dst preserving the given mode and syncing the destination.
 func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	srcFile, err := os.Open(src)
@@ -31,5 +34,5 @@ func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
-	return dstFile.Sync()
+	return fileCopierSync(dstFile)
 }

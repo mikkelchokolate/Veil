@@ -17,6 +17,9 @@ import (
 // Magic header for encrypted backups
 var magicHeader = []byte("VEILBACK")
 
+// backupRandRead is overridable in tests to inject failures during encryption.
+var backupRandRead = rand.Read
+
 func deriveKey(passphrase string, salt []byte, version byte) []byte {
 	iterations := 600000 // OWASP recommendation for PBKDF2-HMAC-SHA256
 	if version == 1 {
@@ -83,12 +86,12 @@ func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
 	}
 
 	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := backupRandRead(salt); err != nil {
 		return nil, fmt.Errorf("generate salt: %w", err)
 	}
 
 	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := backupRandRead(nonce); err != nil {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 

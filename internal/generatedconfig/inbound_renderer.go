@@ -13,6 +13,9 @@ import (
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
+// randRead is swapped in tests to exercise the olcRTC password generation error path.
+var randRead = rand.Read
+
 type InboundRenderer struct {
 	settings Settings
 	paths    Paths
@@ -148,7 +151,7 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 	password := inbound.Password
 	if password == "" {
 		bytes := make([]byte, 32)
-		if _, err := rand.Read(bytes); err != nil {
+		if _, err := randRead(bytes); err != nil {
 			return "", err
 		}
 		password = hex.EncodeToString(bytes)
