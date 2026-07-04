@@ -8,13 +8,14 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/spf13/cobra"
 )
 
 // runtimeInstallFunc is injectable so tests can exercise the command without
 // reaching the network.
-var runtimeInstallFunc = runtimeinstall.InstallAll
+var runtimeInstallFunc = protocols.InstallAllRuntimes
 
 // installRuntimesFunc provisions protocol runtimes during `veil install`. It is
 // intentionally non-fatal: a fresh Panel install must still succeed even if a

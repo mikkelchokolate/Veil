@@ -97,28 +97,7 @@ func panelInboundActionsJS() string {
       if (password) {
         payload.password = password;
       }
-      if (protocol === 'naiveproxy') {
-        const usernameEl = document.getElementById('inbound-naive-username');
-        const passwordEl = document.getElementById('inbound-naive-password');
-        const fallbackEl = document.getElementById('inbound-fallback-root');
-        if (usernameEl) payload.naiveUsername = usernameEl.value.trim();
-        if (passwordEl) payload.naivePassword = passwordEl.value.trim();
-        if (fallbackEl) payload.fallbackRoot = fallbackEl.value.trim();
-      } else if (protocol === 'hysteria2') {
-        const passwordEl = document.getElementById('inbound-hysteria2-password');
-        const masqueradeEl = document.getElementById('inbound-masquerade-url');
-        const insecureEl = document.getElementById('inbound-hysteria2-insecure');
-        if (passwordEl) payload.hysteria2Password = passwordEl.value.trim();
-        if (masqueradeEl) payload.masqueradeURL = masqueradeEl.value.trim();
-        if (insecureEl) payload.hysteria2Insecure = insecureEl.checked;
-      } else if (protocol === 'olcrtc') {
-        const authEl = document.getElementById('inbound-olcrtc-auth');
-        const transportEl = document.getElementById('inbound-olcrtc-transport');
-        const roomEl = document.getElementById('inbound-olcrtc-room-id');
-        if (authEl) payload.olcrtcAuth = authEl.value.trim();
-        if (transportEl) payload.olcrtcTransport = transportEl.value.trim();
-        if (roomEl) payload.olcrtcRoomID = roomEl.value.trim();
-      }
+      payload.protocolFields = veilCollectProtocolFields(protocol);
       return payload;
     }
 
@@ -367,8 +346,8 @@ func panelInboundActionsJS() string {
     // providers that support automatic rooms (Jitsi). Telemost/WbStream require
     // a room created on the service first, so the button is disabled for them.
     window.updateOlcrtcGenerateButton = function() {
-      const authSelect = document.getElementById('inbound-olcrtc-auth');
-      const btn = document.getElementById('gen-olcrtc-room-btn');
+      const authSelect = document.getElementById('protocol-field-olcrtcAuth');
+      const btn = document.getElementById('protocol-field-olcrtcRoomID-generate');
       if (!authSelect || !btn) return;
       const opt = authSelect.selectedOptions[0];
       const auto = !!(opt && opt.dataset.autoroom === 'true');
@@ -397,116 +376,12 @@ func panelInboundActionsJS() string {
     window.renderDynamicProtocolFields = function(inbound) {
       const container = document.getElementById('inbound-protocol-fields');
       if (!container) return;
-      
       const protocol = document.getElementById('inbound-protocol').value;
-      
-      let html = '';
-      if (protocol === 'naiveproxy') {
-        html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
-          '<div>' +
-            '<label for="inbound-naive-username">Naive Username</label>' +
-            '<input id="inbound-naive-username" autocomplete="off" placeholder="veil">' +
-          '</div>' +
-          '<div>' +
-            '<label for="inbound-naive-password">Naive Password</label>' +
-            '<div style="display:flex;gap:8px">' +
-              '<input id="inbound-naive-password" type="text" autocomplete="off" placeholder="password" style="flex:1">' +
-              '<button type="button" class="secondary" onclick="genInboundNaivePassword()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>' +
-            '</div>' +
-          '</div>' +
-          '<div style="grid-column: 1 / -1">' +
-            '<label for="inbound-fallback-root">Fallback Root</label>' +
-            '<input id="inbound-fallback-root" autocomplete="off" placeholder="/var/lib/veil/www">' +
-          '</div>' +
-        '</div>';
-      } else if (protocol === 'hysteria2') {
-        html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
-          '<div>' +
-            '<label for="inbound-hysteria2-password">Hysteria2 Password</label>' +
-            '<div style="display:flex;gap:8px">' +
-              '<input id="inbound-hysteria2-password" type="text" autocomplete="off" placeholder="password" style="flex:1">' +
-              '<button type="button" class="secondary" onclick="genInboundHysteria2Password()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>' +
-            '</div>' +
-          '</div>' +
-          '<div>' +
-            '<label for="inbound-masquerade-url">Masquerade URL</label>' +
-            '<input id="inbound-masquerade-url" autocomplete="off" placeholder="https://example.com">' +
-          '</div>' +
-          '<div>' +
-            '<label for="inbound-hysteria2-insecure" style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
-              '<input id="inbound-hysteria2-insecure" type="checkbox" style="width:auto">' +
-              'Insecure mode (allow self-signed server certificate)' +
-            '</label>' +
-          '</div>' +
-        '</div>';
-      } else if (protocol === 'olcrtc') {
-        html = '<div class="form-grid" style="margin: 0; padding: 0;">' +
-          '<div>' +
-            '<label for="inbound-olcrtc-auth">olcRTC Auth Provider</label>' +
-            '<select id="inbound-olcrtc-auth" onchange="updateOlcrtcGenerateButton()">' +
-              '<option value="jitsi" data-autoroom="true">jitsi</option>' +
-              '<option value="telemost" data-autoroom="false">telemost</option>' +
-              '<option value="wbstream" data-autoroom="false">wbstream</option>' +
-            '</select>' +
-          '</div>' +
-          '<div>' +
-            '<label for="inbound-olcrtc-transport">olcRTC Transport</label>' +
-            '<select id="inbound-olcrtc-transport">' +
-              '<option value="datachannel">datachannel</option>' +
-              '<option value="vp8channel">vp8channel</option>' +
-              '<option value="seichannel">seichannel</option>' +
-              '<option value="videochannel">videochannel</option>' +
-            '</select>' +
-          '</div>' +
-          '<div style="grid-column: 1 / -1">' +
-            '<label for="inbound-olcrtc-room-id">olcRTC Room ID</label>' +
-            '<div style="display:flex;gap:8px">' +
-              '<input id="inbound-olcrtc-room-id" autocomplete="off" placeholder="Room ID" style="flex:1">' +
-              '<button type="button" class="secondary" id="gen-olcrtc-room-btn" onclick="genInboundOlcrtcRoomID()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      }
-      
-      container.innerHTML = html;
-      
-      // Populate fields
-      if (inbound) {
-        if (protocol === 'naiveproxy') {
-          document.getElementById('inbound-naive-username').value = inbound.naiveUsername || '';
-          document.getElementById('inbound-naive-password').value = inbound.naivePassword || '';
-          document.getElementById('inbound-fallback-root').value = inbound.fallbackRoot || '';
-        } else if (protocol === 'hysteria2') {
-          document.getElementById('inbound-hysteria2-password').value = inbound.hysteria2Password || '';
-          document.getElementById('inbound-masquerade-url').value = inbound.masqueradeURL || '';
-          document.getElementById('inbound-hysteria2-insecure').checked = !!inbound.hysteria2Insecure;
-        } else if (protocol === 'olcrtc') {
-          document.getElementById('inbound-olcrtc-auth').value = inbound.olcrtcAuth || 'jitsi';
-          document.getElementById('inbound-olcrtc-transport').value = inbound.olcrtcTransport || 'datachannel';
-          document.getElementById('inbound-olcrtc-room-id').value = inbound.olcrtcRoomID || '';
-        }
-      } else {
-        // Defaults for Add
-        if (protocol === 'naiveproxy') {
-          document.getElementById('inbound-naive-username').value = 'veil';
-          document.getElementById('inbound-naive-password').value = randomPassword();
-          document.getElementById('inbound-fallback-root').value = '/var/lib/veil/www';
-        } else if (protocol === 'hysteria2') {
-          document.getElementById('inbound-hysteria2-password').value = randomPassword();
-          document.getElementById('inbound-masquerade-url').value = 'https://example.com';
-        } else if (protocol === 'olcrtc') {
-          document.getElementById('inbound-olcrtc-auth').value = 'jitsi';
-          document.getElementById('inbound-olcrtc-transport').value = 'datachannel';
-          genInboundOlcrtcRoomID();
-        }
-      }
-      // Reflect the selected olcRTC provider in the room "Generate" button
-      // (enabled for auto-room providers, disabled otherwise). No-op for other
-      // protocols.
-      if (typeof updateOlcrtcGenerateButton === 'function') {
-        updateOlcrtcGenerateButton();
-      }
-      scheduleInboundValidation();
+      const values = inbound && inbound.protocolFields ? inbound.protocolFields : {};
+      ensureProtocolSchemas().then(() => {
+        veilRenderDynamicProtocolFields(container, protocol, values);
+        scheduleInboundValidation();
+      });
     };
 
     async function saveInbound(event) {

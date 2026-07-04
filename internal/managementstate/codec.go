@@ -10,7 +10,42 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-const CurrentSchemaVersion = 3
+const CurrentSchemaVersion = 4
+
+// settingsProtocolFieldKeys are legacy flat settings fields that are now kept
+// inside settings.protocolFields for dynamic UI/validation.
+var settingsProtocolFieldKeys = []string{
+	"naiveUsername", "naivePassword",
+	"hysteria2Password", "hysteria2Insecure", "masqueradeURL",
+	"fallbackRoot",
+	"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID",
+}
+
+// inboundProtocolFieldKeys are legacy flat inbound fields that are now kept
+// inside inbound.protocolFields for dynamic UI/validation.
+var inboundProtocolFieldKeys = []string{
+	"naiveUsername", "naivePassword",
+	"hysteria2Password", "hysteria2Insecure", "masqueradeURL",
+	"fallbackRoot",
+	"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID",
+}
+
+func moveToProtocolFields(obj map[string]interface{}, keys []string) map[string]interface{} {
+	pf, ok := obj["protocolFields"].(map[string]interface{})
+	if !ok {
+		pf = make(map[string]interface{})
+	}
+	for _, key := range keys {
+		if val, exists := obj[key]; exists {
+			pf[key] = val
+			delete(obj, key)
+		}
+	}
+	if len(pf) > 0 {
+		obj["protocolFields"] = pf
+	}
+	return obj
+}
 
 // migrations maps a starting version to a function that upgrades the raw state map to the next version.
 var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, error){
@@ -32,6 +67,22 @@ var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, e
 			}
 		}
 		raw["setup"] = map[string]interface{}{"completed": completed}
+		return raw, nil
+	},
+	3: func(raw map[string]interface{}) (map[string]interface{}, error) {
+		// Migration from version 3 to 4.
+		// Collapse legacy protocol-specific flat fields into protocolFields so
+		// the dynamic Panel UI and plugin validators can consume them uniformly.
+		if settings, ok := raw["settings"].(map[string]interface{}); ok {
+			raw["settings"] = moveToProtocolFields(settings, settingsProtocolFieldKeys)
+		}
+		if inbounds, ok := raw["inbounds"].([]interface{}); ok {
+			for i, entry := range inbounds {
+				if inbound, ok := entry.(map[string]interface{}); ok {
+					inbounds[i] = moveToProtocolFields(inbound, inboundProtocolFieldKeys)
+				}
+			}
+		}
 		return raw, nil
 	},
 }

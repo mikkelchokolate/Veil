@@ -946,6 +946,28 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/protocols:
+    get:
+      tags: [protocols]
+      summary: List supported protocols and their UI/runtime metadata
+      security:
+        - veilToken: []
+        - bearerAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Protocol metadata list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProtocolInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/inbounds:
     get:
       tags: [inbounds]
@@ -2296,6 +2318,10 @@ components:
           type: string
         olcrtcRoomID:
           type: string
+        protocolFields:
+          type: object
+          description: Protocol-specific settings keyed by field identifier.
+          additionalProperties: true
         firewallManagement:
           type: boolean
           description: When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
@@ -2351,6 +2377,68 @@ components:
           type: string
         olcrtcRoomID:
           type: string
+        protocolFields:
+          type: object
+          description: Protocol-specific inbound fields keyed by field identifier.
+          additionalProperties: true
+    ProtocolInfo:
+      type: object
+      required: [protocol, displayName, transports]
+      properties:
+        protocol:
+          type: string
+        displayName:
+          type: string
+        transports:
+          type: array
+          items:
+            type: string
+        requiresCaddy:
+          type: boolean
+        firewallService:
+          type: string
+        maxEnabled:
+          type: integer
+        inboundFieldSchema:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldSchema"
+        settingsFieldSchema:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldSchema"
+    FieldSchema:
+      type: object
+      required: [key, label, type]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+        placeholder:
+          type: string
+        default:
+          description: Protocol-defined default value for the field.
+        generateAction:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldOption"
+    FieldOption:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        attributes:
+          type: object
+          description: Optional HTML data attributes for the option element.
+          additionalProperties: true
     RoutingRule:
       type: object
       required: [name, match, outbound, enabled]

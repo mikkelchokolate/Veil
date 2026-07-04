@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -142,52 +143,99 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 }
 
 func UnitForArtifactID(id string) (string, bool) {
-	slashPath := filepath.ToSlash(id)
-	// WARP is a single, fixed config (not a per-inbound instance): removing it
-	// (operator disables WARP) must stop and disable the sing-box unit.
-	if slashPath == generatedconfig.WarpConfigSubpath {
-		return renderer.UnitWarp, true
-	}
-	for _, spec := range []struct {
-		prefix  string
-		suffix  string
-		unit    string
-		exclude string
-	}{
-		{prefix: "caddy/", suffix: ".Caddyfile", unit: "veil-caddy@", exclude: "panel"},
-		{prefix: "hysteria2/", suffix: ".yaml", unit: "veil-hysteria2@", exclude: "server"},
-		{prefix: "olcrtc/", suffix: ".yaml", unit: "veil-olcrtc@", exclude: "server"},
-	} {
-		if !strings.HasPrefix(slashPath, spec.prefix) || !strings.HasSuffix(slashPath, spec.suffix) {
-			continue
-		}
-		name := strings.TrimSuffix(strings.TrimPrefix(slashPath, spec.prefix), spec.suffix)
-		if name != "" && name != spec.exclude && !strings.Contains(name, "/") {
-			return spec.unit + name + ".service", true
-		}
-	}
-	return "", false
+	return unitForPath(filepath.ToSlash(id))
 }
 
 func UnitForLiveConfig(livePath string) (string, bool) {
-	slashPath := filepath.ToSlash(livePath)
-	if idx := strings.Index(slashPath, "/live/caddy/"); idx != -1 {
-		name := strings.TrimSuffix(slashPath[idx+len("/live/caddy/"):], ".Caddyfile")
-		if name != "panel" {
-			return "veil-caddy@" + name + ".service", true
+	return unitForPath(filepath.ToSlash(livePath))
+}
+
+func unitForPath(slashPath string) (string, bool) {
+	registry := protocols.NewRegistry()
+
+	// Exact match covers aggregated units (mieru) and any artifact whose path
+	// equals a plugin's artifact spec subpath.
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
+		}
+		sub := cr.ArtifactSpec().Subpath
+		if sub == "" || (slashPath != sub && !strings.HasSuffix(slashPath, "/"+sub)) {
+			continue
+		}
+		rp, ok := protocols.AsRuntimeProvider(plugin)
+		if !ok {
+			continue
+		}
+		descs := rp.RuntimeDescriptors(nil)
+		if len(descs) > 0 && descs[0].Unit != "" {
+			return descs[0].Unit, true
 		}
 	}
-	if idx := strings.Index(slashPath, "/live/hysteria2/"); idx != -1 {
-		name := strings.TrimSuffix(slashPath[idx+len("/live/hysteria2/"):], ".yaml")
-		if name != "server" {
-			return "veil-hysteria2@" + name + ".service", true
+
+	// Pattern match per-inbound template units from plugin artifact specs.
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
 		}
+		sub := cr.ArtifactSpec().Subpath
+		if sub == "" {
+			continue
+		}
+		dir := filepath.Dir(sub)
+		var rest string
+		if strings.HasPrefix(slashPath, dir+"/") {
+			rest = strings.TrimPrefix(slashPath, dir+"/")
+		} else {
+			marker := "/" + dir + "/"
+			idx := strings.LastIndex(slashPath, marker)
+			if idx == -1 {
+				continue
+			}
+			rest = slashPath[idx+len(marker):]
+		}
+		suffix := filepath.Ext(filepath.Base(sub))
+		if suffix == "" {
+			continue
+		}
+		if !strings.HasSuffix(rest, suffix) {
+			continue
+		}
+		name := strings.TrimSuffix(rest, suffix)
+		if name == "" || strings.Contains(name, "/") {
+			continue
+		}
+		rp, ok := protocols.AsRuntimeProvider(plugin)
+		if !ok {
+			continue
+		}
+		template := ""
+		for _, d := range rp.RuntimeDescriptors(nil) {
+			if d.TemplateUnit != "" {
+				template = d.TemplateUnit
+				break
+			}
+			if strings.Contains(d.Unit, "@") {
+				template = d.Unit
+				break
+			}
+		}
+		if template == "" {
+			continue
+		}
+		at := strings.Index(template, "@")
+		if at == -1 {
+			continue
+		}
+		unit := template[:at+1] + name + template[at+1:]
+		return unit, true
 	}
-	if idx := strings.Index(slashPath, "/live/olcrtc/"); idx != -1 {
-		name := strings.TrimSuffix(slashPath[idx+len("/live/olcrtc/"):], ".yaml")
-		if name != "server" {
-			return "veil-olcrtc@" + name + ".service", true
-		}
+
+	// WARP is not a protocol plugin; handle it explicitly.
+	if slashPath == generatedconfig.WarpConfigSubpath || strings.HasSuffix(slashPath, "/"+generatedconfig.WarpConfigSubpath) {
+		return renderer.UnitWarp, true
 	}
 	return "", false
 }

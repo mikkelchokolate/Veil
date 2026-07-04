@@ -7,6 +7,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/olcrtc"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
@@ -85,44 +86,26 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// autofillOlcrtcInbound makes olcRTC a one-click protocol: the operator only
-// picks "olcrtc" and we provision a working config. olcRTC disguises traffic as
-// a WebRTC "meet" call, so it needs a provider, a room URL both ends share, a
-// channel transport, and a single shared crypto key. For providers that support
-// auto-rooms (Jitsi rooms are created on join) we generate the room; for
-// providers that need a manually created room we leave it for the operator. The
-// 64-hex shared key lives in the inbound password slot.
+// autofillOlcrtcInbound delegates one-click provisioning to the olcRTC plugin.
 func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
-	if inbound.Protocol != "olcrtc" {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
 		return inbound, nil
 	}
-	if inbound.OlcrtcAuth == "" {
-		inbound.OlcrtcAuth = "jitsi"
+	ui, ok := protocols.AsUIProvider(p)
+	if !ok {
+		return inbound, nil
 	}
-	if inbound.OlcrtcTransport == "" {
-		inbound.OlcrtcTransport = "datachannel"
+	filled, err := ui.Autofill(inbound)
+	if err != nil {
+		return inbound, err
 	}
-	if inbound.OlcrtcRoomID == "" && protocols.OlcrtcProviderSupportsAutoRoom(inbound.OlcrtcAuth) {
-		room, err := protocols.GenerateOlcrtcRoom(inbound.OlcrtcAuth)
-		if err != nil {
-			return inbound, err
-		}
-		inbound.OlcrtcRoomID = room
-	}
-	if !isOlcrtcKey(inbound.Password) {
-		key, err := generateRandomHex(64)
-		if err != nil {
-			return inbound, err
-		}
-		inbound.Password = key
-	}
-	return inbound, nil
+	return filled, nil
 }
 
 // handleOlcrtcRoom backs the panel's "Generate" room button. It returns a fresh
 // auto-generated room id for providers that support it, and refuses (400) for
-// providers that require a manually created room — the same rule the panel uses
-// to enable/disable the button, enforced server-side.
+// providers that require a manually created room.
 func (s *managementState) handleOlcrtcRoom(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -137,26 +120,12 @@ func (s *managementState) handleOlcrtcRoom(w http.ResponseWriter, r *http.Reques
 	if req.Provider == "" {
 		req.Provider = "jitsi"
 	}
-	room, err := protocols.GenerateOlcrtcRoom(req.Provider)
+	room, err := olcrtc.GenerateRoom(req.Provider)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, map[string]any{"provider": req.Provider, "roomID": room})
-}
-
-// isOlcrtcKey reports whether s is a 64-char lowercase hex string, the crypto
-// key format olcRTC requires.
-func isOlcrtcKey(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +179,23 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		}
 		return nil
 	})
+}
+
+// isOlcrtcKey reports whether s is a 64-char lowercase hex string.
+func isOlcrtcKey(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *managementState) handleProtocols(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, protocols.NewRegistry().ProtocolInfos())
 }
 
 func writeInboundManagementError(w http.ResponseWriter, err error) {

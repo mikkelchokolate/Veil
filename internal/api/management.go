@@ -28,6 +28,7 @@ type Reloader interface {
 
 func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/protocols", s.handleProtocols)
 	mux.HandleFunc("/api/inbounds", s.handleInbounds)
 	mux.HandleFunc("/api/inbounds/", s.handleInboundByName)
 	mux.HandleFunc("/api/routing/rules", s.handleRoutingRules)

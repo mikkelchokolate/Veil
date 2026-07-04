@@ -16,6 +16,10 @@ type Settings struct {
 	OlcrtcAuth        string `json:"olcrtcAuth,omitempty"`
 	OlcrtcTransport   string `json:"olcrtcTransport,omitempty"`
 	OlcrtcRoomID      string `json:"olcrtcRoomID,omitempty"`
+	// ProtocolFields holds protocol-specific settings populated by the dynamic
+	// Panel UI. Legacy flat fields above are still supported for backward
+	// compatibility and are migrated into ProtocolFields on load.
+	ProtocolFields map[string]any `json:"protocolFields,omitempty"`
 	// FirewallManagement controls whether Veil syncs UFW rules during apply.
 	// A nil pointer means "enabled" for backward compatibility with states created
 	// before this field existed.
@@ -46,6 +50,9 @@ type Inbound struct {
 	OlcrtcAuth        string          `json:"olcrtcAuth,omitempty"`
 	OlcrtcTransport   string          `json:"olcrtcTransport,omitempty"`
 	OlcrtcRoomID      string          `json:"olcrtcRoomID,omitempty"`
+	// ProtocolFields holds protocol-specific inbound fields populated by the
+	// dynamic Panel UI. Legacy flat fields above remain for backward compatibility.
+	ProtocolFields map[string]any `json:"protocolFields,omitempty"`
 }
 
 type RoutingRule struct {

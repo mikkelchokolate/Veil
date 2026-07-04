@@ -35,6 +35,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/version":                         {"get"},
 		"/api/version/update":                  {"post"},
 		"/api/settings":                        {"get", "put"},
+		"/api/protocols":                       {"get"},
 		"/api/inbounds":                        {"get", "post"},
 		"/api/inbounds/{name}":                 {"delete", "get", "put"},
 		"/api/routing/rules":                   {"get", "post"},

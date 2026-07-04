@@ -1,4 +1,4 @@
-package protocols
+package olcrtc
 
 import (
 	"strings"
@@ -13,14 +13,14 @@ func TestOlcrtcProviderAutoRoomCapability(t *testing.T) {
 		"unknown":  false,
 	}
 	for provider, want := range cases {
-		if got := OlcrtcProviderSupportsAutoRoom(provider); got != want {
-			t.Errorf("OlcrtcProviderSupportsAutoRoom(%q) = %v, want %v", provider, got, want)
+		if got := ProviderSupportsAutoRoom(provider); got != want {
+			t.Errorf("ProviderSupportsAutoRoom(%q) = %v, want %v", provider, got, want)
 		}
 	}
 }
 
 func TestGenerateOlcrtcRoomJitsiProducesURL(t *testing.T) {
-	room, err := GenerateOlcrtcRoom("jitsi")
+	room, err := GenerateRoom("jitsi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestGenerateOlcrtcRoomJitsiProducesURL(t *testing.T) {
 		t.Fatalf("jitsi room is not a URL: %q", room)
 	}
 	// Two generations must differ (random room name).
-	other, _ := GenerateOlcrtcRoom("jitsi")
+	other, _ := GenerateRoom("jitsi")
 	if room == other {
 		t.Fatalf("rooms should be random, got %q twice", room)
 	}
@@ -41,7 +41,7 @@ func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
 	// single fingerprintable pattern.
 	shapes := map[string]bool{}
 	for i := 0; i < 200; i++ {
-		room, err := GenerateOlcrtcRoom("jitsi")
+		room, err := GenerateRoom("jitsi")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -76,7 +76,7 @@ func TestGenerateOlcrtcRoomLooksNaturalWithNoPanelMarker(t *testing.T) {
 
 func TestGenerateOlcrtcRoomRefusesManualProviders(t *testing.T) {
 	for _, provider := range []string{"telemost", "wbstream", "unknown"} {
-		if _, err := GenerateOlcrtcRoom(provider); err == nil {
+		if _, err := GenerateRoom(provider); err == nil {
 			t.Errorf("GenerateOlcrtcRoom(%q) should error (manual room required)", provider)
 		}
 	}

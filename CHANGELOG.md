@@ -20,6 +20,26 @@ All notable changes to Veil will be documented in this file.
 
 ### Added
 
+- Plugin-based protocol architecture. Each proxy protocol (NaiveProxy,
+  Hysteria2, Mieru, olcRTC) is now implemented as a plugin in
+  `internal/protocols/<protocol>` that supplies its own config renderer,
+  runtime/systemd descriptors, validator, UI field schema, and client-link
+  builder. A central `internal/protocols.Registry` discovers built-in plugins
+  and drives the runtime catalog, generated-config set, live validation, apply
+  plan, and inbound autofill.
+- Dynamic Panel UI for inbound protocol fields. The Panel now fetches protocol
+  field schemas from `GET /api/protocols` and renders inbound-specific inputs
+  (username/password, masquerade URL, olcRTC provider/transport/room, etc.)
+  generically. Values are stored in the new `protocolFields` map on `Settings`
+  and `Inbound`, while legacy flat fields remain supported for backward
+  compatibility.
+- `GET /api/protocols` endpoint returning protocol metadata, transports, and
+  field schemas for the Panel renderer. Documented in `docs/openapi.yaml` with
+  new `ProtocolInfo`, `FieldSchema`, and `FieldOption` schemas.
+- State migration from schema version 3 to 4. On load, legacy protocol-specific
+  flat fields (`naiveUsername`, `hysteria2Password`, `olcrtcRoomID`, etc.) are
+  automatically moved into `protocolFields` so existing states work with the
+  plugin validators and dynamic UI without manual conversion.
 - Direct Panel access (`--panel-access direct`) now automatically obtains a
   trusted Let's Encrypt IP certificate using the `shortlived` profile
   (~6-day validity, auto-renewed by `acme.sh`). This eliminates the

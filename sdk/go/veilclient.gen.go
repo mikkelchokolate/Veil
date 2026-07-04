@@ -459,6 +459,26 @@ type ErrorObject struct {
 // ErrorText Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
 type ErrorText = string
 
+// FieldOption defines model for FieldOption.
+type FieldOption struct {
+	// Attributes Optional HTML data attributes for the option element.
+	Attributes *map[string]interface{} `json:"attributes,omitempty"`
+	Label      string                  `json:"label"`
+	Value      string                  `json:"value"`
+}
+
+// FieldSchema defines model for FieldSchema.
+type FieldSchema struct {
+	// Default Protocol-defined default value for the field.
+	Default        *interface{}   `json:"default,omitempty"`
+	GenerateAction *string        `json:"generateAction,omitempty"`
+	Key            string         `json:"key"`
+	Label          string         `json:"label"`
+	Options        *[]FieldOption `json:"options,omitempty"`
+	Placeholder    *string        `json:"placeholder,omitempty"`
+	Type           string         `json:"type"`
+}
+
 // FirewallRule defines model for FirewallRule.
 type FirewallRule struct {
 	Port     int                  `json:"port"`
@@ -494,7 +514,10 @@ type Inbound struct {
 	Port              int              `json:"port"`
 	Profiles          *[]ClientProfile `json:"profiles,omitempty"`
 	Protocol          InboundProtocol  `json:"protocol"`
-	Transport         InboundTransport `json:"transport"`
+
+	// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+	ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
+	Transport      InboundTransport        `json:"transport"`
 }
 
 // InboundProtocol defines model for Inbound.Protocol.
@@ -597,6 +620,18 @@ type ProcessInfo struct {
 // ProcessesStats defines model for ProcessesStats.
 type ProcessesStats struct {
 	Processes []ProcessInfo `json:"processes"`
+}
+
+// ProtocolInfo defines model for ProtocolInfo.
+type ProtocolInfo struct {
+	DisplayName         string         `json:"displayName"`
+	FirewallService     *string        `json:"firewallService,omitempty"`
+	InboundFieldSchema  *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
+	MaxEnabled          *int           `json:"maxEnabled,omitempty"`
+	Protocol            string         `json:"protocol"`
+	RequiresCaddy       *bool          `json:"requiresCaddy,omitempty"`
+	SettingsFieldSchema *[]FieldSchema `json:"settingsFieldSchema,omitempty"`
+	Transports          []string       `json:"transports"`
 }
 
 // RURecommendedPreviewRequest defines model for RURecommendedPreviewRequest.
@@ -756,7 +791,10 @@ type Settings struct {
 	OlcrtcTransport *string              `json:"olcrtcTransport,omitempty"`
 	PanelAccess     *SettingsPanelAccess `json:"panelAccess,omitempty"`
 	PanelListen     string               `json:"panelListen"`
-	WebBasePath     *string              `json:"webBasePath,omitempty"`
+
+	// ProtocolFields Protocol-specific settings keyed by field identifier.
+	ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
+	WebBasePath    *string                 `json:"webBasePath,omitempty"`
 }
 
 // SettingsPanelAccess defines model for Settings.PanelAccess.
@@ -1251,6 +1289,9 @@ type ClientInterface interface {
 	PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostApiProfilesRuRecommendedPreview(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiProtocols request
+	GetApiProtocols(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiRoutingPresets request
 	GetApiRoutingPresets(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1911,6 +1952,18 @@ func (c *Client) PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context
 
 func (c *Client) PostApiProfilesRuRecommendedPreview(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiProfilesRuRecommendedPreviewRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiProtocols(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiProtocolsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -3644,6 +3697,33 @@ func NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server string, conten
 	return req, nil
 }
 
+// NewGetApiProtocolsRequest generates requests for GetApiProtocols
+func NewGetApiProtocolsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/protocols")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiRoutingPresetsRequest generates requests for GetApiRoutingPresets
 func NewGetApiRoutingPresetsRequest(server string) (*http.Request, error) {
 	var err error
@@ -4840,6 +4920,9 @@ type ClientWithResponsesInterface interface {
 
 	PostApiProfilesRuRecommendedPreviewWithResponse(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error)
 
+	// GetApiProtocolsWithResponse request
+	GetApiProtocolsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiProtocolsResponse, error)
+
 	// GetApiRoutingPresetsWithResponse request
 	GetApiRoutingPresetsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiRoutingPresetsResponse, error)
 
@@ -5675,6 +5758,28 @@ func (r PostApiProfilesRuRecommendedPreviewResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiProfilesRuRecommendedPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiProtocolsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]ProtocolInfo
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiProtocolsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiProtocolsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6740,6 +6845,15 @@ func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithResponse(ct
 		return nil, err
 	}
 	return ParsePostApiProfilesRuRecommendedPreviewResponse(rsp)
+}
+
+// GetApiProtocolsWithResponse request returning *GetApiProtocolsResponse
+func (c *ClientWithResponses) GetApiProtocolsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiProtocolsResponse, error) {
+	rsp, err := c.GetApiProtocols(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiProtocolsResponse(rsp)
 }
 
 // GetApiRoutingPresetsWithResponse request returning *GetApiRoutingPresetsResponse
@@ -7938,6 +8052,32 @@ func ParsePostApiProfilesRuRecommendedPreviewResponse(rsp *http.Response) (*Post
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest RURecommendedPreviewResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiProtocolsResponse parses an HTTP response from a GetApiProtocolsWithResponse call
+func ParseGetApiProtocolsResponse(rsp *http.Response) (*GetApiProtocolsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiProtocolsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ProtocolInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

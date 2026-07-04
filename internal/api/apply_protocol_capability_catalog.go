@@ -20,15 +20,31 @@ type ApplyProtocolCapabilityCatalog struct {
 
 func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 	byProtocol := map[string]ApplyProtocolCapability{}
-	for _, capability := range protocols.NewCapabilityCatalog().All() {
-		byProtocol[capability.Protocol] = ApplyProtocolCapability{
-			Protocol:               capability.Protocol,
-			Config:                 capability.GeneratedConfig.PlanPath(),
-			Action:                 capability.ApplyAction,
-			ValidateInboundRender:  capability.ValidateInboundRender,
-			RequiresRenderSettings: capability.RequiresRenderSettings,
-			RequiresCaddySettings:  capability.RequiresCaddySettings,
+	registry := protocols.NewRegistry()
+	for _, p := range registry.All() {
+		meta := protocols.MetadataOf(p)
+		cap := ApplyProtocolCapability{
+			Protocol: meta.Protocol,
 		}
+		if cr, ok := protocols.AsConfigRenderer(p); ok {
+			cap.Config = cr.ArtifactSpec().PlanPath()
+			cap.ValidateInboundRender = true
+			cap.RequiresRenderSettings = meta.Protocol != "mieru"
+		}
+		if rp, ok := protocols.AsRuntimeProvider(p); ok {
+			descs := rp.RuntimeDescriptors(nil)
+			if len(descs) > 0 {
+				unit := descs[0].Unit
+				if descs[0].TemplateUnit != "" {
+					unit = descs[0].TemplateUnit
+				}
+				cap.Action = "restart " + unit
+			}
+		}
+		if _, ok := protocols.AsValidator(p); ok {
+			cap.RequiresCaddySettings = meta.Protocol == "naiveproxy"
+		}
+		byProtocol[meta.Protocol] = cap
 	}
 	return ApplyProtocolCapabilityCatalog{byProtocol: byProtocol}
 }

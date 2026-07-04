@@ -6,11 +6,13 @@ import (
 )
 
 type ManagedRuntime struct {
-	Name             string
-	ActionName       string
-	Protocol         string
-	Transport        string
-	Unit             string
+	Name       string
+	ActionName string
+	Protocol   string
+	Transport  string
+	Unit       string
+	// TemplateUnit is the un-instantiated template form (e.g. veil-caddy@.service).
+	TemplateUnit     string
 	PromotedSubpath  string
 	PromotedVerb     string
 	ManualRestart    bool
