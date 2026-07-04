@@ -153,9 +153,9 @@ func TestApplyReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 	}
 
 	paths := ApplyPaths{
-		EtcDir:     filepath.Join(dir, "etc", "veil"),
-		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
-		BackupDir:  backupDir,
+		EtcDir:    filepath.Join(dir, "etc", "veil"),
+		VarDir:    filepath.Join(dir, "var", "lib", "veil"),
+		BackupDir: backupDir,
 	}
 	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
 
@@ -183,4 +183,3 @@ func TestApplyReturnsErrorWhenWriteManagedFileFails(t *testing.T) {
 		t.Fatal("expected error when managed file cannot be written")
 	}
 }
-
