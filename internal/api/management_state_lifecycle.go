@@ -211,9 +211,12 @@ func defaultApplyRoot(root string) string {
 	return "/etc/veil"
 }
 
+// randomReader is swapped in tests to exercise generateRandomHex error paths.
+var randomReader = rand.Read
+
 func generateRandomHex(length int) (string, error) {
 	b := make([]byte, length/2)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randomReader(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

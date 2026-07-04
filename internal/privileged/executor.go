@@ -26,6 +26,16 @@ const (
 	maxChecksumsBytes     int64 = 1024 * 1024
 )
 
+// Test hooks for functions that touch global runtime state or external
+// systems. They are swapped in tests to keep unit tests hermetic.
+var (
+	caddyDataDir           = caddycert.DefaultCaddyDataDir
+	findCaddyCertPair      = caddycert.FindPair
+	osExecutable           = os.Executable
+	caddyRetryInterval     = 2 * time.Second
+	defaultCaddyCertOutDir = "/etc/veil/certs"
+)
+
 type Executor struct {
 	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
 	ServiceAction func(context.Context, ServiceActionRequest) error
@@ -197,7 +207,7 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	}
 	binaryPath := config.BinaryPath
 	if binaryPath == "" {
-		binaryPath, err = os.Executable()
+		binaryPath, err = osExecutable()
 		if err != nil {
 			return UpdateResult{}, fmt.Errorf("resolve current executable: %w", err)
 		}
@@ -519,7 +529,7 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain is required")
 	}
 	if request.OutDir == "" {
-		request.OutDir = "/etc/veil/certs"
+		request.OutDir = defaultCaddyCertOutDir
 	}
 	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
 	if err != nil {
@@ -548,13 +558,12 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 }
 
 func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair, error) {
-	caddyDataDir := "/var/lib/caddy"
 	// Fast path: cert already exists.
-	if pair, err := caddycert.FindPair(caddyDataDir, domain); err == nil {
+	if pair, err := findCaddyCertPair(caddyDataDir, domain); err == nil {
 		return pair, nil
 	}
 	// Caddy may still be issuing; poll briefly.
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(caddyRetryInterval)
 	defer ticker.Stop()
 	deadline, hasDeadline := ctx.Deadline()
 	if !hasDeadline {
@@ -568,7 +577,7 @@ func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair,
 		case <-ctx.Done():
 			return caddycert.Pair{}, ctx.Err()
 		case <-ticker.C:
-			if pair, err := caddycert.FindPair(caddyDataDir, domain); err == nil {
+			if pair, err := findCaddyCertPair(caddyDataDir, domain); err == nil {
 				return pair, nil
 			}
 			if time.Now().After(deadline.Add(-500 * time.Millisecond)) {

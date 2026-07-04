@@ -16,6 +16,9 @@ type SocketClient struct {
 	timeout time.Duration
 }
 
+// randRead is a test hook so the request-id fallback path can be exercised.
+var randRead = rand.Read
+
 func NewSocketClient(path string) *SocketClient {
 	return &SocketClient{path: path, timeout: 30 * time.Second}
 }
@@ -148,7 +151,7 @@ const maxResponseBytes int64 = 96 * 1024 * 1024
 
 func newRequestID() string {
 	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err == nil {
+	if _, err := randRead(raw[:]); err == nil {
 		return hex.EncodeToString(raw[:])
 	}
 	return fmt.Sprintf("request-%d", time.Now().UnixNano())
