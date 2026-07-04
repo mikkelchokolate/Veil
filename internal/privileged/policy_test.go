@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -203,5 +204,214 @@ func assertOperationErrorCode(t *testing.T, err error, code ErrorCode) {
 	}
 	if operationError.Code != code {
 		t.Fatalf("want error code %s, got %s: %v", code, operationError.Code, err)
+	}
+}
+
+func TestErrorStringHandlesNil(t *testing.T) {
+	var e *Error
+	if e.Error() != "" {
+		t.Fatalf("nil Error should return empty string, got %q", e.Error())
+	}
+	if (&Error{Code: ErrorInvalidRequest, Message: "boom"}).Error() != "boom" {
+		t.Fatal("Error.Error() should return Message")
+	}
+}
+
+func TestPolicyValidateServiceActionRejectsUnsupportedAction(t *testing.T) {
+	policy := testPolicy(t)
+	err := policy.ValidateServiceAction(ServiceActionRequest{Unit: "veil.service", Action: ServiceAction("freeze")})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+}
+
+func TestPolicyValidateServiceStatusRequiresAtLeastOneUnit(t *testing.T) {
+	policy := testPolicy(t)
+	err := policy.ValidateServiceStatus(ServiceStatusRequest{Units: []string{}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	err = policy.ValidateServiceStatus(ServiceStatusRequest{Units: []string{"veil.service", "unmanaged.service"}})
+	assertOperationErrorCode(t, err, ErrorForbiddenOperation)
+}
+
+func TestPolicyResolvePromotionRejectsRestoreWithArtifacts(t *testing.T) {
+	policy := testPolicy(t)
+	_, err := policy.ResolvePromotion(PromoteRequest{RestoreBackupID: "20260605T120000.000000000Z", ArtifactIDs: []string{"mieru"}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	_, err = policy.ResolvePromotion(PromoteRequest{RestoreBackupID: "bad id"})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+}
+
+func TestPolicyResolvePromotionRequiresAtLeastOneArtifact(t *testing.T) {
+	policy := testPolicy(t)
+	_, err := policy.ResolvePromotion(PromoteRequest{})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+}
+
+func TestPolicyResolvePromotionRejectsDuplicateArtifacts(t *testing.T) {
+	policy := testPolicy(t)
+	_, err := policy.ResolvePromotion(PromoteRequest{ArtifactIDs: []string{"mieru", "mieru"}})
+	assertOperationErrorCode(t, err, ErrorConflict)
+}
+
+func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
+	tests := []struct {
+		id      string
+		allowed bool
+	}{
+		{"caddy/edge.Caddyfile", true},
+		{"hysteria2/udp.yaml", true},
+		{"olcrtc/rtc.yaml", true},
+		{"mieru/server_config.json", true},
+		{"sing-box/warp.json", true},
+		{"caddy/edge.yaml", false},
+		{"hysteria2/udp.Caddyfile", false},
+		{"caddy/bad!.Caddyfile", false},
+		{"unknown/file.yaml", false},
+		{"single.yaml", false},
+		{"caddy/../escape.Caddyfile", false},
+		{"caddy/sub/dir.Caddyfile", false},
+	}
+	for _, tc := range tests {
+		_, ok := managedArtifactPath(tc.id)
+		if ok != tc.allowed {
+			t.Errorf("managedArtifactPath(%q) got %v, want %v", tc.id, ok, tc.allowed)
+		}
+	}
+}
+
+func TestPolicyResolveBackupRejectsUnsupportedAction(t *testing.T) {
+	policy := testPolicy(t)
+	_, err := policy.ResolveBackup(BackupRequest{Action: BackupAction("purge")})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+}
+
+func TestPolicyResolveBackupDefaultsPathsWhenEmpty(t *testing.T) {
+	root := t.TempDir()
+	policy := Policy{StateRoot: root, BackupRoot: root}
+	resolved, err := policy.ResolveBackup(BackupRequest{Action: BackupActionCreate})
+	if err != nil {
+		t.Fatalf("resolve backup: %v", err)
+	}
+	if resolved.StatePath != filepath.Join(root, "state.json") {
+		t.Fatalf("unexpected state path %q", resolved.StatePath)
+	}
+	if resolved.KeyPath != filepath.Join(root, "state.key") {
+		t.Fatalf("unexpected key path %q", resolved.KeyPath)
+	}
+	if resolved.BackupPassphrasePath != filepath.Join(root, "backup.passphrase") {
+		t.Fatalf("unexpected passphrase path %q", resolved.BackupPassphrasePath)
+	}
+}
+
+func TestPolicyResolveBackupAllowsListAndPruneWithoutArchive(t *testing.T) {
+	policy := testPolicy(t)
+	for _, action := range []BackupAction{BackupActionList, BackupActionPrune} {
+		if _, err := policy.ResolveBackup(BackupRequest{Action: action}); err != nil {
+			t.Fatalf("action %q rejected: %v", action, err)
+		}
+	}
+}
+
+func TestPolicyResolveFirewall(t *testing.T) {
+	policy := testPolicy(t)
+	resolved, err := policy.ResolveFirewall(FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}})
+	if err != nil {
+		t.Fatalf("resolve firewall rule ids: %v", err)
+	}
+	if !reflect.DeepEqual(resolved.RuleIDs, []string{"allow-mieru-tcp"}) {
+		t.Fatalf("unexpected rule ids: %+v", resolved.RuleIDs)
+	}
+
+	_, err = policy.ResolveFirewall(FirewallRequest{RuleIDs: []string{"allow-unknown"}})
+	assertOperationErrorCode(t, err, ErrorForbiddenOperation)
+
+	_, err = policy.ResolveFirewall(FirewallRequest{})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+
+	resolved, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "HTTPS"}}}})
+	if err != nil {
+		t.Fatalf("resolve firewall rules: %v", err)
+	}
+	if len(resolved.Rules) != 1 {
+		t.Fatalf("unexpected rules: %+v", resolved.Rules)
+	}
+}
+
+func TestPolicyValidateUFWRule(t *testing.T) {
+	good := FirewallRule{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "HTTPS"}}
+	if err := validateUFWRule(good); err != nil {
+		t.Fatalf("valid rule rejected: %v", err)
+	}
+	bad := []FirewallRule{
+		{Command: "iptables", Args: []string{"allow", "443/tcp"}},
+		{Command: "ufw", Args: []string{"allow"}},
+		{Command: "ufw", Args: []string{"deny", "443/tcp"}},
+		{Command: "ufw", Args: []string{"allow", "notaport"}},
+		{Command: "ufw", Args: []string{"allow", "443/tcp", "comment"}},
+		{Command: "ufw", Args: []string{"allow", "443/tcp", "; reboot"}},
+		{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "x", "extra"}},
+	}
+	for _, rule := range bad {
+		if err := validateUFWRule(rule); err == nil {
+			t.Fatalf("expected rule %+v to be rejected", rule)
+		}
+	}
+}
+
+func TestPolicyResolveUpdateRejectsTraversal(t *testing.T) {
+	policy := testPolicy(t)
+	policy.UpdateArtifacts["traversal"] = "../escape.tar.gz"
+	_, err := policy.ResolveUpdate(UpdateRequest{ArtifactID: "traversal", Version: "v1.0.0"})
+	assertOperationErrorCode(t, err, ErrorForbiddenOperation)
+}
+
+func TestPolicyAllowsUnitPrefixesAndRejectsDangerousNames(t *testing.T) {
+	policy := testPolicy(t)
+	policy.ManagedUnitPrefixes = []string{"veil-hysteria2@"}
+	if !policy.allowsUnit("veil-hysteria2@edge.service") {
+		t.Fatal("expected prefix unit to be allowed")
+	}
+	for _, unit := range []string{"veil-hysteria2@edge.service; reboot", "veil-hysteria2@../edge.service", "veil-other@edge.service"} {
+		if policy.allowsUnit(unit) {
+			t.Fatalf("expected unit %q to be rejected", unit)
+		}
+	}
+}
+
+func TestPolicyResolveBelowRejectsBadInputs(t *testing.T) {
+	root := t.TempDir()
+	for _, tc := range []struct{ root, relative string }{
+		{"", "file"},
+		{root, ""},
+		{root, "/absolute"},
+		{root, ".."},
+		{root, "../escape"},
+	} {
+		if _, err := resolveBelow(tc.root, tc.relative); err == nil {
+			t.Fatalf("expected resolveBelow(%q, %q) to fail", tc.root, tc.relative)
+		}
+	}
+}
+
+func TestPolicyPathWithin(t *testing.T) {
+	root := t.TempDir()
+	if !pathWithin(root, filepath.Join(root, "sub")) {
+		t.Fatal("expected subpath to be within root")
+	}
+	if pathWithin(root, filepath.Join(root, "..")) {
+		t.Fatal("expected parent to be outside root")
+	}
+}
+
+func TestWrapOperationError(t *testing.T) {
+	if wrapOperationError(nil) != nil {
+		t.Fatal("wrapOperationError(nil) should be nil")
+	}
+	privileged := newError(ErrorForbiddenOperation, "no")
+	if wrapOperationError(privileged) != privileged {
+		t.Fatal("wrapOperationError should preserve privileged Error")
+	}
+	err := wrapOperationError(errors.New("plain"))
+	var opErr *Error
+	if !errors.As(err, &opErr) || opErr.Code != ErrorOperationFailed {
+		t.Fatalf("expected operation failed wrap, got %v", err)
 	}
 }

@@ -27,5 +27,9 @@ func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) erro
 		os.Remove(tmpPath)
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }

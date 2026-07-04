@@ -16,6 +16,14 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
+// test hooks; overridden in tests only.
+var (
+	randReader  = rand.Reader
+	osHostname  = os.Hostname
+	x25519      = curve25519.X25519
+	jsonMarshal = json.Marshal
+)
+
 const (
 	defaultRegBaseURL = "https://api.cloudflareclient.com/v0a4005"
 	defaultClientVer  = "a-6.30-3596"
@@ -40,13 +48,13 @@ type Registration struct {
 // public keys.
 func GenerateKeypair() (privateKey string, publicKey string, err error) {
 	var priv [32]byte
-	if _, err := rand.Read(priv[:]); err != nil {
+	if _, err := io.ReadFull(randReader, priv[:]); err != nil {
 		return "", "", fmt.Errorf("warp: generate private key: %w", err)
 	}
 	priv[0] &= 248
 	priv[31] &= 127
 	priv[31] |= 64
-	pub, err := curve25519.X25519(priv[:], curve25519.Basepoint)
+	pub, err := x25519(priv[:], curve25519.Basepoint)
 	if err != nil {
 		return "", "", fmt.Errorf("warp: derive public key: %w", err)
 	}
@@ -89,7 +97,7 @@ func (r *Registrar) hostname() string {
 	if r.Hostname != "" {
 		return r.Hostname
 	}
-	if h, err := os.Hostname(); err == nil {
+	if h, err := osHostname(); err == nil {
 		return h
 	}
 	return "veil"
@@ -125,7 +133,7 @@ func (r *Registrar) Register(ctx context.Context) (Registration, error) {
 	if err != nil {
 		return Registration{}, err
 	}
-	reqBody, err := json.Marshal(map[string]any{
+	reqBody, err := jsonMarshal(map[string]any{
 		"key":   publicKey,
 		"tos":   time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		"type":  "PC",

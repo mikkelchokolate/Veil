@@ -19,3 +19,11 @@ func TestProcessCPUUsageReturnsZeroWhenSystemUptimeOrElapsedIsInvalid(t *testing
 		t.Fatalf("negative elapsed percent = %v", got)
 	}
 }
+
+func TestProcessCPUUsageDefaultsInvalidClockTicks(t *testing.T) {
+	usage := NewProcessCPUUsage(0)
+	got := usage.Percent(ProcessStatFields{UserTicks: 100, SystemTicks: 50, StartTimeTicks: 1000}, 20)
+	if got != 15 {
+		t.Fatalf("percent = %v", got)
+	}
+}

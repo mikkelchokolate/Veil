@@ -18,3 +18,10 @@ func TestProcessStatParserRejectsMalformedStat(t *testing.T) {
 		t.Fatal("expected parse failure")
 	}
 }
+
+func TestProcessStatParserRejectsShortFieldList(t *testing.T) {
+	stat := "123 (veil) S 0 0 0 0 0 0 0 0 0 0 11 22"
+	if _, ok := NewProcessStatParser().Parse(stat); ok {
+		t.Fatal("expected parse failure for short field list")
+	}
+}

@@ -12,7 +12,7 @@ func TestResourceNameParsesSinglePathSegment(t *testing.T) {
 
 func TestResourceNameRejectsEmptyNestedAndWrongPrefix(t *testing.T) {
 	parser := NewResourceNameParser("/api/routing/rules/")
-	for _, path := range []string{"/api/routing/rules/", "/api/routing/rules/a/b", "/api/routing/presets/ru"} {
+	for _, path := range []string{"/api/routing/rules/", "/api/routing/rules/a/b", "/api/routing/presets/ru", "/api/routing/rules"} {
 		if name, ok := parser.Parse(path); ok {
 			t.Fatalf("expected reject for %q, got %q", path, name)
 		}

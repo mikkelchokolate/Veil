@@ -2,60 +2,157 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"testing"
 )
 
-func TestRunReturnsNilForHelp(t *testing.T) {
+func TestRunHelp(t *testing.T) {
 	origArgs := os.Args
 	os.Args = []string{"veil"}
 	defer func() { os.Args = origArgs }()
 
-	err := run()
-	if err != nil {
-		t.Fatalf("expected no error for default (help) command, got: %v", err)
+	code := run()
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for default (help) command, got: %d", code)
 	}
 }
 
-func TestRunReturnsErrorForInvalidCommand(t *testing.T) {
-	// Override os.Args temporarily to pass an invalid subcommand
+func TestRunHelpFlag(t *testing.T) {
 	origArgs := os.Args
-	os.Args = []string{"veil", "nonexistent"}
+	os.Args = []string{"veil", "--help"}
 	defer func() { os.Args = origArgs }()
 
-	err := run()
-	if err == nil {
-		t.Fatal("expected error for invalid command, got nil")
-	}
-	if !strings.Contains(err.Error(), "nonexistent") {
-		t.Fatalf("expected error to mention 'nonexistent', got: %v", err)
+	code := run()
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for --help, got: %d", code)
 	}
 }
 
-func TestRunCreatesSignalContext(t *testing.T) {
-	// Test that run() wires signal.NotifyContext with SIGTERM and SIGINT.
-	// We verify this by calling signal.NotifyContext with the same signals,
-	// cancelling it, and confirming the context gets cancelled.
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+func TestRunVersion(t *testing.T) {
+	origVersion := version
+	version = "test-version"
+	defer func() { version = origVersion }()
 
-	// Simulate signal arrival by calling cancel directly (signal.NotifyContext
-	// does the same internally when a signal is received).
-	cancel()
+	origArgs := os.Args
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	os.Args = []string{"veil", "version"}
+	defer func() {
+		os.Args = origArgs
+		os.Stdout = origStdout
+	}()
 
-	select {
-	case <-ctx.Done():
-		// expected: context is cancelled
-	default:
-		t.Error("expected signal context to be cancelled, but it wasn't")
+	code := run()
+	w.Close()
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for version command, got: %d", code)
+	}
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := strings.TrimSpace(buf.String())
+	if output != version {
+		t.Fatalf("expected version output %q, got: %q", version, output)
+	}
+}
+
+func TestRunInvalidCommand(t *testing.T) {
+	origArgs := os.Args
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+	os.Args = []string{"veil", "nonexistent"}
+	defer func() {
+		os.Args = origArgs
+		os.Stderr = origStderr
+	}()
+
+	code := run()
+	w.Close()
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1 for invalid command, got: %d", code)
+	}
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+	if !strings.Contains(output, "veil:") {
+		t.Errorf("expected stderr output to contain 'veil:', got: %q", output)
+	}
+	if !strings.Contains(output, "nonexistent") {
+		t.Errorf("expected stderr output to mention 'nonexistent', got: %q", output)
+	}
+}
+
+func TestRunInvalidCommandWithoutSubcommand(t *testing.T) {
+	origArgs := os.Args
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+	os.Args = []string{"veil", "--unknown-flag"}
+	defer func() {
+		os.Args = origArgs
+		os.Stderr = origStderr
+	}()
+
+	code := run()
+	w.Close()
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1 for unknown flag, got: %d", code)
+	}
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+	if !strings.Contains(output, "veil:") {
+		t.Errorf("expected stderr output to contain 'veil:', got: %q", output)
+	}
+}
+
+func TestRunDoctorDispatch(t *testing.T) {
+	origArgs := os.Args
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	os.Args = []string{"veil", "doctor"}
+	defer func() {
+		os.Args = origArgs
+		os.Stdout = origStdout
+	}()
+
+	code := run()
+	w.Close()
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for doctor command, got: %d", code)
+	}
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+	if output == "" {
+		t.Error("expected doctor command to produce output")
 	}
 }
 
 func TestHandleErrorPrintsToStderr(t *testing.T) {
-	// Capture stderr and verify error is printed
 	origStderr := os.Stderr
 	r, w, err := os.Pipe()
 	if err != nil {

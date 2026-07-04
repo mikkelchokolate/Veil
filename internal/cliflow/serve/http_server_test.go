@@ -111,3 +111,64 @@ func TestServeHTTPServerInjectsLiveHostValidator(t *testing.T) {
 		t.Fatalf("production validation did not inspect live port: %s", response.Body.String())
 	}
 }
+
+func TestServeHTTPServerBuildsAutoTLSServer(t *testing.T) {
+	server, reloader := NewHTTPServer(HTTPServerOptions{
+		Listen:          "0.0.0.0:443",
+		Version:         "test",
+		AuthToken:       "token",
+		StatePath:       filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:       filepath.Join(t.TempDir(), "apply"),
+		KeyPath:         filepath.Join(t.TempDir(), "state.key"),
+		TLSEnabled:      true,
+		AutoTLSDomain:   "example.com",
+		AutoTLSEmail:    "admin@example.com",
+		AutoTLSCacheDir: filepath.Join(t.TempDir(), "autocert"),
+		WebBasePath:     "/",
+	}).Build()
+	if server == nil || reloader == nil {
+		t.Fatalf("server=%v reloader=%v", server, reloader)
+	}
+	if server.TLSConfig == nil {
+		t.Fatalf("expected TLS config for auto-tls")
+	}
+	if server.TLSConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion=%d", server.TLSConfig.MinVersion)
+	}
+	if server.TLSConfig.GetCertificate == nil {
+		t.Fatalf("expected auto-tls GetCertificate")
+	}
+}
+
+func TestServeHTTPServerBuildsPlainServer(t *testing.T) {
+	server, reloader := NewHTTPServer(HTTPServerOptions{
+		Listen:      "127.0.0.1:2096",
+		Version:     "test",
+		AuthToken:   "token",
+		StatePath:   filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:   filepath.Join(t.TempDir(), "apply"),
+		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
+		WebBasePath: "/",
+	}).Build()
+	if server == nil || reloader == nil {
+		t.Fatalf("server=%v reloader=%v", server, reloader)
+	}
+	if server.TLSConfig != nil {
+		t.Fatalf("expected no TLS config for plain server")
+	}
+}
+
+func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
+	server, _ := NewHTTPServer(HTTPServerOptions{
+		Listen:      "127.0.0.1:2096",
+		Version:     "test",
+		AuthToken:   "token",
+		StatePath:   filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:   filepath.Join(t.TempDir(), "apply"),
+		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
+		WebBasePath: "/",
+	}).Build()
+	if server == nil {
+		t.Fatalf("expected server")
+	}
+}

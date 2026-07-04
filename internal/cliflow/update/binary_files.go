@@ -7,6 +7,19 @@ import (
 	"path/filepath"
 )
 
+type atomicFile interface {
+	io.Writer
+	io.Closer
+	Name() string
+}
+
+var (
+	createTempForReplace = func(dir, pattern string) (atomicFile, error) { return os.CreateTemp(dir, pattern) }
+	chmodForReplace      = os.Chmod
+	removeForReplace     = os.Remove
+	renameForReplace     = os.Rename
+)
+
 type BinaryFiles struct{}
 
 func NewBinaryFiles() BinaryFiles {
@@ -32,25 +45,25 @@ func (BinaryFiles) Copy(src, dst string) error {
 
 func (BinaryFiles) ReplaceAtomic(dst string, data []byte) error {
 	dir := filepath.Dir(dst)
-	tmp, err := os.CreateTemp(dir, ".veil-update-*")
+	tmp, err := createTempForReplace(dir, ".veil-update-*")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		os.Remove(tmpPath)
+		removeForReplace(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		removeForReplace(tmpPath)
 		return err
 	}
-	if err := os.Chmod(tmpPath, 0o755); err != nil {
-		os.Remove(tmpPath)
+	if err := chmodForReplace(tmpPath, 0o755); err != nil {
+		removeForReplace(tmpPath)
 		return err
 	}
-	return os.Rename(tmpPath, dst)
+	return renameForReplace(tmpPath, dst)
 }
 
 func (f BinaryFiles) Rollback(backupPath, currentPath string) error {
@@ -88,7 +101,8 @@ func CopyFileData(src, dst string) error {
 	return NewBinaryFiles().Copy(src, dst)
 }
 
-func ReplaceBinaryAtomic(dst string, data []byte) error {
+// ReplaceBinaryAtomic writes data to a temp file in dst's directory and renames it over dst.
+var ReplaceBinaryAtomic = func(dst string, data []byte) error {
 	return NewBinaryFiles().ReplaceAtomic(dst, data)
 }
 

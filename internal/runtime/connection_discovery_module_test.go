@@ -38,9 +38,13 @@ func TestConnectionDiscoveryReadsTCPAndUDPListenersFromSource(t *testing.T) {
 type fakeConnectionSource struct {
 	tables    map[string][]string
 	processes map[string]string
+	err       error
 }
 
 func (s fakeConnectionSource) SocketLines(proto string) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
 	return s.tables[proto], nil
 }
 

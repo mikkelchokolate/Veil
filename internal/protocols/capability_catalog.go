@@ -4,8 +4,12 @@ import "github.com/mikkelchokolate/Veil/internal/generatedconfig"
 
 // NewGeneratedConfigRegistry builds the generatedconfig registry from plugins.
 func NewGeneratedConfigRegistry() generatedconfig.ProtocolRegistry {
+	return newGeneratedConfigRegistryFrom(NewRegistry())
+}
+
+func newGeneratedConfigRegistryFrom(r *Registry) generatedconfig.ProtocolRegistry {
 	protocolRenderers := []generatedconfig.Protocol{}
-	for _, p := range NewRegistry().All() {
+	for _, p := range r.All() {
 		cr, ok := AsConfigRenderer(p)
 		if !ok {
 			continue

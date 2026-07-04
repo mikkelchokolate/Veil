@@ -152,3 +152,48 @@ func TestBackupReadContractUsesManagedArchiveNameOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestPayloadMatchesOperationForAllOperations(t *testing.T) {
+	cases := []struct {
+		op        Operation
+		payload   func(*RequestEnvelope)
+		wantMatch bool
+	}{
+		{OperationPromote, func(r *RequestEnvelope) { r.Promote = &PromoteRequest{} }, true},
+		{OperationPromote, func(r *RequestEnvelope) { r.RestartPanel = &RestartPanelRequest{} }, false},
+		{OperationServiceAction, func(r *RequestEnvelope) { r.ServiceAction = &ServiceActionRequest{} }, true},
+		{OperationServiceStatus, func(r *RequestEnvelope) { r.ServiceStatus = &ServiceStatusRequest{} }, true},
+		{OperationJournal, func(r *RequestEnvelope) { r.Journal = &JournalRequest{} }, true},
+		{OperationBackupCreate, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationBackupList, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationBackupVerify, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationBackupRead, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationBackupPrune, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationBackupRestore, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
+		{OperationRotateKey, func(r *RequestEnvelope) { r.RotateKey = &RotateKeyRequest{} }, true},
+		{OperationFirewallApply, func(r *RequestEnvelope) { r.Firewall = &FirewallRequest{} }, true},
+		{OperationStageUpdate, func(r *RequestEnvelope) { r.Update = &UpdateRequest{} }, true},
+		{OperationRestartPanel, func(r *RequestEnvelope) { r.RestartPanel = &RestartPanelRequest{} }, true},
+		{OperationSyncCaddyCert, func(r *RequestEnvelope) { r.SyncCaddyCert = &SyncCaddyCertRequest{} }, true},
+	}
+	for _, tc := range cases {
+		r := RequestEnvelope{Version: ProtocolVersion, RequestID: "x", Operation: tc.op}
+		tc.payload(&r)
+		if got := r.payloadMatchesOperation(); got != tc.wantMatch {
+			t.Fatalf("payloadMatchesOperation(%q) = %v, want %v", tc.op, got, tc.wantMatch)
+		}
+	}
+}
+
+func TestPayloadMatchesOperationRejectsUnknownOperation(t *testing.T) {
+	r := RequestEnvelope{Version: ProtocolVersion, RequestID: "x", Operation: Operation("unknown"), RestartPanel: &RestartPanelRequest{}}
+	if r.payloadMatchesOperation() {
+		t.Fatal("expected unknown operation to not match any payload")
+	}
+}
+
+func TestOperationValidRejectsUnknown(t *testing.T) {
+	if Operation("nope").Valid() {
+		t.Fatal("expected unknown operation to be invalid")
+	}
+}

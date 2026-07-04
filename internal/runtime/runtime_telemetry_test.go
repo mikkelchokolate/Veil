@@ -25,3 +25,18 @@ func TestRuntimeTelemetryCollectsSystemAndPropagatesErrors(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestRuntimeTelemetryObservationAggregatesSnapshot(t *testing.T) {
+	telemetry := NewRuntimeTelemetry()
+	telemetry.readSystem = func() (SystemStats, error) { return SystemStats{CPUPercent: 5.5}, nil }
+	telemetry.readTLSCertPath = func() string { return "" }
+	telemetry.readNetwork = func() (NetworkStats, error) { return NetworkStats{}, nil }
+	telemetry.readConnections = func() (ConnectionsStats, error) { return ConnectionsStats{}, nil }
+	telemetry.readProcesses = func() (ProcessesStats, error) { return ProcessesStats{}, nil }
+	telemetry.readDisk = func() DiskStats { return DiskStats{} }
+
+	snapshot := telemetry.Observation()
+	if snapshot.System.CPUPercent != 5.5 {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+}
