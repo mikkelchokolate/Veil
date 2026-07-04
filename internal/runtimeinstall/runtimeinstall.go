@@ -428,9 +428,23 @@ func main() {
 	return nil
 }
 
+// atomicFile is the subset of *os.File used by writeBinaryAtomic. It is
+// implemented by *os.File in production and by test doubles in tests.
+type atomicFile interface {
+	io.Writer
+	Name() string
+	Chmod(mode os.FileMode) error
+	Close() error
+}
+
+// writeBinaryAtomicCreateTemp is swapped in tests to exercise error paths.
+var writeBinaryAtomicCreateTemp = func(dir, pattern string) (atomicFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
 func writeBinaryAtomic(path string, body []byte) error {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".veil-runtime-*")
+	tmp, err := writeBinaryAtomicCreateTemp(dir, ".veil-runtime-*")
 	if err != nil {
 		return err
 	}

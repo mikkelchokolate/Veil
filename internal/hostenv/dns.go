@@ -16,6 +16,10 @@ func (NetResolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) 
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
 }
 
+// defaultResolver is used by CheckDomainDNS when the caller passes a nil
+// resolver. It is a package-level variable so tests can substitute a stub.
+var defaultResolver DNSResolver = NetResolver{}
+
 type DNSCheck struct {
 	Domain          string
 	ResolvedIPs     []string
@@ -29,7 +33,7 @@ func CheckDomainDNS(ctx context.Context, resolver DNSResolver, domain string, pu
 		return DNSCheck{}, err
 	}
 	if resolver == nil {
-		resolver = NetResolver{}
+		resolver = defaultResolver
 	}
 	ips, err := resolver.LookupIP(ctx, domain)
 	if err != nil {

@@ -11,6 +11,9 @@ import (
 
 const MaxEntries = 100
 
+// jsonMarshalIndent is swapped during tests to exercise the marshal-error path.
+var jsonMarshalIndent = json.MarshalIndent
+
 type ApplyHistoryStore struct {
 	path string
 	max  int
@@ -42,7 +45,7 @@ func (s ApplyHistoryStore) Append(stage string, success bool, response ApplyResp
 	}
 	entry := NewApplyHistoryEntryBuilder(nil).Build(stage, success, response)
 	history = NewApplyHistoryRetention(s.max).Prepend(entry, history)
-	body, err := json.MarshalIndent(history, "", "  ")
+	body, err := jsonMarshalIndent(history, "", "  ")
 	if err != nil {
 		return err
 	}

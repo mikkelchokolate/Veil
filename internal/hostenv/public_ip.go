@@ -19,6 +19,11 @@ func DefaultPublicIPEndpoints() []string {
 	}
 }
 
+// defaultPublicIPEndpointProvider is used by DetectPublicIP when no endpoints
+// are supplied. It is a package-level variable so tests can substitute a stub
+// without touching the real public endpoints.
+var defaultPublicIPEndpointProvider = DefaultPublicIPEndpoints
+
 func ResolvePublicIP(ctx context.Context, value string, client *http.Client, endpoints []string) (net.IP, error) {
 	if value == "" {
 		return nil, nil
@@ -43,7 +48,7 @@ func DetectPublicIP(ctx context.Context, client *http.Client, endpoints []string
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	if len(endpoints) == 0 {
-		endpoints = DefaultPublicIPEndpoints()
+		endpoints = defaultPublicIPEndpointProvider()
 	}
 	var failures []string
 	for _, endpoint := range endpoints {

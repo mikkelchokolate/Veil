@@ -176,8 +176,12 @@ func TranslationCatalogs() map[string]map[string]string {
 	return catalogs
 }
 
+// jsonMarshal is swappable so tests can exercise the error branch of
+// LocalizationRuntimeJS without importing encoding/json internals.
+var jsonMarshal = json.Marshal
+
 func LocalizationRuntimeJS() string {
-	catalogs, err := json.Marshal(translationCatalogs)
+	catalogs, err := jsonMarshal(translationCatalogs)
 	if err != nil {
 		return ""
 	}

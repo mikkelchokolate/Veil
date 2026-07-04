@@ -30,6 +30,14 @@ const (
 	MinCiphertextLen = NonceSize + TagSize
 )
 
+// Package-level hooks for error-path testing. They are assigned to the real
+// implementations by default so production behavior is unchanged.
+var (
+	randRead     = rand.Read
+	aesNewCipher = aes.NewCipher
+	newGCM       = cipher.NewGCM
+)
+
 // Cipher holds an AES-256-GCM AEAD instance for encrypting and decrypting
 // individual secret fields.
 type Cipher struct {
@@ -39,11 +47,11 @@ type Cipher struct {
 
 // NewCipher creates a new Cipher from a 32-byte AES-256 key.
 func NewCipher(key [KeySize]byte) (*Cipher, error) {
-	block, err := aes.NewCipher(key[:])
+	block, err := aesNewCipher(key[:])
 	if err != nil {
 		return nil, fmt.Errorf("secrets: aes.NewCipher: %w", err)
 	}
-	aead, err := cipher.NewGCM(block)
+	aead, err := newGCM(block)
 	if err != nil {
 		return nil, fmt.Errorf("secrets: cipher.NewGCM: %w", err)
 	}
@@ -65,7 +73,7 @@ func (c *Cipher) Encrypt(plaintext string) (string, error) {
 	}
 	plainBytes := []byte(plaintext)
 	nonce := make([]byte, NonceSize)
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := randRead(nonce); err != nil {
 		return "", fmt.Errorf("secrets: rand.Read nonce: %w", err)
 	}
 	// Seal appends encrypted data to nonce: output = nonce || ciphertext || tag

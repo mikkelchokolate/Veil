@@ -435,3 +435,376 @@ func TestGoToolchainDownloadInvalidTarPath(t *testing.T) {
 		t.Fatalf("expected invalid path error, got %v", err)
 	}
 }
+
+func TestKnownGoBinsDeduplicatesDefaultPaths(t *testing.T) {
+	t.Setenv("GOROOT", "/usr/local/go")
+	bins := knownGoBins()
+	seen := map[string]int{}
+	for _, b := range bins {
+		seen[b]++
+	}
+	if seen["/usr/local/go/bin/go"] != 1 {
+		t.Fatalf("expected exactly one /usr/local/go/bin/go, got %v", seen)
+	}
+}
+
+func TestFindBestGoVersionCommandFails(t *testing.T) {
+	old := knownGoBinsFn
+	defer func() { knownGoBinsFn = old }()
+
+	dir := t.TempDir()
+	badGo := filepath.Join(dir, "go")
+	script := "#!/usr/bin/env bash\necho 'go: cannot find version' >&2\nexit 1\n"
+	if err := os.WriteFile(badGo, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	knownGoBinsFn = func() []string { return []string{badGo} }
+
+	best, err := findBestGo(defaultGoVersion)
+	if err != nil {
+		t.Fatalf("findBestGo: %v", err)
+	}
+	if best != "" {
+		t.Fatalf("expected empty, got %q", best)
+	}
+}
+
+func TestFindBestGoVersionUnparseable(t *testing.T) {
+	old := knownGoBinsFn
+	defer func() { knownGoBinsFn = old }()
+
+	dir := t.TempDir()
+	badGo := filepath.Join(dir, "go")
+	script := "#!/usr/bin/env bash\necho 'hello world'\nexit 0\n"
+	if err := os.WriteFile(badGo, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	knownGoBinsFn = func() []string { return []string{badGo} }
+
+	best, err := findBestGo(defaultGoVersion)
+	if err != nil {
+		t.Fatalf("findBestGo: %v", err)
+	}
+	if best != "" {
+		t.Fatalf("expected empty, got %q", best)
+	}
+}
+
+func TestFindBestGoNoCandidates(t *testing.T) {
+	old := knownGoBinsFn
+	defer func() { knownGoBinsFn = old }()
+
+	knownGoBinsFn = func() []string { return nil }
+	best, err := findBestGo(defaultGoVersion)
+	if err != nil {
+		t.Fatalf("findBestGo: %v", err)
+	}
+	if best != "" {
+		t.Fatalf("expected empty, got %q", best)
+	}
+}
+
+func TestResolveGoEnsureGoNil(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	got, err := resolveGo(context.Background(), t.TempDir(), nil)
+	if err != nil || got != "" {
+		t.Fatalf("resolveGo = %q, err = %v", got, err)
+	}
+}
+
+func TestResolveGoEnsureGoError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	_, err := resolveGo(context.Background(), t.TempDir(), func(ctx context.Context) (string, error) {
+		return "", errors.New("ensure failed")
+	})
+	if err == nil || !strings.Contains(err.Error(), "ensure failed") {
+		t.Fatalf("expected ensure error, got %v", err)
+	}
+}
+
+func TestResolveGoEnsureGoInstalls(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", nil }
+	defer func() { findBestGoFn = old }()
+
+	got, err := resolveGo(context.Background(), t.TempDir(), func(ctx context.Context) (string, error) {
+		return "/usr/local/go/bin/go", nil
+	})
+	if err != nil || got != "/usr/local/go/bin/go" {
+		t.Fatalf("resolveGo = %q, err = %v", got, err)
+	}
+}
+
+func TestResolveGoFindBestGoError(t *testing.T) {
+	old := findBestGoFn
+	findBestGoFn = func(minVersion string) (string, error) { return "", errors.New("find failed") }
+	defer func() { findBestGoFn = old }()
+
+	_, err := resolveGo(context.Background(), t.TempDir(), nil)
+	if err == nil || !strings.Contains(err.Error(), "find failed") {
+		t.Fatalf("expected find error, got %v", err)
+	}
+}
+
+func TestGoBuildEnvAddsPathWhenMissing(t *testing.T) {
+	t.Setenv("PATH", "")
+	t.Setenv("Path", "")
+	os.Unsetenv("PATH")
+	os.Unsetenv("Path")
+	env := goBuildEnv("/usr/local/go/bin/go")
+	found := false
+	for _, e := range env {
+		if e == "PATH=:/usr/local/go/bin" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("PATH not added: %v", env)
+	}
+}
+
+func TestGoToolchainEnsureMkdirAllFails(t *testing.T) {
+	dir := t.TempDir()
+	cacheFile := filepath.Join(dir, "cache-file")
+	if err := os.WriteFile(cacheFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gt := NewGoToolchain(cacheFile)
+	_, err := gt.Ensure(context.Background())
+	if err == nil {
+		t.Fatal("expected MkdirAll error")
+	}
+}
+
+func TestGoToolchainEnsureTmpDirMkdirAllFails(t *testing.T) {
+	dir := t.TempDir()
+	goDir := filepath.Join(dir, "go"+defaultGoVersion)
+	tmpDir := filepath.Join(filepath.Dir(goDir), ".tmp-"+defaultGoVersion)
+	if err := os.WriteFile(tmpDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gt := NewGoToolchain(dir)
+	_, err := gt.Ensure(context.Background())
+	if err == nil {
+		t.Fatal("expected tmp dir MkdirAll error")
+	}
+}
+
+func TestGoToolchainEnsureDownloadCopyError(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	body := []byte("partial tarball data")
+	sum := sha256.Sum256(body)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(&errorReader{err: errors.New("read failed")}),
+			Request:    req,
+		}, nil
+	}}}
+	_, err := gt.Ensure(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "download Go") {
+		t.Fatalf("expected download error, got %v", err)
+	}
+}
+
+func TestGoToolchainEnsureTarNextError(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	gz.Write([]byte("not a tar archive"))
+	gz.Close()
+	tarball := buf.Bytes()
+	sum := sha256.Sum256(tarball)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Request: req}, nil
+	}}}
+	_, err := gt.Ensure(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "tar Go") {
+		t.Fatalf("expected tar error, got %v", err)
+	}
+}
+
+func buildGoTarballWithHeaders(t *testing.T, entries []struct {
+	hdr  tar.Header
+	data []byte
+}) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, e := range entries {
+		h := e.hdr
+		h.Size = int64(len(e.data))
+		if err := tw.WriteHeader(&h); err != nil {
+			t.Fatal(err)
+		}
+		if len(e.data) > 0 {
+			if _, err := tw.Write(e.data); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestGoToolchainEnsureRootDirEntrySkipped(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	tarball := buildGoTarballWithHeaders(t, []struct {
+		hdr  tar.Header
+		data []byte
+	}{
+		{hdr: tar.Header{Name: "go/", Mode: 0o755, Typeflag: tar.TypeDir}},
+		{hdr: tar.Header{Name: "go/bin/go", Mode: 0o755, Typeflag: tar.TypeReg}, data: []byte("#!/bin/sh\necho go version go1.26.4 linux/amd64\n")},
+	})
+	sum := sha256.Sum256(tarball)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Request: req}, nil
+	}}}
+	goBin, err := gt.Ensure(context.Background())
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if _, err := os.Stat(goBin); err != nil {
+		t.Fatalf("go binary not found: %v", err)
+	}
+}
+
+func TestGoToolchainEnsureDirMkdirError(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	goDir := filepath.Join(dir, "go"+defaultGoVersion)
+	// Pre-create a file where the tarball wants to create a nested directory.
+	if err := os.MkdirAll(goDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goDir, "pkg"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tarball := buildGoTarballWithHeaders(t, []struct {
+		hdr  tar.Header
+		data []byte
+	}{
+		{hdr: tar.Header{Name: "go/pkg/", Mode: 0o755, Typeflag: tar.TypeDir}},
+	})
+	sum := sha256.Sum256(tarball)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Request: req}, nil
+	}}}
+	_, err := gt.Ensure(context.Background())
+	if err == nil {
+		t.Fatal("expected dir MkdirAll error")
+	}
+}
+
+func TestGoToolchainEnsureFileOpenError(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	goDir := filepath.Join(dir, "go"+defaultGoVersion)
+	targetFile := filepath.Join(goDir, "file.txt")
+	if err := os.MkdirAll(goDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(targetFile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tarball := buildGoTarballWithHeaders(t, []struct {
+		hdr  tar.Header
+		data []byte
+	}{
+		{hdr: tar.Header{Name: "go/file.txt", Mode: 0o644, Typeflag: tar.TypeReg}, data: []byte("x")},
+	})
+	sum := sha256.Sum256(tarball)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Request: req}, nil
+	}}}
+	_, err := gt.Ensure(context.Background())
+	if err == nil {
+		t.Fatal("expected OpenFile error")
+	}
+}
+
+func buildTruncatedGoTarball(t *testing.T, fileSize int, written []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "go/file.txt", Mode: 0o644, Typeflag: tar.TypeReg, Size: int64(fileSize)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(written); err != nil {
+		t.Fatal(err)
+	}
+	// Close only the gzip stream so the tar archive ends mid-file.
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestGoToolchainEnsureFileCopyError(t *testing.T) {
+	dir := t.TempDir()
+	key := runtime.GOOS + "-" + runtime.GOARCH
+	oldSHA := defaultGoSHA256[key]
+	defer func() { defaultGoSHA256[key] = oldSHA }()
+
+	tarball := buildTruncatedGoTarball(t, 10, []byte("12345"))
+	sum := sha256.Sum256(tarball)
+	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
+
+	gt := NewGoToolchain(dir)
+	gt.client = &http.Client{Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Request: req}, nil
+	}}}
+	_, err := gt.Ensure(context.Background())
+	if err == nil {
+		t.Fatal("expected copy error")
+	}
+}

@@ -3,6 +3,7 @@ package hostaccess
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -10,6 +11,27 @@ import (
 	"strconv"
 	"time"
 )
+
+// testHooks are package-level indirections that allow tests to inject errors
+// for OS and filesystem operations that are otherwise impossible to trigger
+// deterministically (e.g. chmod/chown failing on a directory the test process
+// owns). They are initialized to the real implementations and are only
+// reassigned by tests.
+var testHooks = struct {
+	prepareAccountDeps func() AccountDependencies
+	lstat              func(string) (os.FileInfo, error)
+	chmod              func(string, os.FileMode) error
+	chown              func(string, int, int) error
+	walkDir            func(string, fs.WalkDirFunc) error
+	copy               func(io.Writer, io.Reader) (int64, error)
+}{
+	prepareAccountDeps: DefaultAccountDependencies,
+	lstat:              os.Lstat,
+	chmod:              os.Chmod,
+	chown:              os.Chown,
+	walkDir:            filepath.WalkDir,
+	copy:               io.Copy,
+}
 
 type Identity struct {
 	UID int
@@ -40,7 +62,7 @@ func DefaultAccountDependencies() AccountDependencies {
 }
 
 func Prepare(paths Paths) error {
-	identity, err := EnsureAccount(DefaultAccountDependencies())
+	identity, err := EnsureAccount(testHooks.prepareAccountDeps())
 	if err != nil {
 		return err
 	}
@@ -168,7 +190,7 @@ func createSafetyCopies(paths Paths, now time.Time) (string, error) {
 	}
 	existing := make([]source, 0, len(sources))
 	for _, source := range sources {
-		info, err := os.Lstat(source.path)
+		info, err := testHooks.lstat(source.path)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -220,7 +242,7 @@ func copyRegularFile(source, destination string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(output, input); err != nil {
+	if _, err := testHooks.copy(output, input); err != nil {
 		output.Close()
 		return err
 	}
@@ -231,17 +253,17 @@ func ensureOwnedDirectory(path string, mode os.FileMode, uid, gid int) error {
 	if err := os.MkdirAll(path, mode); err != nil {
 		return err
 	}
-	if err := os.Chmod(path, mode); err != nil {
+	if err := testHooks.chmod(path, mode); err != nil {
 		return err
 	}
-	return os.Chown(path, uid, gid)
+	return testHooks.chown(path, uid, gid)
 }
 
 func applyTreeOwnership(root string, dirMode, fileMode os.FileMode, uid, gid int) error {
 	if err := ensureOwnedDirectory(root, dirMode, uid, gid); err != nil {
 		return err
 	}
-	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -258,15 +280,15 @@ func applyTreeOwnership(root string, dirMode, fileMode os.FileMode, uid, gid int
 		} else if !info.Mode().IsRegular() {
 			return fmt.Errorf("refuse to migrate non-regular path %s", path)
 		}
-		if err := os.Chmod(path, mode); err != nil {
+		if err := testHooks.chmod(path, mode); err != nil {
 			return err
 		}
-		return os.Chown(path, uid, gid)
+		return testHooks.chown(path, uid, gid)
 	})
 }
 
 func setOptionalFile(path string, mode os.FileMode, uid, gid int) error {
-	info, err := os.Lstat(path)
+	info, err := testHooks.lstat(path)
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -276,8 +298,8 @@ func setOptionalFile(path string, mode os.FileMode, uid, gid int) error {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return fmt.Errorf("refuse to migrate non-regular managed file %s", path)
 	}
-	if err := os.Chmod(path, mode); err != nil {
+	if err := testHooks.chmod(path, mode); err != nil {
 		return err
 	}
-	return os.Chown(path, uid, gid)
+	return testHooks.chown(path, uid, gid)
 }

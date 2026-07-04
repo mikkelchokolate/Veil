@@ -15,6 +15,18 @@ import (
 // draw from sizable word lists — the resulting links share no single shape and
 // none carry a veil/panel/tool marker.
 var (
+	// randInt and randRead are swappable for tests so CSPRNG error paths can be
+	// exercised without touching the real system entropy source.
+	randInt    = rand.Int
+	randRead   = rand.Read
+	cryptoIntn = func(n int) (int, error) {
+		r, err := randInt(rand.Reader, big.NewInt(int64(n)))
+		if err != nil {
+			return 0, err
+		}
+		return int(r.Int64()), nil
+	}
+
 	roomAdjectives = []string{
 		"Happy", "Brave", "Calm", "Clever", "Bright", "Gentle", "Bold", "Quiet",
 		"Swift", "Lucky", "Mighty", "Noble", "Proud", "Witty", "Eager", "Fancy",
@@ -150,7 +162,7 @@ func randomHexName() (string, error) {
 		return "", err
 	}
 	b := make([]byte, 4+extra)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
@@ -173,12 +185,4 @@ func randomAlphaNum() (string, error) {
 		b.WriteByte(alphabet[idx])
 	}
 	return b.String(), nil
-}
-
-func cryptoIntn(n int) (int, error) {
-	r, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
-	if err != nil {
-		return 0, err
-	}
-	return int(r.Int64()), nil
 }
