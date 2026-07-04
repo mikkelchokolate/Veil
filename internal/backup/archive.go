@@ -20,7 +20,26 @@ var magicHeader = []byte("VEILBACK")
 // backupRandRead is overridable in tests to inject failures during encryption.
 var backupRandRead = rand.Read
 
+// Test hooks for createTarball and encryptBackupTarball.
+var (
+	createTarballStat        = os.Stat
+	createTarballFileHeader  = tar.FileInfoHeader
+	createTarballWriteHeader = (*tar.Writer).WriteHeader
+	createTarballWrite       = (*tar.Writer).Write
+	createTarballClose       = (*tar.Writer).Close
+	createTarballGzipClose   = (*gzip.Writer).Close
+
+	encryptAESNewCipher = aes.NewCipher
+	encryptNewGCM       = cipher.NewGCM
+
+	// deriveKeyHook is overridable in tests to avoid expensive PBKDF2 iterations.
+	deriveKeyHook func(passphrase string, salt []byte, version byte) []byte
+)
+
 func deriveKey(passphrase string, salt []byte, version byte) []byte {
+	if deriveKeyHook != nil {
+		return deriveKeyHook(passphrase, salt, version)
+	}
 	iterations := 600000 // OWASP recommendation for PBKDF2-HMAC-SHA256
 	if version == 1 {
 		iterations = 10000 // Legacy version
@@ -38,20 +57,20 @@ func createTarball(statePath, keyPath string) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-		info, err := os.Stat(path)
+		info, err := createTarballStat(path)
 		if err != nil {
 			return err
 		}
-		hdr, err := tar.FileInfoHeader(info, "")
+		hdr, err := createTarballFileHeader(info, "")
 		if err != nil {
 			return err
 		}
 		hdr.Name = name
 		hdr.Size = int64(len(data))
-		if err := tw.WriteHeader(hdr); err != nil {
+		if err := createTarballWriteHeader(tw, hdr); err != nil {
 			return err
 		}
-		if _, err := tw.Write(data); err != nil {
+		if _, err := createTarballWrite(tw, data); err != nil {
 			return err
 		}
 		return nil
@@ -64,10 +83,10 @@ func createTarball(statePath, keyPath string) ([]byte, error) {
 		return nil, fmt.Errorf("archive key: %w", err)
 	}
 
-	if err := tw.Close(); err != nil {
+	if err := createTarballClose(tw); err != nil {
 		return nil, err
 	}
-	if err := gw.Close(); err != nil {
+	if err := createTarballGzipClose(gw); err != nil {
 		return nil, err
 	}
 
@@ -96,11 +115,11 @@ func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
 	}
 
 	key := deriveKey(passphrase, salt, 2)
-	block, err := aes.NewCipher(key)
+	block, err := encryptAESNewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	aead, err := cipher.NewGCM(block)
+	aead, err := encryptNewGCM(block)
 	if err != nil {
 		return nil, err
 	}

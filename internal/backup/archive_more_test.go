@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/cipher"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -308,4 +309,135 @@ func TestRawStateSchemaVersionInvalidJSON(t *testing.T) {
 	if got := rawStateSchemaVersion([]byte(`{"schemaVersion":-5}`)); got != 1 {
 		t.Fatalf("expected 1 for non-positive schema, got %d", got)
 	}
+}
+
+func TestCreateTarballWriterErrors(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+	if err := os.WriteFile(statePath, []byte(`{"schemaVersion":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, bytes.Repeat([]byte{0x42}, 32), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		inject  func() (cleanup func())
+		wantErr string
+	}{
+		{
+			name: "stat error",
+			inject: func() (cleanup func()) {
+				orig := createTarballStat
+				createTarballStat = func(string) (os.FileInfo, error) {
+					return nil, errors.New("injected stat error")
+				}
+				return func() { createTarballStat = orig }
+			},
+			wantErr: "injected stat error",
+		},
+		{
+			name: "file header error",
+			inject: func() (cleanup func()) {
+				orig := createTarballFileHeader
+				createTarballFileHeader = func(os.FileInfo, string) (*tar.Header, error) {
+					return nil, errors.New("injected header error")
+				}
+				return func() { createTarballFileHeader = orig }
+			},
+			wantErr: "injected header error",
+		},
+		{
+			name: "write header error",
+			inject: func() (cleanup func()) {
+				orig := createTarballWriteHeader
+				createTarballWriteHeader = func(*tar.Writer, *tar.Header) error {
+					return errors.New("injected write header error")
+				}
+				return func() { createTarballWriteHeader = orig }
+			},
+			wantErr: "injected write header error",
+		},
+		{
+			name: "write error",
+			inject: func() (cleanup func()) {
+				orig := createTarballWrite
+				createTarballWrite = func(*tar.Writer, []byte) (int, error) {
+					return 0, errors.New("injected write error")
+				}
+				return func() { createTarballWrite = orig }
+			},
+			wantErr: "injected write error",
+		},
+		{
+			name: "tar close error",
+			inject: func() (cleanup func()) {
+				orig := createTarballClose
+				createTarballClose = func(*tar.Writer) error {
+					return errors.New("injected tar close error")
+				}
+				return func() { createTarballClose = orig }
+			},
+			wantErr: "injected tar close error",
+		},
+		{
+			name: "gzip close error",
+			inject: func() (cleanup func()) {
+				orig := createTarballGzipClose
+				createTarballGzipClose = func(*gzip.Writer) error {
+					return errors.New("injected gzip close error")
+				}
+				return func() { createTarballGzipClose = orig }
+			},
+			wantErr: "injected gzip close error",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := tt.inject()
+			defer cleanup()
+			_, err := createTarball(statePath, keyPath)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestEncryptBackupTarballCipherErrors(t *testing.T) {
+	fastKey := func(string, []byte, byte) []byte { return bytes.Repeat([]byte{0xab}, 32) }
+
+	t.Run("aes new cipher error", func(t *testing.T) {
+		origDerive := deriveKeyHook
+		orig := encryptAESNewCipher
+		defer func() {
+			deriveKeyHook = origDerive
+			encryptAESNewCipher = orig
+		}()
+		deriveKeyHook = fastKey
+		encryptAESNewCipher = func([]byte) (cipher.Block, error) {
+			return nil, errors.New("injected aes error")
+		}
+		if _, err := encryptBackupTarball([]byte("tarball"), "passphrase"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("gcm error", func(t *testing.T) {
+		origDerive := deriveKeyHook
+		orig := encryptNewGCM
+		defer func() {
+			deriveKeyHook = origDerive
+			encryptNewGCM = orig
+		}()
+		deriveKeyHook = fastKey
+		encryptNewGCM = func(cipher.Block) (cipher.AEAD, error) {
+			return nil, errors.New("injected gcm error")
+		}
+		if _, err := encryptBackupTarball([]byte("tarball"), "passphrase"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }

@@ -27,6 +27,10 @@ type ApplyResult struct {
 	BackupID          string
 }
 
+// newUFWApplier is overridable in tests so that firewall success and error
+// paths can be exercised without depending on a real ufw installation.
+var newUFWApplier = firewall.NewUFWApplier
+
 type InstallApply struct {
 	profile         RURecommendedProfile
 	paths           ApplyPaths
@@ -71,7 +75,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 	}
 
 	if len(a.firewallActions) > 0 {
-		applier := firewall.NewUFWApplier()
+		applier := newUFWApplier()
 		if err := applier.EnsureActive(); err != nil {
 			return result, fmt.Errorf("enable firewall: %w", err)
 		}

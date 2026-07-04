@@ -6,6 +6,9 @@ import (
 	"os"
 )
 
+// manifestMarshal is overridable in tests to inject marshal failures.
+var manifestMarshal = json.Marshal
+
 type ManifestStore struct {
 	Path string
 }
@@ -21,7 +24,7 @@ func NewBackupManifestStore(path string) BackupManifestStore {
 }
 
 func (s ManifestStore) Save(manifest Manifest) error {
-	manifestData, err := json.Marshal(manifest)
+	manifestData, err := manifestMarshal(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}

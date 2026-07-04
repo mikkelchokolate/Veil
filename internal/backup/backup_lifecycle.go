@@ -1,11 +1,20 @@
 package backup
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
+)
+
+// Test hooks for lifecycle operations that are hard to trigger via the filesystem.
+var (
+	lifecycleMkdirAll     = os.MkdirAll
+	lifecycleManifestSave = func(path string, manifest Manifest) error {
+		return NewBackupManifestStore(path).Save(manifest)
+	}
 )
 
 type Lifecycle struct {
@@ -29,7 +38,7 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 	}
 
 	backupPath := filepath.Join(l.Dir, backupID)
-	if err := os.MkdirAll(backupPath, 0o700); err != nil {
+	if err := lifecycleMkdirAll(backupPath, 0o700); err != nil {
 		return "", fmt.Errorf("create backup directory: %w", err)
 	}
 
@@ -62,7 +71,7 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 	}
 
 	manifestPath := filepath.Join(backupPath, "manifest.json")
-	if err := NewBackupManifestStore(manifestPath).Save(manifest); err != nil {
+	if err := lifecycleManifestSave(manifestPath, manifest); err != nil {
 		return "", err
 	}
 
@@ -85,7 +94,7 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 	manifestPath := filepath.Join(backupPath, "manifest.json")
 	manifest, err := NewBackupManifestStore(manifestPath).Load()
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("manifest not found in backup %s", backupID)
 		}
 		return nil, err

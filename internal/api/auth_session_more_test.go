@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -207,5 +209,249 @@ func TestClientIPRespectsXForwardedFor(t *testing.T) {
 	req.Header.Set("X-Forwarded-For", " 10.0.0.1 , 10.0.0.2")
 	if got := clientIP(req); got != "10.0.0.1" {
 		t.Fatalf("clientIP=%q", got)
+	}
+}
+
+func TestHandleAuthStatusMethodsAndCSRFPaths(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	session, _ := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	state := &managementState{sessions: registry}
+
+	post := httptest.NewRequest(http.MethodPost, "/api/auth/status", nil)
+	rec := httptest.NewRecorder()
+	state.handleAuthStatus(rec, post)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST status=%d", rec.Code)
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	get.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec = httptest.NewRecorder()
+	state.handleAuthStatus(rec, get)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"authenticated":true`) {
+		t.Fatalf("GET status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Force CSRF regeneration to fail by emptying the raw CSRF store and making random generation fail.
+	tokenHash := hashSessionSecret(session.Token)
+	registry.mu.Lock()
+	registry.rawCSRF[tokenHash] = ""
+	registry.mu.Unlock()
+	old := randomReader
+	randomReader = func(b []byte) (int, error) { return 0, errors.New("random failure") }
+	t.Cleanup(func() { randomReader = old })
+	get = httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	get.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec = httptest.NewRecorder()
+	state.handleAuthStatus(rec, get)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("csrf error status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleAuthLocaleValidation(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	session, _ := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	state := newManagementState(ServerInfo{Mode: "dev", SetupAllowed: true})
+	state.sessions = registry
+	state.users = []User{{Username: "alice", Role: "admin", Locale: "en"}}
+
+	cases := []struct {
+		name       string
+		method     string
+		body       string
+		cookie     bool
+		ctxUser    string
+		wantStatus int
+		setup      func()
+	}{
+		{"method not allowed", http.MethodGet, `{"locale":"ru"}`, true, "", http.StatusMethodNotAllowed, nil},
+		{"no cookie", http.MethodPost, `{"locale":"ru"}`, false, "", http.StatusUnauthorized, nil},
+		{"session mismatch", http.MethodPost, `{"locale":"ru"}`, true, "bob", http.StatusForbidden, nil},
+		{"invalid locale", http.MethodPost, `{"locale":"de"}`, true, "", http.StatusBadRequest, nil},
+		{"user not found", http.MethodPost, `{"locale":"ru"}`, true, "", http.StatusNotFound, func() { state.users = []User{} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != nil {
+				tc.setup()
+				defer func() { state.users = []User{{Username: "alice", Role: "admin", Locale: "en"}} }()
+			}
+			req := httptest.NewRequest(tc.method, "/api/auth/locale", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.cookie {
+				req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+			}
+			if tc.ctxUser != "" {
+				req = req.WithContext(context.WithValue(req.Context(), contextKeyUsername, tc.ctxUser))
+			}
+			rec := httptest.NewRecorder()
+			state.handleAuthLocale(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandleAuthLocalePersistsLocale(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	session, _ := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	state := newManagementState(ServerInfo{Mode: "dev", StatePath: filepath.Join(t.TempDir(), "state.json")})
+	state.sessions = registry
+	state.users = []User{{Username: "alice", Role: "admin", Locale: "en"}}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/locale", strings.NewReader(`{"locale":"ru"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec := httptest.NewRecorder()
+	state.handleAuthLocale(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"locale":"ru"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleLoginValidation(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
+	registry, _ := NewSessionRegistry("")
+	state := &managementState{
+		sessions: registry,
+		users:    []User{{Username: "alice", PasswordHash: string(hash), Role: "admin"}},
+		settings: Settings{NaivePassword: "naive-password", PanelAccess: "local"},
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
+	rec := httptest.NewRecorder()
+	state.handleLogin(rec, get)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status=%d", rec.Code)
+	}
+
+	badJSON := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{`))
+	badJSON.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	state.handleLogin(rec, badJSON)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad JSON status=%d", rec.Code)
+	}
+
+	badCreds := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice","password":"wrong"}`))
+	badCreds.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	state.handleLogin(rec, badCreds)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad creds status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	old := randomReader
+	randomReader = func(b []byte) (int, error) { return 0, errors.New("random failure") }
+	t.Cleanup(func() { randomReader = old })
+	valid := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice","password":"secret-password"}`))
+	valid.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	state.handleLogin(rec, valid)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("session failure status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleLoginFallbackAdmin(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	state := &managementState{
+		sessions: registry,
+		users:    []User{},
+		settings: Settings{NaivePassword: "naive-password", PanelAccess: "local"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"naive-password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	state.handleLogin(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"role":"admin"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleLogout(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	session, _ := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	state := &managementState{sessions: registry, settings: Settings{PanelAccess: "local"}}
+
+	get := httptest.NewRequest(http.MethodGet, "/api/auth/logout", nil)
+	rec := httptest.NewRecorder()
+	state.handleLogout(rec, get)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status=%d", rec.Code)
+	}
+
+	post := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	post.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec = httptest.NewRecorder()
+	state.handleLogout(rec, post)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := registry.Get(session.Token); ok {
+		t.Fatal("session was not revoked")
+	}
+}
+
+func TestHandleAuthSessionsMethodNotAllowed(t *testing.T) {
+	state := &managementState{sessions: mustNewSessionRegistry("")}
+	put := httptest.NewRequest(http.MethodPut, "/api/auth/sessions", nil)
+	put = put.WithContext(context.WithValue(put.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+	state.handleAuthSessions(rec, put)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d", rec.Code)
+	}
+}
+
+func TestHandleUsersRouteMethodNotAllowed(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	state := &managementState{sessions: registry, users: []User{}}
+	put := httptest.NewRequest(http.MethodPut, "/api/users", nil)
+	put = put.WithContext(context.WithValue(put.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+	state.handleUsersRoute(rec, put)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d", rec.Code)
+	}
+}
+
+func TestHandleUserByNameRouteValidation(t *testing.T) {
+	registry, _ := NewSessionRegistry("")
+	hash, _ := bcrypt.GenerateFromPassword([]byte("old-password"), bcrypt.MinCost)
+	state := &managementState{
+		sessions: registry,
+		users: []User{
+			{Username: "alice", PasswordHash: string(hash), Role: "admin"},
+		},
+	}
+
+	invalidPath := httptest.NewRequest(http.MethodPut, "/api/users", nil)
+	invalidPath = invalidPath.WithContext(context.WithValue(invalidPath.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+	state.handleUserByNameRoute(rec, invalidPath)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("invalid path status=%d", rec.Code)
+	}
+
+	badRole := httptest.NewRequest(http.MethodPut, "/api/users/alice", strings.NewReader(`{"role":"superuser"}`))
+	badRole.Header.Set("Content-Type", "application/json")
+	badRole = badRole.WithContext(context.WithValue(badRole.Context(), contextKeyRole, "admin"))
+	rec = httptest.NewRecorder()
+	state.handleUserByNameRoute(rec, badRole)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad role status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	badLocale := httptest.NewRequest(http.MethodPut, "/api/users/alice", strings.NewReader(`{"role":"admin","locale":"de"}`))
+	badLocale.Header.Set("Content-Type", "application/json")
+	badLocale = badLocale.WithContext(context.WithValue(badLocale.Context(), contextKeyRole, "admin"))
+	rec = httptest.NewRecorder()
+	state.handleUserByNameRoute(rec, badLocale)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad locale status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
