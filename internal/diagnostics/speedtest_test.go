@@ -1,6 +1,14 @@
 package diagnostics
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+var errSpeedtestTest = errors.New("speedtest test error")
 
 func TestParseSpeedtestCLIJSONConvertsBitsPerSecondToMbps(t *testing.T) {
 	result, err := parseSpeedtestCLIJSON([]byte(`{
@@ -75,6 +83,13 @@ func TestParseSpeedtestCLIJSONTrimsWhitespace(t *testing.T) {
 	}
 }
 
+func TestParseSpeedtestCLIJSONReturnsErrorOnInvalidJSON(t *testing.T) {
+	_, err := parseSpeedtestCLIJSON([]byte(`{not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestParseOoklaSpeedtestJSONServerLabelFallback(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -146,5 +161,134 @@ func TestParseOoklaSpeedtestJSONConvertsBytesPerSecondToMbps(t *testing.T) {
 	}
 	if result.Server != "Test ISP - Moscow" {
 		t.Fatalf("unexpected server: %q", result.Server)
+	}
+}
+
+func TestParseOoklaSpeedtestJSONReturnsErrorOnInvalidJSON(t *testing.T) {
+	_, err := parseOoklaSpeedtestJSON([]byte(`{not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestRunSpeedtestUsesFirstSuccessfulBackend(t *testing.T) {
+	want := SpeedtestResult{Server: "CLI - Node", PingMS: 1, DownloadMbps: 10, UploadMbps: 5}
+	oldCLI := runSpeedtestCLI
+	oldOokla := runOoklaSpeedtest
+	runSpeedtestCLI = func(ctx context.Context) (SpeedtestResult, error) { return want, nil }
+	runOoklaSpeedtest = func(ctx context.Context) (SpeedtestResult, error) { return SpeedtestResult{}, errSpeedtestTest }
+	t.Cleanup(func() {
+		runSpeedtestCLI = oldCLI
+		runOoklaSpeedtest = oldOokla
+	})
+
+	req, err := http.NewRequest("GET", "/speedtest", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	got, err := RunSpeedtest(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("result = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunSpeedtestFallsBackToOoklaBackend(t *testing.T) {
+	want := SpeedtestResult{Server: "Ookla - Node", PingMS: 2, DownloadMbps: 20, UploadMbps: 10}
+	oldCLI := runSpeedtestCLI
+	oldOokla := runOoklaSpeedtest
+	runSpeedtestCLI = func(ctx context.Context) (SpeedtestResult, error) { return SpeedtestResult{}, errSpeedtestTest }
+	runOoklaSpeedtest = func(ctx context.Context) (SpeedtestResult, error) { return want, nil }
+	t.Cleanup(func() {
+		runSpeedtestCLI = oldCLI
+		runOoklaSpeedtest = oldOokla
+	})
+
+	req, err := http.NewRequest("GET", "/speedtest", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	got, err := RunSpeedtest(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("result = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunSpeedtestReturnsUnavailableWhenBothBackendsFail(t *testing.T) {
+	oldCLI := runSpeedtestCLI
+	oldOokla := runOoklaSpeedtest
+	runSpeedtestCLI = func(ctx context.Context) (SpeedtestResult, error) { return SpeedtestResult{}, errSpeedtestTest }
+	runOoklaSpeedtest = func(ctx context.Context) (SpeedtestResult, error) { return SpeedtestResult{}, errSpeedtestTest }
+	t.Cleanup(func() {
+		runSpeedtestCLI = oldCLI
+		runOoklaSpeedtest = oldOokla
+	})
+
+	req, err := http.NewRequest("GET", "/speedtest", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	_, err = RunSpeedtest(req)
+	if !errors.Is(err, ErrSpeedtestUnavailable) {
+		t.Fatalf("error = %v, want %v", err, ErrSpeedtestUnavailable)
+	}
+}
+
+func TestRunSpeedtestCLIReturnsParsedResult(t *testing.T) {
+	mockExecCommandContext(t, "speedtest_cli_success")
+
+	got, err := runSpeedtestCLI(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.PingMS != 11.2 || got.DownloadMbps != 104 || got.UploadMbps != 52 {
+		t.Fatalf("result = %+v", got)
+	}
+	if got.Server != "Test ISP - Moscow" {
+		t.Fatalf("server = %q, want Test ISP - Moscow", got.Server)
+	}
+}
+
+func TestRunSpeedtestCLIReturnsErrorOnFailure(t *testing.T) {
+	mockExecCommandContext(t, "speedtest_cli_failure")
+
+	_, err := runSpeedtestCLI(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "speedtest-cli:") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRunOoklaSpeedtestReturnsParsedResult(t *testing.T) {
+	mockExecCommandContext(t, "ookla_success")
+
+	got, err := runOoklaSpeedtest(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.PingMS != 9.5 || got.DownloadMbps != 100 || got.UploadMbps != 50 {
+		t.Fatalf("result = %+v", got)
+	}
+	if got.Server != "Test ISP - Moscow" {
+		t.Fatalf("server = %q, want Test ISP - Moscow", got.Server)
+	}
+}
+
+func TestRunOoklaSpeedtestReturnsErrorOnFailure(t *testing.T) {
+	mockExecCommandContext(t, "ookla_failure")
+
+	_, err := runOoklaSpeedtest(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "speedtest:") {
+		t.Fatalf("error = %v", err)
 	}
 }

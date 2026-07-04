@@ -2,10 +2,13 @@ package managementstate
 
 import (
 	"crypto/rand"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -173,3 +176,164 @@ func TestStoreSavePreservesOwnershipAndPermissions(t *testing.T) {
 		t.Fatalf("Load = %+v ok=%v err=%v", loaded, ok, err)
 	}
 }
+
+func TestNewStateStoreAlias(t *testing.T) {
+	store := NewStateStore("/tmp/state.json", nil)
+	if store.path != "/tmp/state.json" {
+		t.Fatalf("path = %q", store.path)
+	}
+}
+
+func TestStoreLoadWithEmptyPath(t *testing.T) {
+	store := NewStore("", nil)
+	snapshot, ok, err := store.Load()
+	if err != nil || ok || snapshot.SchemaVersion != 0 {
+		t.Fatalf("Load = %+v ok=%v err=%v", snapshot, ok, err)
+	}
+}
+
+func TestStoreLoadWhenFileMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "state.json")
+	store := NewStore(path, nil)
+	snapshot, ok, err := store.Load()
+	if err != nil || ok {
+		t.Fatalf("Load = %+v ok=%v err=%v", snapshot, ok, err)
+	}
+}
+
+func TestStoreLoadReturnsReadError(t *testing.T) {
+	path := t.TempDir() // directory, cannot be read as file
+	store := NewStore(path, nil)
+	_, _, err := store.Load()
+	if err == nil {
+		t.Fatal("expected read error")
+	}
+}
+
+func TestStoreSaveWithEmptyPath(t *testing.T) {
+	store := NewStore("", nil)
+	if err := store.Save(model.ManagementSnapshot{Settings: model.Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+}
+
+func TestStoreMarshalRoundTrip(t *testing.T) {
+	store := NewStore("", nil)
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}}
+	body, err := store.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	loaded, err := NewManagementStateCodec().Decode(body)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if loaded.Settings.PanelListen != snapshot.Settings.PanelListen {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+}
+
+func TestStoreMarshalEncryptsWithCipher(t *testing.T) {
+	var key [secrets.KeySize]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+	store := NewStore("", cipher)
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{NaivePassword: "secret"}}
+	body, err := store.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(body) == "" || !strings.Contains(string(body), secrets.Prefix) {
+		t.Fatal("expected encrypted output")
+	}
+}
+
+func TestEncryptDecryptSnapshotHelpers(t *testing.T) {
+	var key [secrets.KeySize]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{NaivePassword: "secret"}}
+	if err := EncryptSnapshot(&snapshot, cipher); err != nil {
+		t.Fatalf("EncryptSnapshot: %v", err)
+	}
+	if !secrets.IsEncrypted(snapshot.Settings.NaivePassword) {
+		t.Fatal("expected encrypted password")
+	}
+	if err := DecryptSnapshot(&snapshot, cipher); err != nil {
+		t.Fatalf("DecryptSnapshot: %v", err)
+	}
+	if snapshot.Settings.NaivePassword != "secret" {
+		t.Fatalf("password = %q", snapshot.Settings.NaivePassword)
+	}
+}
+
+func TestDecryptSnapshotLeavesPlaintextValues(t *testing.T) {
+	var key [secrets.KeySize]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{NaivePassword: "plain-secret"}}
+	if err := DecryptSnapshot(&snapshot, cipher); err != nil {
+		t.Fatalf("DecryptSnapshot: %v", err)
+	}
+	if snapshot.Settings.NaivePassword != "plain-secret" {
+		t.Fatalf("plaintext password changed: %q", snapshot.Settings.NaivePassword)
+	}
+}
+
+func TestStoreSaveReturnsRenameError(t *testing.T) {
+	// If the destination path is an existing directory, os.Rename must fail.
+	dir := filepath.Join(t.TempDir(), "state.json")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	store := NewStore(dir, nil)
+	if err := store.Save(model.ManagementSnapshot{}); err == nil {
+		t.Fatal("expected Rename error")
+	}
+}
+
+func TestStoreSaveReturnsMkdirAllError(t *testing.T) {
+	// Create a file and use it as the parent directory of the state path.
+	parent := filepath.Join(t.TempDir(), "parent")
+	if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write parent file: %v", err)
+	}
+	store := NewStore(filepath.Join(parent, "state.json"), nil)
+	if err := store.Save(model.ManagementSnapshot{}); err == nil {
+		t.Fatal("expected MkdirAll error")
+	}
+}
+
+func TestFileOwnerUIDGIDWithNonStat(t *testing.T) {
+	fi := fakeFileInfo{sys: "not-a-stat"}
+	if fileOwnerUID(fi) != -1 || fileOwnerGID(fi) != -1 {
+		t.Fatalf("expected -1 for non-stat sys value")
+	}
+}
+
+type fakeFileInfo struct {
+	sys any
+}
+
+func (f fakeFileInfo) Name() string       { return "fake" }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() fs.FileMode  { return 0o600 }
+func (f fakeFileInfo) ModTime() time.Time { return time.Now() }
+func (f fakeFileInfo) IsDir() bool        { return false }
+func (f fakeFileInfo) Sys() any           { return f.sys }

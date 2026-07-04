@@ -76,19 +76,18 @@ func (defaultSystem) Chmod(name string, perm os.FileMode) error {
 	return os.Chmod(name, perm)
 }
 
-func (defaultSystem) Chown(name string, uid, gid int) error {
-	return os.Chown(name, uid, gid)
-}
-
 func (defaultSystem) Stat(name string) (os.FileInfo, error) {
 	return os.Stat(name)
 }
+
+// userHomeDirFunc allows tests to mock the os.UserHomeDir fallback.
+var userHomeDirFunc = os.UserHomeDir
 
 func (defaultSystem) HomeDir() (string, error) {
 	if home := os.Getenv("HOME"); home != "" {
 		return home, nil
 	}
-	return os.UserHomeDir()
+	return userHomeDirFunc()
 }
 
 func (defaultSystem) IsPortFree(port int) bool {
@@ -277,6 +276,17 @@ func ensureCertDirs(sys System, certPath, keyPath string) error {
 	return nil
 }
 
+// getuidFunc allows tests to mock the current UID without changing the real
+// process owner.
+var getuidFunc = os.Getuid
+
+// chownFunc allows tests to mock file ownership changes.
+var chownFunc = os.Chown
+
+func (defaultSystem) Chown(name string, uid, gid int) error {
+	return chownFunc(name, uid, gid)
+}
+
 func fixCertOwnership(sys System, certPath, keyPath string) error {
 	if err := sys.Chmod(certPath, 0o644); err != nil {
 		return err
@@ -286,7 +296,7 @@ func fixCertOwnership(sys System, certPath, keyPath string) error {
 	}
 	// The panel service runs as the veil user. If we are root and the veil
 	// group exists, make the key readable by that group.
-	if uid := os.Getuid(); uid == 0 {
+	if uid := getuidFunc(); uid == 0 {
 		if gid := lookupGroupID("veil"); gid >= 0 {
 			_ = sys.Chown(certPath, 0, gid)
 			_ = sys.Chown(keyPath, 0, gid)

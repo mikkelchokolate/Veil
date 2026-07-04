@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,6 +48,33 @@ func TestReadTLSCertParsesValidCertificate(t *testing.T) {
 	}
 	if len(info.DNSNames) != 1 || info.DNSNames[0] != "test.example.com" {
 		t.Fatalf("dns names = %+v", info.DNSNames)
+	}
+}
+
+func TestReadTLSCertReportsInvalidPEM(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(certPath, []byte("not a pem block"), 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+
+	info := ReadTLSCert(certPath)
+	if info.Valid || info.Error != "failed to decode PEM block" {
+		t.Fatalf("expected PEM decode error, got %+v", info)
+	}
+}
+
+func TestReadTLSCertReportsInvalidCertificateBytes(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	block := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("invalid der")})
+	if err := os.WriteFile(certPath, block, 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+
+	info := ReadTLSCert(certPath)
+	if info.Valid || !strings.Contains(info.Error, "parse certificate") {
+		t.Fatalf("expected parse certificate error, got %+v", info)
 	}
 }
 

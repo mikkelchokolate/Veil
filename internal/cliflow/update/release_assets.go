@@ -55,10 +55,12 @@ func (a ReleaseAssets) DownloadVerifiedArchive() (Archive, error) {
 	return Archive{Name: a.assetName, Body: archive, Checksums: checksumsBody}, nil
 }
 
+var assetNameGOARCH = func() string { return runtime.GOARCH }
+
 // AssetName returns the expected release asset name for the current platform.
 func AssetName() string {
 	os := runtime.GOOS
-	arch := runtime.GOARCH
+	arch := assetNameGOARCH()
 	switch arch {
 	case "amd64", "x86_64":
 		arch = "amd64"

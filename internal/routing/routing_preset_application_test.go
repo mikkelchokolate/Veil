@@ -14,3 +14,8 @@ func TestRoutingPresetApplicationCopiesPresetState(t *testing.T) {
 		t.Fatalf("rules not copied: %+v", state.Rules)
 	}
 }
+
+func TestRoutingPresetApplicationNilStateIsNoop(t *testing.T) {
+	app := NewRoutingPresetApplication(nil)
+	app.Apply(RoutingPreset{Name: "ru", Rules: []RoutingRule{{Name: "rule"}}})
+}

@@ -164,6 +164,25 @@ func TestDecodeV3MigratesProtocolFields(t *testing.T) {
 	}
 }
 
+func TestDecodeV2WithoutAdminMarksSetupIncomplete(t *testing.T) {
+	inputJSON := `{
+		"schemaVersion": 2,
+		"settings": {"panelListen": "127.0.0.1:2096", "mode": "server"},
+		"inbounds": [],
+		"routingRules": [],
+		"warp": {},
+		"users": [{"username": "viewer", "passwordHash": "hash", "role": "viewer"}]
+	}`
+
+	snapshot, err := NewManagementStateCodec().Decode([]byte(inputJSON))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if snapshot.SchemaVersion != CurrentSchemaVersion || snapshot.Setup.Completed {
+		t.Fatalf("expected incomplete setup, got %+v", snapshot)
+	}
+}
+
 func TestEncodeSavesLatestSchemaVersion(t *testing.T) {
 	codec := NewManagementStateCodec()
 	snapshot := model.ManagementSnapshot{

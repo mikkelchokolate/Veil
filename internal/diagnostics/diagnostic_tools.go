@@ -12,6 +12,13 @@ var dnsLookuper = RunDNSLookup
 
 var pingRunner = RunPing
 
+// execCommandContext is swapped in tests so external commands can be mocked.
+var execCommandContext = exec.CommandContext
+
+// lookupHostFunc and lookupCNAMEFunc are swapped in tests to mock DNS resolution.
+var lookupHostFunc = net.LookupHost
+var lookupCNAMEFunc = net.LookupCNAME
+
 type PingResult struct {
 	Host        string  `json:"host"`
 	Transmitted int     `json:"transmitted"`
@@ -44,11 +51,13 @@ func RunPing(host string, count int) PingResult {
 	policy := NewPingCommandPolicy()
 	ctx, cancel := context.WithTimeout(context.Background(), policy.Timeout(count))
 	defer cancel()
-	output, err := exec.CommandContext(ctx, "ping", policy.Args(host, count)...).CombinedOutput()
+	output, err := execCommandContext(ctx, "ping", policy.Args(host, count)...).CombinedOutput()
 	if err != nil {
-		result.Error = "ping failed: " + strings.TrimSpace(string(output))
-		if result.Error == "ping failed:" {
+		msg := strings.TrimSpace(string(output))
+		if msg == "" {
 			result.Error = "ping failed: " + err.Error()
+		} else {
+			result.Error = "ping failed: " + msg
 		}
 		result.LossPct = 100
 		return result
@@ -61,11 +70,11 @@ func RunPing(host string, count int) PingResult {
 }
 
 func RunDNSLookup(host string) ([]string, string, error) {
-	addrs, err := net.LookupHost(host)
+	addrs, err := lookupHostFunc(host)
 	if err != nil {
 		return nil, "", err
 	}
-	cname, _ := net.LookupCNAME(host)
+	cname, _ := lookupCNAMEFunc(host)
 	// Only return cname if it differs from the host (i.e. there is a CNAME record)
 	if strings.TrimSuffix(cname, ".") == strings.TrimSuffix(host, ".") {
 		cname = ""

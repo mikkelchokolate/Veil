@@ -141,7 +141,7 @@ func (Environment) StatePath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH")); path != "" {
 		return path, "VEIL_STATE_PATH"
 	}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		pd := os.Getenv("ProgramData")
 		if pd == "" {
 			pd = `C:\ProgramData`
@@ -158,7 +158,7 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_APPLY_ROOT")); path != "" {
 		return path, "VEIL_APPLY_ROOT"
 	}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		pd := os.Getenv("ProgramData")
 		if pd == "" {
 			pd = `C:\ProgramData`
@@ -175,7 +175,7 @@ func (Environment) LiveRoot(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_LIVE_ROOT")); path != "" {
 		return path, "VEIL_LIVE_ROOT"
 	}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		pd := os.Getenv("ProgramData")
 		if pd == "" {
 			pd = `C:\ProgramData`
@@ -192,7 +192,7 @@ func (Environment) KeyPath(flagValue string) (path string, source string) {
 	if path := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH")); path != "" {
 		return path, "VEIL_KEY_PATH"
 	}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		pd := os.Getenv("ProgramData")
 		if pd == "" {
 			pd = `C:\ProgramData`
@@ -283,7 +283,7 @@ func (e Environment) AutoTLS(autoTLS bool, autoTLSDir string, statePath string, 
 		autoTLSDir = strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS_DIR"))
 	}
 	if autoTLSDir == "" {
-		if runtime.GOOS == "windows" {
+		if goos == "windows" {
 			pd := os.Getenv("ProgramData")
 			if pd == "" {
 				pd = `C:\ProgramData`
@@ -317,6 +317,10 @@ func (Environment) SettingsFromState(statePath, keyPath string) (domain, email s
 	}
 	return snapshot.Settings.Domain, snapshot.Settings.Email, nil
 }
+
+// goos is overridable in tests to exercise Windows-specific path defaults
+// without requiring a Windows build.
+var goos = runtime.GOOS
 
 func validatePort(port string) error {
 	portNum, err := strconv.Atoi(port)

@@ -154,25 +154,19 @@ func findBestGo(minVersion string) (string, error) {
 // newer version while still running older code.
 func goLocalEnv() []string {
 	var out []string
-	hasToolchain := false
 	for _, e := range os.Environ() {
 		if strings.HasPrefix(e, "GOROOT=") || strings.HasPrefix(e, "GOPATH=") ||
 			strings.HasPrefix(e, "GOMODCACHE=") || strings.HasPrefix(e, "GOBIN=") ||
 			strings.HasPrefix(e, "GOCACHE=") || strings.HasPrefix(e, "GOENV=") ||
 			strings.HasPrefix(e, "GOFLAGS=") || strings.HasPrefix(e, "GONOSUMDB=") ||
 			strings.HasPrefix(e, "GOSUMDB=") || strings.HasPrefix(e, "GOPRIVATE=") ||
-			strings.HasPrefix(e, "GONOSUMCHECK=") || strings.HasPrefix(e, "GOPROXY=") {
-			continue
-		}
-		if strings.HasPrefix(e, "GOTOOLCHAIN=") {
-			hasToolchain = true
+			strings.HasPrefix(e, "GONOSUMCHECK=") || strings.HasPrefix(e, "GOPROXY=") ||
+			strings.HasPrefix(e, "GOTOOLCHAIN=") {
 			continue
 		}
 		out = append(out, e)
 	}
-	if !hasToolchain {
-		out = append(out, "GOTOOLCHAIN=local")
-	}
+	out = append(out, "GOTOOLCHAIN=local")
 	return out
 }
 

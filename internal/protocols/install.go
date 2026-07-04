@@ -10,13 +10,17 @@ import (
 // plugins plus the WARP (sing-box) runtime. It is the plugin-aware replacement
 // for runtimeinstall.InstallAll.
 func InstallAllRuntimes(ctx context.Context, opts runtimeinstall.Options) []runtimeinstall.Result {
+	return installAllRuntimesFor(ctx, opts, NewRegistry())
+}
+
+func installAllRuntimesFor(ctx context.Context, opts runtimeinstall.Options, r *Registry) []runtimeinstall.Result {
 	arch := opts.Arch
 	if arch == "" {
 		arch = "amd64"
 	}
 
 	var runtimes []runtimeinstall.Runtime
-	for _, p := range NewRegistry().All() {
+	for _, p := range r.All() {
 		rp, ok := AsRuntimeProvider(p)
 		if !ok {
 			continue

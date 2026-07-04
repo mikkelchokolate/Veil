@@ -14,6 +14,10 @@ const GitHubReleasesAPI = "https://api.github.com/repos/mikkelchokolate/Veil/rel
 
 var HTTPClient = &http.Client{Timeout: 10 * time.Second}
 
+// releasesAPIURL is overridden by tests so FetchLatestReleaseTag can be
+// exercised against a local httptest server instead of the real GitHub API.
+var releasesAPIURL = GitHubReleasesAPI
+
 type LatestFunc func() (string, error)
 
 type Check struct {
@@ -54,7 +58,7 @@ func (v Check) Run() error {
 func FetchLatestReleaseTag() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubReleasesAPI, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesAPIURL, nil)
 	if err != nil {
 		return "", err
 	}

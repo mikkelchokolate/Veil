@@ -49,3 +49,46 @@ func TestDiskEndpointFieldsPresent(t *testing.T) {
 		t.Errorf("expected non-negative size, got %d", first.SizeBytes)
 	}
 }
+
+func TestFormatBytesFormatsSizes(t *testing.T) {
+	cases := []struct {
+		bytes int64
+		want  string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{1024 * 1024, "1.0 MB"},
+		{1024 * 1024 * 1024, "1.0 GB"},
+		{1536, "1.5 KB"},
+	}
+	for _, tc := range cases {
+		got := formatBytes(tc.bytes)
+		if got != tc.want {
+			t.Errorf("formatBytes(%d) = %q, want %q", tc.bytes, got, tc.want)
+		}
+	}
+}
+
+func TestDirSizeRecursiveIgnoresErrors(t *testing.T) {
+	size := dirSizeRecursive("/nonexistent/veil-runtime-test-path")
+	if size != 0 {
+		t.Fatalf("expected 0 for missing path, got %d", size)
+	}
+}
+
+func TestDirSizeReturnsEmptyForInvalidRoot(t *testing.T) {
+	stats := DirSize("/nonexistent/veil-runtime-test-path")
+	if len(stats) != 0 {
+		t.Fatalf("expected empty result, got %+v", stats)
+	}
+}
+
+func TestDirSizeSkipsNonDirectoryEntries(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0o644)
+	stats := DirSize(dir)
+	if len(stats) != 0 {
+		t.Fatalf("expected no directory entries, got %+v", stats)
+	}
+}

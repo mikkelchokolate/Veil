@@ -134,6 +134,4 @@ func Fetch(ctx context.Context, url string, token string) (*Response, error) {
 	return &status, nil
 }
 
-func HTTPClient(rawURL string) *http.Client {
-	return http.DefaultClient
-}
+var HTTPClient = func(rawURL string) *http.Client { return http.DefaultClient }

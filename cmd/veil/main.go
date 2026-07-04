@@ -13,14 +13,13 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(); err != nil {
-		handleError(err.Error())
-		os.Exit(1)
-	}
+	os.Exit(run())
 }
 
-// run executes the root command with signal-aware context.
-func run() error {
+// run executes the root command with signal-aware context and returns an exit
+// code. A non-zero code indicates an error that has already been printed to
+// stderr.
+func run() int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -35,7 +34,11 @@ func run() error {
 	cmd := cli.NewRootCommand(version)
 	cmd.SetContext(ctx)
 
-	return cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		handleError(err.Error())
+		return 1
+	}
+	return 0
 }
 
 // handleError prints an error message to stderr in veil's format.

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -38,16 +37,16 @@ func RunSpeedtest(r *http.Request) (SpeedtestResult, error) {
 	return SpeedtestResult{}, errSpeedtestUnavailable
 }
 
-func runSpeedtestCLI(ctx context.Context) (SpeedtestResult, error) {
-	out, err := exec.CommandContext(ctx, "speedtest-cli", "--json").CombinedOutput()
+var runSpeedtestCLI = func(ctx context.Context) (SpeedtestResult, error) {
+	out, err := execCommandContext(ctx, "speedtest-cli", "--json").CombinedOutput()
 	if err != nil {
 		return SpeedtestResult{}, fmt.Errorf("speedtest-cli: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return parseSpeedtestCLIJSON(out)
 }
 
-func runOoklaSpeedtest(ctx context.Context) (SpeedtestResult, error) {
-	out, err := exec.CommandContext(ctx, "speedtest", "--accept-license", "--accept-gdpr", "--format=json").CombinedOutput()
+var runOoklaSpeedtest = func(ctx context.Context) (SpeedtestResult, error) {
+	out, err := execCommandContext(ctx, "speedtest", "--accept-license", "--accept-gdpr", "--format=json").CombinedOutput()
 	if err != nil {
 		return SpeedtestResult{}, fmt.Errorf("speedtest: %w: %s", err, strings.TrimSpace(string(out)))
 	}

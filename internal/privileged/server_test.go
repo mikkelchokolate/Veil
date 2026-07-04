@@ -173,3 +173,198 @@ func servePipeRaw(t *testing.T, server *Server, raw string) ResponseEnvelope {
 	}
 	return response
 }
+
+func TestServerDispatchesAllOperations(t *testing.T) {
+	policy := testPolicy(t)
+	tests := []struct {
+		name      string
+		operation Operation
+		payload   any
+		setup     func(*Executor)
+		wantOK    bool
+	}{
+		{
+			name: "promote", operation: OperationPromote, payload: &PromoteRequest{ArtifactIDs: []string{"mieru"}},
+			setup: func(e *Executor) {
+				e.Promote = func(context.Context, ResolvedPromotion) (PromoteResult, error) { return PromoteResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "service_action", operation: OperationServiceAction, payload: &ServiceActionRequest{Unit: "veil.service", Action: ServiceActionRestart},
+			setup: func(e *Executor) { e.ServiceAction = func(context.Context, ServiceActionRequest) error { return nil } }, wantOK: true,
+		},
+		{
+			name: "service_status", operation: OperationServiceStatus, payload: &ServiceStatusRequest{Units: []string{"veil.service"}},
+			setup: func(e *Executor) {
+				e.ServiceStatus = func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error) {
+					return ServiceStatusResult{}, nil
+				}
+			}, wantOK: true,
+		},
+		{
+			name: "journal", operation: OperationJournal, payload: &JournalRequest{Unit: "veil.service", Lines: 10},
+			setup: func(e *Executor) {
+				e.Journal = func(context.Context, ResolvedJournal) (JournalResult, error) { return JournalResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "backup_create", operation: OperationBackupCreate, payload: &BackupRequest{Action: BackupActionCreate},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "backup_list", operation: OperationBackupList, payload: &BackupRequest{Action: BackupActionList},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "backup_verify", operation: OperationBackupVerify, payload: &BackupRequest{Action: BackupActionVerify, ArchiveName: "daily.enc"},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "backup_read", operation: OperationBackupRead, payload: &BackupRequest{Action: BackupActionRead, ArchiveName: "daily.enc"},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					return BackupResult{Data: []byte("x")}, nil
+				}
+			}, wantOK: true,
+		},
+		{
+			name: "backup_prune", operation: OperationBackupPrune, payload: &BackupRequest{Action: BackupActionPrune},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "backup_restore", operation: OperationBackupRestore, payload: &BackupRequest{Action: BackupActionRestore, ArchiveName: "daily.enc"},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "rotate_key", operation: OperationRotateKey, payload: &RotateKeyRequest{},
+			setup: func(e *Executor) { e.RotateKey = func(context.Context, RotateKeyRequest) error { return nil } }, wantOK: true,
+		},
+		{
+			name: "firewall_apply", operation: OperationFirewallApply, payload: &FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}},
+			setup: func(e *Executor) {
+				e.Firewall = func(context.Context, ResolvedFirewall) (FirewallResult, error) { return FirewallResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "stage_update", operation: OperationStageUpdate, payload: &UpdateRequest{ArtifactID: "veil-linux-amd64", Version: "v0.6.0"},
+			setup: func(e *Executor) {
+				e.Update = func(context.Context, ResolvedUpdate) (UpdateResult, error) { return UpdateResult{}, nil }
+			}, wantOK: true,
+		},
+		{
+			name: "restart_panel", operation: OperationRestartPanel, payload: &RestartPanelRequest{},
+			setup: func(e *Executor) { e.RestartPanel = func(context.Context) error { return nil } }, wantOK: true,
+		},
+		{
+			name: "sync_caddy_cert", operation: OperationSyncCaddyCert, payload: &SyncCaddyCertRequest{Domain: "example.com"},
+			setup: func(e *Executor) {
+				e.SyncCaddyCert = func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+					return SyncCaddyCertResult{}, nil
+				}
+			}, wantOK: true,
+		},
+		{
+			name: "backup_action_mismatch", operation: OperationBackupCreate, payload: &BackupRequest{Action: BackupActionList},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: false,
+		},
+		{
+			name: "unsupported_operation", operation: Operation("bad"), payload: &RestartPanelRequest{},
+			setup: func(e *Executor) {}, wantOK: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := Executor{}
+			tc.setup(&executor)
+			server := NewServer(NewLocalAdapter(policy, executor))
+			request := RequestEnvelope{Version: ProtocolVersion, RequestID: tc.name, Operation: tc.operation}
+			switch tc.operation {
+			case OperationPromote:
+				request.Promote = tc.payload.(*PromoteRequest)
+			case OperationServiceAction:
+				request.ServiceAction = tc.payload.(*ServiceActionRequest)
+			case OperationServiceStatus:
+				request.ServiceStatus = tc.payload.(*ServiceStatusRequest)
+			case OperationJournal:
+				request.Journal = tc.payload.(*JournalRequest)
+			case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+				request.Backup = tc.payload.(*BackupRequest)
+			case OperationRotateKey:
+				request.RotateKey = tc.payload.(*RotateKeyRequest)
+			case OperationFirewallApply:
+				request.Firewall = tc.payload.(*FirewallRequest)
+			case OperationStageUpdate:
+				request.Update = tc.payload.(*UpdateRequest)
+			case OperationRestartPanel:
+				request.RestartPanel = tc.payload.(*RestartPanelRequest)
+			case OperationSyncCaddyCert:
+				request.SyncCaddyCert = tc.payload.(*SyncCaddyCertRequest)
+			default:
+				request.RestartPanel = tc.payload.(*RestartPanelRequest)
+			}
+			response := servePipeRequest(t, server, request)
+			if tc.wantOK && (!response.OK || response.Error != nil) {
+				t.Fatalf("expected ok response, got %+v", response)
+			}
+			if !tc.wantOK && (response.OK || response.Error == nil || response.Error.Code != ErrorInvalidRequest) {
+				t.Fatalf("expected invalid_request error, got %+v", response)
+			}
+		})
+	}
+}
+
+func TestServerDispatchReturnsErrorWhenClientNil(t *testing.T) {
+	server := NewServer(nil)
+	request := RequestEnvelope{Version: ProtocolVersion, RequestID: "nil-client", Operation: OperationRestartPanel, RestartPanel: &RestartPanelRequest{}}
+	response := servePipeRequest(t, server, request)
+	if response.OK || response.Error == nil || response.Error.Code != ErrorOperationFailed {
+		t.Fatalf("expected operation_failed error, got %+v", response)
+	}
+}
+
+func TestBackupActionForOperation(t *testing.T) {
+	for op, want := range map[Operation]BackupAction{
+		OperationBackupCreate:  BackupActionCreate,
+		OperationBackupList:    BackupActionList,
+		OperationBackupVerify:  BackupActionVerify,
+		OperationBackupRead:    BackupActionRead,
+		OperationBackupPrune:   BackupActionPrune,
+		OperationBackupRestore: BackupActionRestore,
+		OperationPromote:       "",
+	} {
+		if got := backupActionForOperation(op); got != want {
+			t.Fatalf("backupActionForOperation(%q) = %q, want %q", op, got, want)
+		}
+	}
+}
+
+func TestValidateSocketPathAcceptsMissingAbsoluteAndRejectsNonSocket(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(root, "missing.sock")
+	if err := validateSocketPath(missing); err != nil {
+		t.Fatalf("missing absolute path should be valid: %v", err)
+	}
+	relative := "helper.sock"
+	if err := validateSocketPath(relative); err == nil {
+		t.Fatal("expected relative path rejection")
+	}
+	notSocket := filepath.Join(root, "file")
+	if err := os.WriteFile(notSocket, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateSocketPath(notSocket); err == nil {
+		t.Fatal("expected non-socket rejection")
+	}
+}

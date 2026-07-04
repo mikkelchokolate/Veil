@@ -15,3 +15,10 @@ func TestCPUTicksParserReturnsZeroWhenAggregateLineMissing(t *testing.T) {
 		t.Fatalf("idle=%d total=%d", idle, total)
 	}
 }
+
+func TestCPUTicksParserReturnsZeroForShortAggregateLine(t *testing.T) {
+	idle, total := NewCPUTicksParser().Parse("cpu 1 2 3")
+	if idle != 0 || total != 0 {
+		t.Fatalf("idle=%d total=%d", idle, total)
+	}
+}
