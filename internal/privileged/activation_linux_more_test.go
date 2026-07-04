@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- server.ServeSystemd(ctx, 0, false)
+		done <- server.ServeSystemd(ctx, uint32(os.Getuid()), false)
 	}()
 
 	// Wait for the server goroutine to start accepting.

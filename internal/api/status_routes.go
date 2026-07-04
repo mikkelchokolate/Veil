@@ -11,7 +11,7 @@ type StatusResponse = service.StatusResponse
 type ServiceStatus = service.ServiceStatus
 type ServiceRuntimeStatus = service.RuntimeStatus
 
-var serviceStatusReader = readSystemdServiceStatus
+var serviceStatusReader = defaultReadSystemdServiceStatus
 
 type StatusRoutes struct {
 	Info  ServerInfo
@@ -63,6 +63,10 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
+func defaultReadSystemdServiceStatus(unit string) ServiceRuntimeStatus {
 	return service.ReadSystemdServiceStatus(unit)
+}
+
+func readSystemdServiceStatus(unit string) ServiceRuntimeStatus {
+	return serviceStatusReader(unit)
 }
