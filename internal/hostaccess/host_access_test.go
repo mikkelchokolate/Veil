@@ -163,6 +163,9 @@ func TestPrepare(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX ownership and mode test")
 	}
+	if os.Getuid() != 0 {
+		t.Skip("requires root to create veil system user/group")
+	}
 	root := t.TempDir()
 	etcDir := filepath.Join(root, "etc", "veil")
 	varDir := filepath.Join(root, "var", "veil")

@@ -59,10 +59,15 @@ func TestRunSyncCaddyCertRequiresDomain(t *testing.T) {
 }
 
 func TestRunSyncCaddyCertDefaultsOutDir(t *testing.T) {
-	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalFinder := findCaddyCertPair
+	originalOutDir := defaultCaddyCertOutDir
+	defer func() {
+		findCaddyCertPair = originalFinder
+		defaultCaddyCertOutDir = originalOutDir
+	}()
 
 	root := t.TempDir()
+	defaultCaddyCertOutDir = root
 	certPath := filepath.Join(root, "example.com.crt")
 	keyPath := filepath.Join(root, "example.com.key")
 	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
@@ -80,8 +85,8 @@ func TestRunSyncCaddyCertDefaultsOutDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sync caddy cert: %v", err)
 	}
-	if !strings.HasPrefix(result.CertPath, "/etc/veil/certs") {
-		t.Fatalf("default cert path = %q, want prefix /etc/veil/certs", result.CertPath)
+	if !strings.HasPrefix(result.CertPath, root) {
+		t.Fatalf("default cert path = %q, want prefix %q", result.CertPath, root)
 	}
 }
 
