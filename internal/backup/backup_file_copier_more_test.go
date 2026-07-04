@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +47,20 @@ func TestBackupFileCopierCopyErrors(t *testing.T) {
 		}
 		if err := NewBackupFileCopier().Copy(src, filepath.Join(parentFile, "dst"), 0o600); err == nil {
 			t.Fatal("expected error when destination parent is a file")
+		}
+	})
+
+	t.Run("copy io error", func(t *testing.T) {
+		if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		orig := fileCopierCopy
+		defer func() { fileCopierCopy = orig }()
+		fileCopierCopy = func(io.Writer, io.Reader) (int64, error) {
+			return 0, errors.New("injected copy error")
+		}
+		if err := NewBackupFileCopier().Copy(src, dst, 0o600); err == nil {
+			t.Fatal("expected error from injected copy failure")
 		}
 	})
 }

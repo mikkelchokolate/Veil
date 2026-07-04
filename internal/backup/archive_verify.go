@@ -119,7 +119,7 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 			{Name: "state.key", Size: int64(len(key)), SHA256: backupChecksum(key)},
 		},
 	}
-	manifestBody, err := json.Marshal(manifest)
+	manifestBody, err := archiveManifestMarshal(manifest)
 	if err != nil {
 		return nil, fmt.Errorf("marshal backup manifest: %w", err)
 	}
@@ -265,11 +265,11 @@ func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
 	salt := data[len(magicHeader)+1 : len(magicHeader)+1+16]
 	nonce := data[len(magicHeader)+1+16 : headerLen]
 	key := deriveKey(passphrase, salt, byte(version))
-	block, err := aes.NewCipher(key)
+	block, err := decryptAESNewCipher(key)
 	if err != nil {
 		return nil, true, version, err
 	}
-	aead, err := cipher.NewGCM(block)
+	aead, err := decryptNewGCM(block)
 	if err != nil {
 		return nil, true, version, err
 	}
@@ -310,17 +310,17 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 			Size:     int64(len(file.body)),
 			Typeflag: tar.TypeReg,
 		}
-		if err := tarWriter.WriteHeader(header); err != nil {
+		if err := archiveWriteHeader(tarWriter, header); err != nil {
 			return nil, err
 		}
-		if _, err := tarWriter.Write(file.body); err != nil {
+		if _, err := archiveWrite(tarWriter, file.body); err != nil {
 			return nil, err
 		}
 	}
-	if err := tarWriter.Close(); err != nil {
+	if err := archiveClose(tarWriter); err != nil {
 		return nil, err
 	}
-	if err := gzipWriter.Close(); err != nil {
+	if err := archiveGzipClose(gzipWriter); err != nil {
 		return nil, err
 	}
 	return buffer.Bytes(), nil
@@ -398,7 +398,7 @@ func validateStateAndKey(state, key []byte) error {
 	}
 	var keyArray [secrets.KeySize]byte
 	copy(keyArray[:], key)
-	cipher, err := secrets.NewCipher(keyArray)
+	cipher, err := validateSecretsNewCipher(keyArray)
 	if err != nil {
 		return err
 	}
@@ -434,6 +434,24 @@ var (
 	restoreChmod      = os.Chmod
 	restoreRename     = os.Rename
 	restoreRemove     = os.Remove
+
+	restoreFileWrite = (*os.File).Write
+	restoreFileSync  = (*os.File).Sync
+	restoreFileClose = (*os.File).Close
+)
+
+// Archive and crypto hooks overridable in tests.
+var (
+	archiveManifestMarshal = json.Marshal
+	archiveWriteHeader     = (*tar.Writer).WriteHeader
+	archiveWrite           = (*tar.Writer).Write
+	archiveClose           = (*tar.Writer).Close
+	archiveGzipClose       = (*gzip.Writer).Close
+
+	decryptAESNewCipher = aes.NewCipher
+	decryptNewGCM       = cipher.NewGCM
+
+	validateSecretsNewCipher = secrets.NewCipher
 )
 
 type stagedRestoreFile struct {
@@ -453,17 +471,17 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 		return nil, err
 	}
 	tempPath := temp.Name()
-	if _, err := temp.Write(body); err != nil {
-		_ = temp.Close()
+	if _, err := restoreFileWrite(temp, body); err != nil {
+		_ = restoreFileClose(temp)
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
+	if err := restoreFileSync(temp); err != nil {
+		_ = restoreFileClose(temp)
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	if err := temp.Close(); err != nil {
+	if err := restoreFileClose(temp); err != nil {
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}

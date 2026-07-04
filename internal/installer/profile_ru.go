@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 
 	"github.com/mikkelchokolate/Veil/internal/panelaccess"
@@ -143,7 +142,7 @@ func (m RURecommendedProfileModule) normalizedInput() RURecommendedInput {
 
 func generateRandomHex(length int) (string, error) {
 	b := make([]byte, length/2)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randomReader(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

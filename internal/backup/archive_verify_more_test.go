@@ -1,7 +1,10 @@
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
+	"crypto/cipher"
 	"encoding/json"
 	"errors"
 	"os"
@@ -380,5 +383,333 @@ func TestStagedRestoreFileCleanupStaged(t *testing.T) {
 	}
 	if _, err := os.Stat(f.temp); !os.IsNotExist(err) {
 		t.Fatalf("temp should be removed: %v", err)
+	}
+}
+
+func TestStagedRestoreFileCommitOriginalRenameError(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "state.json")
+	safety := filepath.Join(dir, "state.safety")
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := stageRestoreFile(target, []byte("new"), safety)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origRename := restoreRename
+	defer func() { restoreRename = origRename }()
+	restoreRename = func(string, string) error {
+		return errors.New("injected original rename error")
+	}
+
+	if err := f.commit(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestStagedRestoreFileCommitRollback(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "state.json")
+	safety := filepath.Join(dir, "state.safety")
+	original := []byte("original state")
+	if err := os.WriteFile(target, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := stageRestoreFile(target, []byte("new state"), safety)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origRename := restoreRename
+	defer func() { restoreRename = origRename }()
+	calls := 0
+	restoreRename = func(oldpath, newpath string) error {
+		calls++
+		if calls == 2 {
+			return errors.New("injected rename error")
+		}
+		return origRename(oldpath, newpath)
+	}
+
+	if err := f.commit(); err == nil {
+		t.Fatal("expected error")
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("original not restored after failed commit: %q", got)
+	}
+}
+
+func TestInspectBackupValidateStateAndKeyError(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+
+	var secretKey [secrets.KeySize]byte
+	copy(secretKey[:], bytes.Repeat([]byte{0x5a}, secrets.KeySize))
+	cipher, err := secrets.NewCipher(secretKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := model.ManagementSnapshot{
+		Settings: model.Settings{
+			PanelListen:   "127.0.0.1:2096",
+			PanelAccess:   "local",
+			Mode:          "server",
+			NaivePassword: "secret-password",
+		},
+	}
+	if err := managementstate.NewStore(statePath, cipher).Save(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, secretKey[:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A valid-length key that does not match the encrypted state.
+	badKey := bytes.Repeat([]byte{0x42}, 32)
+	contents := archiveContents{state: state, key: badKey}
+	data, err := writeArchiveTarball(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = inspectBackup(data, "")
+	if err == nil || !strings.Contains(err.Error(), "validate backup state") {
+		t.Fatalf("expected validate error, got %v", err)
+	}
+}
+
+func TestInspectBackupReadArchiveError(t *testing.T) {
+	_, err := inspectBackup([]byte("not a valid archive"), "")
+	if err == nil || !strings.Contains(err.Error(), "gzip") {
+		t.Fatalf("expected gzip reader error, got %v", err)
+	}
+}
+
+func TestReadArchiveTarballGzipError(t *testing.T) {
+	_, err := readArchiveTarball([]byte("not gzip"))
+	if err == nil || !strings.Contains(err.Error(), "initialize gzip reader") {
+		t.Fatalf("expected gzip init error, got %v", err)
+	}
+}
+
+func TestReadArchiveTarballCorruptTar(t *testing.T) {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	if _, err := gw.Write([]byte("not a tar header")); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readArchiveTarball(buf.Bytes())
+	if err == nil || !strings.Contains(err.Error(), "read tar archive") {
+		t.Fatalf("expected tar read error, got %v", err)
+	}
+}
+
+func TestCreateTarballWithManifestMarshalError(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	orig := archiveManifestMarshal
+	defer func() { archiveManifestMarshal = orig }()
+	archiveManifestMarshal = func(any) ([]byte, error) {
+		return nil, errors.New("injected marshal error")
+	}
+	if _, err := createTarballWithManifest(statePath, keyPath, ArchiveOptions{}); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestWriteArchiveTarballErrors(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	state, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := archiveContents{
+		state:    state,
+		key:      key,
+		manifest: []byte(`{"formatVersion":1}`),
+	}
+
+	tests := []struct {
+		name    string
+		inject  func() (cleanup func())
+		wantErr string
+	}{
+		{
+			name: "write header error",
+			inject: func() (cleanup func()) {
+				orig := archiveWriteHeader
+				archiveWriteHeader = func(*tar.Writer, *tar.Header) error {
+					return errors.New("injected write header error")
+				}
+				return func() { archiveWriteHeader = orig }
+			},
+			wantErr: "injected write header error",
+		},
+		{
+			name: "write error",
+			inject: func() (cleanup func()) {
+				orig := archiveWrite
+				archiveWrite = func(*tar.Writer, []byte) (int, error) {
+					return 0, errors.New("injected write error")
+				}
+				return func() { archiveWrite = orig }
+			},
+			wantErr: "injected write error",
+		},
+		{
+			name: "tar close error",
+			inject: func() (cleanup func()) {
+				orig := archiveClose
+				archiveClose = func(*tar.Writer) error {
+					return errors.New("injected tar close error")
+				}
+				return func() { archiveClose = orig }
+			},
+			wantErr: "injected tar close error",
+		},
+		{
+			name: "gzip close error",
+			inject: func() (cleanup func()) {
+				orig := archiveGzipClose
+				archiveGzipClose = func(*gzip.Writer) error {
+					return errors.New("injected gzip close error")
+				}
+				return func() { archiveGzipClose = orig }
+			},
+			wantErr: "injected gzip close error",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := tt.inject()
+			defer cleanup()
+			if _, err := writeArchiveTarball(contents); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestDecryptBackupCipherErrors(t *testing.T) {
+	data := append(bytes.Clone(magicHeader), byte(2))
+	data = append(data, make([]byte, 28)...)
+
+	t.Run("aes new cipher error", func(t *testing.T) {
+		orig := decryptAESNewCipher
+		defer func() { decryptAESNewCipher = orig }()
+		decryptAESNewCipher = func([]byte) (cipher.Block, error) {
+			return nil, errors.New("injected aes error")
+		}
+		if _, _, _, err := decryptBackup(data, "passphrase"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("gcm error", func(t *testing.T) {
+		orig := decryptNewGCM
+		defer func() { decryptNewGCM = orig }()
+		decryptNewGCM = func(cipher.Block) (cipher.AEAD, error) {
+			return nil, errors.New("injected gcm error")
+		}
+		if _, _, _, err := decryptBackup(data, "passphrase"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestValidateStateAndKeyNewCipherError(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	state, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	orig := validateSecretsNewCipher
+	defer func() { validateSecretsNewCipher = orig }()
+	validateSecretsNewCipher = func([secrets.KeySize]byte) (*secrets.Cipher, error) {
+		return nil, errors.New("injected cipher error")
+	}
+
+	if err := validateStateAndKey(state, key); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestStageRestoreFileWriteSyncCloseErrors(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "state.json")
+	safety := filepath.Join(dir, "safety")
+
+	tests := []struct {
+		name    string
+		inject  func() (cleanup func())
+		wantErr string
+	}{
+		{
+			name: "write error",
+			inject: func() (cleanup func()) {
+				orig := restoreFileWrite
+				restoreFileWrite = func(*os.File, []byte) (int, error) {
+					return 0, errors.New("injected write error")
+				}
+				return func() { restoreFileWrite = orig }
+			},
+			wantErr: "injected write error",
+		},
+		{
+			name: "sync error",
+			inject: func() (cleanup func()) {
+				orig := restoreFileSync
+				restoreFileSync = func(*os.File) error {
+					return errors.New("injected sync error")
+				}
+				return func() { restoreFileSync = orig }
+			},
+			wantErr: "injected sync error",
+		},
+		{
+			name: "close error",
+			inject: func() (cleanup func()) {
+				orig := restoreFileClose
+				restoreFileClose = func(*os.File) error {
+					return errors.New("injected close error")
+				}
+				return func() { restoreFileClose = orig }
+			},
+			wantErr: "injected close error",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := tt.inject()
+			defer cleanup()
+			_, err := stageRestoreFile(target, []byte("body"), safety)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+		})
 	}
 }

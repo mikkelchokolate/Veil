@@ -6,6 +6,10 @@ import (
 	"fmt"
 )
 
+// randomReader is overridable in tests so that RandomHighPort error paths can be
+// exercised without mocking the crypto/rand package.
+var randomReader = rand.Read
+
 const (
 	RandomPortMin = 20000
 	RandomPortMax = 50000
@@ -13,7 +17,7 @@ const (
 
 func RandomHighPort() (int, error) {
 	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	if _, err := randomReader(b[:]); err != nil {
 		return 0, err
 	}
 	n := binary.BigEndian.Uint64(b[:])

@@ -13,6 +13,12 @@ import (
 
 var archiveNamePattern = regexp.MustCompile(`^veil_backup_(\d{8})_(\d{6})\.tar\.gz(?:\.enc)?$`)
 
+// retentionRemove is overridable in tests to inject removal failures.
+var retentionRemove = os.Remove
+
+// retentionEntryInfo is overridable in tests to inject entry info failures.
+var retentionEntryInfo = func(entry os.DirEntry) (os.FileInfo, error) { return entry.Info() }
+
 type ArchiveEntry struct {
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
@@ -54,7 +60,7 @@ func ListArchives(dir string) ([]ArchiveEntry, error) {
 		if !ok {
 			continue
 		}
-		info, err := entry.Info()
+		info, err := retentionEntryInfo(entry)
 		if err != nil {
 			return nil, fmt.Errorf("stat backup archive %s: %w", entry.Name(), err)
 		}
@@ -103,7 +109,7 @@ func PruneArchives(dir string, policy RetentionPolicy, dryRun bool) (PruneResult
 		}
 		result.Deleted = append(result.Deleted, entry.Name)
 		if !dryRun {
-			if err := os.Remove(entry.Path); err != nil {
+			if err := retentionRemove(entry.Path); err != nil {
 				return result, fmt.Errorf("remove backup archive %s: %w", entry.Name, err)
 			}
 		}

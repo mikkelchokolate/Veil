@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,4 +41,27 @@ func TestBackupManifestStoreLoadErrors(t *testing.T) {
 			t.Fatal("expected error for invalid JSON")
 		}
 	})
+}
+
+func TestBackupManifestStoreLoadMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	_, err := NewBackupManifestStore(path).Load()
+	if err == nil {
+		t.Fatal("expected error for missing manifest")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected os.ErrNotExist, got %v", err)
+	}
+}
+
+func TestBackupManifestStoreSaveMarshalError(t *testing.T) {
+	orig := manifestMarshal
+	defer func() { manifestMarshal = orig }()
+	manifestMarshal = func(any) ([]byte, error) {
+		return nil, errors.New("injected marshal error")
+	}
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	if err := NewBackupManifestStore(path).Save(backupManifest{}); err == nil {
+		t.Fatal("expected error")
+	}
 }
