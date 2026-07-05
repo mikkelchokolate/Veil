@@ -180,6 +180,9 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		if runtime.Unit == renderer.UnitCaddy {
 			caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
 			if containsCleanPath(liveFiles, caddyLivePath) {
+				// Use a synthetic command for the Admin API load. There is no systemctl
+				// invocation here; the REST response contract still expects a Command
+				// array, so we report the Caddy admin endpoint that was used.
 				adminResult := ServiceActionResult{
 					Name:    renderer.UnitCaddy,
 					Command: []string{"caddy", "admin", "load"},
