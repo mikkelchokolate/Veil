@@ -78,3 +78,71 @@ func fallbackRoot(settings model.Settings, inbound model.Inbound) string {
 	}
 	return root
 }
+
+// NaiveDomain returns the public domain stored on the inbound ProtocolFields.
+func NaiveDomain(inbound model.Inbound) string {
+	return stringField(inbound.ProtocolFields, "domain")
+}
+
+// NaiveEmail returns the explicit ACME contact email stored on the inbound ProtocolFields.
+func NaiveEmail(inbound model.Inbound) string {
+	return stringField(inbound.ProtocolFields, "email")
+}
+
+// NaivePublicPort returns the public port for the inbound, falling back to the
+// inbound listen port, the global default inbound public port, and finally 443.
+func NaivePublicPort(settings model.Settings, inbound model.Inbound) int {
+	if v, ok := inbound.ProtocolFields["publicPort"]; ok {
+		if n, ok := v.(float64); ok {
+			return int(n)
+		}
+		if n, ok := v.(int); ok {
+			return n
+		}
+	}
+	if inbound.Port != 0 {
+		return inbound.Port
+	}
+	if settings.DefaultInboundPublicPort != 0 {
+		return settings.DefaultInboundPublicPort
+	}
+	return 443
+}
+
+// NaiveTransport returns the transport from the inbound ProtocolFields,
+// defaulting to "tcp" when unset.
+func NaiveTransport(inbound model.Inbound) string {
+	t := stringField(inbound.ProtocolFields, "transport")
+	if t == "" {
+		return "tcp"
+	}
+	return t
+}
+
+// NaiveFallbackRoot returns the fallback web root for the inbound, falling back
+// to the inbound-level fallback root, the global fallback root, and finally the
+// built-in default.
+func NaiveFallbackRoot(settings model.Settings, inbound model.Inbound) string {
+	root := stringField(inbound.ProtocolFields, "fallbackRoot")
+	if root == "" {
+		root = inbound.FallbackRoot
+	}
+	if root == "" {
+		root = settings.FallbackRoot
+	}
+	if root == "" {
+		root = "/var/lib/veil/www"
+	}
+	return root
+}
+
+func stringField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
+	return v
+}

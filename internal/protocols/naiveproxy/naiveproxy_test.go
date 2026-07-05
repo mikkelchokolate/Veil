@@ -683,13 +683,39 @@ func TestHasCredential(t *testing.T) {
 	})
 }
 
+func TestNaiveProtocolFieldHelpers(t *testing.T) {
+	settings := model.Settings{DefaultInboundPublicPort: 8443, FallbackRoot: "/var/lib/veil/www"}
+	inbound := model.Inbound{
+		Protocol: "naiveproxy",
+		ProtocolFields: map[string]any{
+			"domain":     "p.example.com",
+			"email":      "a@example.com",
+			"publicPort": 9443,
+			"transport":  "dual",
+		},
+	}
+	if got := NaiveDomain(inbound); got != "p.example.com" {
+		t.Errorf("domain = %q", got)
+	}
+	if got := NaivePublicPort(settings, inbound); got != 9443 {
+		t.Errorf("publicPort = %d", got)
+	}
+	if got := NaiveTransport(inbound); got != "dual" {
+		t.Errorf("transport = %q", got)
+	}
+}
+
 func TestInboundFieldSchema(t *testing.T) {
 	p := New()
 	fields := p.InboundFieldSchema()
-	if len(fields) != 3 {
-		t.Fatalf("len(fields) = %d, want 3", len(fields))
+	if len(fields) != 7 {
+		t.Fatalf("len(fields) = %d, want 7", len(fields))
 	}
 	want := []schema.FieldSchema{
+		{Key: "domain", Label: "Domain", Type: schema.FieldText, Required: true, Placeholder: "Public domain used for TLS/SNI and client export.", Scope: "inbound"},
+		{Key: "email", Label: "ACME email", Type: schema.FieldText, Placeholder: "Optional explicit ACME contact for this domain.", Scope: "inbound"},
+		{Key: "publicPort", Label: "Public port", Type: schema.FieldNumber, Default: 443, Placeholder: "Port Caddy listens on for this inbound.", Scope: "inbound"},
+		{Key: "transport", Label: "Transport", Type: schema.FieldSelect, Required: true, Default: "tcp", Options: []schema.FieldOption{{Label: "tcp", Value: "tcp"}, {Label: "quic", Value: "quic"}, {Label: "dual", Value: "dual"}}, Placeholder: "tcp=HTTPS/H2, quic=HTTP/3/QUIC, dual=both.", Scope: "inbound"},
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "inbound"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, GenerateAction: "password", Scope: "inbound"},
 		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "inbound"},
