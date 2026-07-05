@@ -1498,9 +1498,17 @@ paths:
                     email: admin@example.com
                     panelAccess: caddy
                     panelUrl: https://vpn.example.com/4f10dbe4/
-                    caddyfile: |
-                      vpn.example.com {
-                        reverse_proxy 127.0.0.1:2096
+                    caddyJSON: |
+                      {
+                        "apps": {
+                          "http": {
+                            "servers": {
+                              "tcp-0.0.0.0-443": {
+                                "listen": [":443"]
+                              }
+                            }
+                          }
+                        }
                       }
         "400":
           $ref: "#/components/responses/BadRequest"
@@ -2978,7 +2986,7 @@ components:
         panelUrl:
           type: string
           format: uri
-        caddyfile:
+        caddyJSON:
           type: string
     SystemStats:
       type: object

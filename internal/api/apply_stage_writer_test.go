@@ -47,7 +47,7 @@ func TestCleanStaleGeneratedFilesRemovesOnlyManagedStaleFiles(t *testing.T) {
 
 func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 	root := t.TempDir()
-	configPath := filepath.Join(root, "generated", "caddy", "Caddyfile")
+	configPath := filepath.Join(root, "generated", "caddy", "config.json")
 	written, validations, renderedPaths, err := WriteApplyStage(ApplyStageInput{
 		ApplyRoot: root,
 		Plan:      ApplyPlanResponse{Valid: true, Configs: []string{"caddy"}},

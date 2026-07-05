@@ -38,7 +38,7 @@ func TestStagedConfigValidatorBuildsExpectedCommands(t *testing.T) {
 	})
 
 	results := validator.Validate([]string{
-		filepath.Join(root, "generated", "caddy", "Caddyfile"),
+		filepath.Join(root, "generated", "caddy", "config.json"),
 		filepath.Join(root, "generated", "hysteria2", "server.yaml"), // no standalone checker: no validation produced
 		filepath.Join(root, "generated", "sing-box", "warp.json"),
 	})

@@ -157,7 +157,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateMieruInbounds(t *testing.T) {
 			t.Fatalf("repair summary missing %q:\n%s", want, summary)
 		}
 	}
-	for _, unwanted := range []string{"generated/caddy/Caddyfile", "shared proxy port"} {
+	for _, unwanted := range []string{"generated/caddy/config.json", "shared proxy port"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("repair summary should not include %q:\n%s", unwanted, summary)
 		}

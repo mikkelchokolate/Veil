@@ -30,8 +30,8 @@ func TestProfileUsesPanelPublicPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(material.Caddyfile, "panel.example.com:8443") {
-		t.Errorf("Caddyfile missing public port bind:\n%s", material.Caddyfile)
+	if !strings.Contains(material.CaddyJSON, `":8443"`) {
+		t.Errorf("Caddy JSON missing public port listen:\n%s", material.CaddyJSON)
 	}
 }
 
@@ -75,9 +75,9 @@ func TestProfileBuildsPanelCaddyAccessMaterial(t *testing.T) {
 	if material.WebBasePath == "" || !strings.HasPrefix(material.WebBasePath, "/") || !strings.HasSuffix(material.WebBasePath, "/") {
 		t.Fatalf("web base path = %q", material.WebBasePath)
 	}
-	for _, want := range []string{"panel.example.com", "reverse_proxy 127.0.0.1:2096", "handle " + strings.TrimRight(material.WebBasePath, "/") + "/*"} {
-		if !strings.Contains(material.Caddyfile, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, material.Caddyfile)
+	for _, want := range []string{"panel.example.com", `"dial": "127.0.0.1:2096"`, strings.TrimRight(material.WebBasePath, "/")} {
+		if !strings.Contains(material.CaddyJSON, want) {
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, material.CaddyJSON)
 		}
 	}
 }

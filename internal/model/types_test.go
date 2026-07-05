@@ -18,7 +18,7 @@ func TestApplyPlanResponseIncludesStructuredPreview(t *testing.T) {
 		}},
 		Operations: []ApplyOperation{{
 			Type:              "promote_file",
-			Destination:       "/etc/veil/generated/caddy/Caddyfile",
+			Destination:       "/etc/veil/generated/caddy/config.json",
 			InterruptionRisk:  "reload",
 			RollbackAvailable: true,
 			ValidationSource:  "live-host",

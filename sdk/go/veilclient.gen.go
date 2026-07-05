@@ -646,7 +646,7 @@ type RURecommendedPreviewRequestPanelAccess string
 
 // RURecommendedPreviewResponse defines model for RURecommendedPreviewResponse.
 type RURecommendedPreviewResponse struct {
-	Caddyfile   *string                                 `json:"caddyfile,omitempty"`
+	CaddyJSON   *string                                 `json:"caddyJSON,omitempty"`
 	Domain      string                                  `json:"domain"`
 	Email       openapi_types.Email                     `json:"email"`
 	PanelAccess RURecommendedPreviewResponsePanelAccess `json:"panelAccess"`

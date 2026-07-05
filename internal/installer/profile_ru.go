@@ -29,7 +29,7 @@ type RURecommendedProfile struct {
 	PanelTLSKeyPEM    string
 	WebBasePath       string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 	MasqueradeURL     string
 	FallbackRoot      string
 }
@@ -64,7 +64,7 @@ func BuildRURecommendedProfile(input RURecommendedInput) (RURecommendedProfile, 
 }
 
 // BuildRURecommendedInstall concentrates the ordering invariant that the panel
-// port must be selected before profile rendering, because the Caddyfile embeds
+// port must be selected before profile rendering, because the Caddy JSON embeds
 // that port for the Panel reverse proxy.
 func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedInstall, error) {
 	randomPanelPort := input.RandomPanelPort
@@ -123,7 +123,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelTLSKeyPEM:    panelAccess.PanelTLSKeyPEM,
 		WebBasePath:       panelAccess.WebBasePath,
 		InstallPanelCaddy: panelAccess.InstallPanelCaddy,
-		Caddyfile:         panelAccess.Caddyfile,
+		CaddyJSON:         panelAccess.CaddyJSON,
 		MasqueradeURL:     masqueradeURL,
 		FallbackRoot:      fallbackRoot,
 	}, nil

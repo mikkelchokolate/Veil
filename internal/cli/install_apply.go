@@ -113,13 +113,13 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 				resolvedStatePath, resolvedKeyPath, filepath.Base(resolvedKeyPath))
 		}
 		if snapshot.Settings.WebBasePath != "" {
-			// The panel Caddyfile was already rendered with a freshly-generated
+			// The panel Caddy JSON was already rendered with a freshly-generated
 			// base path before we knew we'd reuse the existing one. Rewrite it to
 			// the reused base path so Caddy routes the same path the panel actually
 			// serves (VEIL_WEB_BASE_PATH); otherwise an in-place switch to caddy
 			// mode 404s.
-			if profile.Caddyfile != "" && profile.WebBasePath != "" {
-				profile.Caddyfile = strings.ReplaceAll(profile.Caddyfile, profile.WebBasePath, snapshot.Settings.WebBasePath)
+			if profile.CaddyJSON != "" && profile.WebBasePath != "" {
+				profile.CaddyJSON = strings.ReplaceAll(profile.CaddyJSON, profile.WebBasePath, snapshot.Settings.WebBasePath)
 			}
 			profile.WebBasePath = snapshot.Settings.WebBasePath
 		}

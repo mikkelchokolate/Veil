@@ -87,7 +87,7 @@ func TestHysteria2ConfigReloadNeeded(t *testing.T) {
 	if !ctx.hysteria2ConfigReloadNeeded(liveFiles) {
 		t.Fatal("expected reload needed for hysteria2 live file")
 	}
-	if ctx.hysteria2ConfigReloadNeeded([]string{filepath.Join(root, "live", "caddy", "panel.Caddyfile")}) {
+	if ctx.hysteria2ConfigReloadNeeded([]string{filepath.Join(root, "live", "caddy", "config.json")}) {
 		t.Fatal("expected no reload for caddy file")
 	}
 }

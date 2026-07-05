@@ -21,9 +21,9 @@ func TestLivePathForStagedConfig(t *testing.T) {
 	}{
 		// Known live paths
 		{
-			name:       "caddy Caddyfile",
-			stagedPath: "/tmp/veil-test/generated/caddy/Caddyfile",
-			wantPath:   "/tmp/veil-test/live/caddy/Caddyfile",
+			name:       "caddy config.json",
+			stagedPath: "/tmp/veil-test/generated/caddy/config.json",
+			wantPath:   "/tmp/veil-test/live/caddy/config.json",
 			wantOK:     true,
 		},
 		{
@@ -54,26 +54,26 @@ func TestLivePathForStagedConfig(t *testing.T) {
 		// Paths outside the apply root
 		{
 			name:       "completely different root",
-			stagedPath: "/other/path/generated/caddy/Caddyfile",
+			stagedPath: "/other/path/generated/caddy/config.json",
 			wantPath:   "",
 			wantOK:     false,
 		},
 		{
 			name:       "apply root as substring but not prefix",
-			stagedPath: "/var/tmp/veil-test-extra/generated/caddy/Caddyfile",
+			stagedPath: "/var/tmp/veil-test-extra/generated/caddy/config.json",
 			wantPath:   "",
 			wantOK:     false,
 		},
 		// Paths without the generated prefix (under apply root but not in generated/)
 		{
 			name:       "staged directory instead of generated",
-			stagedPath: "/tmp/veil-test/staged/caddy/Caddyfile",
+			stagedPath: "/tmp/veil-test/staged/caddy/config.json",
 			wantPath:   "",
 			wantOK:     false,
 		},
 		{
 			name:       "live directory instead of generated",
-			stagedPath: "/tmp/veil-test/live/caddy/Caddyfile",
+			stagedPath: "/tmp/veil-test/live/caddy/config.json",
 			wantPath:   "",
 			wantOK:     false,
 		},
@@ -86,7 +86,7 @@ func TestLivePathForStagedConfig(t *testing.T) {
 		},
 		{
 			name:       "just generated prefix no root",
-			stagedPath: "generated/caddy/Caddyfile",
+			stagedPath: "generated/caddy/config.json",
 			wantPath:   "",
 			wantOK:     false,
 		},
@@ -112,9 +112,9 @@ func TestLivePathForStagedConfigTrailingSlashRoot(t *testing.T) {
 		applyRoot: "/tmp/veil-test/",
 	}
 
-	gotPath, gotOK := state.livePathForStagedConfig("/tmp/veil-test/generated/caddy/Caddyfile")
+	gotPath, gotOK := state.livePathForStagedConfig("/tmp/veil-test/generated/caddy/config.json")
 	gotPath = filepath.ToSlash(gotPath)
-	wantPath := "/tmp/veil-test/live/caddy/Caddyfile"
+	wantPath := "/tmp/veil-test/live/caddy/config.json"
 	if gotPath != wantPath {
 		t.Fatalf("path = %q, want %q", gotPath, wantPath)
 	}

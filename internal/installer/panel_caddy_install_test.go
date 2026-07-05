@@ -9,7 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
-func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
+func TestPanelCaddyInstallRendersPanelOnlyCaddyJSON(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		PanelAccess: "caddy",
 		Domain:      "panel.example.com",
@@ -23,14 +23,14 @@ func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 	if !profile.InstallPanelCaddy {
 		t.Fatalf("panel Caddy install should enable Panel Caddy access: %+v", profile)
 	}
-	for _, want := range []string{"panel.example.com", "handle ", "reverse_proxy 127.0.0.1:2096"} {
-		if !strings.Contains(profile.Caddyfile, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, profile.Caddyfile)
+	for _, want := range []string{"panel.example.com", `"dial": "127.0.0.1:2096"`} {
+		if !strings.Contains(profile.CaddyJSON, want) {
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, profile.CaddyJSON)
 		}
 	}
 	for _, unwanted := range []string{"forward_proxy", "basic_auth", "probe_resistance"} {
-		if strings.Contains(profile.Caddyfile, unwanted) {
-			t.Fatalf("panel Caddyfile must not contain %q:\n%s", unwanted, profile.Caddyfile)
+		if strings.Contains(profile.CaddyJSON, unwanted) {
+			t.Fatalf("panel Caddy JSON must not contain %q:\n%s", unwanted, profile.CaddyJSON)
 		}
 	}
 }
@@ -77,12 +77,12 @@ func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
 	if strings.Contains(string(envBody), "VEIL_TLS_CERT=") || strings.Contains(string(envBody), "VEIL_TLS_KEY=") {
 		t.Fatalf("Panel Caddy access should terminate TLS in Caddy, not Panel:\n%s", string(envBody))
 	}
-	body, err := os.ReadFile(result.CaddyfilePath)
+	body, err := os.ReadFile(result.CaddyJSONPath)
 	if err != nil {
-		t.Fatalf("panel Caddyfile should be written: %v", err)
+		t.Fatalf("panel Caddy JSON should be written: %v", err)
 	}
-	if !strings.Contains(string(body), "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("unexpected panel Caddyfile:\n%s", string(body))
+	if !strings.Contains(string(body), `"dial": "127.0.0.1:2096"`) {
+		t.Fatalf("unexpected panel Caddy JSON:\n%s", string(body))
 	}
 	if _, err := os.Stat(filepath.Join(dir, "systemd", "veil-caddy.service")); err != nil {
 		t.Fatalf("Caddy runtime unit should be written for panel Caddy access: %v", err)

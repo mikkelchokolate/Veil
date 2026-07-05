@@ -29,8 +29,8 @@ func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
 
 func TestLiveConfigPromotionPromotesBacksUpAndRollsBack(t *testing.T) {
 	root := t.TempDir()
-	staged := filepath.Join(root, "generated", "caddy", "Caddyfile")
-	live := filepath.Join(root, "live", "caddy", "Caddyfile")
+	staged := filepath.Join(root, "generated", "caddy", "config.json")
+	live := filepath.Join(root, "live", "caddy", "config.json")
 	if err := atomicfile.Write(staged, []byte("new"), 0o600, 0o700); err != nil {
 		t.Fatalf("write staged: %v", err)
 	}

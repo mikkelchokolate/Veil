@@ -74,7 +74,7 @@ func TestCaddyRouteRejectsInvalidConfiguration(t *testing.T) {
 }
 
 func TestGeneratedConfigPropagatesRenderError(t *testing.T) {
-	// Empty domain makes renderer.RenderPanelCaddyfile fail while CaddyRoute succeeds.
+	// Empty domain makes Caddy JSON rendering fail while CaddyRoute succeeds.
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	_, ok, err := access.GeneratedConfig(generatedconfig.NewPaths(filepath.FromSlash("/etc/veil")))

@@ -29,7 +29,7 @@ type Input struct {
 	PanelTLSCertPEM   string
 	PanelTLSKeyPEM    string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 }
 
 type File struct {
@@ -94,7 +94,7 @@ func (m ManagedMaterial) Files() ([]File, error) {
 	}
 	files := []File{}
 	if input.InstallPanelCaddy {
-		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "panel.Caddyfile"), Content: input.Caddyfile, Mode: 0o600})
+		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "config.json"), Content: input.CaddyJSON, Mode: 0o600})
 		files = append(files, File{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(input.Domain), Mode: 0o644})
 	}
 	if input.PanelTLSEnabled {

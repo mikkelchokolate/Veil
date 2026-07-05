@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
@@ -67,16 +69,29 @@ type ProfileMaterial struct {
 	PanelTLSKeyPEM    string
 	WebBasePath       string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 }
 
 type Profile struct {
-	input      ProfileInput
+	settings   model.Settings
 	PublicPort int
 }
 
 func NewProfile(input ProfileInput) Profile {
-	return Profile{input: input, PublicPort: input.PublicPort}
+	publicPort := input.PublicPort
+	if publicPort == 0 {
+		publicPort = 443
+	}
+	settings := model.Settings{
+		PanelAccess:     input.PanelAccess,
+		PanelDomain:     input.PanelDomain,
+		Domain:          input.Domain,
+		PanelEmail:      input.PanelEmail,
+		Email:           input.Email,
+		PanelListen:     RecommendedListen(input.PanelAccess, input.PanelPort),
+		PanelPublicPort: publicPort,
+	}
+	return Profile{settings: settings, PublicPort: publicPort}
 }
 
 // BuildProfile builds a Panel access Profile from model settings. It defaults
@@ -87,20 +102,11 @@ func BuildProfile(settings model.Settings) (Profile, error) {
 	if publicPort == 0 {
 		publicPort = 443
 	}
-	panelPort, err := panelPortFromListen(settings.PanelListen)
-	if err != nil {
+	if _, err := panelPortFromListen(settings.PanelListen); err != nil {
 		return Profile{}, err
 	}
-	profile := NewProfile(ProfileInput{
-		PanelAccess: settings.PanelAccess,
-		Domain:      settings.Domain,
-		Email:       settings.Email,
-		PanelDomain: settings.PanelDomain,
-		PanelEmail:  settings.PanelEmail,
-		PanelPort:   panelPort,
-		PublicPort:  publicPort,
-	})
-	return profile, nil
+	settings.PanelPublicPort = publicPort
+	return Profile{settings: settings, PublicPort: publicPort}, nil
 }
 
 func panelPortFromListen(listen string) (int, error) {
@@ -123,38 +129,41 @@ func panelPortFromListen(listen string) (int, error) {
 var newTLSFunc = NewTLS
 
 func (p Profile) Build() (ProfileMaterial, error) {
-	input := p.input
-	domain := input.PanelDomain
-	if domain == "" {
-		domain = input.Domain
-	}
-	email := input.PanelEmail
-	if email == "" {
-		email = input.Email
-	}
-	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
+	settings := p.settings
+	material := ProfileMaterial{PanelListen: settings.PanelListen}
 	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
-	panelCaddy := input.PanelAccess == "caddy"
+	settings.WebBasePath = material.WebBasePath
+	if settings.PanelDomain == "" {
+		settings.PanelDomain = settings.Domain
+	}
+	if settings.PanelEmail == "" {
+		settings.PanelEmail = settings.Email
+	}
+	panelCaddy := settings.PanelAccess == "caddy"
 	if panelCaddy {
-		if err := hostenv.ValidateDomain(domain); err != nil {
+		if err := hostenv.ValidateDomain(settings.PanelDomain); err != nil {
 			return ProfileMaterial{}, err
 		}
-		if err := hostenv.ValidateEmail(email); err != nil {
+		if err := hostenv.ValidateEmail(settings.PanelEmail); err != nil {
 			return ProfileMaterial{}, err
 		}
 		material.InstallPanelCaddy = true
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: domain, Email: email, PanelPort: input.PanelPort, PublicPort: p.PublicPort, WebBasePath: material.WebBasePath})
+		plan, _, err := caddyassembly.BuildRenderPlan(settings, nil, nil)
 		if err != nil {
 			return ProfileMaterial{}, err
 		}
-		material.Caddyfile = caddyfile
+		body, err := renderer.RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+		if err != nil {
+			return ProfileMaterial{}, err
+		}
+		material.CaddyJSON = string(body)
 		return material, nil
 	}
 	var extraIPs []net.IP
-	if input.PanelAccess == "direct" {
+	if settings.PanelAccess == "direct" {
 		extraIPs = nonLoopbackInterfaceIPs()
 	}
-	panelTLS, err := newTLSFunc().Generate(domain, extraIPs)
+	panelTLS, err := newTLSFunc().Generate(settings.PanelDomain, extraIPs)
 	if err != nil {
 		return ProfileMaterial{}, err
 	}
