@@ -45,8 +45,18 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.OlcrtcRoomID == "" {
 		settings.OlcrtcRoomID = current.OlcrtcRoomID
 	}
-	if settings.PanelAccess == "caddy" && (strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "") {
-		return errors.New("--domain and --email are required for caddy Panel access")
+	if settings.PanelAccess == "caddy" {
+		domain := strings.TrimSpace(settings.PanelDomain)
+		if domain == "" {
+			domain = strings.TrimSpace(settings.Domain)
+		}
+		email := strings.TrimSpace(settings.PanelEmail)
+		if email == "" {
+			email = strings.TrimSpace(settings.Email)
+		}
+		if domain == "" || email == "" {
+			return errors.New("--domain and --email are required for caddy Panel access")
+		}
 	}
 	if settings.PanelPublicPort == 0 {
 		settings.PanelPublicPort = current.PanelPublicPort

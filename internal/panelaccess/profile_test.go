@@ -6,7 +6,34 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
+
+func TestProfileUsesPanelPublicPort(t *testing.T) {
+	settings := model.Settings{
+		PanelListen:     "127.0.0.1:2096",
+		PanelAccess:     "caddy",
+		PanelDomain:     "panel.example.com",
+		PanelEmail:      "a@example.com",
+		PanelPublicPort: 8443,
+		WebBasePath:     "/panel-secret/",
+	}
+	profile, err := BuildProfile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.PublicPort != 8443 {
+		t.Errorf("public port = %d", profile.PublicPort)
+	}
+	material, err := profile.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(material.Caddyfile, "panel.example.com:8443") {
+		t.Errorf("Caddyfile missing public port bind:\n%s", material.Caddyfile)
+	}
+}
 
 func TestPanelAccessModeBuildsListenAddressAndCaddyRequirement(t *testing.T) {
 	for _, tc := range []struct {

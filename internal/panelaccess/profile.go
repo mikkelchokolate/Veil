@@ -11,9 +11,11 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -21,7 +23,10 @@ type ProfileInput struct {
 	PanelAccess string
 	Domain      string
 	Email       string
+	PanelDomain string
+	PanelEmail  string
 	PanelPort   int
+	PublicPort  int
 }
 
 type ModeResolution struct {
@@ -66,11 +71,51 @@ type ProfileMaterial struct {
 }
 
 type Profile struct {
-	input ProfileInput
+	input      ProfileInput
+	PublicPort int
 }
 
 func NewProfile(input ProfileInput) Profile {
-	return Profile{input: input}
+	return Profile{input: input, PublicPort: input.PublicPort}
+}
+
+// BuildProfile builds a Panel access Profile from model settings. It defaults
+// PanelPublicPort to 443 when zero and resolves the panel-specific domain/email
+// with fallback to the legacy Domain/Email fields.
+func BuildProfile(settings model.Settings) (Profile, error) {
+	publicPort := settings.PanelPublicPort
+	if publicPort == 0 {
+		publicPort = 443
+	}
+	panelPort, err := panelPortFromListen(settings.PanelListen)
+	if err != nil {
+		return Profile{}, err
+	}
+	profile := NewProfile(ProfileInput{
+		PanelAccess: settings.PanelAccess,
+		Domain:      settings.Domain,
+		Email:       settings.Email,
+		PanelDomain: settings.PanelDomain,
+		PanelEmail:  settings.PanelEmail,
+		PanelPort:   panelPort,
+		PublicPort:  publicPort,
+	})
+	return profile, nil
+}
+
+func panelPortFromListen(listen string) (int, error) {
+	if listen == "" {
+		return 0, fmt.Errorf("panelListen is required")
+	}
+	_, portStr, err := net.SplitHostPort(listen)
+	if err != nil {
+		return 0, fmt.Errorf("panelListen must be host:port")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return 0, fmt.Errorf("panelListen port must be a valid integer between 1 and 65535")
+	}
+	return port, nil
 }
 
 // newTLSFunc is overridable in tests so that Profile.Build TLS error paths can
@@ -79,18 +124,26 @@ var newTLSFunc = NewTLS
 
 func (p Profile) Build() (ProfileMaterial, error) {
 	input := p.input
+	domain := input.PanelDomain
+	if domain == "" {
+		domain = input.Domain
+	}
+	email := input.PanelEmail
+	if email == "" {
+		email = input.Email
+	}
 	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
 	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
 	panelCaddy := input.PanelAccess == "caddy"
 	if panelCaddy {
-		if err := hostenv.ValidateDomain(input.Domain); err != nil {
+		if err := hostenv.ValidateDomain(domain); err != nil {
 			return ProfileMaterial{}, err
 		}
-		if err := hostenv.ValidateEmail(input.Email); err != nil {
+		if err := hostenv.ValidateEmail(email); err != nil {
 			return ProfileMaterial{}, err
 		}
 		material.InstallPanelCaddy = true
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: material.WebBasePath})
+		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: domain, Email: email, PanelPort: input.PanelPort, PublicPort: p.PublicPort, WebBasePath: material.WebBasePath})
 		if err != nil {
 			return ProfileMaterial{}, err
 		}
@@ -101,7 +154,7 @@ func (p Profile) Build() (ProfileMaterial, error) {
 	if input.PanelAccess == "direct" {
 		extraIPs = nonLoopbackInterfaceIPs()
 	}
-	panelTLS, err := newTLSFunc().Generate(input.Domain, extraIPs)
+	panelTLS, err := newTLSFunc().Generate(domain, extraIPs)
 	if err != nil {
 		return ProfileMaterial{}, err
 	}
