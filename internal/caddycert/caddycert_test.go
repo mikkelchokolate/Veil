@@ -103,3 +103,20 @@ func writeSelfSignedCert(t *testing.T, root, issuer, domain string, lifetime tim
 	}
 	return Pair{CertPath: certPath, KeyPath: keyPath}
 }
+
+func TestSyncCopiesCertificate(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "example.com.crt"), []byte("CERT"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "example.com.key"), []byte("KEY"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sync("example.com", src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "example.com.crt")); err != nil {
+		t.Fatal(err)
+	}
+}

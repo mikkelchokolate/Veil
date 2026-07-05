@@ -126,3 +126,50 @@ func isValidCertificate(certPath, domain string) bool {
 	}
 	return cert.VerifyHostname(domain) == nil
 }
+
+// Sync polls sourceDir for a certificate and key for domain and, once both
+// exist, atomically copies them into targetDir. The atomic rename ensures
+// Hysteria2 never observes a partially-written certificate.
+func Sync(domain, sourceDir, targetDir string) error {
+	crtSrc := filepath.Join(sourceDir, domain+".crt")
+	keySrc := filepath.Join(sourceDir, domain+".key")
+	crtDst := filepath.Join(targetDir, domain+".crt")
+	keyDst := filepath.Join(targetDir, domain+".key")
+
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		if exists(crtSrc) && exists(keySrc) {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if !exists(crtSrc) || !exists(keySrc) {
+		return fmt.Errorf("certificate for %s not issued within timeout", domain)
+	}
+
+	tmpCrt := crtDst + ".tmp"
+	tmpKey := keyDst + ".tmp"
+	if err := copyFile(crtSrc, tmpCrt); err != nil {
+		return err
+	}
+	if err := copyFile(keySrc, tmpKey); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpCrt, crtDst); err != nil {
+		return err
+	}
+	return os.Rename(tmpKey, keyDst)
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o600)
+}
