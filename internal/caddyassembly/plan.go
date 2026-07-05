@@ -95,6 +95,28 @@ func BuildRenderPlan(
 	}, owners, nil
 }
 
+// BuildFinalRenderPlan constructs the complete Caddy render plan including ACME
+// challenge binds. It first builds the server-owner map, plans challenge binds
+// based on those owners, merges challenge owners into the global owner map, and
+// returns the final plan along with any validation issues raised by challenge
+// planning.
+func BuildFinalRenderPlan(
+	settings model.Settings,
+	inbounds []model.Inbound,
+) (CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner, []model.ValidationIssue, error) {
+	plan, owners, err := BuildRenderPlan(settings, inbounds, nil)
+	if err != nil {
+		return CaddyRenderPlan{}, nil, nil, err
+	}
+
+	challengeBinds, issues := PlanAcmeChallengeBinds(settings.AcmeChallengeMode, plan.Domains, owners)
+	for key := range challengeBinds {
+		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerAcmeChallenge, ServiceName: "veil-caddy.service"}
+	}
+	plan.ACMEChallenges = challengeBinds
+	return plan, owners, issues, nil
+}
+
 func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, fallbackRoot string, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
 	if transport == "tcp" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenTCP}

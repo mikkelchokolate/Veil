@@ -90,6 +90,40 @@ func TestPlanAcmeChallengeBindsTLSALPN01Conflict(t *testing.T) {
 	}
 }
 
+func TestPlanAcmeChallengeBindsHTTP01ReusesPanelCaddyListener(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"x.com": {Domain: "x.com", Email: "a@x.com"},
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{
+		key: {Kind: bindregistry.BindOwnerPanelCaddy},
+	}
+	planned, issues := PlanAcmeChallengeBinds("http-01", domains, owners)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %v", issues)
+	}
+	if _, ok := planned[key]; ok {
+		t.Fatal("expected no TCP :80 challenge bind when Panel Caddy already owns the port")
+	}
+}
+
+func TestPlanAcmeChallengeBindsHTTP01ReusesNaiveListener(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"x.com": {Domain: "x.com", Email: "a@x.com"},
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{
+		key: {Kind: bindregistry.BindOwnerNaive},
+	}
+	planned, issues := PlanAcmeChallengeBinds("http-01", domains, owners)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %v", issues)
+	}
+	if _, ok := planned[key]; ok {
+		t.Fatal("expected no TCP :80 challenge bind when a naive inbound already owns the port")
+	}
+}
+
 func TestPlanAcmeChallengeBindsTLSALPN01ReusesCaddyListener(t *testing.T) {
 	domains := map[string]CaddyDomainCertSpec{
 		"x.com": {Domain: "x.com", Email: "a@x.com"},

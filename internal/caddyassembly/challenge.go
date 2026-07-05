@@ -30,10 +30,14 @@ func PlanAcmeChallengeBinds(
 		case "http-01":
 			key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
 			if existing, ok := owners[key]; ok && existing.Kind != bindregistry.BindOwnerAcmeChallenge {
+				// A compatible Caddy listener (Panel or Naive) can answer HTTP-01 on :80.
+				if existing.Kind == bindregistry.BindOwnerPanelCaddy || existing.Kind == bindregistry.BindOwnerNaive {
+					continue
+				}
 				issues = append(issues, model.ValidationIssue{
 					Code:     "acme_http01_port_in_use",
 					Severity: "error",
-					Message:  "TCP :80 is required for http-01 but is owned by another service",
+					Message:  "TCP :80 is required for http-01 but is owned by a non-Caddy service",
 					Source:   "caddyassembly",
 				})
 				continue
