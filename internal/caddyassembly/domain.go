@@ -113,8 +113,5 @@ func naiveDomainWithFallback(inb model.Inbound, settings model.Settings) string 
 }
 
 func naiveEmailWithFallback(inb model.Inbound, settings model.Settings) string {
-	if e := stringField(inb.ProtocolFields, "email"); e != "" {
-		return e
-	}
-	return settings.Email
+	return stringField(inb.ProtocolFields, "email")
 }

@@ -235,7 +235,7 @@ func resolveNaiveEmail(inb Inbound, settings Settings) string {
 			candidates = append(candidates, e)
 		}
 	}
-	candidates = append(candidates, settings.Email, settings.DefaultAcmeEmail, settings.PanelEmail)
+	candidates = append(candidates, settings.DefaultAcmeEmail, settings.PanelEmail)
 	for _, c := range candidates {
 		if v := strings.TrimSpace(c); v != "" {
 			return v
