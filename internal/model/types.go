@@ -3,6 +3,7 @@ package model
 type Settings struct {
 	PanelListen              string `json:"panelListen"`
 	PanelAccess              string `json:"panelAccess,omitempty"`
+	PanelDomain              string `json:"panelDomain,omitempty"`
 	WebBasePath              string `json:"webBasePath,omitempty"`
 	Mode                     string `json:"mode"`
 	Domain                   string `json:"domain,omitempty"`

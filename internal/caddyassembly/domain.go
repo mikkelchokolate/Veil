@@ -24,10 +24,10 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 	owners := make(map[string]*CaddyDomainOwners)
 	emails := make(map[string]map[string]struct{})
 
-	if settings.PanelAccess == "caddy" && settings.Domain != "" {
-		domain := strings.ToLower(settings.Domain)
+	if settings.PanelAccess == "caddy" && settings.PanelDomain != "" {
+		domain := strings.ToLower(settings.PanelDomain)
 		ensureOwner(owners, domain).Panel = true
-		addEmail(emails, domain, settings.Email)
+		addEmail(emails, domain, settings.PanelEmail)
 	}
 
 	for _, inb := range inbounds {
