@@ -3,7 +3,6 @@ package caddyassembly
 import (
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/model"
-	"github.com/mikkelchokolate/Veil/internal/protocols/naiveproxy"
 )
 
 type CaddyBindOwnerKind string
@@ -43,9 +42,9 @@ func BuildRenderPlan(
 		if inb.Protocol != "naiveproxy" || !inb.Enabled {
 			continue
 		}
-		transport := naiveproxy.NaiveTransport(inb)
-		port := naiveproxy.NaivePublicPort(settings, inb)
-		domain := naiveproxy.NaiveDomain(inb)
+		transport := naiveTransport(inb)
+		port := naivePublicPort(settings, inb)
+		domain := naiveDomain(inb)
 		addNaiveBinds(transport, port, domain, inb.Name, owners, servers)
 	}
 
@@ -72,4 +71,39 @@ func addNaiveBinds(transport string, port int, domain, name string, owners map[b
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
 		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name}
 	}
+}
+
+// naiveTransport mirrors the behavior of the naiveproxy plugin helper so that
+// caddyassembly can remain independent of the protocol package and avoid an
+// import cycle with the renderer.
+func naiveTransport(inbound model.Inbound) string {
+	t := stringField(inbound.ProtocolFields, "transport")
+	if t == "" {
+		return "tcp"
+	}
+	return t
+}
+
+// naivePublicPort mirrors the naiveproxy plugin helper.
+func naivePublicPort(settings model.Settings, inbound model.Inbound) int {
+	if v, ok := inbound.ProtocolFields["publicPort"]; ok {
+		if n, ok := v.(float64); ok {
+			return int(n)
+		}
+		if n, ok := v.(int); ok {
+			return n
+		}
+	}
+	if inbound.Port != 0 {
+		return inbound.Port
+	}
+	if settings.DefaultInboundPublicPort != 0 {
+		return settings.DefaultInboundPublicPort
+	}
+	return 443
+}
+
+// naiveDomain mirrors the naiveproxy plugin helper.
+func naiveDomain(inbound model.Inbound) string {
+	return stringField(inbound.ProtocolFields, "domain")
 }
