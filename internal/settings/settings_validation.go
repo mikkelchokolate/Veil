@@ -119,14 +119,13 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	settings.Hysteria2Password = disclosure.PreserveRedacted(settings.Hysteria2Password, current.Hysteria2Password)
 	settings.OlcrtcAuth = disclosure.PreserveRedacted(settings.OlcrtcAuth, current.OlcrtcAuth)
 	if settings.FallbackRoot != "" {
-		settings.FallbackRoot = filepath.Clean(settings.FallbackRoot)
-		if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
-			settings.FallbackRoot = filepath.Clean("/var/lib/veil/" + settings.FallbackRoot)
+		settings.FallbackRoot = filepath.ToSlash(filepath.Clean(settings.FallbackRoot))
+		if !strings.HasPrefix(settings.FallbackRoot, "/") {
+			settings.FallbackRoot = filepath.ToSlash(filepath.Clean("/var/lib/veil/" + settings.FallbackRoot))
 		}
-		if !strings.HasPrefix(filepath.ToSlash(settings.FallbackRoot), "/var/lib/veil") {
+		if settings.FallbackRoot != "/var/lib/veil" && !strings.HasPrefix(settings.FallbackRoot, "/var/lib/veil/") {
 			return errors.New("fallbackRoot must be within /var/lib/veil")
 		}
-		settings.FallbackRoot = filepath.ToSlash(settings.FallbackRoot)
 	}
 	return nil
 }

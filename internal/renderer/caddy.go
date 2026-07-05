@@ -3,9 +3,6 @@ package renderer
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"path/filepath"
-	"strings"
 	"text/template"
 )
 
@@ -45,19 +42,11 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 			return "", errors.New("naive username and password are required")
 		}
 	}
-	if cfg.FallbackRoot == "" {
-		cfg.FallbackRoot = "/var/lib/veil/www"
+	fallbackRoot, err := resolveNaiveFallbackRoot(cfg.FallbackRoot)
+	if err != nil {
+		return "", err
 	}
-	// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
-	cfg.FallbackRoot = filepath.Clean(cfg.FallbackRoot)
-	// Use ToSlash for platform-independent path manipulation.
-	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
-		cfg.FallbackRoot = filepath.Clean("/var/lib/veil/" + cfg.FallbackRoot)
-	}
-	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
-		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", cfg.FallbackRoot)
-	}
-	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
+	cfg.FallbackRoot = fallbackRoot
 	const tpl = `{
   order forward_proxy before file_server
   servers {

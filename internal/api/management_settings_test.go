@@ -150,9 +150,12 @@ func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
 	}{
 		{"PUT /var/lib/veil/www → 200", "/var/lib/veil/www", http.StatusOK, true},
 		{"PUT /var/lib/veil/custom/path → 200", "/var/lib/veil/custom/path", http.StatusOK, true},
-		{"PUT /etc/passwd → 200 (normalized into /var/lib/veil)", "/etc/passwd", http.StatusOK, true},
-		{"PUT /var/lib/veil/../../../etc → 200 (normalized)", "/var/lib/veil/../../../etc", http.StatusOK, true},
-		{"PUT traversal attempt → 200 (contained by prepend)", "/var/lib/veil/../../../../etc", http.StatusOK, true},
+		{"PUT /var/lib/veil → 200", "/var/lib/veil", http.StatusOK, true},
+		{"PUT /etc/passwd → 400", "/etc/passwd", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil2 → 400 (boundary prefix)", "/var/lib/veil2", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil-evil → 400 (boundary prefix)", "/var/lib/veil-evil", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil/../../../etc → 400", "/var/lib/veil/../../../etc", http.StatusBadRequest, false},
+		{"PUT traversal attempt → 400", "/var/lib/veil/../../../../etc", http.StatusBadRequest, false},
 		{"PUT empty → 200", "", http.StatusOK, false},
 		{"PUT relative/path → 200", "relative/path", http.StatusOK, true},
 	}

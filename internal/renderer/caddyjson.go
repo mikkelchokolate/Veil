@@ -118,19 +118,10 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		for _, u := range owner.NaiveUsers {
 			basicAuth = append(basicAuth, map[string]any{"username": u.Username, "password": u.Password})
 		}
-		fallbackRoot := owner.FallbackRoot
-		if fallbackRoot == "" {
-			fallbackRoot = "/var/lib/veil/www"
+		fallbackRoot, err := resolveNaiveFallbackRoot(owner.FallbackRoot)
+		if err != nil {
+			return nil, err
 		}
-		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
-		fallbackRoot = filepath.Clean(fallbackRoot)
-		if !strings.HasPrefix(filepath.ToSlash(fallbackRoot), "/var/lib/veil") {
-			fallbackRoot = filepath.Clean("/var/lib/veil/" + fallbackRoot)
-		}
-		if !strings.HasPrefix(filepath.ToSlash(fallbackRoot), "/var/lib/veil") {
-			return nil, fmt.Errorf("fallback root must be within /var/lib/veil: %s", fallbackRoot)
-		}
-		fallbackRoot = filepath.ToSlash(fallbackRoot)
 		handlers := []map[string]any{
 			{
 				"handler":          "forward_proxy",
@@ -156,6 +147,23 @@ func protocolsForTransport(transport string) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("unsupported naive transport %q", transport)
 	}
+}
+
+// resolveNaiveFallbackRoot validates and normalizes the naive fallback root.
+// It must be either exactly /var/lib/veil or a subdirectory of it.
+// Relative paths are resolved against /var/lib/veil.
+func resolveNaiveFallbackRoot(input string) (string, error) {
+	if input == "" {
+		return "/var/lib/veil/www", nil
+	}
+	root := filepath.ToSlash(filepath.Clean(input))
+	if !strings.HasPrefix(root, "/") {
+		root = filepath.ToSlash(filepath.Clean("/var/lib/veil/" + root))
+	}
+	if root != "/var/lib/veil" && !strings.HasPrefix(root, "/var/lib/veil/") {
+		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", root)
+	}
+	return root, nil
 }
 
 func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.AcmeChallengeOwner) map[string]any {

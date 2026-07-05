@@ -113,10 +113,22 @@ func TestSettingsValidationPanelListenErrors(t *testing.T) {
 }
 
 func TestSettingsValidationFallbackRootEscapesVarLibVeil(t *testing.T) {
-	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", FallbackRoot: "../../etc/passwd"}
-	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
-	if err == nil || err.Error() != "fallbackRoot must be within /var/lib/veil" {
-		t.Fatalf("err = %v", err)
+	cases := []string{
+		"../../etc/passwd",
+		"/etc/passwd",
+		"/var/lib/veil2",
+		"/var/lib/veil-evil",
+		"/var/lib/veil2/sub",
+		"/var/lib",
+	}
+	for _, root := range cases {
+		t.Run(root, func(t *testing.T) {
+			settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", FallbackRoot: root}
+			err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+			if err == nil || err.Error() != "fallbackRoot must be within /var/lib/veil" {
+				t.Fatalf("err = %v", err)
+			}
+		})
 	}
 }
 

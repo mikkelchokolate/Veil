@@ -152,10 +152,14 @@ func TestRenderNaiveCaddyfileNormalizesPaths(t *testing.T) {
 		fallbackRoot string
 		wantOk       bool
 	}{
-		{"FallbackRoot=/etc/passwd normalizes into /var/lib/veil", "/etc/passwd", true},
-		{"FallbackRoot=/var/lib/veil/../../../etc/passwd normalizes into /var/lib/veil", "/var/lib/veil/../../../etc/passwd", true},
+		{"FallbackRoot=/etc/passwd rejects outside /var/lib/veil", "/etc/passwd", false},
+		{"FallbackRoot=/var/lib/veil2 rejects boundary prefix", "/var/lib/veil2", false},
+		{"FallbackRoot=/var/lib/veil-evil rejects boundary prefix", "/var/lib/veil-evil", false},
+		{"FallbackRoot=/var/lib/veil/../../../etc/passwd rejects escape", "/var/lib/veil/../../../etc/passwd", false},
 		{"FallbackRoot=/var/lib/veil/www unchanged", "/var/lib/veil/www", true},
+		{"FallbackRoot=/var/lib/veil accepted exactly", "/var/lib/veil", true},
 		{"FallbackRoot empty uses default", "", true},
+		{"FallbackRoot relative resolves under /var/lib/veil", "custom", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

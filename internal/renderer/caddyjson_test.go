@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -212,27 +213,73 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsParentTraversal(t *testing.T) {
 	}
 }
 
-func TestRenderCaddyJSONNaiveFallbackRootNormalizesAbsolutePath(t *testing.T) {
-	plan := caddyassembly.CaddyRenderPlan{
-		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
-			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
-				Kind:         caddyassembly.CaddyOwnerNaive,
-				Domain:       "p.example.com",
-				InboundName:  "naive-1",
-				Transport:    "tcp",
-				FallbackRoot: "/etc/passwd",
-			},
-		},
-		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
-			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
-		},
+func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
+	cases := []string{
+		"/etc/passwd",
+		"/var/lib/veil2",
+		"/var/lib/veil-evil",
+		"/var/lib/veil2/sub",
+		"/var/lib",
 	}
-	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
-	if err != nil {
-		t.Fatal(err)
+	for _, root := range cases {
+		t.Run(root, func(t *testing.T) {
+			plan := caddyassembly.CaddyRenderPlan{
+				Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+					{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+						Kind:         caddyassembly.CaddyOwnerNaive,
+						Domain:       "p.example.com",
+						InboundName:  "naive-1",
+						Transport:    "tcp",
+						FallbackRoot: root,
+					},
+				},
+				Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+					"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+				},
+			}
+			_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+			if err == nil {
+				t.Fatalf("expected error for fallback root %q outside /var/lib/veil", root)
+			}
+		})
 	}
-	if !strings.Contains(string(data), `"root": "/var/lib/veil/etc/passwd"`) {
-		t.Errorf("expected normalized fallback root, got %s", string(data))
+}
+
+func TestRenderCaddyJSONNaiveFallbackRootAcceptsWithinVeil(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"/var/lib/veil", "/var/lib/veil"},
+		{"/var/lib/veil/", "/var/lib/veil"},
+		{"/var/lib/veil/custom", "/var/lib/veil/custom"},
+		{"/var/lib/veil/www", "/var/lib/veil/www"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			plan := caddyassembly.CaddyRenderPlan{
+				Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+					{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+						Kind:         caddyassembly.CaddyOwnerNaive,
+						Domain:       "p.example.com",
+						InboundName:  "naive-1",
+						Transport:    "tcp",
+						FallbackRoot: tc.input,
+					},
+				},
+				Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+					"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+				},
+			}
+			data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantRoot := fmt.Sprintf(`"root": %q`, tc.want)
+			if !strings.Contains(string(data), wantRoot) {
+				t.Errorf("expected %s in rendered JSON, got %s", wantRoot, string(data))
+			}
+		})
 	}
 }
 
