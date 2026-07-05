@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
@@ -611,77 +610,17 @@ func TestBuildLinksNoDomain(t *testing.T) {
 	}
 }
 
-func TestBuildLinksFallbackFromLegacySettingsOnly(t *testing.T) {
+func TestBuildLinksTCP(t *testing.T) {
 	p := New()
-	settings := model.Settings{
-		Domain:        "example.com",
-		NaiveUsername: "settingsuser",
-		NaivePassword: "settingspass",
-	}
+	settings := model.Settings{DefaultInboundPublicPort: 443}
 	inbound := model.Inbound{
-		Name:      "n1",
-		Protocol:  "naiveproxy",
-		Enabled:   true,
-		Transport: "tcp",
-		Port:      443,
-	}
-
-	links, err := p.BuildLinks(settings, inbound)
-	if err != nil {
-		t.Fatalf("BuildLinks error: %v", err)
-	}
-	if len(links) != 1 {
-		t.Fatalf("len(links) = %d, want 1", len(links))
-	}
-	want := clientaccess.NaiveClientURI("example.com", 443, "settingsuser", "settingspass")
-	if links[0].URI != want {
-		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
-	}
-}
-
-func TestBuildLinksFallbackCredentials(t *testing.T) {
-	p := New()
-	settings := model.Settings{
-		Domain:        "example.com",
-		NaiveUsername: "fallbackuser",
-		NaivePassword: "fallbackpass",
-	}
-	inbound := model.Inbound{
-		Name:      "n1",
-		Protocol:  "naiveproxy",
-		Enabled:   true,
-		Transport: "tcp",
-		Port:      443,
-	}
-
-	links, err := p.BuildLinks(settings, inbound)
-	if err != nil {
-		t.Fatalf("BuildLinks error: %v", err)
-	}
-	if len(links) != 1 {
-		t.Fatalf("len(links) = %d, want 1", len(links))
-	}
-	if links[0].Name != "n1" {
-		t.Errorf("link.Name = %q, want n1", links[0].Name)
-	}
-	want := clientaccess.NaiveClientURI("example.com", 443, "fallbackuser", "fallbackpass")
-	if links[0].URI != want {
-		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
-	}
-}
-
-func TestBuildLinksWithProfiles(t *testing.T) {
-	p := New()
-	settings := model.Settings{Domain: "example.com"}
-	inbound := model.Inbound{
-		Name:      "n1",
-		Protocol:  "naiveproxy",
-		Enabled:   true,
-		Transport: "tcp",
-		Port:      443,
-		Profiles: []model.ClientProfile{
-			{Name: "pro1", Username: "u1", Password: "p1", Enabled: true},
-			{Name: "pro2", Username: "u2", Password: "p2", Enabled: false},
+		Name:     "n1",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		Profiles: []model.ClientProfile{{Name: "pro1", Username: "u1", Password: "p1", Enabled: true}},
+		ProtocolFields: map[string]any{
+			"domain":    "example.com",
+			"transport": "tcp",
 		},
 	}
 
@@ -692,47 +631,111 @@ func TestBuildLinksWithProfiles(t *testing.T) {
 	if len(links) != 1 {
 		t.Fatalf("len(links) = %d, want 1", len(links))
 	}
-	if links[0].Name != "n1/pro1" {
-		t.Errorf("link.Name = %q, want n1/pro1", links[0].Name)
+	if links[0].Name != "n1-https" {
+		t.Errorf("link.Name = %q, want n1-https", links[0].Name)
 	}
-	want := clientaccess.NaiveClientURI("example.com", 443, "u1", "p1")
+	if links[0].Transport != "tcp" {
+		t.Errorf("link.Transport = %q, want tcp", links[0].Transport)
+	}
+	want := "https://u1:p1@example.com"
 	if links[0].URI != want {
 		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
 	}
 }
 
-func TestBuildLinksInvalidProfiles(t *testing.T) {
+func TestBuildLinksQUIC(t *testing.T) {
 	p := New()
-	settings := model.Settings{Domain: "example.com"}
+	settings := model.Settings{DefaultInboundPublicPort: 443}
 	inbound := model.Inbound{
-		Name:      "n1",
-		Protocol:  "naiveproxy",
-		Enabled:   true,
-		Transport: "tcp",
-		Port:      443,
-		Profiles: []model.ClientProfile{
-			{Name: "pro1", Username: "u1", Password: "", Enabled: true},
+		Name:     "n1",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		Profiles: []model.ClientProfile{{Name: "pro1", Username: "u1", Password: "p1", Enabled: true}},
+		ProtocolFields: map[string]any{
+			"domain":    "example.com",
+			"transport": "quic",
+		},
+	}
+
+	links, err := p.BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatalf("BuildLinks error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("len(links) = %d, want 1", len(links))
+	}
+	if links[0].Name != "n1-quic" {
+		t.Errorf("link.Name = %q, want n1-quic", links[0].Name)
+	}
+	if links[0].Transport != "quic" {
+		t.Errorf("link.Transport = %q, want quic", links[0].Transport)
+	}
+	want := "quic://u1:p1@example.com"
+	if links[0].URI != want {
+		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
+	}
+}
+
+func TestBuildLinksNonDefaultPort(t *testing.T) {
+	p := New()
+	settings := model.Settings{DefaultInboundPublicPort: 8443}
+	inbound := model.Inbound{
+		Name:     "n1",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		Profiles: []model.ClientProfile{{Name: "pro1", Username: "u1", Password: "p1", Enabled: true}},
+		ProtocolFields: map[string]any{
+			"domain":    "example.com",
+			"transport": "tcp",
+		},
+	}
+
+	links, err := p.BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatalf("BuildLinks error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("len(links) = %d, want 1", len(links))
+	}
+	want := "https://u1:p1@example.com:8443"
+	if links[0].URI != want {
+		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
+	}
+}
+
+func TestBuildLinksNoProfiles(t *testing.T) {
+	p := New()
+	settings := model.Settings{DefaultInboundPublicPort: 443}
+	inbound := model.Inbound{
+		Name:     "n1",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		ProtocolFields: map[string]any{
+			"domain":    "example.com",
+			"transport": "tcp",
 		},
 	}
 
 	_, err := p.BuildLinks(settings, inbound)
 	if err == nil {
-		t.Fatal("expected error for invalid profile, got nil")
+		t.Fatal("expected error for missing profiles, got nil")
 	}
 }
 
 func TestBuildLinksMultipleProfiles(t *testing.T) {
 	p := New()
-	settings := model.Settings{Domain: "example.com"}
+	settings := model.Settings{DefaultInboundPublicPort: 443}
 	inbound := model.Inbound{
-		Name:      "n1",
-		Protocol:  "naiveproxy",
-		Enabled:   true,
-		Transport: "tcp",
-		Port:      443,
+		Name:     "n1",
+		Protocol: "naiveproxy",
+		Enabled:  true,
 		Profiles: []model.ClientProfile{
 			{Name: "pro1", Username: "u1", Password: "p1", Enabled: true},
 			{Name: "pro2", Username: "u2", Password: "p2", Enabled: true},
+		},
+		ProtocolFields: map[string]any{
+			"domain":    "example.com",
+			"transport": "tcp",
 		},
 	}
 
@@ -743,9 +746,13 @@ func TestBuildLinksMultipleProfiles(t *testing.T) {
 	if len(links) != 2 {
 		t.Fatalf("len(links) = %d, want 2", len(links))
 	}
-	for i, wantName := range []string{"n1/pro1", "n1/pro2"} {
-		if links[i].Name != wantName {
-			t.Errorf("links[%d].Name = %q, want %q", i, links[i].Name, wantName)
+	wantURIs := []string{
+		"https://u1:p1@example.com",
+		"https://u2:p2@example.com",
+	}
+	for i, want := range wantURIs {
+		if links[i].URI != want {
+			t.Errorf("links[%d].URI = %q, want %q", i, links[i].URI, want)
 		}
 	}
 }
