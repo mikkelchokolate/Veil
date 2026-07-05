@@ -184,8 +184,8 @@ Type=simple
 # internal-CA fallback.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
-ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyConfig + ` --adapter json
-ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyConfig + ` --adapter json
+ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyConfig + `
+ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

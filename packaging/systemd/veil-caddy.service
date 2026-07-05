@@ -12,8 +12,8 @@ Type=simple
 # internal-CA fallback.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
-ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/config.json --adapter json
-ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/config.json --adapter json
+ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/config.json
+ExecReload=/usr/local/bin/caddy reload --config /etc/veil/generated/caddy/config.json
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

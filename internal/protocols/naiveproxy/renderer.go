@@ -45,7 +45,7 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 		Subpath:        generatedconfig.CaddyJSONConfigSubpath,
 		ValidationName: "caddy",
 		ValidationCommand: func(path string) []string {
-			return []string{"caddy", "validate", "--config", path, "--adapter", "json"}
+			return []string{"caddy", "validate", "--config", path}
 		},
 	}
 }
