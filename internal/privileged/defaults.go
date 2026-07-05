@@ -15,13 +15,13 @@ func DefaultPolicy() Policy {
 		BackupRoot:           "/var/lib/veil/backups",
 		UpdateRoot:           "/var/lib/veil/updates",
 		ManagedUnits: map[string]struct{}{
-			"veil.service":             {},
-			"veil-mieru.service":       {},
-			"veil-warp.service":        {},
-			"veil-caddy@panel.service": {},
+			"veil.service":       {},
+			"veil-mieru.service": {},
+			"veil-warp.service":  {},
+			"veil-caddy.service": {},
 		},
 		ManagedUnitPrefixes: []string{
-			"veil-caddy@",
+			"veil-caddy.service",
 			"veil-hysteria2@",
 			"veil-olcrtc@",
 		},
