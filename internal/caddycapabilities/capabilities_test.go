@@ -6,8 +6,8 @@ func TestProbeParsesModuleList(t *testing.T) {
 	// A mock binary that prints a module list matching Caddy's `caddy list-modules --json` shape.
 	// For the plan we test parsing of a known JSON fragment.
 	input := `[
-	  {"name":"http.handlers.forward_proxy"},
-	  {"name":"http"}
+	  {"module_name":"http.handlers.forward_proxy"},
+	  {"module_name":"http"}
 	]`
 	caps, err := parseModuleList([]byte(input))
 	if err != nil {

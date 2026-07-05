@@ -121,3 +121,72 @@ func TestRenderCaddyJSONAcmeChallengeKeys(t *testing.T) {
 		})
 	}
 }
+
+
+func TestRenderCaddyJSONRejectsNaiveWithoutForwardProxy(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "p.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: false})
+	if err == nil {
+		t.Fatal("expected error for missing forward_proxy module")
+	}
+	want := "Caddy binary does not include the forward_proxy module required for NaiveProxy"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestRenderCaddyJSONRejectsNaiveQuicWithoutH3Only(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenUDP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "p.example.com",
+				InboundName: "naive-1",
+				Transport:   "quic",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true, H3Only: false})
+	if err == nil {
+		t.Fatal("expected error for missing H3Only support")
+	}
+	want := "Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport quic"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestRenderCaddyJSONAllowsNaiveHTTPSWithForwardProxy(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "p.example.com",
+				InboundName: "naive-1",
+				Transport:   "https",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatalf("expected success for https transport with forward_proxy, got %v", err)
+	}
+}

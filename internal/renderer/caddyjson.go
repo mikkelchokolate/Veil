@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -12,10 +13,33 @@ import (
 )
 
 func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) ([]byte, error) {
+	if err := validateCaddyCapabilities(plan, caps); err != nil {
+		return nil, err
+	}
 	cfg := caddyConfig{Apps: map[string]any{}}
 	cfg.Apps["http"] = renderHTTPApp(plan, caps)
 	cfg.Apps["tls"] = renderTLSApp(plan)
 	return json.MarshalIndent(cfg, "", "  ")
+}
+
+func validateCaddyCapabilities(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) error {
+	for _, owner := range plan.Servers {
+		if owner.Kind != caddyassembly.CaddyOwnerNaive {
+			continue
+		}
+		if !caps.ForwardProxy {
+			return fmt.Errorf("Caddy binary does not include the forward_proxy module required for NaiveProxy")
+		}
+		if owner.Transport == "quic" || owner.Transport == "dual" {
+			if !caps.H3Only || !caps.HTTP3 {
+				return fmt.Errorf("Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport %s", owner.Transport)
+			}
+		}
+		if owner.Transport == "quic" && !caps.H3Only {
+			return fmt.Errorf("Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport %s", owner.Transport)
+		}
+	}
+	return nil
 }
 
 type caddyConfig struct {

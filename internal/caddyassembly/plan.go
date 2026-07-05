@@ -21,6 +21,7 @@ type CaddyBindOwner struct {
 	Kind        CaddyBindOwnerKind
 	Domain      string
 	InboundName string
+	Transport   string           // Inbound transport; used only for Naive owner
 	BackendPort int              // Panel backend port parsed from PanelListen; used only for Panel owner
 	WebBasePath string           // Normalized panel web base path; used only for Panel owner
 	NaiveUsers  []CaddyNaiveUser // Only for naive owner
@@ -92,12 +93,12 @@ func addNaiveBinds(transport string, port int, domain, name string, users []Cadd
 	if transport == "tcp" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenTCP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, NaiveUsers: users}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users}
 	}
 	if transport == "quic" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenUDP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, NaiveUsers: users}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users}
 	}
 }
 

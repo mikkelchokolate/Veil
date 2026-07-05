@@ -13,7 +13,7 @@ type CaddyCapabilities struct {
 }
 
 type caddyModule struct {
-	Name string `json:"name"`
+	Name string `json:"module_name"`
 }
 
 func Probe(binaryPath string) (CaddyCapabilities, error) {
