@@ -7,6 +7,7 @@ import (
 
 const (
 	CaddyfileSubpath       = "caddy/panel.Caddyfile"
+	CaddyJSONConfigSubpath = "caddy/config.json"
 	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
 	MieruConfigSubpath     = "mieru/server_config.json"
 	WarpConfigSubpath      = "sing-box/warp.json"
@@ -81,6 +82,7 @@ type GeneratedConfigArtifactCatalog = ArtifactCatalog
 
 func NewArtifactCatalog() ArtifactCatalog {
 	return ArtifactCatalog{artifacts: []ArtifactSpec{
+		{Subpath: CaddyJSONConfigSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path, "--adapter", "json"} }},
 		{Subpath: CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
 		// Hysteria2 (hysteria), Mieru (mita) and olcRTC have no standalone config
 		// check command, so they get no pre-stage syntax validation; a bad config

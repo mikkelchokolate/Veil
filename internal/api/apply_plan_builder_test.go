@@ -7,6 +7,30 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
+func TestBuildApplyPlanIncludesCaddyJSONArtifact(t *testing.T) {
+	settings := Settings{
+		PanelListen: "0.0.0.0:8080",
+		Mode:        "server",
+		PanelAccess: "caddy",
+		PanelDomain: "panel.example.com",
+		PanelEmail:  "admin@example.com",
+	}
+	inbounds := []Inbound{}
+	plan := BuildApplyPlan(ApplyPlanInput{Settings: settings, Inbounds: inbounds})
+	if !plan.Valid {
+		t.Fatalf("plan invalid: %v", plan.Errors)
+	}
+	found := false
+	for _, c := range plan.Configs {
+		if c == "/etc/veil/generated/caddy/config.json" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected Caddy JSON config artifact in plan")
+	}
+}
+
 func TestBuildApplyPlanUsesApplyRootForStructuredOperations(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		ApplyRoot: "/srv/veil",

@@ -1,12 +1,16 @@
 package api
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
+	"github.com/mikkelchokolate/Veil/internal/bindregistry"
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
-	"github.com/mikkelchokolate/Veil/internal/panelaccess"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -24,7 +28,7 @@ type ApplyPlanInput struct {
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	applyRoot := defaultApplyRoot(input.ApplyRoot)
-	panelAccessIntent := panelaccess.New(input.Settings, protocols.NewCatalog().RequiresCaddy).ApplyIntent(input.Inbounds)
+	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds)
 	capabilities := []applyplan.ProtocolCapability{}
 	catalog := NewApplyProtocolCapabilityCatalog()
 	for _, protocolCapability := range catalog.All() {
@@ -39,7 +43,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		})
 	}
 	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
-	runtimeUnits := service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits()
+	runtimeUnits := filterCaddyRuntimeUnits(service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits())
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""
 	if action, ok := runtimeCatalog.ApplyAction("sing-box"); ok {
@@ -52,13 +56,8 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		RoutingSource:           input.RoutingSource,
 		Warp:                    input.Warp,
 		RenderSettingsAvailable: input.RenderSettingsAvailable,
-		PanelAccess: applyplan.Material{
-			Configs:  panelAccessIntent.Configs,
-			Actions:  panelAccessIntent.Actions,
-			Runtimes: panelAccessIntent.Runtimes,
-			Errors:   panelAccessIntent.Errors,
-		},
-		Capabilities: capabilities,
+		PanelAccess:             caddyMaterial,
+		Capabilities:            capabilities,
 		ValidateCardinality: func(settings Settings, inbounds []Inbound) error {
 			return generatedconfig.NewGeneratedConfigCardinality(settings, protocols.NewGeneratedConfigRegistry()).Validate(inbounds)
 		},
@@ -69,4 +68,123 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
 		LiveRoot:              filepath.Join(applyRoot, "live"),
 	})
+}
+
+func buildCaddyMaterial(settings Settings, inbounds []Inbound) applyplan.Material {
+	material := applyplan.Material{}
+	if !caddyRequired(settings, inbounds) {
+		return material
+	}
+	if settings.PanelAccess == "caddy" && (settings.PanelDomain == "" || settings.PanelEmail == "") {
+		material.Errors = append(material.Errors, "panelDomain and panelEmail are required for caddy Panel access")
+		return material
+	}
+	if settings.PanelAccess == "caddy" && settings.PanelPublicPort == 0 {
+		settings.PanelPublicPort = 443
+	}
+
+	initialPlan, owners, err := caddyassembly.BuildRenderPlan(settings, inbounds, nil)
+	if err != nil {
+		material.Errors = append(material.Errors, err.Error())
+		return material
+	}
+
+	challengeBinds, issues := caddyassembly.PlanAcmeChallengeBinds(settings.AcmeChallengeMode, initialPlan.Domains, owners)
+	for _, issue := range issues {
+		if issue.Severity == "error" {
+			material.Errors = append(material.Errors, issue.Message)
+		}
+	}
+
+	allOwners := make(map[bindregistry.BindKey]bindregistry.BindOwner, len(owners)+len(challengeBinds)+len(inbounds))
+	for k, v := range owners {
+		allOwners[k] = v
+	}
+	for k := range challengeBinds {
+		allOwners[k] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerAcmeChallenge, ServiceName: "veil-caddy.service"}
+	}
+	for _, conflict := range addInboundBindOwners(inbounds, allOwners) {
+		material.Errors = append(material.Errors, conflict.Message)
+	}
+	for _, conflict := range bindregistry.ValidateNoConflicts(allOwners) {
+		material.Errors = append(material.Errors, conflict.Message)
+	}
+
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers:        initialPlan.Servers,
+		ACMEChallenges: challengeBinds,
+		Domains:        initialPlan.Domains,
+	}
+
+	caps, _ := caddycapabilities.Probe("")
+	if _, err := renderer.RenderCaddyJSON(plan, caps); err != nil {
+		material.Errors = append(material.Errors, err.Error())
+		return material
+	}
+
+	path := generatedconfig.ArtifactSpec{Subpath: generatedconfig.CaddyJSONConfigSubpath}.PlanPath()
+	material.Configs = append(material.Configs, path)
+	material.Actions = append(material.Actions, "reload veil-caddy.service")
+	material.Runtimes = append(material.Runtimes, "veil-caddy.service")
+	return material
+}
+
+func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bindregistry.BindOwner) []bindregistry.Conflict {
+	var conflicts []bindregistry.Conflict
+	for _, inb := range inbounds {
+		if !inb.Enabled || inb.Port <= 0 {
+			continue
+		}
+		var key bindregistry.BindKey
+		var owner bindregistry.BindOwner
+		switch inb.Protocol {
+		case "naiveproxy":
+			// Already represented by the Caddy render plan owners.
+			continue
+		case "hysteria2":
+			// Hysteria2 public binds are UDP; the TCP port is only used for ACME
+			// TLS-ALPN-01 if configured, which is owned by Caddy in this design.
+			key = bindregistry.BindKey{Address: "0.0.0.0", Port: inb.Port, Network: bindregistry.ListenUDP}
+			owner = bindregistry.BindOwner{Kind: bindregistry.BindOwnerHysteria2, ServiceName: "veil-hysteria2@" + inb.Name + ".service", InboundName: inb.Name}
+		default:
+			key = bindregistry.BindKey{Address: "0.0.0.0", Port: inb.Port, Network: bindregistry.ListenTCP}
+			owner = bindregistry.BindOwner{Kind: bindregistry.BindOwnerInbound, ServiceName: "veil-" + inb.Protocol + ".service", InboundName: inb.Name}
+		}
+		if existing, ok := owners[key]; ok && existing != owner {
+			conflicts = append(conflicts, bindregistry.Conflict{
+				Key:     key,
+				Owners:  []bindregistry.BindOwner{existing, owner},
+				Message: fmt.Sprintf("%s %s:%d is claimed by multiple owners", key.Network, key.Address, key.Port),
+			})
+			continue
+		}
+		owners[key] = owner
+	}
+	return conflicts
+}
+
+func caddyRequired(settings Settings, inbounds []Inbound) bool {
+	if settings.PanelAccess == "caddy" {
+		return true
+	}
+	for _, inb := range inbounds {
+		if inb.Enabled && inb.Protocol == "naiveproxy" {
+			return true
+		}
+	}
+	return false
+}
+
+func filterCaddyRuntimeUnits(units []string) []string {
+	out := make([]string, 0, len(units))
+	for _, unit := range units {
+		if unit == "veil-caddy.service" || !isTemplateCaddyUnit(unit) {
+			out = append(out, unit)
+		}
+	}
+	return out
+}
+
+func isTemplateCaddyUnit(unit string) bool {
+	return len(unit) > len("veil-caddy@") && unit[:len("veil-caddy@")] == "veil-caddy@" && unit[len(unit)-len(".service"):] == ".service"
 }
