@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
@@ -79,18 +80,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	}
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
-		server["routes"] = []map[string]any{
-			{
-				"match": []map[string]any{{"host": []string{owner.Domain}}},
-				"handle": []map[string]any{{
-					"handler":   "reverse_proxy",
-					"upstreams": []map[string]any{{"dial": "127.0.0.1:8080"}},
-				}},
-			},
-			{
-				"handle": []map[string]any{{"handler": "static_response", "status_code": 404}},
-			},
-		}
+		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
 	case caddyassembly.CaddyOwnerNaive:
 		handlers := []map[string]any{
 			{
@@ -115,6 +105,38 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 		"listen":     []string{listenString(key)},
 		"auto_https": map[string]any{"disable_redirects": true},
 		"routes":     []map[string]any{},
+	}
+}
+
+func panelRoutes(domain string, backendPort int, webBasePath string) []map[string]any {
+	proxy := map[string]any{
+		"handler":   "reverse_proxy",
+		"upstreams": []map[string]any{{"dial": "127.0.0.1:" + portString(backendPort)}},
+	}
+	if webBasePath == "" || webBasePath == "/" {
+		return []map[string]any{
+			{"match": []map[string]any{{"host": []string{domain}}}, "handle": []map[string]any{proxy}},
+			{"handle": []map[string]any{{"handler": "static_response", "status_code": 404}}},
+		}
+	}
+	webBasePath = strings.TrimRight(webBasePath, "/")
+	webBasePathSlash := webBasePath + "/"
+	return []map[string]any{
+		{
+			"match": []map[string]any{{"host": []string{domain}, "path": []string{webBasePath}}},
+			"handle": []map[string]any{{
+				"handler": "static_response",
+				"headers": map[string]any{"Location": []string{webBasePathSlash}},
+				"status_code": 308,
+			}},
+		},
+		{
+			"match": []map[string]any{{"host": []string{domain}, "path": []string{webBasePathSlash + "*"}}},
+			"handle": []map[string]any{proxy},
+		},
+		{
+			"handle": []map[string]any{{"handler": "static_response", "status_code": 404}},
+		},
 	}
 }
 

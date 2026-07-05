@@ -22,6 +22,7 @@ const (
 	BindOwnerPanelCaddy    BindOwnerKind = "panel_caddy"
 	BindOwnerNaive         BindOwnerKind = "naive"
 	BindOwnerHysteria2     BindOwnerKind = "hysteria2"
+	BindOwnerInbound       BindOwnerKind = "inbound"
 	BindOwnerLegacyCaddy   BindOwnerKind = "legacy_caddy"
 	BindOwnerAcmeChallenge BindOwnerKind = "acme_challenge"
 )

@@ -46,7 +46,7 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 
 	configs, err := registry.Render(generatedconfig.ConfigInput{
 		ApplyRoot: root,
-		Settings:  model.Settings{Domain: "example.com"},
+		Settings:  model.Settings{Domain: "example.com", Email: "admin@example.com"},
 		Inbounds:  inbounds,
 	})
 	if err != nil {
@@ -63,22 +63,17 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 		t.Errorf("missing config for hy2-b at %s", hy2BPath)
 	}
 
-	// Verify naiveproxy configs are rendered as separate files
-	naiveAPath := filepath.Join(root, "generated", "caddy", "naive-a.Caddyfile")
-	naiveBPath := filepath.Join(root, "generated", "caddy", "naive-b.Caddyfile")
-	caddyContentA, ok := configs[naiveAPath]
+	// Verify naiveproxy inbounds are rendered into the consolidated Caddy JSON config.
+	naiveJSONPath := filepath.Join(root, "generated", "caddy", "config.json")
+	caddyContent, ok := configs[naiveJSONPath]
 	if !ok {
-		t.Fatalf("missing caddy config at %s", naiveAPath)
-	}
-	caddyContentB, ok := configs[naiveBPath]
-	if !ok {
-		t.Fatalf("missing caddy config at %s", naiveBPath)
+		t.Fatalf("missing consolidated caddy config at %s", naiveJSONPath)
 	}
 
-	if !strings.Contains(caddyContentA, "usera") {
-		t.Errorf("Caddyfile does not contain naive proxy definition for usera: %s", caddyContentA)
+	if !strings.Contains(caddyContent, `"handler": "forward_proxy"`) {
+		t.Errorf("Caddy JSON does not contain forward_proxy handler: %s", caddyContent)
 	}
-	if !strings.Contains(caddyContentB, "userb") {
-		t.Errorf("Caddyfile does not contain naive proxy definition for userb: %s", caddyContentB)
+	if !strings.Contains(caddyContent, `"example.com"`) {
+		t.Errorf("Caddy JSON does not contain expected domain: %s", caddyContent)
 	}
 }

@@ -4,7 +4,7 @@ import "path"
 
 const (
 	UnitVeil          = "veil.service"
-	UnitCaddy         = "veil-caddy@.service"
+	UnitCaddy         = "veil-caddy.service"
 	UnitHysteria2     = "veil-hysteria2@.service"
 	UnitOlcrtc        = "veil-olcrtc@.service"
 	UnitWarp          = "veil-warp.service"
@@ -68,7 +68,7 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.EtcDir == "" {
 		cfg.EtcDir = "/etc/veil"
 	}
-	caddyfile := path.Join(cfg.EtcDir, "generated", "caddy", "%i.Caddyfile")
+	caddyConfig := path.Join(cfg.EtcDir, "generated", "caddy", "config.json")
 	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")
 	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")
 	warpConfig := path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
@@ -171,7 +171,7 @@ RemoveOnStop=true
 WantedBy=sockets.target
 `,
 		UnitCaddy: `[Unit]
-Description=Veil managed NaiveProxy/Caddy (%i)
+Description=Veil managed NaiveProxy/Caddy
 After=network-online.target
 Wants=network-online.target
 
@@ -184,8 +184,8 @@ Type=simple
 # internal-CA fallback.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
-ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyfile + ` --adapter caddyfile
-ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyfile + ` --adapter caddyfile
+ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyConfig + ` --adapter json
+ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyConfig + ` --adapter json
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

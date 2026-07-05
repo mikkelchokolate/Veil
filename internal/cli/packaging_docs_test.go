@@ -127,7 +127,7 @@ func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 		"veil.service",
 		"veil-backup.service",
 		"veil-backup.timer",
-		"veil-caddy@.service",
+		"veil-caddy.service",
 		"veil-hysteria2@.service",
 		"veil-olcrtc@.service",
 		"veil-mieru.service",
@@ -162,7 +162,7 @@ func TestPackageScriptsExist(t *testing.T) {
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	runtimeUnits := []string{
-		"../../packaging/systemd/veil-caddy@.service",
+		"../../packaging/systemd/veil-caddy.service",
 		"../../packaging/systemd/veil-hysteria2@.service",
 		"../../packaging/systemd/veil-olcrtc@.service",
 		"../../packaging/systemd/veil-mieru.service",

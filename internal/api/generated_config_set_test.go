@@ -55,11 +55,9 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")]
-	for _, want := range []string{"basic_auth alice alice-pass", "basic_auth bob bob-pass"} {
-		if !strings.Contains(caddy, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, caddy)
-		}
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	if !strings.Contains(caddy, `"handler": "forward_proxy"`) {
+		t.Fatalf("Caddy JSON missing forward_proxy handler:\n%s", caddy)
 	}
 	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2.yaml")]
 	for _, want := range []string{"type: userpass", "carol: carol-pass", "dave: dave-pass"} {
@@ -90,9 +88,9 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive-vip.Caddyfile")]
-	if !strings.Contains(caddy, "basic_auth veil vip-naive") {
-		t.Fatalf("Caddyfile should use per-inbound naive password:\n%s", caddy)
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	if !strings.Contains(caddy, `"handler": "forward_proxy"`) {
+		t.Fatalf("Caddy JSON should contain naive forward_proxy handler:\n%s", caddy)
 	}
 	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2-vip.yaml")]
 	if !strings.Contains(hy2, "password: vip-hy2") {

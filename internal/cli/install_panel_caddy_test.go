@@ -65,7 +65,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	var gotPaths installer.ApplyPaths
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
 		gotPaths = paths
-		return installer.ApplyResult{WrittenFiles: []string{"/etc/systemd/system/veil-caddy@.service"}}, nil
+		return installer.ApplyResult{WrittenFiles: []string{"/etc/systemd/system/veil-caddy.service"}}, nil
 	}
 	commandLookPath = func(name string) (string, error) {
 		if name == "caddy" {

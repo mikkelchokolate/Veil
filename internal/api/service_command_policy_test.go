@@ -7,15 +7,18 @@ import (
 )
 
 func TestServiceCommandPolicyAllowsOnlyManagedPromotedActionsAndHealthServices(t *testing.T) {
-	policy := service.NewCommandPolicy(NewManagedRuntimeCatalog())
-	if !policy.AllowsAction([]string{"systemctl", "restart", "veil-caddy@panel.service"}) {
-		t.Fatalf("expected veil-caddy@panel restart to be allowed")
+	policy := service.NewCommandPolicy(NewManagedRuntimeCatalogFor([]Inbound{
+		{Name: "naive", Protocol: "naiveproxy", Enabled: true},
+		{Name: "mieru", Protocol: "mieru", Enabled: true},
+	}, WarpConfig{}))
+	if !policy.AllowsAction([]string{"systemctl", "reload", "veil-caddy.service"}) {
+		t.Fatalf("expected veil-caddy reload to be allowed")
 	}
 	if !policy.AllowsAction([]string{"systemctl", "restart", "veil-mieru.service"}) {
 		t.Fatalf("expected veil-mieru restart to be allowed")
 	}
-	if policy.AllowsAction([]string{"systemctl", "reload", "veil-caddy@panel.service"}) {
-		t.Fatalf("reload must not be allowed for Caddy panel")
+	if policy.AllowsAction([]string{"systemctl", "restart", "veil-caddy.service"}) {
+		t.Fatalf("restart must not be allowed for single Caddy service")
 	}
 	if policy.AllowsAction([]string{"systemctl", "reload", "veil-mieru.service"}) {
 		t.Fatalf("reload must not be allowed for Mieru")

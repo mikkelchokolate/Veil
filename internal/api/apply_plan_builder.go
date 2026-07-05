@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
@@ -28,7 +29,8 @@ type ApplyPlanInput struct {
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	applyRoot := defaultApplyRoot(input.ApplyRoot)
-	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds)
+	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
+	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds, runtimeCatalog)
 	capabilities := []applyplan.ProtocolCapability{}
 	catalog := NewApplyProtocolCapabilityCatalog()
 	for _, protocolCapability := range catalog.All() {
@@ -42,7 +44,6 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
 	}
-	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
 	runtimeUnits := filterCaddyRuntimeUnits(service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits())
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""
@@ -70,7 +71,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	})
 }
 
-func buildCaddyMaterial(settings Settings, inbounds []Inbound) applyplan.Material {
+func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog) applyplan.Material {
 	material := applyplan.Material{}
 	if !caddyRequired(settings, inbounds) {
 		return material
@@ -103,7 +104,7 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound) applyplan.Materia
 	for k := range challengeBinds {
 		allOwners[k] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerAcmeChallenge, ServiceName: "veil-caddy.service"}
 	}
-	for _, conflict := range addInboundBindOwners(inbounds, allOwners) {
+	for _, conflict := range addInboundBindOwners(inbounds, allOwners, runtimeCatalog) {
 		material.Errors = append(material.Errors, conflict.Message)
 	}
 	for _, conflict := range bindregistry.ValidateNoConflicts(allOwners) {
@@ -129,7 +130,7 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound) applyplan.Materia
 	return material
 }
 
-func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bindregistry.BindOwner) []bindregistry.Conflict {
+func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bindregistry.BindOwner, runtimeCatalog ManagedRuntimeCatalog) []bindregistry.Conflict {
 	var conflicts []bindregistry.Conflict
 	for _, inb := range inbounds {
 		if !inb.Enabled || inb.Port <= 0 {
@@ -147,8 +148,12 @@ func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bi
 			key = bindregistry.BindKey{Address: "0.0.0.0", Port: inb.Port, Network: bindregistry.ListenUDP}
 			owner = bindregistry.BindOwner{Kind: bindregistry.BindOwnerHysteria2, ServiceName: "veil-hysteria2@" + inb.Name + ".service", InboundName: inb.Name}
 		default:
-			key = bindregistry.BindKey{Address: "0.0.0.0", Port: inb.Port, Network: bindregistry.ListenTCP}
-			owner = bindregistry.BindOwner{Kind: bindregistry.BindOwnerInbound, ServiceName: "veil-" + inb.Protocol + ".service", InboundName: inb.Name}
+			network := bindregistry.ListenTCP
+			if inb.Transport == "udp" {
+				network = bindregistry.ListenUDP
+			}
+			key = bindregistry.BindKey{Address: "0.0.0.0", Port: inb.Port, Network: network}
+			owner = bindregistry.BindOwner{Kind: bindregistry.BindOwnerInbound, ServiceName: inboundServiceUnit(runtimeCatalog, inb.Protocol, inb.Name), InboundName: inb.Name}
 		}
 		if existing, ok := owners[key]; ok && existing != owner {
 			conflicts = append(conflicts, bindregistry.Conflict{
@@ -161,6 +166,20 @@ func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bi
 		owners[key] = owner
 	}
 	return conflicts
+}
+
+func inboundServiceUnit(runtimeCatalog ManagedRuntimeCatalog, protocol, inboundName string) string {
+	for _, runtime := range runtimeCatalog.Runtimes() {
+		if runtime.Protocol != protocol {
+			continue
+		}
+		unit := runtime.Unit
+		if idx := strings.Index(unit, "@."); idx != -1 {
+			unit = unit[:idx+1] + inboundName + unit[idx+1:]
+		}
+		return unit
+	}
+	return "veil-" + protocol + ".service"
 }
 
 func caddyRequired(settings Settings, inbounds []Inbound) bool {

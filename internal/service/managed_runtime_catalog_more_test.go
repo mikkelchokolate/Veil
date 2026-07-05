@@ -80,14 +80,14 @@ func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
 		command []string
 		want    bool
 	}{
-		{[]string{"systemctl", "start", "veil-caddy@x.service"}, true},
+		{[]string{"systemctl", "start", "veil-caddy.service"}, true},
 		{[]string{"systemctl", "stop", "veil-hysteria2@y.service"}, true},
 		{[]string{"systemctl", "enable", "veil-olcrtc@z.service"}, true},
-		{[]string{"systemctl", "disable", "veil-caddy@x.service"}, true},
-		{[]string{"systemctl", "restart", "veil-caddy@x.service"}, false},
+		{[]string{"systemctl", "disable", "veil-caddy.service"}, true},
+		{[]string{"systemctl", "restart", "veil-caddy.service"}, false},
 		{[]string{"systemctl", "start", "veil-unknown@x.service"}, false},
-		{[]string{"systemctl", "start", "veil-caddy@x"}, false},
-		{[]string{"systemctl", "kill", "veil-caddy@x.service"}, false},
+		{[]string{"systemctl", "start", "veil-caddy"}, false},
+		{[]string{"systemctl", "kill", "veil-caddy.service"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.command[1]+"_"+tt.command[2], func(t *testing.T) {
@@ -100,15 +100,15 @@ func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
 
 func TestMatchUnitTemplateSuffix(t *testing.T) {
 	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{
-		{Unit: "veil-caddy@.service", HealthCheckAfter: true},
+		{Unit: "veil-hysteria2@.service", HealthCheckAfter: true},
 	})
-	if !catalog.AllowsHealthUnit("veil-caddy@x.service") {
+	if !catalog.AllowsHealthUnit("veil-hysteria2@x.service") {
 		t.Fatal("expected template unit to match instantiated unit")
 	}
-	if catalog.AllowsHealthUnit("veil-caddy@x.servic") {
+	if catalog.AllowsHealthUnit("veil-hysteria2@x.servic") {
 		t.Fatal("expected suffix mismatch to be rejected")
 	}
-	if catalog.AllowsHealthUnit("veil-hysteria2@x.service") {
+	if catalog.AllowsHealthUnit("veil-caddy@x.service") {
 		t.Fatal("expected prefix mismatch to be rejected")
 	}
 }

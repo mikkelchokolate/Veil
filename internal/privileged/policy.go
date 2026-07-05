@@ -197,7 +197,7 @@ func managedArtifactPath(id string) (ArtifactPath, bool) {
 		return ArtifactPath{}, false
 	}
 	switch clean {
-	case "mieru/server_config.json", "sing-box/warp.json":
+	case "caddy/config.json", "mieru/server_config.json", "sing-box/warp.json":
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
 	parts := strings.Split(clean, "/")

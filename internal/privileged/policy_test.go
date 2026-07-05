@@ -120,7 +120,7 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	policy := testPolicy(t)
 	resolved, err := policy.ResolvePromotion(PromoteRequest{
 		ArtifactIDs: []string{
-			"caddy/edge.Caddyfile",
+			"caddy/config.json",
 			"hysteria2/udp-edge.yaml",
 			"olcrtc/rtc-edge.yaml",
 			"mieru/server_config.json",
@@ -256,11 +256,13 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		id      string
 		allowed bool
 	}{
+		{"caddy/config.json", true},
 		{"caddy/edge.Caddyfile", true},
 		{"hysteria2/udp.yaml", true},
 		{"olcrtc/rtc.yaml", true},
 		{"mieru/server_config.json", true},
 		{"sing-box/warp.json", true},
+		{"caddy/edge.json", false},
 		{"caddy/edge.yaml", false},
 		{"hysteria2/udp.Caddyfile", false},
 		{"caddy/bad!.Caddyfile", false},

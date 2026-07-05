@@ -78,7 +78,7 @@ func TestIsAllowedHealthService(t *testing.T) {
 		service string
 		want    bool
 	}{
-		{"veil-caddy@panel.service", true},
+		{"veil-mieru.service", true},
 		{"veil-hysteria2@default.service", true},
 		{"veil-hysteria2@.service", true},
 		{"veil-warp.service", true},
@@ -86,8 +86,8 @@ func TestIsAllowedHealthService(t *testing.T) {
 		{"caddy.service", false},
 		{"hysteria2.service", false},
 		{"", false},
-		{"veil-caddy@panel", false},
-		{"veil-caddy@panel.service.evil", false},
+		{"veil-mieru", false},
+		{"veil-mieru.service.evil", false},
 	}
 	for _, tt := range tests {
 		got := service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsHealth(tt.service)
@@ -104,8 +104,8 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "restart naive",
-			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			name:    "restart mieru",
+			command: []string{"systemctl", "restart", "veil-mieru.service"},
 			want:    true,
 		},
 		{
@@ -125,12 +125,12 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		},
 		{
 			name:    "non-systemctl",
-			command: []string{"bash", "reload", "veil-caddy@panel.service"},
+			command: []string{"bash", "reload", "veil-mieru.service"},
 			want:    false,
 		},
 		{
 			name:    "non-allowed verb",
-			command: []string{"systemctl", "status", "veil-caddy@panel.service"},
+			command: []string{"systemctl", "status", "veil-mieru.service"},
 			want:    false,
 		},
 		{
@@ -140,7 +140,7 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		},
 		{
 			name:    "too many args",
-			command: []string{"systemctl", "reload", "veil-caddy@panel.service", "extra"},
+			command: []string{"systemctl", "reload", "veil-mieru.service", "extra"},
 			want:    false,
 		},
 		{

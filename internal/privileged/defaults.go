@@ -27,8 +27,8 @@ func DefaultPolicy() Policy {
 		},
 		Artifacts: map[string]ArtifactPath{
 			"caddy-panel": {
-				Staged:    filepath.FromSlash("caddy/panel.Caddyfile"),
-				Generated: filepath.FromSlash("caddy/panel.Caddyfile"),
+				Staged:    filepath.FromSlash("caddy/config.json"),
+				Generated: filepath.FromSlash("caddy/config.json"),
 			},
 			"hysteria2": {
 				Staged:    filepath.FromSlash("hysteria2/server.yaml"),

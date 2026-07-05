@@ -36,7 +36,7 @@ func TestGeneratedConfigArtifactCatalogAlias(t *testing.T) {
 	}
 	found := false
 	for _, a := range all {
-		if a.Subpath == CaddyfileSubpath {
+		if a.Subpath == CaddyJSONConfigSubpath {
 			found = true
 		}
 	}

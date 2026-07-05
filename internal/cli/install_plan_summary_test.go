@@ -25,7 +25,7 @@ func TestBuildRURecommendedInstallPlanSummaryUsesPanelOnlySystemdUnits(t *testin
 			t.Fatalf("summary missing %q:\n%s", want, summary)
 		}
 	}
-	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "veil-caddy@.service", "veil-hysteria2@.service", "/udp comment Veil Hysteria2"} {
+	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "veil-caddy.service", "veil-hysteria2@.service", "/udp comment Veil Hysteria2"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("Panel install summary should not include %q:\n%s", unwanted, summary)
 		}

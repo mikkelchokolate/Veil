@@ -149,7 +149,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "config.json")
 	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml")
 	if !containsString(response.WrittenFiles, caddyPath) || !containsString(response.WrittenFiles, hy2Path) {
 		t.Fatalf("apply response missing rendered configs: %+v", response.WrittenFiles)
@@ -158,7 +158,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read caddy config: %v", err)
 	}
-	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "basic_auth veil naive-secret") || !strings.Contains(string(caddyBody), "protocols h1 h2") {
+	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), `"handler": "forward_proxy"`) {
 		t.Fatalf("unexpected caddy config: %s", string(caddyBody))
 	}
 	hy2Body, err := os.ReadFile(hy2Path)

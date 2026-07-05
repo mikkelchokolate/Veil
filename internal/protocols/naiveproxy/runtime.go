@@ -1,50 +1,35 @@
 package naiveproxy
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
-const templateUnit = "veil-caddy@.service"
+const templateUnit = "veil-caddy.service"
 
-// RuntimeDescriptors returns per-inbound caddy units for naiveproxy.
+// RuntimeDescriptors returns the single veil-caddy.service runtime for all
+// naiveproxy inbounds. The inbound/Caddy redesign consolidates Caddy into one
+// process backed by a single JSON config.
 func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.ManagedRuntime {
-	var runtimes []service.ManagedRuntime
-	count := 0
-	for _, inbound := range enabledInbounds {
-		if inbound.Protocol != p.Protocol() {
-			continue
+	for _, inb := range enabledInbounds {
+		if inb.Protocol == "naiveproxy" {
+			return []service.ManagedRuntime{{
+				Name:             "veil-caddy.service",
+				ActionName:       "caddy",
+				Protocol:         p.Protocol(),
+				Transport:        "tcp",
+				Unit:             "veil-caddy.service",
+				TemplateUnit:     templateUnit,
+				PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
+				PromotedVerb:     "reload",
+				ManualRestart:    true,
+				HealthCheckAfter: true,
+			}}
 		}
-		count++
-		runtimes = append(runtimes, service.ManagedRuntime{
-			Name:             "caddy-" + inbound.Name,
-			ActionName:       "caddy-" + inbound.Name,
-			Protocol:         p.Protocol(),
-			Transport:        "tcp",
-			Unit:             "veil-caddy@" + inbound.Name + ".service",
-			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "caddy/" + inbound.Name + ".Caddyfile",
-			PromotedVerb:     "restart",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
 	}
-	if count == 0 {
-		runtimes = append(runtimes, service.ManagedRuntime{
-			Name:             "caddy-panel",
-			ActionName:       "caddy-panel",
-			Protocol:         p.Protocol(),
-			Transport:        "tcp",
-			Unit:             "veil-caddy@panel.service",
-			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "caddy/panel.Caddyfile",
-			PromotedVerb:     "restart",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
-	}
-	return runtimes
+	return nil
 }
 
 // RuntimeInstall returns the Caddy-with-naive runtime descriptor.

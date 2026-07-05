@@ -18,9 +18,9 @@ func TestManagementConfigRendererBuildsGeneratedConfigSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	body := configs[filepath.Join(root, "generated", "caddy", "naive.Caddyfile")]
-	if !strings.Contains(body, "vpn.example.com") {
-		t.Fatalf("Caddyfile missing domain: %s", body)
+	body := configs[filepath.Join(root, "generated", "caddy", "config.json")]
+	if !strings.Contains(body, `"handler": "forward_proxy"`) {
+		t.Fatalf("Caddy JSON missing forward_proxy handler: %s", body)
 	}
 }
 

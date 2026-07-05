@@ -10,7 +10,7 @@ func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
 		cmd  []string
 	}{
 		// Only protocols with a working standalone checker have a validation command.
-		{"/etc/veil/generated/caddy/Caddyfile", "caddy", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"}},
+		{"/etc/veil/generated/caddy/config.json", "caddy", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/config.json", "--adapter", "json"}},
 		{"/etc/veil/generated/sing-box/warp.json", "warp", []string{"sing-box", "check", "-c", "/etc/veil/generated/sing-box/warp.json"}},
 	}
 	for _, tc := range cases {

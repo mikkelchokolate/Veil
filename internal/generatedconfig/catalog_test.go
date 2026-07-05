@@ -36,14 +36,14 @@ func TestArtifactSpecDerivesStablePlanGeneratedAndLivePaths(t *testing.T) {
 func TestArtifactCatalogMatchesValidationAndPromotionSpecs(t *testing.T) {
 	catalog := NewArtifactCatalog()
 	// caddy has a working standalone validator.
-	validation, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/Caddyfile"))
+	validation, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/config.json"))
 	if !ok {
 		t.Fatal("missing validation spec for caddy generated config")
 	}
-	if validation.Name != "caddy" || validation.Config != filepath.FromSlash("/apply/generated/caddy/Caddyfile") {
+	if validation.Name != "caddy" || validation.Config != filepath.FromSlash("/apply/generated/caddy/config.json") {
 		t.Fatalf("validation spec = %+v", validation)
 	}
-	if got := validation.Command; len(got) != 4 || got[0] != "caddy" || got[1] != "validate" {
+	if got := validation.Command; len(got) != 6 || got[0] != "caddy" || got[1] != "validate" || got[4] != "--adapter" || got[5] != "json" {
 		t.Fatalf("validation command = %+v", got)
 	}
 	// hysteria2 has no standalone config checker, so it produces no validation spec...

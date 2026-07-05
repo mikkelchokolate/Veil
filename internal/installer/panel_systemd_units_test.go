@@ -4,7 +4,7 @@ import "testing"
 
 func TestPanelSystemdUnitsIncludesPanelReverseProxyUnit(t *testing.T) {
 	units := PanelSystemdUnits(RURecommendedProfile{InstallPanelCaddy: true})
-	want := []string{"veil-helper.socket", "veil.service", "veil-caddy@panel.service"}
+	want := []string{"veil-helper.socket", "veil.service", "veil-caddy.service"}
 	if !equalStringSlices(units, want) {
 		t.Fatalf("PanelSystemdUnits = %+v, want %+v", units, want)
 	}

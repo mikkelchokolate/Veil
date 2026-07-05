@@ -24,7 +24,7 @@ func TestManagementStateValidationUsesStrictStateCodec(t *testing.T) {
 
 func TestManagementStateValidationReusesApplyPlanIntent(t *testing.T) {
 	body := []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel/","mode":"dev","domain":"panel.example.com","email":"admin@example.com"},
+		"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel/","mode":"dev","panelDomain":"panel.example.com","panelEmail":"admin@example.com"},
 		"inbounds":[{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"password":"secret"}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
@@ -34,7 +34,17 @@ func TestManagementStateValidationReusesApplyPlanIntent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateBytes: %v", err)
 	}
-	if result.Valid || !containsString(result.Errors, "panel caddy access uses 443/tcp; choose another TCP port for inbound mieru-tcp") {
-		t.Fatalf("expected Apply plan intent error, got %+v", result)
+	if result.Valid {
+		t.Fatalf("expected invalid plan, got %+v", result)
+	}
+	found := false
+	for _, err := range result.Errors {
+		if strings.Contains(err, "is claimed by multiple owners") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected bind conflict error, got %+v", result.Errors)
 	}
 }

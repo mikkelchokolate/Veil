@@ -107,69 +107,69 @@ func TestApplyIntentPropagatesCaddyRouteError(t *testing.T) {
 	}
 }
 
-func TestApplyIntentSelectsInboundOn443(t *testing.T) {
+func TestApplyIntentEmitsSingleCaddyService(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
-	inbounds := []model.Inbound{
-		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
+	intent := access.ApplyIntent(nil)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected single Caddy JSON config, got %+v", intent.Configs)
 	}
-	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive.Caddyfile") {
-		t.Fatalf("expected naive.Caddyfile config, got %+v", intent.Configs)
+	if !contains(intent.Actions, "reload veil-caddy.service") {
+		t.Fatalf("expected single caddy service action, got %+v", intent.Actions)
 	}
-	if !contains(intent.Actions, "reload veil-caddy@naive.service") {
-		t.Fatalf("expected naive service action, got %+v", intent.Actions)
-	}
-	if !contains(intent.Runtimes, "veil-caddy@naive.service") {
-		t.Fatalf("expected naive runtime, got %+v", intent.Runtimes)
+	if !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected single caddy runtime, got %+v", intent.Runtimes)
 	}
 	if len(intent.Errors) != 0 {
 		t.Fatalf("expected no errors, got %+v", intent.Errors)
 	}
 }
 
-func TestApplyIntentFallsBackToFirstCaddyProtocolInbound(t *testing.T) {
+func TestApplyIntentReports443InboundConflict(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
-		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 8080, Enabled: true},
-		{Name: "naive1", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
-		{Name: "naive2", Protocol: "naiveproxy", Transport: "tcp", Port: 8444, Enabled: true},
+		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive1.Caddyfile") {
-		t.Fatalf("expected naive1.Caddyfile config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected single Caddy JSON config, got %+v", intent.Configs)
 	}
-	if len(intent.Errors) != 0 {
-		t.Fatalf("expected no errors, got %+v", intent.Errors)
+	if len(intent.Errors) != 1 || !strings.Contains(intent.Errors[0], "panel caddy access uses 443/tcp") {
+		t.Fatalf("expected 443 conflict error, got %+v", intent.Errors)
 	}
 }
 
-func TestApplyIntentSkipsDisabledInbounds(t *testing.T) {
+func TestApplyIntentSkipsDisabledInboundsForConflict(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: false},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") {
-		t.Fatalf("expected panel.Caddyfile fallback config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected single Caddy JSON config, got %+v", intent.Configs)
 	}
 	if len(intent.Errors) != 0 {
-		t.Fatalf("expected no errors, got %+v", intent.Errors)
+		t.Fatalf("expected no errors for disabled inbound, got %+v", intent.Errors)
 	}
 }
 
-func TestApplyIntentPrefers443InboundOverFallback(t *testing.T) {
+func TestApplyIntentEmitsSingleConfigWithMultipleNaiveInbounds(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
-		{Name: "naive-fallback", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
-		{Name: "naive-443", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
+		{Name: "naive-8443", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive-443.Caddyfile") {
-		t.Fatalf("expected 443 inbound config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected single Caddy JSON config, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") {
+		t.Fatalf("expected single caddy service action, got %+v", intent.Actions)
+	}
+	if len(intent.Errors) != 0 {
+		t.Fatalf("expected no errors, got %+v", intent.Errors)
 	}
 }
 
@@ -177,12 +177,15 @@ func TestApplyIntentRequiresCaddyFuncNil(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, nil)
 	inbounds := []model.Inbound{
-		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	// With nil requiresCaddy, no inbound requires caddy, so fallback panel config is used.
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") {
-		t.Fatalf("expected panel.Caddyfile fallback config, got %+v", intent.Configs)
+	// With nil requiresCaddy, naive inbounds are still managed by the single Caddy process.
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected single Caddy JSON config, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") {
+		t.Fatalf("expected single caddy service action, got %+v", intent.Actions)
 	}
 }
 

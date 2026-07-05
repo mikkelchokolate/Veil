@@ -1,8 +1,12 @@
 package caddyassembly
 
 import (
+	"net"
+	"strconv"
+
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 type CaddyBindOwnerKind string
@@ -16,6 +20,8 @@ type CaddyBindOwner struct {
 	Kind        CaddyBindOwnerKind
 	Domain      string
 	InboundName string
+	BackendPort int    // Panel backend port parsed from PanelListen; used only for Panel owner
+	WebBasePath string // Normalized panel web base path; used only for Panel owner
 }
 
 type CaddyRenderPlan struct {
@@ -32,10 +38,21 @@ func BuildRenderPlan(
 	owners := make(map[bindregistry.BindKey]bindregistry.BindOwner)
 	servers := make(map[bindregistry.BindKey]CaddyBindOwner)
 
-	if settings.PanelAccess == "caddy" && settings.PanelDomain != "" {
-		key := bindregistry.BindKey{Address: "0.0.0.0", Port: settings.PanelPublicPort, Network: bindregistry.ListenTCP}
-		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelCaddy, ServiceName: "veil-caddy.service"}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerPanel, Domain: settings.PanelDomain}
+	if settings.PanelAccess == "caddy" {
+		panelDomain := settings.PanelDomain
+		if panelDomain == "" {
+			panelDomain = settings.Domain
+		}
+		if panelDomain != "" {
+			key := bindregistry.BindKey{Address: "0.0.0.0", Port: settings.PanelPublicPort, Network: bindregistry.ListenTCP}
+			owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelCaddy, ServiceName: "veil-caddy.service"}
+			servers[key] = CaddyBindOwner{
+				Kind:        CaddyOwnerPanel,
+				Domain:      panelDomain,
+				BackendPort: panelBackendPort(settings.PanelListen),
+				WebBasePath: veilsettings.NormalizeWebBasePath(settings.WebBasePath),
+			}
+		}
 	}
 
 	for _, inb := range inbounds {
@@ -44,7 +61,7 @@ func BuildRenderPlan(
 		}
 		transport := naiveTransport(inb)
 		port := naivePublicPort(settings, inb)
-		domain := naiveDomain(inb)
+		domain := naiveDomain(inb, settings)
 		addNaiveBinds(transport, port, domain, inb.Name, owners, servers)
 	}
 
@@ -103,7 +120,24 @@ func naivePublicPort(settings model.Settings, inbound model.Inbound) int {
 	return 443
 }
 
-// naiveDomain mirrors the naiveproxy plugin helper.
-func naiveDomain(inbound model.Inbound) string {
-	return stringField(inbound.ProtocolFields, "domain")
+// naiveDomain mirrors the naiveproxy plugin helper, falling back to the global
+// settings domain so existing state that stores the domain at the top level
+// continues to render.
+func naiveDomain(inbound model.Inbound, settings model.Settings) string {
+	if d := stringField(inbound.ProtocolFields, "domain"); d != "" {
+		return d
+	}
+	return settings.Domain
+}
+
+func panelBackendPort(panelListen string) int {
+	_, portText, err := net.SplitHostPort(panelListen)
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port <= 0 || port > 65535 {
+		return 0
+	}
+	return port
 }

@@ -43,8 +43,9 @@ func TestRenderCaddyJSONPanelOnly(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
 			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
-				Kind:   caddyassembly.CaddyOwnerPanel,
-				Domain: "panel.example.com",
+				Kind:        caddyassembly.CaddyOwnerPanel,
+				Domain:      "panel.example.com",
+				BackendPort: 2096,
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -91,8 +92,9 @@ func TestRenderCaddyJSONAcmeChallengeKeys(t *testing.T) {
 			plan := caddyassembly.CaddyRenderPlan{
 				Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
 					{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
-						Kind:   caddyassembly.CaddyOwnerPanel,
-						Domain: "panel.example.com",
+						Kind:        caddyassembly.CaddyOwnerPanel,
+						Domain:      "panel.example.com",
+						BackendPort: 2096,
 					},
 				},
 				Domains: map[string]caddyassembly.CaddyDomainCertSpec{

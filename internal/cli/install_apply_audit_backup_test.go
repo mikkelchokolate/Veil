@@ -44,7 +44,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Written files:", "Caddyfile", "index.html", "veil.service", "veil-caddy@.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
+	for _, want := range []string{"Written files:", "Caddyfile", "index.html", "veil.service", "veil-caddy.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}

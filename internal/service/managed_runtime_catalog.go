@@ -84,7 +84,7 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 	}
 	if command[1] == "stop" || command[1] == "disable" || command[1] == "start" || command[1] == "enable" {
 		unit := command[2]
-		for _, prefix := range []string{"veil-caddy@", "veil-hysteria2@", "veil-olcrtc@"} {
+		for _, prefix := range []string{"veil-caddy.service", "veil-hysteria2@", "veil-olcrtc@"} {
 			if strings.HasPrefix(unit, prefix) && strings.HasSuffix(unit, ".service") {
 				return true
 			}

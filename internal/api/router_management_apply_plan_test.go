@@ -94,10 +94,10 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/config.json") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "restart veil-caddy@.service") || !containsString(response.Actions, "restart veil-hysteria2@.service") {
+	if !containsString(response.Actions, "reload veil-caddy.service") || !containsString(response.Actions, "restart veil-hysteria2@.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
 }
@@ -105,7 +105,7 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com"},
 		"inbounds":[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
@@ -124,7 +124,7 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive username and password are required") {
+	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive username, and naive password are required") {
 		t.Fatalf("expected missing naive credentials validation error: %+v", response)
 	}
 }

@@ -21,6 +21,7 @@ type ApplyProtocolCapabilityCatalog struct {
 func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 	byProtocol := map[string]ApplyProtocolCapability{}
 	registry := protocols.NewRegistry()
+	requiresCaddy := protocols.NewCatalog().RequiresCaddy
 	for _, p := range registry.All() {
 		meta := protocols.MetadataOf(p)
 		cap := ApplyProtocolCapability{
@@ -43,6 +44,13 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 		}
 		if _, ok := protocols.AsValidator(p); ok {
 			cap.RequiresCaddySettings = meta.Protocol == "naiveproxy"
+		}
+		// Caddy-managed protocols render a single global Caddy JSON config and
+		// reload veil-caddy.service; per-protocol config/action entries would
+		// duplicate or contradict the global Caddy material.
+		if requiresCaddy(meta.Protocol) {
+			cap.Config = ""
+			cap.Action = ""
 		}
 		byProtocol[meta.Protocol] = cap
 	}
