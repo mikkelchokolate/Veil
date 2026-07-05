@@ -77,11 +77,14 @@ func (p PanelAccess) GeneratedConfig(paths generatedconfig.Paths) (generatedconf
 	if panelDomain(p.settings) == "" {
 		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("domain is required")
 	}
-	plan, _, err := caddyassembly.BuildRenderPlan(p.settings, nil, nil)
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(p.settings, nil)
 	if err != nil {
 		return generatedconfig.GeneratedConfigArtifact{}, false, err
 	}
-	caps, _ := caddycapabilities.Probe("")
+	caps, err := caddycapabilities.Probe("")
+	if err != nil {
+		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+	}
 	body, err := renderer.RenderCaddyJSON(plan, caps)
 	if err != nil {
 		return generatedconfig.GeneratedConfigArtifact{}, false, err

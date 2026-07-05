@@ -101,44 +101,29 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		}
 	}
 
-	initialPlan, owners, err := caddyassembly.BuildRenderPlan(settings, inbounds, nil)
+	plan, owners, challengeIssues, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
 	if err != nil {
 		material.Errors = append(material.Errors, err.Error())
 		return material
 	}
-
-	challengeBinds, issues := caddyassembly.PlanAcmeChallengeBinds(settings.AcmeChallengeMode, initialPlan.Domains, owners)
-	for _, issue := range issues {
+	for _, issue := range challengeIssues {
 		if issue.Severity == "error" {
 			material.Errors = append(material.Errors, issue.Message)
 		}
 	}
 
-	allOwners := make(map[bindregistry.BindKey]bindregistry.BindOwner, len(owners)+len(challengeBinds)+len(inbounds))
-	for k, v := range owners {
-		allOwners[k] = v
-	}
-	for k := range challengeBinds {
-		if existing, ok := allOwners[k]; ok && (existing.Kind == bindregistry.BindOwnerPanelCaddy || existing.Kind == bindregistry.BindOwnerNaive) {
-			// Compatible Caddy owner already handles TLS-ALPN-01 on this bind.
-			continue
-		}
-		allOwners[k] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerAcmeChallenge, ServiceName: "veil-caddy.service"}
-	}
-	for _, conflict := range addInboundBindOwners(inbounds, allOwners, runtimeCatalog) {
+	for _, conflict := range addInboundBindOwners(inbounds, owners, runtimeCatalog) {
 		material.Errors = append(material.Errors, conflict.Message)
 	}
-	for _, conflict := range bindregistry.ValidateNoConflicts(allOwners) {
+	for _, conflict := range bindregistry.ValidateNoConflicts(owners) {
 		material.Errors = append(material.Errors, conflict.Message)
 	}
 
-	plan := caddyassembly.CaddyRenderPlan{
-		Servers:        initialPlan.Servers,
-		ACMEChallenges: challengeBinds,
-		Domains:        initialPlan.Domains,
+	caps, err := caddycapabilities.Probe("")
+	if err != nil {
+		material.Errors = append(material.Errors, fmt.Sprintf("failed to probe Caddy capabilities: %v", err))
+		return material
 	}
-
-	caps, _ := caddycapabilities.Probe("")
 	if _, err := renderer.RenderCaddyJSON(plan, caps); err != nil {
 		material.Errors = append(material.Errors, err.Error())
 		return material

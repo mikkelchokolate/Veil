@@ -1,6 +1,8 @@
 package naiveproxy
 
 import (
+	"fmt"
+
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -16,12 +18,15 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 		return nil, false, nil
 	}
 
-	plan, _, err := caddyassembly.BuildRenderPlan(input.Settings, input.Inbounds, nil)
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(input.Settings, input.Inbounds)
 	if err != nil {
 		return nil, false, err
 	}
 
-	caps, _ := caddycapabilities.Probe("")
+	caps, err := caddycapabilities.Probe("")
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+	}
 	data, err := renderer.RenderCaddyJSON(plan, caps)
 	if err != nil {
 		return nil, false, err
