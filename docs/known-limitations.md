@@ -24,7 +24,12 @@ Veil supports multiple Inbounds, with varying levels of isolation depending on t
 
 ---
 
-## 3. Go Module Path
+## 3. NaiveProxy Transport Support
+
+- **TCP only:** NaiveProxy in this release supports only the **TCP (HTTPS/H2)** transport. QUIC and `dual` transports are planned for a future release once an HTTP/3 capability probe and the `forward_proxy` over HTTP-3 path have been verified end-to-end.
+- **Implication:** Configuring a NaiveProxy inbound with `transport: quic` or `transport: dual` will be rejected during the apply-plan build.
+
+## 4. Go Module Path
 
 - **Path:** The module path is canonicalized to `github.com/mikkelchokolate/Veil`, matching the GitHub repository URL.
 - **Implication:** You can install the CLI tool directly from GitHub via `go install github.com/mikkelchokolate/Veil/cmd/veil@latest`.

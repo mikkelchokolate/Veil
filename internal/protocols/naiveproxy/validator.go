@@ -35,13 +35,13 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 	}
 	transport := NaiveTransport(inbound)
 	switch transport {
-	case "tcp", "quic", "dual":
+	case "tcp":
 	default:
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_transport_invalid",
 			Severity: "error",
 			Field:    "transport",
-			Message:  "transport must be tcp, quic, or dual",
+			Message:  "NaiveProxy supports only the tcp transport in this release",
 			Source:   "naiveproxy",
 		})
 	}

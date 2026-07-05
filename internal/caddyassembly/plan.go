@@ -1,6 +1,7 @@
 package caddyassembly
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -71,6 +72,9 @@ func BuildRenderPlan(
 			continue
 		}
 		transport := naiveTransport(inb)
+		if transport != "tcp" {
+			return CaddyRenderPlan{}, nil, fmt.Errorf("naive inbound %q uses unsupported transport %q (only tcp is supported)", inb.Name, transport)
+		}
 		port := naivePublicPort(settings, inb)
 		domain := naiveDomain(inb, settings)
 		users := naiveUsers(inb, settings)
@@ -172,9 +176,15 @@ func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser
 	}
 	username := stringField(inbound.ProtocolFields, "naiveUsername")
 	if username == "" {
+		username = stringField(settings.ProtocolFields, "naiveUsername")
+	}
+	if username == "" {
 		username = settings.NaiveUsername
 	}
 	password := stringField(inbound.ProtocolFields, "naivePassword")
+	if password == "" {
+		password = stringField(settings.ProtocolFields, "naivePassword")
+	}
 	if password == "" {
 		password = settings.NaivePassword
 	}

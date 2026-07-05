@@ -16,8 +16,12 @@ func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.
 	if err := validateCaddyCapabilities(plan, caps); err != nil {
 		return nil, err
 	}
+	httpApp, err := renderHTTPApp(plan, caps)
+	if err != nil {
+		return nil, err
+	}
 	cfg := caddyConfig{Apps: map[string]any{}}
-	cfg.Apps["http"] = renderHTTPApp(plan, caps)
+	cfg.Apps["http"] = httpApp
 	cfg.Apps["tls"] = renderTLSApp(plan)
 	return json.MarshalIndent(cfg, "", "  ")
 }
@@ -30,11 +34,6 @@ func validateCaddyCapabilities(plan caddyassembly.CaddyRenderPlan, caps caddycap
 		if !caps.ForwardProxy {
 			return fmt.Errorf("Caddy binary does not include the forward_proxy module required for NaiveProxy")
 		}
-		if owner.Transport == "quic" || owner.Transport == "dual" {
-			if !caps.H3Only || !caps.HTTP3 {
-				return fmt.Errorf("Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport %s", owner.Transport)
-			}
-		}
 	}
 	return nil
 }
@@ -43,17 +42,21 @@ type caddyConfig struct {
 	Apps map[string]any `json:"apps"`
 }
 
-func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) map[string]any {
+func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
 	servers := make(map[string]any)
 	for key, owner := range plan.Servers {
 		serverName := serverNameFor(key)
-		servers[serverName] = renderServer(key, owner, caps)
+		server, err := renderServer(key, owner, caps)
+		if err != nil {
+			return nil, err
+		}
+		servers[serverName] = server
 	}
 	for key, owner := range plan.ACMEChallenges {
 		serverName := serverNameFor(key) + "-acme"
 		servers[serverName] = renderAcmeChallengeServer(key, owner)
 	}
-	return map[string]any{"servers": servers}
+	return map[string]any{"servers": servers}, nil
 }
 
 func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
@@ -94,13 +97,17 @@ func renderACMEIssuer(email, mode string) map[string]any {
 	}
 }
 
-func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) map[string]any {
+func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
 	server := map[string]any{
 		"listen":     []string{listenString(key)},
 		"auto_https": map[string]any{"disable_redirects": true},
 	}
 	if owner.Kind == caddyassembly.CaddyOwnerNaive {
-		server["protocols"] = protocolsForTransport(owner.Transport)
+		protocols, err := protocolsForTransport(owner.Transport)
+		if err != nil {
+			return nil, err
+		}
+		server["protocols"] = protocols
 	}
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
@@ -129,19 +136,15 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		}
 		server["routes"] = []map[string]any{{"handle": handlers}}
 	}
-	return server
+	return server, nil
 }
 
-func protocolsForTransport(transport string) []string {
+func protocolsForTransport(transport string) ([]string, error) {
 	switch transport {
 	case "tcp":
-		return []string{"h1", "h2"}
-	case "quic":
-		return []string{"h3"}
-	case "dual":
-		return []string{"h1", "h2", "h3"}
+		return []string{"h1", "h2"}, nil
 	default:
-		return []string{"h1", "h2"}
+		return nil, fmt.Errorf("unsupported naive transport %q", transport)
 	}
 }
 
