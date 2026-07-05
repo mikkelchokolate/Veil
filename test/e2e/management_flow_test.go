@@ -156,6 +156,57 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 	}
 }
 
+// TestNaiveInboundCaddyJSON creates a naiveproxy inbound, stages an apply, and
+// verifies the generated Caddy JSON config contains the forward_proxy handler
+// and the inbound's domain.
+func TestNaiveInboundCaddyJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","panelAccess":"direct","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword","defaultInboundPublicPort":443}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true,"naiveUsername":"alice","naivePassword":"alice-pass","protocolFields":{"domain":"proxy.example.com","transport":"tcp","publicPort":8443}}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("inbound expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apply plan expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	planBody := readJSON(t, resp)
+	if valid, ok := planBody["valid"].(bool); !ok || !valid {
+		t.Fatalf("expected valid plan, got %v", planBody)
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("apply expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	caddyJSON := filepath.Join(srv.applyRoot, "generated", "caddy", "config.json")
+	data, err := os.ReadFile(caddyJSON)
+	if err != nil {
+		t.Fatalf("expected Caddy JSON at %s: %v", caddyJSON, err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "forward_proxy") {
+		t.Error("Caddy JSON missing forward_proxy handler")
+	}
+	if !strings.Contains(s, "proxy.example.com") {
+		t.Error("Caddy JSON missing naive domain")
+	}
+}
+
 // TestRejectsDuplicatePortsEndToEnd confirms the safeguard against
 // multiple inbounds trying to listen on the same port surfaces as
 // an apply/plan error over the HTTP surface.
