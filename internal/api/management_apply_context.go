@@ -151,13 +151,15 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
-	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.hysteria2ConfigReloadNeeded(liveFiles) {
-		results = append(results, ctx.syncCaddyCertForHysteria2())
-		if !results[len(results)-1].Success {
-			return results
+	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {
+		for _, domain := range ctx.hysteria2DomainsLocked() {
+			results = append(results, ctx.syncCaddyCertForHysteria2(domain))
+			if !results[len(results)-1].Success {
+				return results
+			}
 		}
 	}
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp).Runtimes() {
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
 		}
@@ -270,7 +272,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 }
 
 func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp).Runtimes() {
 		if runtime.Protocol != "hysteria2" {
 			continue
 		}
@@ -285,17 +287,37 @@ func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string
 	return false
 }
 
-func (ctx ManagementApplyContext) syncCaddyCertForHysteria2() ServiceActionResult {
+func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
+	seen := make(map[string]struct{})
+	var domains []string
+	for _, inb := range ctx.state.inbounds {
+		if !inb.Enabled || inb.Protocol != "hysteria2" {
+			continue
+		}
+		domain := inboundDomain(inb)
+		if domain == "" {
+			continue
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		domains = append(domains, domain)
+	}
+	return domains
+}
+
+func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) ServiceActionResult {
 	result := ServiceActionResult{
 		Name:    "sync-caddy-cert",
-		Command: []string{"helper", "sync_caddy_cert", ctx.state.settings.Domain},
+		Command: []string{"helper", "sync_caddy_cert", domain},
 	}
 	if ctx.state.privileged == nil {
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
 	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
-		Domain: ctx.state.settings.Domain,
+		Domain: domain,
 		OutDir: "/etc/veil/certs",
 	})
 	if err != nil {
@@ -303,7 +325,7 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2() ServiceActionResul
 		return result
 	}
 	if !syncResult.Found {
-		result.Error = "Caddy has not yet issued a certificate for " + ctx.state.settings.Domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
+		result.Error = "Caddy has not yet issued a certificate for " + domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
 		return result
 	}
 	result.Success = true

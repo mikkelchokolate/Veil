@@ -17,14 +17,14 @@ func TestSyncCaddyCertForHysteria2(t *testing.T) {
 		Privileged: client,
 	})
 	ctx := NewManagementApplyContext(state)
-	result := ctx.syncCaddyCertForHysteria2()
+	result := ctx.syncCaddyCertForHysteria2("vpn.example.com")
 	if !result.Success {
 		t.Fatalf("expected success, got %+v", result)
 	}
 
 	stateNoPrivileged := newManagementState(ServerInfo{Mode: "dev", Domain: "vpn.example.com", RequirePrivilegedHelper: true})
 	ctx = NewManagementApplyContext(stateNoPrivileged)
-	result = ctx.syncCaddyCertForHysteria2()
+	result = ctx.syncCaddyCertForHysteria2("vpn.example.com")
 	if result.Success || result.Error != "privileged helper is unavailable" {
 		t.Fatalf("expected unavailable error, got %+v", result)
 	}
