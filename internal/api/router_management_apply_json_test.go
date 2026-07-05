@@ -255,7 +255,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	defer func() { stagedConfigValidator = old }()
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{
-			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")}, Valid: true},
+			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "config.json"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "config.json")}, Valid: true},
 			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), "--check"}, Valid: true},
 		}
 	}
