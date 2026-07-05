@@ -408,40 +408,27 @@ func TestRuntimeInstall(t *testing.T) {
 	}
 }
 
-func TestValidateSettings(t *testing.T) {
+func TestValidateSettingsIsNoOp(t *testing.T) {
 	p := New()
-	valid := model.Settings{
-		Domain: "example.com",
-		Email:  "admin@example.com",
-		ProtocolFields: map[string]any{
-			"naiveUsername": "u",
-			"naivePassword": "p",
-		},
-	}
-	if err := p.ValidateSettings(valid); err != nil {
-		t.Errorf("ValidateSettings(valid) = %v, want nil", err)
-	}
-
 	cases := []struct {
 		name string
-		mod  func(*model.Settings)
+		s    model.Settings
 	}{
-		{"missing domain", func(s *model.Settings) { s.Domain = "" }},
-		{"missing email", func(s *model.Settings) { s.Email = "" }},
-		{"missing username", func(s *model.Settings) { s.ProtocolFields = map[string]any{"naivePassword": "p"} }},
-		{"missing password", func(s *model.Settings) { s.ProtocolFields = map[string]any{"naiveUsername": "u"} }},
+		{"empty", model.Settings{}},
+		{"complete", model.Settings{
+			Domain: "example.com",
+			Email:  "admin@example.com",
+			ProtocolFields: map[string]any{
+				"naiveUsername": "u",
+				"naivePassword": "p",
+			},
+		}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := valid
-			tc.mod(&s)
-			err := p.ValidateSettings(s)
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), "domain, email, naive username, and naive password") {
-				t.Errorf("error message = %q, want required-fields message", err.Error())
+			if err := p.ValidateSettings(tc.s); err != nil {
+				t.Errorf("ValidateSettings(%q) = %v, want nil", tc.name, err)
 			}
 		})
 	}

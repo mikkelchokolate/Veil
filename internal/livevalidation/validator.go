@@ -224,7 +224,7 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 				"Set the domain that resolves to this host.", "candidate",
 			))
 		}
-		if naiveproxy.NaiveEmail(settings, inbound) == "" {
+		if resolveNaiveEmail(settings, inbound) == "" {
 			issues = append(issues, issue(
 				"email_required", SeverityError, "settings.email", inbound.Name,
 				"NaiveProxy automatic TLS requires an email address",
@@ -246,6 +246,22 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 		))
 	}
 	return issues
+}
+
+func resolveNaiveEmail(settings model.Settings, inbound model.Inbound) string {
+	candidates := []string{}
+	if inbound.ProtocolFields != nil {
+		if e, ok := inbound.ProtocolFields["email"].(string); ok {
+			candidates = append(candidates, e)
+		}
+	}
+	candidates = append(candidates, settings.DefaultAcmeEmail, settings.PanelEmail)
+	for _, c := range candidates {
+		if v := strings.TrimSpace(c); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {

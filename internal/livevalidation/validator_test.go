@@ -176,10 +176,10 @@ func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "missing.example",
-			Email:         "admin@example.com",
-			NaiveUsername: "veil",
-			NaivePassword: "secret",
+			Domain:           "missing.example",
+			DefaultAcmeEmail: "admin@example.com",
+			NaiveUsername:    "veil",
+			NaivePassword:    "secret",
 		},
 		Inbounds: []model.Inbound{{
 			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
@@ -198,10 +198,10 @@ func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "pending.example",
-			Email:         "admin@example.com",
-			NaiveUsername: "veil",
-			NaivePassword: "secret",
+			Domain:           "pending.example",
+			DefaultAcmeEmail: "admin@example.com",
+			NaiveUsername:    "veil",
+			NaivePassword:    "secret",
 		},
 		Inbounds: []model.Inbound{{
 			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,

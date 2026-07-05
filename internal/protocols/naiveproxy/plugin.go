@@ -88,19 +88,11 @@ func NaiveDomain(settings model.Settings, inbound model.Inbound) string {
 	return settings.Domain
 }
 
-// NaiveEmail returns the ACME contact email for the inbound, preferring the
-// inbound ProtocolFields and falling back through the domain-level resolver
-// chain: settings email, default ACME email, and panel email.
-func NaiveEmail(settings model.Settings, inbound model.Inbound) string {
-	if e := stringField(inbound.ProtocolFields, "email"); e != "" {
-		return e
-	}
-	for _, candidate := range []string{settings.Email, settings.DefaultAcmeEmail, settings.PanelEmail} {
-		if v := strings.TrimSpace(candidate); v != "" {
-			return v
-		}
-	}
-	return ""
+// NaiveEmail returns the ACME contact email explicitly set on the inbound.
+// It does not fall back to global settings; callers that need the effective
+// email should resolve the domain-level chain themselves.
+func NaiveEmail(_ model.Settings, inbound model.Inbound) string {
+	return stringField(inbound.ProtocolFields, "email")
 }
 
 // NaivePublicPort returns the public port for the inbound, falling back to the

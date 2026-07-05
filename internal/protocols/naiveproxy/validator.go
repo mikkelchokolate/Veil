@@ -10,13 +10,9 @@ import (
 // dedicated receiver type while keeping the existing plugin interface intact.
 type Validator = Plugin
 
-// ValidateSettings ensures the global settings needed by naiveproxy are present.
-func (Plugin) ValidateSettings(settings model.Settings) error {
-	username := protocolString(settings.ProtocolFields, "naiveUsername", settings.NaiveUsername)
-	password := protocolString(settings.ProtocolFields, "naivePassword", settings.NaivePassword)
-	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" || strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
-		return errNaiveCaddySettingsRequired{}
-	}
+// ValidateSettings is a no-op for naiveproxy. Per-inbound domain, email, and
+// credential validation are handled by ValidateInbound and the apply-plan builder.
+func (Plugin) ValidateSettings(model.Settings) error {
 	return nil
 }
 
@@ -86,8 +82,3 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 	return username != "" && password != ""
 }
 
-type errNaiveCaddySettingsRequired struct{}
-
-func (errNaiveCaddySettingsRequired) Error() string {
-	return "domain, email, naive username, and naive password are required for NaiveProxy/Caddy"
-}
