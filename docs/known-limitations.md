@@ -11,7 +11,7 @@ Veil supports multiple Inbounds, with varying levels of isolation depending on t
 
 - **Hysteria2 & olcRTC:** Full isolation. Defining multiple enabled Inbounds for Hysteria2 or olcRTC generates isolated configuration files and spawns independent daemon processes managed via systemd template units (`veil-hysteria2@<inbound>.service` and `veil-olcrtc@<inbound>.service`).
 - **Mieru:** Aggregation. If you define multiple Mieru Inbounds, their port/transport bindings and client profiles are aggregated cleanly into a single generated configuration file managed by a single daemon process.
-- **NaiveProxy:** Full isolation. Defining multiple enabled Inbounds for NaiveProxy generates isolated configuration files (`<inbound>.Caddyfile`) and spawns independent Caddy processes managed via systemd template units (`veil-caddy@<inbound>.service`).
+- **NaiveProxy:** Consolidated single service. All enabled NaiveProxy Inbounds share one generated runtime configuration (`config.json`) and one systemd unit (`veil-caddy.service`). Each inbound still has its own domain and port binding inside that shared configuration.
 
 - If you need multiple users on Hysteria2 or NaiveProxy, add multiple **Client Profiles** under the same Inbound instead of creating separate Inbound instances.
 
