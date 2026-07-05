@@ -158,7 +158,8 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 
 // TestNaiveInboundCaddyJSON creates a naiveproxy inbound, stages an apply, and
 // verifies the generated Caddy JSON config contains the forward_proxy handler
-// and the inbound's domain.
+// and the inbound's domain. It then deletes the inbound, re-applies, and
+// asserts the generated config no longer references the deleted inbound.
 func TestNaiveInboundCaddyJSON(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
@@ -204,6 +205,45 @@ func TestNaiveInboundCaddyJSON(t *testing.T) {
 	}
 	if !strings.Contains(s, "proxy.example.com") {
 		t.Error("Caddy JSON missing naive domain")
+	}
+
+	// Delete the naive inbound and re-apply so the config is regenerated
+	// without it.
+	resp = srv.do(http.MethodDelete, "/api/inbounds/naive-tcp", "")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete inbound expected 204, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apply plan after delete expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	planBody = readJSON(t, resp)
+	if valid, ok := planBody["valid"].(bool); !ok || !valid {
+		t.Fatalf("expected valid plan after delete, got %v", planBody)
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("apply after delete expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	data, err = os.ReadFile(caddyJSON)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			t.Fatalf("unexpected error reading regenerated Caddy JSON at %s: %v", caddyJSON, err)
+		}
+	} else {
+		s = string(data)
+		if strings.Contains(s, "forward_proxy") {
+			t.Error("Caddy JSON still contains forward_proxy handler after delete")
+		}
+		if strings.Contains(s, "proxy.example.com") {
+			t.Error("Caddy JSON still contains naive domain after delete")
+		}
 	}
 }
 

@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -54,12 +56,47 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		return nil, nil, nil, err
 	}
 	written = append(written, routingFiles...)
+
+	// Remove generated config files from previous applies that are no longer
+	// part of the desired staged set. This ensures deleted inbounds (or disabled
+	// features such as WARP) do not leave stale artifacts behind.
+	keep := make(map[string]bool, len(written))
+	for _, p := range written {
+		keep[p] = true
+	}
+	if err := cleanStaleGeneratedFiles(filepath.Join(input.ApplyRoot, "generated"), keep); err != nil {
+		return nil, nil, nil, err
+	}
+
 	validate := input.Validate
 	if validate == nil {
 		validate = stagedConfigValidator
 	}
 	validations := validate(renderedPaths)
 	return written, validations, renderedPaths, nil
+}
+
+func cleanStaleGeneratedFiles(generatedRoot string, keep map[string]bool) error {
+	return filepath.Walk(generatedRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(generatedRoot, path)
+		if err != nil {
+			return err
+		}
+		// Protect Veil's own metadata (apply plan, state, history, audit).
+		if rel == "veil" || strings.HasPrefix(rel, "veil"+string(filepath.Separator)) {
+			return nil
+		}
+		if keep[path] {
+			return nil
+		}
+		return os.Remove(path)
+	})
 }
 
 func sortedRenderedPaths(rendered map[string]string) []string {
