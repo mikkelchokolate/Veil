@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"encoding/json"
+	"net"
 	"strconv"
 
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
@@ -34,35 +35,86 @@ func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.Ca
 }
 
 func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
-	byIssuer := make(map[string][]string)
+	type issuerGroup struct {
+		email   string
+		mode    string
+		domains []string
+	}
+	groups := make(map[string]*issuerGroup)
 	for _, spec := range plan.Domains {
-		issuerKey := spec.Email + "/" + challengeForDomain(plan, spec.Domain)
-		byIssuer[issuerKey] = append(byIssuer[issuerKey], spec.Domain)
+		mode := challengeForDomain(plan, spec.Domain)
+		issuerKey := spec.Email + "/" + mode
+		g := groups[issuerKey]
+		if g == nil {
+			g = &issuerGroup{email: spec.Email, mode: mode}
+			groups[issuerKey] = g
+		}
+		g.domains = append(g.domains, spec.Domain)
 	}
 	var policies []map[string]any
-	for _, domains := range byIssuer {
+	for _, g := range groups {
 		policies = append(policies, map[string]any{
-			"subjects": domains,
-			"issuer":   map[string]any{"email": domains[0], "module": "acme"},
+			"subjects": g.domains,
+			"issuer":   renderACMEIssuer(g.email, g.mode),
 		})
 	}
 	return map[string]any{"automation": map[string]any{"policies": policies}}
 }
 
-func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) map[string]any {
-	// Naive server: no host matcher, forward_proxy first, file_server fallback.
-	// Panel server: host matcher, reverse_proxy to panel loopback.
-	// Implementation expanded in Task 11.
+func renderACMEIssuer(email, mode string) map[string]any {
 	return map[string]any{
-		"listen": []string{listenString(key)},
-		"routes": []map[string]any{},
+		"module": "acme",
+		"email":  email,
+		"challenges": map[string]any{
+			"http-01":     map[string]any{"disabled": mode != "http-01"},
+			"tls-alpn-01": map[string]any{"disabled": mode != "tls-alpn-01"},
+		},
 	}
+}
+
+func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) map[string]any {
+	server := map[string]any{
+		"listen":     []string{listenString(key)},
+		"auto_https": map[string]any{"disable_redirects": true},
+	}
+	switch owner.Kind {
+	case caddyassembly.CaddyOwnerPanel:
+		server["routes"] = []map[string]any{
+			{
+				"match": []map[string]any{{"host": []string{owner.Domain}}},
+				"handle": []map[string]any{{
+					"handler":   "reverse_proxy",
+					"upstreams": []map[string]any{{"dial": "127.0.0.1:8080"}},
+				}},
+			},
+			{
+				"handle": []map[string]any{{"handler": "static_response", "status_code": 404}},
+			},
+		}
+	case caddyassembly.CaddyOwnerNaive:
+		handlers := []map[string]any{
+			{
+				"handler":          "forward_proxy",
+				"basic_auth":       []map[string]any{}, // populated from inbound profiles in Task 15
+				"hide_ip":          true,
+				"hide_via":         true,
+				"probe_resistance": map[string]any{},
+			},
+			{
+				"handler": "file_server",
+				"root":    "/var/lib/veil/www",
+			},
+		}
+		server["routes"] = []map[string]any{{"handle": handlers}}
+	}
+	return server
 }
 
 func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.AcmeChallengeOwner) map[string]any {
 	return map[string]any{
-		"listen": []string{listenString(key)},
-		"routes": []map[string]any{},
+		"listen":     []string{listenString(key)},
+		"auto_https": map[string]any{"disable_redirects": true},
+		"routes":     []map[string]any{},
 	}
 }
 
@@ -71,7 +123,10 @@ func serverNameFor(key bindregistry.BindKey) string {
 }
 
 func listenString(key bindregistry.BindKey) string {
-	return ":" + portString(key.Port)
+	if bindregistry.IsWildcard(key.Address) {
+		return ":" + portString(key.Port)
+	}
+	return net.JoinHostPort(key.Address, portString(key.Port))
 }
 
 func portString(p int) string { return strconv.Itoa(p) }
