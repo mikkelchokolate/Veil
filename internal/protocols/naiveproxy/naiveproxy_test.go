@@ -617,7 +617,15 @@ func TestValidateSettings(t *testing.T) {
 
 func TestValidateInbound(t *testing.T) {
 	p := New()
-	issues := p.ValidateInbound(model.Settings{}, model.Inbound{})
+	valid := model.Inbound{
+		Protocol: "naiveproxy",
+		ProtocolFields: map[string]any{
+			"domain":        "x.com",
+			"naiveUsername": "u",
+			"naivePassword": "p",
+		},
+	}
+	issues := p.ValidateInbound(model.Settings{}, valid)
 	if len(issues) != 0 {
 		t.Errorf("ValidateInbound = %v, want empty", issues)
 	}
