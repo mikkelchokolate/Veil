@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -15,6 +17,12 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
+
+// caddyAdminLoader loads a Caddy JSON config through the Admin API. Tests
+// override this variable to assert the Admin API path or inject failures.
+var caddyAdminLoader = func(configJSON []byte) error {
+	return caddyadmin.NewClient("").LoadConfig(configJSON)
+}
 
 // firewallApplier is the UFW rule applier used by apply. Tests can override it
 // to avoid running real ufw commands.
@@ -164,6 +172,30 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			results = append(results, enable)
 			if !enable.Success {
 				return results
+			}
+		}
+		// For the consolidated Caddy unit, prefer loading the runtime config
+		// through Caddy's Admin API and only fall back to systemctl reload when
+		// the Admin API is unavailable.
+		if runtime.Unit == renderer.UnitCaddy {
+			caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
+			if containsCleanPath(liveFiles, caddyLivePath) {
+				adminResult := ServiceActionResult{
+					Name:    renderer.UnitCaddy,
+					Command: []string{"caddy", "admin", "load"},
+				}
+				configBytes, err := os.ReadFile(caddyLivePath)
+				if err == nil {
+					err = caddyAdminLoader(configBytes)
+				}
+				if err == nil {
+					adminResult.Success = true
+					results = append(results, adminResult)
+					continue
+				}
+				adminResult.Error = err.Error()
+				results = append(results, adminResult)
+				// Fall through to the systemctl reload below.
 			}
 		}
 		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
