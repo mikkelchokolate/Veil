@@ -39,7 +39,6 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			Protocol:               capability.Protocol,
 			Config:                 capability.Config,
 			Action:                 capability.Action,
-			ValidateSettings:       capability.ValidateSettings,
 			ValidateInboundRender:  capability.ValidateInboundRender,
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
@@ -82,6 +81,24 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 	}
 	if settings.PanelAccess == "caddy" && settings.PanelPublicPort == 0 {
 		settings.PanelPublicPort = 443
+	}
+
+	for _, inb := range inbounds {
+		if inb.Protocol != "naiveproxy" || !inb.Enabled {
+			continue
+		}
+		if domain := resolveNaiveDomain(inb, settings); domain == "" {
+			material.Errors = append(material.Errors, fmt.Sprintf("naive inbound %q is missing a public domain", inb.Name))
+			return material
+		}
+		if email := resolveNaiveEmail(inb, settings); email == "" {
+			material.Errors = append(material.Errors, fmt.Sprintf("naive inbound %q is missing an ACME email", inb.Name))
+			return material
+		}
+		if !naiveHasCredential(inb, settings) {
+			material.Errors = append(material.Errors, fmt.Sprintf("naive inbound %q is missing valid credentials (enable a profile with username/password or set naive username/password)", inb.Name))
+			return material
+		}
 	}
 
 	initialPlan, owners, err := caddyassembly.BuildRenderPlan(settings, inbounds, nil)
@@ -213,6 +230,72 @@ func inboundDomain(inb Inbound) string {
 		return ""
 	}
 	return v
+}
+
+func resolveNaiveDomain(inb Inbound, settings Settings) string {
+	if inb.ProtocolFields != nil {
+		if d, ok := inb.ProtocolFields["domain"].(string); ok {
+			if v := strings.TrimSpace(d); v != "" {
+				return v
+			}
+		}
+	}
+	return strings.TrimSpace(settings.Domain)
+}
+
+func resolveNaiveEmail(inb Inbound, settings Settings) string {
+	candidates := []string{}
+	if inb.ProtocolFields != nil {
+		if e, ok := inb.ProtocolFields["email"].(string); ok {
+			candidates = append(candidates, e)
+		}
+	}
+	candidates = append(candidates, settings.Email, settings.DefaultAcmeEmail, settings.PanelEmail)
+	for _, c := range candidates {
+		if v := strings.TrimSpace(c); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func naiveHasCredential(inb Inbound, settings Settings) bool {
+	for _, p := range inb.Profiles {
+		if !p.Enabled {
+			continue
+		}
+		if strings.TrimSpace(p.Username) == "" || strings.TrimSpace(p.Password) == "" {
+			continue
+		}
+		return true
+	}
+	username := ""
+	password := ""
+	if inb.ProtocolFields != nil {
+		if u, ok := inb.ProtocolFields["naiveUsername"].(string); ok {
+			username = strings.TrimSpace(u)
+		}
+		if p, ok := inb.ProtocolFields["naivePassword"].(string); ok {
+			password = strings.TrimSpace(p)
+		}
+	}
+	if username == "" && settings.ProtocolFields != nil {
+		if u, ok := settings.ProtocolFields["naiveUsername"].(string); ok {
+			username = strings.TrimSpace(u)
+		}
+	}
+	if password == "" && settings.ProtocolFields != nil {
+		if p, ok := settings.ProtocolFields["naivePassword"].(string); ok {
+			password = strings.TrimSpace(p)
+		}
+	}
+	if username == "" {
+		username = strings.TrimSpace(settings.NaiveUsername)
+	}
+	if password == "" {
+		password = strings.TrimSpace(settings.NaivePassword)
+	}
+	return username != "" && password != ""
 }
 
 func filterCaddyRuntimeUnits(units []string) []string {

@@ -18,14 +18,3 @@ func TestCaddyRequirementDependsOnPanelAccessOrProtocolRequirement(t *testing.T)
 		t.Fatal("Mieru inbound should not require Caddy")
 	}
 }
-
-func TestNaiveCaddySettingsRequirement(t *testing.T) {
-	err := NewNaiveCaddySettingsRequirement().Validate(model.Settings{Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"})
-	if err != nil {
-		t.Fatalf("Validate: %v", err)
-	}
-	err = NewNaiveCaddySettingsRequirement().Validate(model.Settings{Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil"})
-	if err == nil || err.Error() != "domain, email, naive username, and naive password are required for NaiveProxy/Caddy" {
-		t.Fatalf("err = %v", err)
-	}
-}

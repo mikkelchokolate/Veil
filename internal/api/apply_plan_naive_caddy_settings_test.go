@@ -46,16 +46,96 @@ func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T)
 	}
 }
 
-func TestBuildApplyPlanRequiresCaddySettingsForNaiveProxyInbound(t *testing.T) {
+func TestBuildApplyPlanAcceptsNaiveProxyWithPerInboundSettings(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
-		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+		Inbounds: []Inbound{{
+			Name:      "naive",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain":        "vpn.example.com",
+				"email":         "admin@example.com",
+				"naiveUsername": "veil",
+				"naivePassword": "secret",
+			},
+		}},
+	})
+	if !plan.Valid {
+		t.Fatalf("NaiveProxy with per-inbound settings should be valid: %+v", plan)
+	}
+}
+
+func TestBuildApplyPlanRejectsNaiveProxyMissingDomain(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
+		Inbounds: []Inbound{{
+			Name:      "naive",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"email":         "admin@example.com",
+				"naiveUsername": "veil",
+				"naivePassword": "secret",
+			},
+		}},
 	})
 	if plan.Valid {
-		t.Fatalf("NaiveProxy without Caddy settings should be invalid: %+v", plan)
+		t.Fatalf("NaiveProxy without a domain should be invalid: %+v", plan)
 	}
-	if !strings.Contains(strings.Join(plan.Errors, "\n"), "domain, email, naive username, and naive password are required for NaiveProxy/Caddy") {
-		t.Fatalf("missing Caddy settings error: %+v", plan.Errors)
+	if !strings.Contains(strings.Join(plan.Errors, "\n"), "missing a public domain") {
+		t.Fatalf("expected missing domain error: %+v", plan.Errors)
+	}
+}
+
+func TestBuildApplyPlanRejectsNaiveProxyMissingEmail(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
+		Inbounds: []Inbound{{
+			Name:      "naive",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain":        "vpn.example.com",
+				"naiveUsername": "veil",
+				"naivePassword": "secret",
+			},
+		}},
+	})
+	if plan.Valid {
+		t.Fatalf("NaiveProxy without an ACME email should be invalid: %+v", plan)
+	}
+	if !strings.Contains(strings.Join(plan.Errors, "\n"), "missing an ACME email") {
+		t.Fatalf("expected missing email error: %+v", plan.Errors)
+	}
+}
+
+func TestBuildApplyPlanRejectsNaiveProxyMissingCredentials(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
+		Inbounds: []Inbound{{
+			Name:      "naive",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain": "vpn.example.com",
+				"email":  "admin@example.com",
+			},
+		}},
+	})
+	if plan.Valid {
+		t.Fatalf("NaiveProxy without credentials should be invalid: %+v", plan)
+	}
+	if !strings.Contains(strings.Join(plan.Errors, "\n"), "missing valid credentials") {
+		t.Fatalf("expected missing credentials error: %+v", plan.Errors)
 	}
 }
 

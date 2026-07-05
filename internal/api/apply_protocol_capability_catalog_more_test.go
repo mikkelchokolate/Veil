@@ -1,7 +1,6 @@
 package api
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -32,18 +31,3 @@ func TestApplyProtocolCapabilityShouldValidateRender(t *testing.T) {
 	}
 }
 
-func TestApplyProtocolCapabilityValidateSettingsRequiresNaiveCaddy(t *testing.T) {
-	cap := ApplyProtocolCapability{RequiresCaddySettings: true}
-	err := cap.ValidateSettings(Settings{})
-	if err == nil {
-		t.Fatal("expected naive caddy settings requirement error")
-	}
-	if !strings.Contains(err.Error(), "domain, email, naive username, and naive password") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	cap = ApplyProtocolCapability{RequiresCaddySettings: false}
-	if err := cap.ValidateSettings(Settings{}); err != nil {
-		t.Fatalf("unexpected settings error: %v", err)
-	}
-}

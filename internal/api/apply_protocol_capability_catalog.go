@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/mikkelchokolate/Veil/internal/panelaccess"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
@@ -11,7 +10,6 @@ type ApplyProtocolCapability struct {
 	Action                 string
 	ValidateInboundRender  bool
 	RequiresRenderSettings bool
-	RequiresCaddySettings  bool
 }
 
 type ApplyProtocolCapabilityCatalog struct {
@@ -42,9 +40,6 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 				cap.Action = "restart " + unit
 			}
 		}
-		if _, ok := protocols.AsValidator(p); ok {
-			cap.RequiresCaddySettings = meta.Protocol == "naiveproxy"
-		}
 		// Caddy-managed protocols render a single global Caddy JSON config and
 		// reload veil-caddy.service; per-protocol config/action entries would
 		// duplicate or contradict the global Caddy material.
@@ -68,13 +63,6 @@ func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
 		capabilities = append(capabilities, capability)
 	}
 	return capabilities
-}
-
-func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
-	if c.RequiresCaddySettings {
-		return panelaccess.NewNaiveCaddySettingsRequirement().Validate(settings)
-	}
-	return nil
 }
 
 func (c ApplyProtocolCapability) ShouldValidateRender(renderSettingsAvailable bool) bool {

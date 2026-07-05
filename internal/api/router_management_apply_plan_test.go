@@ -124,7 +124,7 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive username, and naive password are required") {
+	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "missing valid credentials") {
 		t.Fatalf("expected missing naive credentials validation error: %+v", response)
 	}
 }
