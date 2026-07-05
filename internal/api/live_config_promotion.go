@@ -105,7 +105,6 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 		ext     string
 		exclude string
 	}{
-		{subpath: "caddy", ext: ".Caddyfile", exclude: "panel.Caddyfile"},
 		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
 	}

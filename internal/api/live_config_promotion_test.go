@@ -62,19 +62,12 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 		t.Fatalf("write staged: %v", err)
 	}
 
-	// Create orphaned configs
-	orphanCaddy := filepath.Join(root, "live", "caddy", "orphan.Caddyfile")
+	// Create orphaned configs. Caddy artifacts are now exclusively
+	// live/caddy/config.json and are no longer scanned as orphans.
 	orphanHysteria2 := filepath.Join(root, "live", "hysteria2", "orphan.yaml")
-	nonOrphanCaddy := filepath.Join(root, "live", "caddy", "panel.Caddyfile") // excluded from scans
 
-	if err := atomicfile.Write(orphanCaddy, []byte("orphan caddy content"), 0o600, 0o700); err != nil {
-		t.Fatalf("write orphan caddy: %v", err)
-	}
 	if err := atomicfile.Write(orphanHysteria2, []byte("orphan hysteria2 content"), 0o600, 0o700); err != nil {
 		t.Fatalf("write orphan hysteria2: %v", err)
-	}
-	if err := atomicfile.Write(nonOrphanCaddy, []byte("non-orphan caddy"), 0o600, 0o700); err != nil {
-		t.Fatalf("write non-orphan caddy: %v", err)
 	}
 
 	promotion := NewLiveConfigPromotion(root, nil)
@@ -90,28 +83,22 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 		t.Fatalf("unexpected liveFiles: %+v", liveFiles)
 	}
 
-	if len(backupFiles) != 2 {
-		t.Fatalf("expected 2 backup files, got %+v", backupFiles)
+	if len(backupFiles) != 1 {
+		t.Fatalf("expected 1 backup file, got %+v", backupFiles)
 	}
 
-	// Verify that orphans were removed from live paths
-	if _, err := os.Stat(orphanCaddy); !os.IsNotExist(err) {
-		t.Fatalf("orphan caddy file should be removed, but stat got: %v", err)
-	}
+	// Verify that the hysteria2 orphan was removed from live paths
 	if _, err := os.Stat(orphanHysteria2); !os.IsNotExist(err) {
 		t.Fatalf("orphan hysteria2 file should be removed, but stat got: %v", err)
 	}
-	// Excluded non-orphan should still exist
-	assertFileBody(t, nonOrphanCaddy, "non-orphan caddy")
 
 	// Rollback
 	rollbackFiles, _ := promotion.Rollback(records, liveFiles)
-	if len(rollbackFiles) != 3 {
-		t.Fatalf("expected 3 rollback files, got %+v", rollbackFiles)
+	if len(rollbackFiles) != 2 {
+		t.Fatalf("expected 2 rollback files, got %+v", rollbackFiles)
 	}
 
-	// Check that orphans are restored
-	assertFileBody(t, orphanCaddy, "orphan caddy content")
+	// Check that the hysteria2 orphan is restored
 	assertFileBody(t, orphanHysteria2, "orphan hysteria2 content")
 	// Check that new live file was removed
 	if _, err := os.Stat(liveMieru); !os.IsNotExist(err) {
