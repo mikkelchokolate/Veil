@@ -257,7 +257,6 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		allowed bool
 	}{
 		{"caddy/config.json", true},
-		{"caddy/edge.Caddyfile", true},
 		{"hysteria2/udp.yaml", true},
 		{"olcrtc/rtc.yaml", true},
 		{"mieru/server_config.json", true},

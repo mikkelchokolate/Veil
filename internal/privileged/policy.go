@@ -206,11 +206,6 @@ func managedArtifactPath(id string) (ArtifactPath, bool) {
 	}
 	name := ""
 	switch parts[0] {
-	case "caddy":
-		name = strings.TrimSuffix(parts[1], ".Caddyfile")
-		if name == parts[1] {
-			return ArtifactPath{}, false
-		}
 	case "hysteria2", "olcrtc":
 		name = strings.TrimSuffix(parts[1], ".yaml")
 		if name == parts[1] {
