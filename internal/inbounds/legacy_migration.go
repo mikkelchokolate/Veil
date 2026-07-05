@@ -5,15 +5,6 @@ import "github.com/mikkelchokolate/Veil/internal/model"
 // LegacyState describes the migration status of an inbound.
 type LegacyState string
 
-const (
-	// LegacyStateMigrated indicates the inbound has been migrated to the new
-	// per-inbound domain/publicPort/email fields.
-	LegacyStateMigrated LegacyState = "migrated"
-	// LegacyStateLegacy indicates the inbound is missing the new fields and
-	// requires migration.
-	LegacyStateLegacy LegacyState = "legacy"
-)
-
 // DetectLegacyInbounds returns naiveproxy inbounds that do not have per-inbound
 // domain configuration in ProtocolFields.
 func DetectLegacyInbounds(inbounds []model.Inbound) []model.Inbound {
