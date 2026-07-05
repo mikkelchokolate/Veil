@@ -534,7 +534,7 @@ func TestNaiveProtocolFieldHelpers(t *testing.T) {
 			"transport":  "dual",
 		},
 	}
-	if got := NaiveDomain(inbound); got != "p.example.com" {
+	if got := NaiveDomain(settings, inbound); got != "p.example.com" {
 		t.Errorf("domain = %q", got)
 	}
 	if got := NaivePublicPort(settings, inbound); got != 9443 {

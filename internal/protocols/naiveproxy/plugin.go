@@ -79,14 +79,28 @@ func fallbackRoot(settings model.Settings, inbound model.Inbound) string {
 	return root
 }
 
-// NaiveDomain returns the public domain stored on the inbound ProtocolFields.
-func NaiveDomain(inbound model.Inbound) string {
-	return stringField(inbound.ProtocolFields, "domain")
+// NaiveDomain returns the public domain for the inbound, preferring the inbound
+// ProtocolFields and falling back to the global settings domain.
+func NaiveDomain(settings model.Settings, inbound model.Inbound) string {
+	if d := stringField(inbound.ProtocolFields, "domain"); d != "" {
+		return d
+	}
+	return settings.Domain
 }
 
-// NaiveEmail returns the explicit ACME contact email stored on the inbound ProtocolFields.
-func NaiveEmail(inbound model.Inbound) string {
-	return stringField(inbound.ProtocolFields, "email")
+// NaiveEmail returns the ACME contact email for the inbound, preferring the
+// inbound ProtocolFields and falling back through the domain-level resolver
+// chain: settings email, default ACME email, and panel email.
+func NaiveEmail(settings model.Settings, inbound model.Inbound) string {
+	if e := stringField(inbound.ProtocolFields, "email"); e != "" {
+		return e
+	}
+	for _, candidate := range []string{settings.Email, settings.DefaultAcmeEmail, settings.PanelEmail} {
+		if v := strings.TrimSpace(candidate); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // NaivePublicPort returns the public port for the inbound, falling back to the

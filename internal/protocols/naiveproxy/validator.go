@@ -23,7 +23,7 @@ func (Plugin) ValidateSettings(settings model.Settings) error {
 // ValidateInbound checks one inbound for naiveproxy-specific problems.
 func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	var issues []model.ValidationIssue
-	domain := NaiveDomain(inbound)
+	domain := NaiveDomain(settings, inbound)
 	if domain == "" {
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_domain_required",

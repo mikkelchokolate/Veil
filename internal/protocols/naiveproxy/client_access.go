@@ -16,7 +16,7 @@ func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mo
 // configured transport. TCP yields an https:// URI, QUIC yields a quic:// URI,
 // and dual yields both. The port is omitted when it matches the default (443).
 func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
-	domain := NaiveDomain(inbound)
+	domain := NaiveDomain(settings, inbound)
 	if domain == "" {
 		return nil, nil
 	}
