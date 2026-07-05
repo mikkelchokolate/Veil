@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"time"
 )
+
+const defaultAdminTimeout = 30 * time.Second
 
 type Client struct {
 	AdminEndpoint string
@@ -15,7 +18,7 @@ func NewClient(endpoint string) Client {
 	if endpoint == "" {
 		endpoint = "http://127.0.0.1:2019"
 	}
-	return Client{AdminEndpoint: endpoint, HTTPClient: http.DefaultClient}
+	return Client{AdminEndpoint: endpoint, HTTPClient: &http.Client{Timeout: defaultAdminTimeout}}
 }
 
 func (c Client) LoadConfig(json []byte) error {
