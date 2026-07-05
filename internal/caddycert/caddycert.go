@@ -137,14 +137,16 @@ func Sync(domain, sourceDir, targetDir string) error {
 	keyDst := filepath.Join(targetDir, domain+".key")
 
 	deadline := time.Now().Add(120 * time.Second)
-	for time.Now().Before(deadline) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
 		if exists(crtSrc) && exists(keySrc) {
 			break
 		}
-		time.Sleep(2 * time.Second)
-	}
-	if !exists(crtSrc) || !exists(keySrc) {
-		return fmt.Errorf("certificate for %s not issued within timeout", domain)
+		if time.Now().After(deadline) {
+			return fmt.Errorf("certificate for %s not issued within timeout", domain)
+		}
+		<-ticker.C
 	}
 
 	tmpCrt := crtDst + ".tmp"
