@@ -55,7 +55,7 @@ func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
 	for _, g := range groups {
 		policies = append(policies, map[string]any{
 			"subjects": g.domains,
-			"issuer":   renderACMEIssuer(g.email, g.mode),
+			"issuers":  []map[string]any{renderACMEIssuer(g.email, g.mode)},
 		})
 	}
 	return map[string]any{"automation": map[string]any{"policies": policies}}
@@ -66,8 +66,8 @@ func renderACMEIssuer(email, mode string) map[string]any {
 		"module": "acme",
 		"email":  email,
 		"challenges": map[string]any{
-			"http-01":     map[string]any{"disabled": mode != "http-01"},
-			"tls-alpn-01": map[string]any{"disabled": mode != "tls-alpn-01"},
+			"http":     map[string]any{"disabled": mode != "http-01"},
+			"tls-alpn": map[string]any{"disabled": mode != "tls-alpn-01"},
 		},
 	}
 }

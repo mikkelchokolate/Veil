@@ -64,3 +64,58 @@ func TestRenderCaddyJSONPanelOnly(t *testing.T) {
 		t.Error("expected http app")
 	}
 }
+
+func TestRenderCaddyJSONAcmeChallengeKeys(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     bindregistry.BindKey
+		mode    string
+		wantKey string
+	}{
+		{
+			name:    "http-01",
+			key:     bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP},
+			mode:    "http-01",
+			wantKey: `"http"`,
+		},
+		{
+			name:    "tls-alpn-01",
+			key:     bindregistry.BindKey{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP},
+			mode:    "tls-alpn-01",
+			wantKey: `"tls-alpn"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := caddyassembly.CaddyRenderPlan{
+				Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+					{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+						Kind:   caddyassembly.CaddyOwnerPanel,
+						Domain: "panel.example.com",
+					},
+				},
+				Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+					"panel.example.com": {Domain: "panel.example.com", Email: "admin@example.com"},
+				},
+				ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+					tt.key: {ChallengeMode: tt.mode, Domains: []string{"panel.example.com"}},
+				},
+			}
+			data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := string(data)
+			if !strings.Contains(s, `"issuers"`) {
+				t.Error("expected automation policy to contain issuers array")
+			}
+			if !strings.Contains(s, tt.wantKey) {
+				t.Errorf("expected challenge key %s in rendered JSON", tt.wantKey)
+			}
+			if strings.Contains(s, `"http-01"`) || strings.Contains(s, `"tls-alpn-01"`) {
+				t.Error("old challenge keys http-01/tls-alpn-01 must not appear in rendered JSON")
+			}
+		})
+	}
+}
