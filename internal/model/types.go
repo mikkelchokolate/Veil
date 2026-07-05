@@ -7,6 +7,8 @@ type Settings struct {
 	Mode              string `json:"mode"`
 	Domain            string `json:"domain,omitempty"`
 	Email             string `json:"email,omitempty"`
+	PanelEmail        string `json:"panelEmail,omitempty"`
+	DefaultAcmeEmail  string `json:"defaultAcmeEmail,omitempty"`
 	NaiveUsername     string `json:"naiveUsername,omitempty"`
 	NaivePassword     string `json:"naivePassword,omitempty"`
 	Hysteria2Password string `json:"hysteria2Password,omitempty"`
