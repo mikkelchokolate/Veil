@@ -38,8 +38,8 @@ func TestPluginMetadata(t *testing.T) {
 func TestRenderConfigWithInbound(t *testing.T) {
 	p := New()
 	settings := model.Settings{
-		Domain: "example.com",
-		Email:  "admin@example.com",
+		Domain:           "example.com",
+		DefaultAcmeEmail: "admin@example.com",
 	}
 	inbound := model.Inbound{
 		Name:      "naive1",
@@ -133,8 +133,8 @@ func TestRenderConfigNoInboundsNoPanelAccess(t *testing.T) {
 func TestRenderConfigWithWarp(t *testing.T) {
 	p := New()
 	settings := model.Settings{
-		Domain: "example.com",
-		Email:  "admin@example.com",
+		Domain:           "example.com",
+		DefaultAcmeEmail: "admin@example.com",
 	}
 	inbound := model.Inbound{
 		Name:      "naive-warp",
@@ -173,7 +173,7 @@ func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {
 	p := New()
 	settings := model.Settings{
 		Domain:                   "settings.example.com",
-		Email:                    "admin@example.com",
+		DefaultAcmeEmail:         "admin@example.com",
 		DefaultInboundPublicPort: 8443,
 	}
 	inbound := model.Inbound{
@@ -222,14 +222,14 @@ func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {
 func TestRenderConfigIncludesPanelServerWhenPanelAccessCaddy(t *testing.T) {
 	p := New()
 	settings := model.Settings{
-		Domain:          "example.com",
-		Email:           "admin@example.com",
-		PanelAccess:     "caddy",
-		PanelDomain:     "panel.example.com",
-		PanelEmail:      "admin@example.com",
-		PanelPublicPort: 443,
-		PanelListen:     "127.0.0.1:8080",
-		WebBasePath:     "/panel",
+		Domain:           "example.com",
+		DefaultAcmeEmail: "admin@example.com",
+		PanelAccess:      "caddy",
+		PanelDomain:      "panel.example.com",
+		PanelEmail:       "admin@example.com",
+		PanelPublicPort:  443,
+		PanelListen:      "127.0.0.1:8080",
+		WebBasePath:      "/panel",
 	}
 	inbound := model.Inbound{
 		Name:      "naive-8443",
@@ -270,7 +270,7 @@ func TestRenderConfigDefaultsPublicPort(t *testing.T) {
 	p := New()
 	settings := model.Settings{
 		Domain:                   "example.com",
-		Email:                    "admin@example.com",
+		DefaultAcmeEmail:         "admin@example.com",
 		DefaultInboundPublicPort: 8443,
 	}
 	inbound := model.Inbound{
@@ -303,11 +303,11 @@ func TestRenderConfigDefaultsPublicPort(t *testing.T) {
 func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
 	p := New()
 	settings := model.Settings{
-		Domain:      "example.com",
-		Email:       "admin@example.com",
-		PanelAccess: "caddy",
-		PanelListen: "not-a-valid-address",
-		WebBasePath: "/panel",
+		Domain:           "example.com",
+		DefaultAcmeEmail: "admin@example.com",
+		PanelAccess:      "caddy",
+		PanelListen:      "not-a-valid-address",
+		WebBasePath:      "/panel",
 	}
 	inbound := model.Inbound{
 		Name:      "naive-panel-err",
@@ -346,7 +346,7 @@ func TestArtifactSpec(t *testing.T) {
 	if spec.ValidationName != "caddy" {
 		t.Errorf("ValidationName = %q, want caddy", spec.ValidationName)
 	}
-	want := []string{"caddy", "validate", "--config", "/tmp/config.json", "--adapter", "json"}
+	want := []string{"caddy", "validate", "--config", "/tmp/config.json"}
 	if got := spec.ValidationCommand("/tmp/config.json"); !reflect.DeepEqual(got, want) {
 		t.Errorf("ValidationCommand = %v, want %v", got, want)
 	}

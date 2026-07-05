@@ -72,7 +72,7 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
@@ -105,7 +105,7 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com"},
 		"inbounds":[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}

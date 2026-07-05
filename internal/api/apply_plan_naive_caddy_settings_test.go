@@ -141,7 +141,7 @@ func TestBuildApplyPlanRejectsNaiveProxyMissingCredentials(t *testing.T) {
 
 func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
-		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"},
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 	if !plan.Valid {

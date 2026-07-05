@@ -11,7 +11,7 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 		ApplyRoot: t.TempDir(),
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -34,7 +34,7 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -73,7 +73,7 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",

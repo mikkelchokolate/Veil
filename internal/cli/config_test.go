@@ -16,7 +16,7 @@ func TestConfigValidateValidState(t *testing.T) {
     "panelListen": "127.0.0.1:2096",
     "mode": "server",
     "domain": "vpn.example.com",
-    "email": "admin@example.com",
+    "defaultAcmeEmail": "admin@example.com",
     "naiveUsername": "veil",
     "naivePassword": "secret"
   },

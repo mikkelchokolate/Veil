@@ -31,3 +31,14 @@ func TestResolveDomainCertSpecsFallback(t *testing.T) {
 		t.Errorf("expected fallback email, got %q", specs["x.com"].Email)
 	}
 }
+
+func TestResolveDomainCertSpecsIgnoresLegacyGlobalEmailForNaive(t *testing.T) {
+	settings := model.Settings{PanelAccess: "direct", Email: "legacy@x.com"}
+	inbounds := []model.Inbound{
+		{Name: "n1", Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com"}},
+	}
+	_, err := ResolveDomainCertSpecs(settings, inbounds)
+	if err == nil {
+		t.Fatal("expected error when no explicit/default/panel email is available")
+	}
+}

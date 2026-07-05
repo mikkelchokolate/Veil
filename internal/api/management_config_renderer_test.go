@@ -10,7 +10,7 @@ func TestManagementConfigRendererBuildsGeneratedConfigSet(t *testing.T) {
 	root := t.TempDir()
 	renderer := NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: root,
-		Settings:  Settings{Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-pass", Hysteria2Password: "hy2-pass"},
+		Settings:  Settings{Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-pass", Hysteria2Password: "hy2-pass"},
 		Inbounds:  []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 	})
 

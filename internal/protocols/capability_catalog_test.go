@@ -46,7 +46,7 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 
 	configs, err := registry.Render(generatedconfig.ConfigInput{
 		ApplyRoot: root,
-		Settings:  model.Settings{Domain: "example.com", Email: "admin@example.com"},
+		Settings:  model.Settings{Domain: "example.com", DefaultAcmeEmail: "admin@example.com"},
 		Inbounds:  inbounds,
 	})
 	if err != nil {

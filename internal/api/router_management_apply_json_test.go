@@ -120,7 +120,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret",
@@ -179,7 +179,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"hysteria2Password":"hy2-secret"
 		},
 		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
@@ -236,7 +236,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret"
@@ -286,7 +286,7 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret"
 		},

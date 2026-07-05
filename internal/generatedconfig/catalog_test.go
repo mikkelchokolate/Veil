@@ -43,7 +43,7 @@ func TestArtifactCatalogMatchesValidationAndPromotionSpecs(t *testing.T) {
 	if validation.Name != "caddy" || validation.Config != filepath.FromSlash("/apply/generated/caddy/config.json") {
 		t.Fatalf("validation spec = %+v", validation)
 	}
-	if got := validation.Command; len(got) != 6 || got[0] != "caddy" || got[1] != "validate" || got[4] != "--adapter" || got[5] != "json" {
+	if got := validation.Command; len(got) != 4 || got[0] != "caddy" || got[1] != "validate" || got[2] != "--config" || got[3] != filepath.FromSlash("/apply/generated/caddy/config.json") {
 		t.Fatalf("validation command = %+v", got)
 	}
 	// hysteria2 has no standalone config checker, so it produces no validation spec...
