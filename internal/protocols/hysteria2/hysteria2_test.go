@@ -176,11 +176,12 @@ func TestRenderConfigWithCaddyPanelAccess(t *testing.T) {
 		Paths: paths,
 		Inbounds: []model.Inbound{
 			{
-				Name:      "h2-1",
-				Protocol:  "hysteria2",
-				Transport: "udp",
-				Port:      8443,
-				Enabled:   true,
+				Name:           "h2-1",
+				Protocol:       "hysteria2",
+				Transport:      "udp",
+				Port:           8443,
+				Enabled:        true,
+				ProtocolFields: map[string]any{"domain": "example.com"},
 			},
 		},
 	})
@@ -698,6 +699,16 @@ func TestBuildLinksProfileRequiresPassword(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "username and password are required") {
 		t.Errorf("expected username/password required error, got: %v", err)
+	}
+}
+
+func TestHysteria2DomainFromProtocolFields(t *testing.T) {
+	inbound := model.Inbound{
+		Protocol:       "hysteria2",
+		ProtocolFields: map[string]any{"domain": "hy.example.com"},
+	}
+	if got := Hysteria2Domain(inbound); got != "hy.example.com" {
+		t.Errorf("domain = %q", got)
 	}
 }
 

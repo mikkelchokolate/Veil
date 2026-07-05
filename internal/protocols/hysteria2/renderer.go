@@ -54,9 +54,9 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if settings.PanelAccess == "caddy" && settings.Domain != "" {
-		hystConfig.CertPath = "/etc/veil/certs/" + settings.Domain + ".crt"
-		hystConfig.KeyPath = "/etc/veil/certs/" + settings.Domain + ".key"
+	if domain := Hysteria2Domain(inbound); domain != "" {
+		hystConfig.CertPath = "/etc/veil/certs/" + domain + ".crt"
+		hystConfig.KeyPath = "/etc/veil/certs/" + domain + ".key"
 	}
 	if warp.Enabled {
 		socksPort := warp.SocksPort
