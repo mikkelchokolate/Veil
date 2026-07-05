@@ -35,9 +35,6 @@ func validateCaddyCapabilities(plan caddyassembly.CaddyRenderPlan, caps caddycap
 				return fmt.Errorf("Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport %s", owner.Transport)
 			}
 		}
-		if owner.Transport == "quic" && !caps.H3Only {
-			return fmt.Errorf("Caddy binary does not support HTTP/3/QUIC transport required for NaiveProxy transport %s", owner.Transport)
-		}
 	}
 	return nil
 }
