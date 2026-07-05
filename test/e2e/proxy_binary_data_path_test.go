@@ -489,29 +489,84 @@ func TestNaiveProxyDataPath(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Modify generated Caddyfile to run over HTTP (remove domain name and tls directives)
-	serverConfig := filepath.Join(srv.applyRoot, "generated", "caddy", "naive-tcp.Caddyfile")
-	caddyfileContent, err := os.ReadFile(serverConfig)
+	// 3. Modify generated Caddy JSON to run over HTTP on loopback.
+	serverConfig := filepath.Join(srv.applyRoot, "generated", "caddy", "config.json")
+	configBytes, err := os.ReadFile(serverConfig)
 	if err != nil {
-		t.Fatalf("read caddyfile: %v", err)
+		t.Fatalf("read caddy config: %v", err)
 	}
 
-	// Change format: ":port, vpn.example.com {" -> "127.0.0.1:port {"
-	caddyfile := string(caddyfileContent)
-	caddyfile = strings.Replace(caddyfile, fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("127.0.0.1:%d", inboundPort), 1)
+	var fullCfg map[string]any
+	if err := json.Unmarshal(configBytes, &fullCfg); err != nil {
+		t.Fatalf("parse caddy config: %v", err)
+	}
+	apps, ok := fullCfg["apps"].(map[string]any)
+	if !ok {
+		t.Fatal("caddy config missing apps")
+	}
+	httpApp, ok := apps["http"].(map[string]any)
+	if !ok {
+		t.Fatal("caddy config missing http app")
+	}
+	servers, ok := httpApp["servers"].(map[string]any)
+	if !ok {
+		t.Fatal("caddy config missing servers")
+	}
 
-	// Remove tls directive
-	reTls := regexp.MustCompile(`(?m)^\s*tls\s+\S+\s*$`)
-	caddyfile = reTls.ReplaceAllString(caddyfile, "")
+	var naiveServer map[string]any
+	for _, srvRaw := range servers {
+		srvMap, ok := srvRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		routes, ok := srvMap["routes"].([]any)
+		if !ok || len(routes) == 0 {
+			continue
+		}
+		route, ok := routes[0].(map[string]any)
+		if !ok {
+			continue
+		}
+		handlers, ok := route["handle"].([]any)
+		if !ok || len(handlers) == 0 {
+			continue
+		}
+		handler, ok := handlers[0].(map[string]any)
+		if !ok {
+			continue
+		}
+		if handler["handler"] == "forward_proxy" {
+			naiveServer = srvMap
+			break
+		}
+	}
+	if naiveServer == nil {
+		t.Fatal("caddy config missing naive server")
+	}
+	naiveServer["listen"] = []any{fmt.Sprintf("127.0.0.1:%d", inboundPort)}
+	naiveServer["auto_https"] = "off"
 
 	tempDir := t.TempDir()
-	tempCaddyfile := filepath.Join(tempDir, "Caddyfile")
-	if err := os.WriteFile(tempCaddyfile, []byte(caddyfile), 0o600); err != nil {
-		t.Fatalf("write modified caddyfile: %v", err)
+	tempConfig := filepath.Join(tempDir, "config.json")
+	minimalCfg := map[string]any{
+		"apps": map[string]any{
+			"http": map[string]any{
+				"servers": map[string]any{
+					"naive": naiveServer,
+				},
+			},
+		},
+	}
+	minimalBytes, err := json.MarshalIndent(minimalCfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal minimal caddy config: %v", err)
+	}
+	if err := os.WriteFile(tempConfig, minimalBytes, 0o600); err != nil {
+		t.Fatalf("write minimal caddy config: %v", err)
 	}
 
 	// 4. Start Caddy server
-	cmdServer := exec.Command(caddyPath, "run", "--config", tempCaddyfile, "--adapter", "caddyfile")
+	cmdServer := exec.Command(caddyPath, "run", "--config", tempConfig)
 	if err := cmdServer.Start(); err != nil {
 		t.Fatalf("start caddy server: %v", err)
 	}
