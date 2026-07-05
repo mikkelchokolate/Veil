@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 	"time"
 
