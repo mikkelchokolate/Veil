@@ -208,8 +208,8 @@ func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {
 			t.Errorf("body missing %q:\n%s", want, body)
 		}
 	}
-	if !strings.Contains(body, `"root": "/var/lib/veil/www"`) {
-		t.Errorf("expected default fallback root in file_server, got:\n%s", body)
+	if !strings.Contains(body, `"root": "/var/lib/veil/pf"`) {
+		t.Errorf("expected inbound fallback root in file_server, got:\n%s", body)
 	}
 	if strings.Contains(body, "settings.example.com") {
 		t.Errorf("body unexpectedly contains settings-level domain:\n%s", body)

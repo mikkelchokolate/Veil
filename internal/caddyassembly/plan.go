@@ -25,6 +25,7 @@ type CaddyBindOwner struct {
 	BackendPort int              // Panel backend port parsed from PanelListen; used only for Panel owner
 	WebBasePath string           // Normalized panel web base path; used only for Panel owner
 	NaiveUsers  []CaddyNaiveUser // Only for naive owner
+	FallbackRoot string          // Only for naive owner
 }
 
 // CaddyNaiveUser is a minimal credential pair for the forward_proxy handler.
@@ -73,7 +74,8 @@ func BuildRenderPlan(
 		port := naivePublicPort(settings, inb)
 		domain := naiveDomain(inb, settings)
 		users := naiveUsers(inb, settings)
-		addNaiveBinds(transport, port, domain, inb.Name, users, owners, servers)
+		fallbackRoot := naiveFallbackRoot(inb, settings)
+		addNaiveBinds(transport, port, domain, inb.Name, users, fallbackRoot, owners, servers)
 	}
 
 	domains, err := ResolveDomainCertSpecs(settings, inbounds)
@@ -89,16 +91,16 @@ func BuildRenderPlan(
 	}, owners, nil
 }
 
-func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
+func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, fallbackRoot string, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
 	if transport == "tcp" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenTCP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}
 	}
 	if transport == "quic" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenUDP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}
 	}
 }
 
@@ -140,6 +142,21 @@ func naiveDomain(inbound model.Inbound, settings model.Settings) string {
 		return d
 	}
 	return settings.Domain
+}
+
+// naiveFallbackRoot mirrors the naiveproxy plugin helper to avoid an import
+// cycle with the renderer. It falls back to the built-in default web root.
+func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
+	if root := stringField(inbound.ProtocolFields, "fallbackRoot"); root != "" {
+		return root
+	}
+	if inbound.FallbackRoot != "" {
+		return inbound.FallbackRoot
+	}
+	if settings.FallbackRoot != "" {
+		return settings.FallbackRoot
+	}
+	return "/var/lib/veil/www"
 }
 
 func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {

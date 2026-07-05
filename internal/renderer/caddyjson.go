@@ -99,6 +99,9 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		"listen":     []string{listenString(key)},
 		"auto_https": map[string]any{"disable_redirects": true},
 	}
+	if owner.Kind == caddyassembly.CaddyOwnerNaive {
+		server["protocols"] = protocolsForTransport(owner.Transport)
+	}
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
@@ -106,6 +109,10 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		basicAuth := make([]map[string]any, 0, len(owner.NaiveUsers))
 		for _, u := range owner.NaiveUsers {
 			basicAuth = append(basicAuth, map[string]any{"username": u.Username, "password": u.Password})
+		}
+		fallbackRoot := owner.FallbackRoot
+		if fallbackRoot == "" {
+			fallbackRoot = "/var/lib/veil/www"
 		}
 		handlers := []map[string]any{
 			{
@@ -117,12 +124,25 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			},
 			{
 				"handler": "file_server",
-				"root":    "/var/lib/veil/www",
+				"root":    fallbackRoot,
 			},
 		}
 		server["routes"] = []map[string]any{{"handle": handlers}}
 	}
 	return server
+}
+
+func protocolsForTransport(transport string) []string {
+	switch transport {
+	case "tcp":
+		return []string{"h1", "h2"}
+	case "quic":
+		return []string{"h3"}
+	case "dual":
+		return []string{"h1", "h2", "h3"}
+	default:
+		return []string{"h1", "h2"}
+	}
 }
 
 func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.AcmeChallengeOwner) map[string]any {
