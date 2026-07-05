@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -76,27 +75,30 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 	return written, validations, renderedPaths, nil
 }
 
+var managedGeneratedSubdirs = []string{"caddy", "hysteria2", "mieru", "olcrtc", "sing-box", "rules"}
+
 func cleanStaleGeneratedFiles(generatedRoot string, keep map[string]bool) error {
-	return filepath.Walk(generatedRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+	for _, subdir := range managedGeneratedSubdirs {
+		root := filepath.Join(generatedRoot, subdir)
+		if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
+			}
+			if info.IsDir() || !info.Mode().IsRegular() {
+				return nil
+			}
+			if keep[path] {
+				return nil
+			}
+			return os.Remove(path)
+		}); err != nil {
 			return err
 		}
-		if info.IsDir() || !info.Mode().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(generatedRoot, path)
-		if err != nil {
-			return err
-		}
-		// Protect Veil's own metadata (apply plan, state, history, audit).
-		if rel == "veil" || strings.HasPrefix(rel, "veil"+string(filepath.Separator)) {
-			return nil
-		}
-		if keep[path] {
-			return nil
-		}
-		return os.Remove(path)
-	})
+	}
+	return nil
 }
 
 func sortedRenderedPaths(rendered map[string]string) []string {

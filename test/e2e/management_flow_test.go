@@ -231,19 +231,9 @@ func TestNaiveInboundCaddyJSON(t *testing.T) {
 	}
 	drain(resp)
 
-	data, err = os.ReadFile(caddyJSON)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			t.Fatalf("unexpected error reading regenerated Caddy JSON at %s: %v", caddyJSON, err)
-		}
-	} else {
-		s = string(data)
-		if strings.Contains(s, "forward_proxy") {
-			t.Error("Caddy JSON still contains forward_proxy handler after delete")
-		}
-		if strings.Contains(s, "proxy.example.com") {
-			t.Error("Caddy JSON still contains naive domain after delete")
-		}
+	_, err = os.ReadFile(caddyJSON)
+	if !os.IsNotExist(err) {
+		t.Fatalf("expected Caddy JSON to be removed after inbound deletion, got err=%v", err)
 	}
 }
 
