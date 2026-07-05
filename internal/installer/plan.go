@@ -71,7 +71,10 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	panelHTTPSPort := 0
 	if profile.InstallPanelCaddy {
 		panelPort = 0
-		panelHTTPSPort = 443
+		panelHTTPSPort = profile.PanelPublicPort
+		if panelHTTPSPort == 0 {
+			panelHTTPSPort = 443
+		}
 	}
 	return InstallPlan{
 		Profile:        profile,

@@ -9,11 +9,12 @@ import (
 type SecretFunc func(label string) string
 
 type RURecommendedInput struct {
-	Domain      string
-	Email       string
-	PanelAccess string
-	Secret      SecretFunc
-	PanelPort   int
+	Domain           string
+	Email            string
+	PanelAccess      string
+	Secret           SecretFunc
+	PanelPort        int
+	PanelPublicPort  int
 }
 
 type RURecommendedProfile struct {
@@ -24,6 +25,7 @@ type RURecommendedProfile struct {
 	PanelAuthToken    string
 	PanelListen       string
 	PanelAccess       string
+	PanelPublicPort   int
 	PanelTLSEnabled   bool
 	PanelTLSCertPEM   string
 	PanelTLSKeyPEM    string
@@ -41,6 +43,7 @@ type RURecommendedInstallInput struct {
 	Email           string
 	PanelAccess     string
 	PanelPort       int
+	PanelPublicPort int
 	Secret          SecretFunc
 	RandomPanelPort func() (int, error)
 }
@@ -76,11 +79,12 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 		return RURecommendedInstall{}, err
 	}
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
-		Domain:      input.Domain,
-		Email:       input.Email,
-		PanelAccess: input.PanelAccess,
-		Secret:      input.Secret,
-		PanelPort:   panelPort,
+		Domain:          input.Domain,
+		Email:           input.Email,
+		PanelAccess:     input.PanelAccess,
+		Secret:          input.Secret,
+		PanelPort:       panelPort,
+		PanelPublicPort: input.PanelPublicPort,
 	})
 	if err != nil {
 		return RURecommendedInstall{}, err
@@ -104,9 +108,13 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 
 	masqueradeURL := "https://www.bing.com/"
 	fallbackRoot := "/var/lib/veil/www"
-	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
+	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, PublicPort: input.PanelPublicPort}).Build()
 	if err != nil {
 		return RURecommendedProfile{}, err
+	}
+	panelPublicPort := panelAccess.PanelPublicPort
+	if panelPublicPort == 0 {
+		panelPublicPort = 443
 	}
 	panelAuthToken := input.Secret("panel")
 
@@ -118,6 +126,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelAuthToken:    panelAuthToken,
 		PanelListen:       panelAccess.PanelListen,
 		PanelAccess:       input.PanelAccess,
+		PanelPublicPort:   panelPublicPort,
 		PanelTLSEnabled:   panelAccess.PanelTLSEnabled,
 		PanelTLSCertPEM:   panelAccess.PanelTLSCertPEM,
 		PanelTLSKeyPEM:    panelAccess.PanelTLSKeyPEM,

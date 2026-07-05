@@ -31,11 +31,18 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 		}
 	}
 	if settings.PanelAccess == "caddy" {
-		builder.Add(443, "tcp", "Veil panel HTTPS")
+		panelPublicPort := settings.PanelPublicPort
+		if panelPublicPort == 0 {
+			panelPublicPort = 443
+		}
+		builder.Add(panelPublicPort, "tcp", "Veil panel HTTPS")
 	} else if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
 		if port, err := strconv.Atoi(portStr); err == nil {
 			builder.Add(port, "tcp", "Veil panel")
 		}
+	}
+	if settings.AcmeChallengeMode == "http-01" {
+		builder.Add(80, "tcp", "Veil ACME HTTP-01")
 	}
 	return builder.Rules()
 }

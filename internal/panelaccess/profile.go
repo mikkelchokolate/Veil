@@ -64,6 +64,7 @@ func (m Mode) Resolve(port int) (ModeResolution, error) {
 
 type ProfileMaterial struct {
 	PanelListen       string
+	PanelPublicPort   int
 	PanelTLSEnabled   bool
 	PanelTLSCertPEM   string
 	PanelTLSKeyPEM    string
@@ -130,7 +131,7 @@ var newTLSFunc = NewTLS
 
 func (p Profile) Build() (ProfileMaterial, error) {
 	settings := p.settings
-	material := ProfileMaterial{PanelListen: settings.PanelListen}
+	material := ProfileMaterial{PanelListen: settings.PanelListen, PanelPublicPort: p.PublicPort}
 	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
 	settings.WebBasePath = material.WebBasePath
 	if settings.PanelDomain == "" {

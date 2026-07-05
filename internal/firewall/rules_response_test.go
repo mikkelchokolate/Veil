@@ -15,3 +15,29 @@ func TestRuleResponsesIncludePanelAndEnabledInbounds(t *testing.T) {
 		t.Fatalf("rules = %+v", rules)
 	}
 }
+
+func TestRuleResponsesUsePanelPublicPortForCaddyAccess(t *testing.T) {
+	rules := BuildRuleResponses(model.Settings{PanelAccess: "caddy", PanelPublicPort: 8443}, nil)
+	found := false
+	for _, r := range rules {
+		if r.Port == 8443 && r.Protocol == "tcp" && r.Service == "Veil panel HTTPS" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected panel HTTPS rule on public port 8443, got %+v", rules)
+	}
+}
+
+func TestRuleResponsesOpenHTTP01ChallengePort(t *testing.T) {
+	rules := BuildRuleResponses(model.Settings{AcmeChallengeMode: "http-01"}, nil)
+	found := false
+	for _, r := range rules {
+		if r.Port == 80 && r.Protocol == "tcp" && r.Service == "Veil ACME HTTP-01" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected HTTP-01 challenge rule on port 80, got %+v", rules)
+	}
+}
