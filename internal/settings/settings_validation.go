@@ -77,7 +77,9 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 		settings.AcmeChallengeMode = "tls-alpn-01"
 	}
 	switch settings.AcmeChallengeMode {
-	case "http-01", "tls-alpn-01", "dns-01":
+	case "http-01", "tls-alpn-01":
+	case "dns-01":
+		return errors.New("dns-01 ACME challenge requires DNS provider credentials, which are not yet configured")
 	default:
 		return errors.New("acmeChallengeMode must be http-01, tls-alpn-01, or dns-01")
 	}
