@@ -1,6 +1,9 @@
 package bindregistry
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type Conflict struct {
 	Key     BindKey
@@ -13,21 +16,33 @@ func ValidateNoConflicts(owners map[BindKey]BindOwner) []Conflict {
 	for k, o := range owners {
 		canonical[k.Canonical()] = o
 	}
+
+	keys := make([]BindKey, 0, len(canonical))
+	for k := range canonical {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Network != keys[j].Network {
+			return keys[i].Network < keys[j].Network
+		}
+		if keys[i].Address != keys[j].Address {
+			return keys[i].Address < keys[j].Address
+		}
+		return keys[i].Port < keys[j].Port
+	})
+
 	var conflicts []Conflict
-	for k, owner := range canonical {
+	for i, k := range keys {
 		var overlapping []BindOwner
-		for otherK, otherOwner := range canonical {
-			if otherK == k {
-				continue
-			}
+		for _, otherK := range keys[i+1:] {
 			if k.Overlaps(otherK) {
-				overlapping = append(overlapping, otherOwner)
+				overlapping = append(overlapping, canonical[otherK])
 			}
 		}
 		if len(overlapping) > 0 {
 			conflicts = append(conflicts, Conflict{
 				Key:     k,
-				Owners:  append([]BindOwner{owner}, overlapping...),
+				Owners:  append([]BindOwner{canonical[k]}, overlapping...),
 				Message: fmt.Sprintf("%s %s:%d is claimed by multiple owners", k.Network, k.Address, k.Port),
 			})
 		}
