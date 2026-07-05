@@ -102,6 +102,10 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		allOwners[k] = v
 	}
 	for k := range challengeBinds {
+		if existing, ok := allOwners[k]; ok && (existing.Kind == bindregistry.BindOwnerPanelCaddy || existing.Kind == bindregistry.BindOwnerNaive) {
+			// Compatible Caddy owner already handles TLS-ALPN-01 on this bind.
+			continue
+		}
 		allOwners[k] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerAcmeChallenge, ServiceName: "veil-caddy.service"}
 	}
 	for _, conflict := range addInboundBindOwners(inbounds, allOwners, runtimeCatalog) {
