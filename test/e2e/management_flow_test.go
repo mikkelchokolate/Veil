@@ -156,17 +156,21 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 	}
 }
 
-// TestNaiveInboundCaddyJSON creates a naiveproxy inbound, stages an apply, and
-// verifies the generated Caddy JSON config contains the forward_proxy handler
-// and the inbound's domain. It then deletes the inbound, re-applies, and
-// asserts the generated config no longer references the deleted inbound.
-func TestNaiveInboundCaddyJSON(t *testing.T) {
+// TestNaiveInboundCreateDeleteCaddyJSON creates a naiveproxy inbound, stages
+// an apply, and verifies the generated Caddy JSON config contains the
+// forward_proxy handler and the inbound's domain. It then deletes the inbound,
+// re-applies, and asserts the generated config is cleaned up.
+//
+// The settings payload includes domain/email/naiveUsername/naivePassword in
+// addition to defaultAcmeEmail because the current naiveproxy settings
+// validator requires the legacy fallback fields to be present.
+func TestNaiveInboundCreateDeleteCaddyJSON(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
 
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","panelAccess":"direct","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword","defaultInboundPublicPort":443}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","panelAccess":"direct","domain":"vpn.example.com","email":"admin@example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword","defaultInboundPublicPort":443}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
