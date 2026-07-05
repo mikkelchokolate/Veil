@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -121,6 +122,15 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		if fallbackRoot == "" {
 			fallbackRoot = "/var/lib/veil/www"
 		}
+		// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
+		fallbackRoot = filepath.Clean(fallbackRoot)
+		if !strings.HasPrefix(filepath.ToSlash(fallbackRoot), "/var/lib/veil") {
+			fallbackRoot = filepath.Clean("/var/lib/veil/" + fallbackRoot)
+		}
+		if !strings.HasPrefix(filepath.ToSlash(fallbackRoot), "/var/lib/veil") {
+			return nil, fmt.Errorf("fallback root must be within /var/lib/veil: %s", fallbackRoot)
+		}
+		fallbackRoot = filepath.ToSlash(fallbackRoot)
 		handlers := []map[string]any{
 			{
 				"handler":          "forward_proxy",

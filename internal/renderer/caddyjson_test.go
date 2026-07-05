@@ -167,3 +167,95 @@ func TestRenderCaddyJSONAllowsNaiveTCPWithForwardProxy(t *testing.T) {
 		t.Fatalf("expected success for tcp transport with forward_proxy, got %v", err)
 	}
 }
+
+func TestRenderCaddyJSONNaiveFallbackRootDefaults(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "p.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"root": "/var/lib/veil/www"`) {
+		t.Errorf("expected default fallback root, got %s", string(data))
+	}
+}
+
+func TestRenderCaddyJSONNaiveFallbackRootRejectsParentTraversal(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:         caddyassembly.CaddyOwnerNaive,
+				Domain:       "p.example.com",
+				InboundName:  "naive-1",
+				Transport:    "tcp",
+				FallbackRoot: "..",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err == nil {
+		t.Fatal("expected error for fallback root outside /var/lib/veil")
+	}
+}
+
+func TestRenderCaddyJSONNaiveFallbackRootNormalizesAbsolutePath(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:         caddyassembly.CaddyOwnerNaive,
+				Domain:       "p.example.com",
+				InboundName:  "naive-1",
+				Transport:    "tcp",
+				FallbackRoot: "/etc/passwd",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"root": "/var/lib/veil/etc/passwd"`) {
+		t.Errorf("expected normalized fallback root, got %s", string(data))
+	}
+}
+
+func TestRenderCaddyJSONNaiveFallbackRootResolvesRelativePath(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:         caddyassembly.CaddyOwnerNaive,
+				Domain:       "p.example.com",
+				InboundName:  "naive-1",
+				Transport:    "tcp",
+				FallbackRoot: "custom",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"root": "/var/lib/veil/custom"`) {
+		t.Errorf("expected resolved fallback root, got %s", string(data))
+	}
+}
