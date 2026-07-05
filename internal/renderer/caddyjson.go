@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -21,7 +22,7 @@ func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.
 	if err != nil {
 		return nil, err
 	}
-	cfg := caddyConfig{Apps: map[string]any{}}
+	cfg := caddyConfig{Admin: map[string]any{"listen": "127.0.0.1:2019"}, Apps: map[string]any{}}
 	cfg.Apps["http"] = httpApp
 	cfg.Apps["tls"] = renderTLSApp(plan)
 	return json.MarshalIndent(cfg, "", "  ")
@@ -40,7 +41,8 @@ func validateCaddyCapabilities(plan caddyassembly.CaddyRenderPlan, caps caddycap
 }
 
 type caddyConfig struct {
-	Apps map[string]any `json:"apps"`
+	Admin map[string]any `json:"admin"`
+	Apps  map[string]any `json:"apps"`
 }
 
 func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
@@ -100,8 +102,8 @@ func renderACMEIssuer(email, mode string) map[string]any {
 
 func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
 	server := map[string]any{
-		"listen":     []string{listenString(key)},
-		"auto_https": map[string]any{"disable_redirects": true},
+		"listen":          []string{listenString(key)},
+		"automatic_https": map[string]any{"disable_redirects": true},
 	}
 	if owner.Kind == caddyassembly.CaddyOwnerNaive {
 		protocols, err := protocolsForTransport(owner.Transport)
@@ -114,9 +116,9 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	case caddyassembly.CaddyOwnerPanel:
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
 	case caddyassembly.CaddyOwnerNaive:
-		basicAuth := make([]map[string]any, 0, len(owner.NaiveUsers))
+		authCreds := make([]string, 0, len(owner.NaiveUsers))
 		for _, u := range owner.NaiveUsers {
-			basicAuth = append(basicAuth, map[string]any{"username": u.Username, "password": u.Password})
+			authCreds = append(authCreds, base64.StdEncoding.EncodeToString([]byte(u.Username+":"+u.Password)))
 		}
 		fallbackRoot, err := resolveNaiveFallbackRoot(owner.FallbackRoot)
 		if err != nil {
@@ -125,7 +127,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		handlers := []map[string]any{
 			{
 				"handler":          "forward_proxy",
-				"basic_auth":       basicAuth,
+				"auth_credentials": authCreds,
 				"hide_ip":          true,
 				"hide_via":         true,
 				"probe_resistance": map[string]any{},
@@ -168,9 +170,9 @@ func resolveNaiveFallbackRoot(input string) (string, error) {
 
 func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.AcmeChallengeOwner) map[string]any {
 	return map[string]any{
-		"listen":     []string{listenString(key)},
-		"auto_https": map[string]any{"disable_redirects": true},
-		"routes":     []map[string]any{},
+		"listen":          []string{listenString(key)},
+		"automatic_https": map[string]any{"disable_redirects": true},
+		"routes":          []map[string]any{},
 	}
 }
 
@@ -191,13 +193,13 @@ func panelRoutes(domain string, backendPort int, webBasePath string) []map[strin
 		{
 			"match": []map[string]any{{"host": []string{domain}, "path": []string{webBasePath}}},
 			"handle": []map[string]any{{
-				"handler": "static_response",
-				"headers": map[string]any{"Location": []string{webBasePathSlash}},
+				"handler":     "static_response",
+				"headers":     map[string]any{"Location": []string{webBasePathSlash}},
 				"status_code": 308,
 			}},
 		},
 		{
-			"match": []map[string]any{{"host": []string{domain}, "path": []string{webBasePathSlash + "*"}}},
+			"match":  []map[string]any{{"host": []string{domain}, "path": []string{webBasePathSlash + "*"}}},
 			"handle": []map[string]any{proxy},
 		},
 		{
