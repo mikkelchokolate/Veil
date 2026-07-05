@@ -1,23 +1,26 @@
 package model
 
 type Settings struct {
-	PanelListen       string `json:"panelListen"`
-	PanelAccess       string `json:"panelAccess,omitempty"`
-	WebBasePath       string `json:"webBasePath,omitempty"`
-	Mode              string `json:"mode"`
-	Domain            string `json:"domain,omitempty"`
-	Email             string `json:"email,omitempty"`
-	PanelEmail        string `json:"panelEmail,omitempty"`
-	DefaultAcmeEmail  string `json:"defaultAcmeEmail,omitempty"`
-	NaiveUsername     string `json:"naiveUsername,omitempty"`
-	NaivePassword     string `json:"naivePassword,omitempty"`
-	Hysteria2Password string `json:"hysteria2Password,omitempty"`
-	Hysteria2Insecure bool   `json:"hysteria2Insecure,omitempty"`
-	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
-	FallbackRoot      string `json:"fallbackRoot,omitempty"`
-	OlcrtcAuth        string `json:"olcrtcAuth,omitempty"`
-	OlcrtcTransport   string `json:"olcrtcTransport,omitempty"`
-	OlcrtcRoomID      string `json:"olcrtcRoomID,omitempty"`
+	PanelListen              string `json:"panelListen"`
+	PanelAccess              string `json:"panelAccess,omitempty"`
+	WebBasePath              string `json:"webBasePath,omitempty"`
+	Mode                     string `json:"mode"`
+	Domain                   string `json:"domain,omitempty"`
+	Email                    string `json:"email,omitempty"`
+	PanelEmail               string `json:"panelEmail,omitempty"`
+	DefaultAcmeEmail         string `json:"defaultAcmeEmail,omitempty"`
+	PanelPublicPort          int    `json:"panelPublicPort,omitempty"`
+	DefaultInboundPublicPort int    `json:"defaultInboundPublicPort,omitempty"`
+	AcmeChallengeMode        string `json:"acmeChallengeMode,omitempty"`
+	NaiveUsername            string `json:"naiveUsername,omitempty"`
+	NaivePassword            string `json:"naivePassword,omitempty"`
+	Hysteria2Password        string `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure        bool   `json:"hysteria2Insecure,omitempty"`
+	MasqueradeURL            string `json:"masqueradeURL,omitempty"`
+	FallbackRoot             string `json:"fallbackRoot,omitempty"`
+	OlcrtcAuth               string `json:"olcrtcAuth,omitempty"`
+	OlcrtcTransport          string `json:"olcrtcTransport,omitempty"`
+	OlcrtcRoomID             string `json:"olcrtcRoomID,omitempty"`
 	// ProtocolFields holds protocol-specific settings populated by the dynamic
 	// Panel UI. Legacy flat fields above are still supported for backward
 	// compatibility and are migrated into ProtocolFields on load.

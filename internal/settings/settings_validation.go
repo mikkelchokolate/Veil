@@ -48,6 +48,40 @@ func (SettingsValidation) NormalizeAndValidate(settings *Settings, current Setti
 	if settings.PanelAccess == "caddy" && (strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "") {
 		return errors.New("--domain and --email are required for caddy Panel access")
 	}
+	if settings.PanelPublicPort == 0 {
+		settings.PanelPublicPort = current.PanelPublicPort
+	}
+	if settings.PanelPublicPort == 0 {
+		settings.PanelPublicPort = 443
+	}
+	if settings.DefaultInboundPublicPort == 0 {
+		settings.DefaultInboundPublicPort = current.DefaultInboundPublicPort
+	}
+	if settings.DefaultInboundPublicPort == 0 {
+		settings.DefaultInboundPublicPort = 443
+	}
+	if settings.AcmeChallengeMode == "" {
+		settings.AcmeChallengeMode = current.AcmeChallengeMode
+	}
+	if settings.AcmeChallengeMode == "" {
+		settings.AcmeChallengeMode = "tls-alpn-01"
+	}
+	switch settings.AcmeChallengeMode {
+	case "http-01", "tls-alpn-01", "dns-01":
+	default:
+		return errors.New("acmeChallengeMode must be http-01, tls-alpn-01, or dns-01")
+	}
+	if settings.PanelPublicPort < 1 || settings.PanelPublicPort > 65535 {
+		return errors.New("panelPublicPort must be between 1 and 65535")
+	}
+	if settings.DefaultInboundPublicPort < 1 || settings.DefaultInboundPublicPort > 65535 {
+		return errors.New("defaultInboundPublicPort must be between 1 and 65535")
+	}
+	if settings.DefaultAcmeEmail != "" {
+		if err := hostenv.ValidateEmail(settings.DefaultAcmeEmail); err != nil {
+			return errors.New("defaultAcmeEmail: " + err.Error())
+		}
+	}
 	if settings.Domain != "" {
 		if err := hostenv.ValidateDomain(settings.Domain); err != nil {
 			return errors.New("domain: " + err.Error())

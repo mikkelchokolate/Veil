@@ -1,6 +1,49 @@
 package settings
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
+
+func TestNormalizeAndValidateNewFields(t *testing.T) {
+	current := model.Settings{PanelListen: "0.0.0.0:8080", Mode: "server"}
+	s := model.Settings{
+		PanelListen:              "0.0.0.0:8080",
+		Mode:                     "server",
+		PanelAccess:              "caddy",
+		WebBasePath:              "/panel/",
+		Domain:                   "panel.example.com",
+		Email:                    "admin@example.com",
+		PanelEmail:               "admin@example.com",
+		PanelPublicPort:          8443,
+		DefaultAcmeEmail:         "acme@example.com",
+		DefaultInboundPublicPort: 443,
+		AcmeChallengeMode:        "tls-alpn-01",
+	}
+	if err := NewSettingsValidation().NormalizeAndValidate(&s, current); err != nil {
+		t.Fatal(err)
+	}
+	if s.PanelPublicPort != 8443 {
+		t.Errorf("PanelPublicPort = %d", s.PanelPublicPort)
+	}
+	if s.DefaultInboundPublicPort != 443 {
+		t.Errorf("DefaultInboundPublicPort = %d", s.DefaultInboundPublicPort)
+	}
+}
+
+func TestNormalizeAndValidateInvalidChallengeMode(t *testing.T) {
+	current := model.Settings{PanelListen: "0.0.0.0:8080", Mode: "server"}
+	s := model.Settings{
+		PanelListen:       "0.0.0.0:8080",
+		Mode:              "server",
+		PanelAccess:       "direct",
+		AcmeChallengeMode: "ftp-01",
+	}
+	if err := NewSettingsValidation().NormalizeAndValidate(&s, current); err == nil {
+		t.Fatal("expected invalid challenge mode error")
+	}
+}
 
 func TestSettingsValidationPreservesRedactedSecretsAndNormalizesFallbackRoot(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", NaivePassword: "[REDACTED]", Hysteria2Password: "[REDACTED]", OlcrtcAuth: "[REDACTED]", FallbackRoot: "www"}
