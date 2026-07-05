@@ -82,10 +82,14 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	case caddyassembly.CaddyOwnerPanel:
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
 	case caddyassembly.CaddyOwnerNaive:
+		basicAuth := make([]map[string]any, 0, len(owner.NaiveUsers))
+		for _, u := range owner.NaiveUsers {
+			basicAuth = append(basicAuth, map[string]any{"username": u.Username, "password": u.Password})
+		}
 		handlers := []map[string]any{
 			{
 				"handler":          "forward_proxy",
-				"basic_auth":       []map[string]any{}, // populated from inbound profiles in Task 15
+				"basic_auth":       basicAuth,
 				"hide_ip":          true,
 				"hide_via":         true,
 				"probe_resistance": map[string]any{},
@@ -160,6 +164,9 @@ func challengeForDomain(plan caddyassembly.CaddyRenderPlan, domain string) strin
 				return owner.ChallengeMode
 			}
 		}
+	}
+	if plan.DefaultChallengeMode != "" {
+		return plan.DefaultChallengeMode
 	}
 	return "tls-alpn-01"
 }

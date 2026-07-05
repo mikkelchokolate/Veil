@@ -187,11 +187,28 @@ func caddyRequired(settings Settings, inbounds []Inbound) bool {
 		return true
 	}
 	for _, inb := range inbounds {
-		if inb.Enabled && inb.Protocol == "naiveproxy" {
+		if !inb.Enabled {
+			continue
+		}
+		if inb.Protocol == "naiveproxy" {
+			return true
+		}
+		if inb.Protocol == "hysteria2" && inboundDomain(inb) != "" {
 			return true
 		}
 	}
 	return false
+}
+
+func inboundDomain(inb Inbound) string {
+	if inb.ProtocolFields == nil {
+		return ""
+	}
+	v, ok := inb.ProtocolFields["domain"].(string)
+	if !ok {
+		return ""
+	}
+	return v
 }
 
 func filterCaddyRuntimeUnits(units []string) []string {

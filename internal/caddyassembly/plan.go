@@ -3,6 +3,7 @@ package caddyassembly
 import (
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -20,14 +21,22 @@ type CaddyBindOwner struct {
 	Kind        CaddyBindOwnerKind
 	Domain      string
 	InboundName string
-	BackendPort int    // Panel backend port parsed from PanelListen; used only for Panel owner
-	WebBasePath string // Normalized panel web base path; used only for Panel owner
+	BackendPort int              // Panel backend port parsed from PanelListen; used only for Panel owner
+	WebBasePath string           // Normalized panel web base path; used only for Panel owner
+	NaiveUsers  []CaddyNaiveUser // Only for naive owner
+}
+
+// CaddyNaiveUser is a minimal credential pair for the forward_proxy handler.
+type CaddyNaiveUser struct {
+	Username string
+	Password string
 }
 
 type CaddyRenderPlan struct {
-	Servers        map[bindregistry.BindKey]CaddyBindOwner
-	ACMEChallenges map[bindregistry.BindKey]AcmeChallengeOwner
-	Domains        map[string]CaddyDomainCertSpec
+	Servers              map[bindregistry.BindKey]CaddyBindOwner
+	ACMEChallenges       map[bindregistry.BindKey]AcmeChallengeOwner
+	Domains              map[string]CaddyDomainCertSpec
+	DefaultChallengeMode string
 }
 
 func BuildRenderPlan(
@@ -62,7 +71,8 @@ func BuildRenderPlan(
 		transport := naiveTransport(inb)
 		port := naivePublicPort(settings, inb)
 		domain := naiveDomain(inb, settings)
-		addNaiveBinds(transport, port, domain, inb.Name, owners, servers)
+		users := naiveUsers(inb, settings)
+		addNaiveBinds(transport, port, domain, inb.Name, users, owners, servers)
 	}
 
 	domains, err := ResolveDomainCertSpecs(settings, inbounds)
@@ -71,22 +81,23 @@ func BuildRenderPlan(
 	}
 
 	return CaddyRenderPlan{
-		Servers:        servers,
-		ACMEChallenges: challengeBinds,
-		Domains:        domains,
+		Servers:              servers,
+		ACMEChallenges:       challengeBinds,
+		Domains:              domains,
+		DefaultChallengeMode: settings.AcmeChallengeMode,
 	}, owners, nil
 }
 
-func addNaiveBinds(transport string, port int, domain, name string, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
+func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
 	if transport == "tcp" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenTCP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, NaiveUsers: users}
 	}
 	if transport == "quic" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenUDP}
 		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name}
+		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, NaiveUsers: users}
 	}
 }
 
@@ -128,6 +139,31 @@ func naiveDomain(inbound model.Inbound, settings model.Settings) string {
 		return d
 	}
 	return settings.Domain
+}
+
+func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
+	var users []CaddyNaiveUser
+	for _, p := range inbound.Profiles {
+		if !p.Enabled || strings.TrimSpace(p.Username) == "" || strings.TrimSpace(p.Password) == "" {
+			continue
+		}
+		users = append(users, CaddyNaiveUser{Username: p.Username, Password: p.Password})
+	}
+	if len(users) > 0 {
+		return users
+	}
+	username := stringField(inbound.ProtocolFields, "naiveUsername")
+	if username == "" {
+		username = settings.NaiveUsername
+	}
+	password := stringField(inbound.ProtocolFields, "naivePassword")
+	if password == "" {
+		password = settings.NaivePassword
+	}
+	if username != "" && password != "" {
+		return []CaddyNaiveUser{{Username: username, Password: password}}
+	}
+	return nil
 }
 
 func panelBackendPort(panelListen string) int {
