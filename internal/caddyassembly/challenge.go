@@ -52,6 +52,9 @@ func PlanAcmeChallengeBinds(
 					})
 					continue
 				}
+				// A compatible Caddy owner already answers TLS-ALPN-01 on :443; do not
+				// add a challenge-only bind that would replace it.
+				continue
 			}
 			add(key, spec.Domain)
 		case "dns-01":

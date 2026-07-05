@@ -102,7 +102,7 @@ func TestPlanAcmeChallengeBindsTLSALPN01ReusesCaddyListener(t *testing.T) {
 	if len(issues) > 0 {
 		t.Fatalf("unexpected issues: %v", issues)
 	}
-	if _, ok := planned[key]; !ok {
-		t.Fatal("expected TCP :443 challenge bind")
+	if _, ok := planned[key]; ok {
+		t.Fatal("expected no TCP :443 challenge bind when a compatible Caddy listener already owns the port")
 	}
 }
