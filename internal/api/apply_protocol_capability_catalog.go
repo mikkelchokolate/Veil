@@ -29,7 +29,7 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 		if cr, ok := protocols.AsConfigRenderer(p); ok {
 			cap.Config = cr.ArtifactSpec().PlanPath()
 			cap.ValidateInboundRender = true
-			cap.RequiresRenderSettings = meta.Protocol != "mieru"
+			cap.RequiresRenderSettings = requiresProtocolRenderSettings(p)
 		}
 		if rp, ok := protocols.AsRuntimeProvider(p); ok {
 			descs := rp.RuntimeDescriptors(nil)
