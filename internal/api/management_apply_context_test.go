@@ -2,9 +2,11 @@ package api
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 type fakeFirewallApplier struct {
@@ -26,6 +28,16 @@ func (f *fakeFirewallApplier) ApplyRules(rules []firewall.Rule) error {
 	return f.applyErr
 }
 
+type fakeApplyPrivileged struct {
+	privilegedClient
+	actions []privileged.ServiceActionRequest
+}
+
+func (f *fakeApplyPrivileged) ServiceAction(_ any, req privileged.ServiceActionRequest) error {
+	f.actions = append(f.actions, req)
+	return nil
+}
+
 func TestManagementApplyContextBuildsApplyPlanFromState(t *testing.T) {
 	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
 	ctx := NewManagementApplyContext(state)
@@ -33,6 +45,46 @@ func TestManagementApplyContextBuildsApplyPlanFromState(t *testing.T) {
 	plan := ctx.buildApplyPlanLocked()
 	if len(plan.Actions) == 0 {
 		t.Fatalf("expected apply plan actions, got %+v", plan)
+	}
+}
+
+func TestReloadPromotedServicesUsesCurrentStateRuntimeCatalog(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.applyRoot = t.TempDir()
+	state.liveRoot = filepath.Join(state.applyRoot, "live")
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	fake := &fakeApplyPrivileged{}
+	state.privileged = fake
+	state.privilegedLocal = false
+
+	ctx := NewManagementApplyContext(state)
+	results := ctx.reloadPromotedServicesLocked([]string{filepath.Join(state.liveRoot, "hysteria2", "edge.yaml")})
+	if len(results) == 0 {
+		t.Fatalf("expected service actions, got none")
+	}
+	if len(fake.actions) != 1 {
+		t.Fatalf("actions = %+v", fake.actions)
+	}
+	if fake.actions[0].Unit != "veil-hysteria2@edge.service" || fake.actions[0].Action != privileged.ServiceActionRestart {
+		t.Fatalf("unexpected action: %+v", fake.actions[0])
+	}
+}
+
+func TestCheckServiceHealthUsesCurrentStateRuntimeCatalog(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	state.privilegedLocal = true
+	ctx := NewManagementApplyContext(state)
+
+	oldChecker := serviceHealthChecker
+	serviceHealthChecker = func(serviceName string) ServiceHealthResult {
+		return ServiceHealthResult{Name: serviceName, Healthy: true}
+	}
+	t.Cleanup(func() { serviceHealthChecker = oldChecker })
+
+	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Success: true}})
+	if len(results) != 1 || results[0].Name != "veil-hysteria2@edge.service" || !results[0].Healthy {
+		t.Fatalf("unexpected health results: %+v", results)
 	}
 }
 
