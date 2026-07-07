@@ -98,7 +98,7 @@ func (d PlanDependencies) executable() func() (string, error) {
 	return os.Executable
 }
 
-func (d PlanDependencies) lookPath() func(string) (string, error) {
+func (d PlanDependencies) lookPath() func(string, error) {
 	if d.LookPath != nil {
 		return d.LookPath
 	}
@@ -282,7 +282,7 @@ func repairStateCipher(keyPath string) *secrets.Cipher {
 }
 
 func runtimeUnitNamesForState(inbounds []api.Inbound, warp api.WarpConfig) []string {
-	return service.NewProtocolRuntimeProvisioning(api.NewManagedRuntimeCatalog()).Plan(inbounds, warp).SystemdUnits()
+	return service.NewProtocolRuntimeProvisioning(api.NewManagedRuntimeCatalogFor(inbounds, warp)).Plan(inbounds, warp).SystemdUnits()
 }
 
 func appendRepairUnit(units []string, unit string) []string {
