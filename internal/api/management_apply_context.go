@@ -149,7 +149,7 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			return results
 		}
 	}
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
 		}
@@ -195,6 +195,10 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 	return results
 }
 
+func (ctx ManagementApplyContext) managedRuntimeCatalogLocked() ManagedRuntimeCatalog {
+	return NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp)
+}
+
 func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
 	if len(records) == 0 || records[0].BackupID == "" || ctx.state.privileged == nil {
 		return nil, nil
@@ -235,7 +239,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 }
 
 func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
 		if runtime.Protocol != "hysteria2" {
 			continue
 		}
@@ -376,8 +380,7 @@ func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success
 	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }
 
-func filterHealthCheckableActions(actions []ServiceActionResult) []ServiceActionResult {
-	catalog := NewManagedRuntimeCatalog()
+func filterHealthCheckableActions(actions []ServiceActionResult, catalog ManagedRuntimeCatalog) []ServiceActionResult {
 	out := make([]ServiceActionResult, 0, len(actions))
 	for _, action := range actions {
 		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
@@ -388,14 +391,15 @@ func filterHealthCheckableActions(actions []ServiceActionResult) []ServiceAction
 }
 
 func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
+	catalog := ctx.managedRuntimeCatalogLocked()
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
-		}).Check(filterHealthCheckableActions(actions))
+		}).Check(filterHealthCheckableActions(actions, catalog))
 	}
 	units := []string{}
 	for _, action := range actions {
-		if action.Success && action.Name != "" && NewManagedRuntimeCatalog().AllowsHealthUnit(action.Name) {
+		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
 			units = append(units, action.Name)
 		}
 	}
