@@ -62,12 +62,16 @@ func TestRenderHysteria2Upstream(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, want := range []string{
-		"outbound:",
+		"outbounds:",
+		"- name: veil-upstream",
 		"type: socks5",
 		"addr: 127.0.0.1:1080",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("expected %q in config:\n%s", want, cfg)
 		}
+	}
+	if strings.Contains(cfg, "\noutbound:\n") {
+		t.Fatalf("expected no singular outbound block in config:\n%s", cfg)
 	}
 }
