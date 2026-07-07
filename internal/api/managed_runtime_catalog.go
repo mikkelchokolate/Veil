@@ -18,39 +18,36 @@ import (
 type ManagedRuntime = service.ManagedRuntime
 type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 
+// NewManagedRuntimeCatalog returns the broad management catalog used for apply,
+// repair, privileged policy checks, and backward-compatible service commands. It
+// intentionally includes fallback/template runtimes when no saved state exists so
+// first-apply and recovery paths can still validate, promote, and restart units.
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	inbounds, warp := loadSnapshotFromState()
+	_, inbounds, warp := loadSnapshotFromState()
 	return NewManagedRuntimeCatalogFor(inbounds, warp)
 }
 
+// NewManagedRuntimeCatalogFor returns the broad management catalog. Use
+// NewVisibleManagedRuntimeCatalog for operator-facing status/UI lists.
 func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 
 	registry := protocols.NewRegistry()
-	if len(inbounds) == 0 {
-		// For backward compatibility and unit tests that expect a clean,
-		// non-configured environment to list the default protocol runtimes.
-		for _, p := range registry.All() {
-			rp, ok := protocols.AsRuntimeProvider(p)
-			if !ok {
-				continue
-			}
-			runtimes = append(runtimes, rp.RuntimeDescriptors(nil)...)
+	for _, p := range registry.All() {
+		rp, ok := protocols.AsRuntimeProvider(p)
+		if !ok {
+			continue
 		}
-	} else {
-		for _, p := range registry.All() {
-			rp, ok := protocols.AsRuntimeProvider(p)
-			if !ok {
-				continue
-			}
-			selected := enabledInboundsForProtocol(inbounds, p.Protocol())
-			if len(selected) > 0 {
-				runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
-			}
+		selected := enabledInboundsForProtocol(inbounds, p.Protocol())
+		if len(inbounds) == 0 {
+			runtimes = append(runtimes, rp.RuntimeDescriptors(nil)...)
+			continue
+		}
+		if len(selected) > 0 {
+			runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
 		}
 	}
 
-	// sing-box / warp
 	if warp.Enabled || len(inbounds) == 0 {
 		runtimes = append(runtimes, ManagedRuntime{
 			Name:            "sing-box",
@@ -66,6 +63,68 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 		})
 	}
 
+	return sortManagedRuntimes(runtimes)
+}
+
+// NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
+// dashboard and /api/status. Once a saved state exists, it only exposes services
+// configured in that state, plus Veil itself. If state is absent, it falls back to
+// the broad catalog so first-run/recovery environments retain their legacy
+// management affordances.
+func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
+	settings, inbounds, warp, ok := loadSnapshotFromStateWithOK()
+	if !ok {
+		return NewManagedRuntimeCatalogFor(inbounds, warp)
+	}
+	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+}
+
+func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
+	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
+
+	if settings.PanelAccess == "caddy" {
+		runtimes = append(runtimes, ManagedRuntime{
+			Name:             "caddy-panel",
+			ActionName:       "caddy-panel",
+			Protocol:         "naiveproxy",
+			Transport:        "tcp",
+			Unit:             "veil-caddy@panel.service",
+			TemplateUnit:     renderer.UnitCaddy,
+			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
+			PromotedVerb:     "restart",
+			ManualRestart:    true,
+			HealthCheckAfter: true,
+		})
+	}
+
+	registry := protocols.NewRegistry()
+	for _, p := range registry.All() {
+		rp, ok := protocols.AsRuntimeProvider(p)
+		if !ok {
+			continue
+		}
+		selected := enabledInboundsForProtocol(inbounds, p.Protocol())
+		if len(selected) > 0 {
+			runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
+		}
+	}
+
+	if warp.Enabled {
+		runtimes = append(runtimes, ManagedRuntime{
+			Name:             "sing-box",
+			ActionName:       "sing-box",
+			Unit:             renderer.UnitWarp,
+			PromotedSubpath:  generatedconfig.WarpConfigSubpath,
+			PromotedVerb:     "restart",
+			ManualRestart:    true,
+			HealthCheckAfter: true,
+		})
+	}
+
+	return sortManagedRuntimes(runtimes)
+}
+
+func sortManagedRuntimes(runtimes []ManagedRuntime) ManagedRuntimeCatalog {
 	sort.SliceStable(runtimes, func(i, j int) bool {
 		if runtimes[i].Name == "veil" {
 			return true
@@ -75,7 +134,6 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 		}
 		return runtimes[i].Name < runtimes[j].Name
 	})
-
 	return service.NewManagedRuntimeCatalog(runtimes)
 }
 
@@ -89,7 +147,12 @@ func enabledInboundsForProtocol(inbounds []Inbound, protocol string) []Inbound {
 	return selected
 }
 
-func loadSnapshotFromState() ([]Inbound, WarpConfig) {
+func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
+	settings, inbounds, warp, _ := loadSnapshotFromStateWithOK()
+	return settings, inbounds, warp
+}
+
+func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 	statePath := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
 	if statePath == "" {
 		if runtime.GOOS == "windows" {
@@ -116,7 +179,7 @@ func loadSnapshotFromState() ([]Inbound, WarpConfig) {
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil {
-		return nil, WarpConfig{}
+		return Settings{}, nil, WarpConfig{}, false
 	}
 	if keyPath != "" {
 		if key, keyErr := secrets.LoadOrCreateKey(keyPath); keyErr == nil {
@@ -128,11 +191,12 @@ func loadSnapshotFromState() ([]Inbound, WarpConfig) {
 		}
 	}
 	var snapshot struct {
+		Settings Settings   `json:"settings"`
 		Inbounds []Inbound  `json:"inbounds"`
 		Warp     WarpConfig `json:"warp"`
 	}
 	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return nil, WarpConfig{}
+		return Settings{}, nil, WarpConfig{}, false
 	}
-	return snapshot.Inbounds, snapshot.Warp
+	return snapshot.Settings, snapshot.Inbounds, snapshot.Warp, true
 }

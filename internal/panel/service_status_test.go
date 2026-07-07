@@ -20,10 +20,10 @@ func TestServiceStatusCardRendersRestartControls(t *testing.T) {
 	}
 }
 
-func TestServiceRestartActionsRenderServiceEndpoints(t *testing.T) {
+func TestServiceRestartActionsRenderDynamicServiceEndpoints(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{ActionName: "veil", ManualRestart: true}, {ActionName: "caddy", ManualRestart: true}}
 	actions := ServiceRestartActionsJS(runtimes)
-	for _, want := range []string{`restart-veil`, `/api/services/veil/restart`, `restart-caddy`, `/api/services/caddy/restart`, `confirm: true`, `loadServiceStatus();`} {
+	for _, want := range []string{`renderServiceRestartControls`, `restartable`, `actionName`, `encodeURIComponent(serviceName)`, `/api/services/`, `/restart`, `confirm: true`, `loadServiceStatus();`} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("actions missing %q:\n%s", want, actions)
 		}

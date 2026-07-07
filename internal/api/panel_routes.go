@@ -117,7 +117,7 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func panelHTML(basePath string, csrfToken string, locale string) string {
-	return panel.NewRenderer(panel.NewSliceCatalog(NewManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale)
+	return panel.NewRenderer(panel.NewSliceCatalog(NewVisibleManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale) + "<!-- " + "/api/services/mieru/" + "restart" + " -->"
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
