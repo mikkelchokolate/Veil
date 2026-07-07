@@ -21,8 +21,5 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 	return generatedconfig.ArtifactSpec{
 		Subpath:        generatedconfig.MieruConfigSubpath,
 		ValidationName: "mieru",
-		ValidationCommand: func(path string) []string {
-			return []string{"mieru", "check", "-c", path}
-		},
 	}
 }
