@@ -18,7 +18,7 @@ func newGeneratedConfigRegistryFrom(r *Registry) generatedconfig.ProtocolRegistr
 		protocolRenderers = append(protocolRenderers, generatedconfig.Protocol{
 			Protocol:               meta.Protocol,
 			MaxEnabled:             meta.MaxEnabled,
-			RequiresRenderSettings: meta.Protocol != "mieru",
+			RequiresRenderSettings: RequiresRenderSettings(p),
 			Render:                 cr.RenderConfig,
 		})
 	}
