@@ -67,10 +67,15 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 }
 
 // NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
-// dashboard and /api/status. Unlike the broad management catalog, it only exposes
-// services that are configured in the saved state, plus Veil itself.
+// dashboard and /api/status. Once a saved state exists, it only exposes services
+// configured in that state, plus Veil itself. If state is absent, it falls back to
+// the broad catalog so first-run/recovery environments retain their legacy
+// management affordances.
 func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	settings, inbounds, warp := loadSnapshotFromState()
+	settings, inbounds, warp, ok := loadSnapshotFromStateWithOK()
+	if !ok {
+		return NewManagedRuntimeCatalogFor(inbounds, warp)
+	}
 	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
 }
 
@@ -143,6 +148,11 @@ func enabledInboundsForProtocol(inbounds []Inbound, protocol string) []Inbound {
 }
 
 func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
+	settings, inbounds, warp, _ := loadSnapshotFromStateWithOK()
+	return settings, inbounds, warp
+}
+
+func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 	statePath := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
 	if statePath == "" {
 		if runtime.GOOS == "windows" {
@@ -169,7 +179,7 @@ func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil {
-		return Settings{}, nil, WarpConfig{}
+		return Settings{}, nil, WarpConfig{}, false
 	}
 	if keyPath != "" {
 		if key, keyErr := secrets.LoadOrCreateKey(keyPath); keyErr == nil {
@@ -186,7 +196,7 @@ func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
 		Warp     WarpConfig `json:"warp"`
 	}
 	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return Settings{}, nil, WarpConfig{}
+		return Settings{}, nil, WarpConfig{}, false
 	}
-	return snapshot.Settings, snapshot.Inbounds, snapshot.Warp
+	return snapshot.Settings, snapshot.Inbounds, snapshot.Warp, true
 }
