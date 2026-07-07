@@ -94,8 +94,11 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
-		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/naive.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/hysteria2.yaml") {
+		t.Fatalf("expected all enabled Inbound configs in apply plan: %+v", response.Configs)
+	}
+	if containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+		t.Fatalf("apply plan should not target fallback configs for enabled inbounds: %+v", response.Configs)
 	}
 	if !containsString(response.Actions, "restart veil-caddy@naive.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
