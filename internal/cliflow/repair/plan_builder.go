@@ -98,7 +98,7 @@ func (d PlanDependencies) executable() func() (string, error) {
 	return os.Executable
 }
 
-func (d PlanDependencies) lookPath() func(string, error) {
+func (d PlanDependencies) lookPath() func(string) (string, error) {
 	if d.LookPath != nil {
 		return d.LookPath
 	}
