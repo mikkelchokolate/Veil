@@ -39,7 +39,9 @@ func BuildClientAccessLinks(r *Registry, settings model.Settings, inbounds []mod
 		if !ok {
 			continue
 		}
-		if _, ok := AsClientAccessProvider(p); !ok {
+		_, hasProvider := AsClientAccessProvider(p)
+		_, hasAggregator := p.(ClientAccessAggregator)
+		if !hasProvider && !hasAggregator {
 			continue
 		}
 		if _, ok := byProtocol[inbound.Protocol]; !ok {
@@ -60,7 +62,10 @@ func BuildClientAccessLinks(r *Registry, settings model.Settings, inbounds []mod
 			links = append(links, aggregated...)
 			continue
 		}
-		provider, _ := AsClientAccessProvider(p)
+		provider, ok := AsClientAccessProvider(p)
+		if !ok {
+			continue
+		}
 		for _, inbound := range selected {
 			built, err := provider.BuildLinks(settings, inbound)
 			if err != nil {
