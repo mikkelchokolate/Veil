@@ -100,7 +100,10 @@ func TestInboundRendererRendersUpstreamSocksWhenWarpEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderHysteria2: %v", err)
 	}
-	if !strings.Contains(hyBody, "outbound:") || !strings.Contains(hyBody, "socks5:") || !strings.Contains(hyBody, "addr: 127.0.0.1:40050") {
+	if !strings.Contains(hyBody, "outbounds:") || !strings.Contains(hyBody, "socks5:") || !strings.Contains(hyBody, "addr: 127.0.0.1:40050") {
 		t.Fatalf("hysteria2 body missing SOCKS5 upstream:\n%s", hyBody)
+	}
+	if strings.Contains(hyBody, "\noutbound:\n") {
+		t.Fatalf("hysteria2 body contains singular outbound block:\n%s", hyBody)
 	}
 }

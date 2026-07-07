@@ -81,10 +81,11 @@ masquerade:
     rewriteHost: true
 
 {{- if .Upstream }}
-outbound:
-  type: socks5
-  socks5:
-    addr: {{ .Upstream }}
+outbounds:
+  - name: veil-upstream
+    type: socks5
+    socks5:
+      addr: {{ .Upstream }}
 {{- end }}
 `
 	var out bytes.Buffer

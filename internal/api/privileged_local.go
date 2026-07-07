@@ -16,9 +16,11 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	for _, runtime := range catalog.Runtimes() {
 		units[runtime.Unit] = struct{}{}
 	}
-	// veil-warp.service stays managed even when WARP is disabled so apply can
-	// query its status and stop/disable it when the operator turns WARP off.
+	// These singleton units stay managed even when disabled so apply can first
+	// enable them, query status, or stop/disable them after the operator turns
+	// the corresponding feature off. Instance units are covered by prefixes below.
 	units[renderer.UnitWarp] = struct{}{}
+	units[renderer.UnitMieru] = struct{}{}
 	stateRoot := filepath.Dir(state.statePath)
 	if state.statePath == "" {
 		stateRoot = filepath.Join(state.applyRoot, "state")
