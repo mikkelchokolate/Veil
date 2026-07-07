@@ -28,16 +28,6 @@ func (f *fakeFirewallApplier) ApplyRules(rules []firewall.Rule) error {
 	return f.applyErr
 }
 
-type fakeApplyPrivileged struct {
-	privilegedClient
-	actions []privileged.ServiceActionRequest
-}
-
-func (f *fakeApplyPrivileged) ServiceAction(_ any, req privileged.ServiceActionRequest) error {
-	f.actions = append(f.actions, req)
-	return nil
-}
-
 func TestManagementApplyContextBuildsApplyPlanFromState(t *testing.T) {
 	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
 	ctx := NewManagementApplyContext(state)
@@ -53,8 +43,8 @@ func TestReloadPromotedServicesUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	state.applyRoot = t.TempDir()
 	state.liveRoot = filepath.Join(state.applyRoot, "live")
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
-	fake := &fakeApplyPrivileged{}
-	state.privileged = fake
+	client := &recordingPrivilegedClient{}
+	state.privileged = client
 	state.privilegedLocal = false
 
 	ctx := NewManagementApplyContext(state)
@@ -62,11 +52,11 @@ func TestReloadPromotedServicesUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	if len(results) == 0 {
 		t.Fatalf("expected service actions, got none")
 	}
-	if len(fake.actions) != 1 {
-		t.Fatalf("actions = %+v", fake.actions)
+	if len(client.serviceActions) != 1 {
+		t.Fatalf("actions = %+v", client.serviceActions)
 	}
-	if fake.actions[0].Unit != "veil-hysteria2@edge.service" || fake.actions[0].Action != privileged.ServiceActionRestart {
-		t.Fatalf("unexpected action: %+v", fake.actions[0])
+	if client.serviceActions[0].Unit != "veil-hysteria2@edge.service" || client.serviceActions[0].Action != privileged.ServiceActionRestart {
+		t.Fatalf("unexpected action: %+v", client.serviceActions[0])
 	}
 }
 
