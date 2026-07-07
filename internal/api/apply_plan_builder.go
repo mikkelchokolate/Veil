@@ -32,6 +32,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		capabilities = append(capabilities, applyplan.ProtocolCapability{
 			Protocol:               capability.Protocol,
 			Config:                 capability.Config,
+			ConfigForInbound:       configForInboundRuntime,
 			Action:                 capability.Action,
 			ActionForInbound:       actionForInboundRuntime,
 			ValidateSettings:       capability.ValidateSettings,
@@ -72,20 +73,34 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	})
 }
 
+func configForInboundRuntime(inbound Inbound) string {
+	for _, descriptor := range runtimeDescriptorsForInbound(inbound) {
+		if descriptor.PromotedSubpath == "" {
+			continue
+		}
+		return filepath.ToSlash(filepath.Join("/etc/veil", "generated", filepath.FromSlash(descriptor.PromotedSubpath)))
+	}
+	return ""
+}
+
 func actionForInboundRuntime(inbound Inbound) string {
-	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
-	if !ok {
-		return ""
-	}
-	rp, ok := protocols.AsRuntimeProvider(p)
-	if !ok {
-		return ""
-	}
-	for _, descriptor := range rp.RuntimeDescriptors([]Inbound{inbound}) {
+	for _, descriptor := range runtimeDescriptorsForInbound(inbound) {
 		if descriptor.Unit == "" || descriptor.PromotedVerb == "" {
 			continue
 		}
 		return descriptor.PromotedVerb + " " + descriptor.Unit
 	}
 	return ""
+}
+
+func runtimeDescriptorsForInbound(inbound Inbound) []ManagedRuntime {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
+		return nil
+	}
+	rp, ok := protocols.AsRuntimeProvider(p)
+	if !ok {
+		return nil
+	}
+	return rp.RuntimeDescriptors([]Inbound{inbound})
 }
