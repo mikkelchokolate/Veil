@@ -5,6 +5,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 var firewallStatusReader = func() (bool, error) {
@@ -18,7 +19,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := clientaccess.BuildClientLinks(s.settings, s.inbounds)
+	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -40,7 +41,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	format := query.Get("format")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := clientaccess.BuildClientLinks(s.settings, s.inbounds)
+	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
