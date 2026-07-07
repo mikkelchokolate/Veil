@@ -33,6 +33,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			Protocol:               capability.Protocol,
 			Config:                 capability.Config,
 			Action:                 capability.Action,
+			ActionForInbound:       actionForInboundRuntime,
 			ValidateSettings:       capability.ValidateSettings,
 			ValidateInboundRender:  capability.ValidateInboundRender,
 			RequiresRenderSettings: capability.RequiresRenderSettings,
@@ -69,4 +70,22 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
 		LiveRoot:              filepath.Join(applyRoot, "live"),
 	})
+}
+
+func actionForInboundRuntime(inbound Inbound) string {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
+		return ""
+	}
+	rp, ok := protocols.AsRuntimeProvider(p)
+	if !ok {
+		return ""
+	}
+	for _, descriptor := range rp.RuntimeDescriptors([]Inbound{inbound}) {
+		if descriptor.Unit == "" || descriptor.PromotedVerb == "" {
+			continue
+		}
+		return descriptor.PromotedVerb + " " + descriptor.Unit
+	}
+	return ""
 }
