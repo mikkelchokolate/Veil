@@ -3,12 +3,11 @@ package api
 import "github.com/mikkelchokolate/Veil/internal/protocols"
 
 type ApplyProtocolCapability struct {
-	Protocol                 string
-	Config                   string
-	Action                   string
-	ValidateInboundRender    bool
-	RequiresRenderSettings   bool
-	ValidateSettingsRequired bool
+	Protocol               string
+	Config                 string
+	Action                 string
+	ValidateInboundRender  bool
+	RequiresRenderSettings bool
 }
 
 type ApplyProtocolCapabilityCatalog struct {
@@ -38,7 +37,6 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 				cap.Action = "restart " + unit
 			}
 		}
-		cap.ValidateSettingsRequired = protocolSettingsValidationRequired(p)
 		byProtocol[meta.Protocol] = cap
 	}
 	return ApplyProtocolCapabilityCatalog{byProtocol: byProtocol}
@@ -58,22 +56,11 @@ func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
 }
 
 func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
-	if !c.ValidateSettingsRequired {
-		return nil
-	}
 	return validateProtocolSettings(c.Protocol, settings)
 }
 
 func (c ApplyProtocolCapability) ShouldValidateRender(renderSettingsAvailable bool) bool {
 	return c.ValidateInboundRender && (!c.RequiresRenderSettings || renderSettingsAvailable)
-}
-
-func protocolSettingsValidationRequired(p protocols.ProtocolPlugin) bool {
-	validator, ok := protocols.AsValidator(p)
-	if !ok {
-		return false
-	}
-	return validator.ValidateSettings(Settings{}) != nil
 }
 
 func validateProtocolSettings(protocol string, settings Settings) error {
