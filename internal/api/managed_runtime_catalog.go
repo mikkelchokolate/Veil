@@ -111,10 +111,10 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 
 	if warp.Enabled {
 		runtimes = append(runtimes, ManagedRuntime{
-			Name:            "sing-box",
-			ActionName:      "sing-box",
-			Unit:            renderer.UnitWarp,
-			PromotedSubpath: generatedconfig.WarpConfigSubpath,
+			Name:             "sing-box",
+			ActionName:       "sing-box",
+			Unit:             renderer.UnitWarp,
+			PromotedSubpath:  generatedconfig.WarpConfigSubpath,
 			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
