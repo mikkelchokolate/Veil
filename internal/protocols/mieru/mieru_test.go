@@ -205,12 +205,8 @@ func TestArtifactSpec(t *testing.T) {
 	if spec.ValidationName != "mieru" {
 		t.Errorf("ValidationName = %q, want %q", spec.ValidationName, "mieru")
 	}
-	if spec.ValidationCommand == nil {
-		t.Fatal("ValidationCommand is nil")
-	}
-	want := []string{"mieru", "check", "-c", "/tmp/config.json"}
-	if got := spec.ValidationCommand("/tmp/config.json"); !slicesEqual(got, want) {
-		t.Errorf("ValidationCommand = %v, want %v", got, want)
+	if spec.ValidationCommand != nil {
+		t.Fatalf("ValidationCommand = %v, want nil because mita has no standalone config checker", spec.ValidationCommand("/tmp/config.json"))
 	}
 }
 
