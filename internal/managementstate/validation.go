@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type Validation struct{}
@@ -37,6 +38,7 @@ func (v Validation) ValidateBytes(body []byte) (ValidationResult, error) {
 func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map[string]json.RawMessage) []string {
 	var errs []string
 	seenPorts := map[string]string{}
+	protocolCatalog := protocols.NewCatalog()
 
 	if _, ok := fields["settings"]; ok {
 		if snapshot.Settings.PanelListen == "" {
@@ -72,6 +74,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			}
 			if inbound.Transport == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].transport is required")
+			}
+			if inbound.Protocol != "" && inbound.Transport != "" && !protocolCatalog.SupportsTransport(inbound.Protocol, inbound.Transport) {
+				errs = append(errs, "inbounds["+itoa(i)+"].protocol/transport is unsupported: "+inbound.Protocol+"/"+inbound.Transport)
 			}
 			if inbound.Port <= 0 || inbound.Port > 65535 {
 				errs = append(errs, "inbounds["+itoa(i)+"].port must be 1-65535, got: "+itoa(inbound.Port))
