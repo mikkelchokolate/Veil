@@ -82,13 +82,8 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 	if len(command) != 3 || command[0] != "systemctl" {
 		return false
 	}
-	if command[1] == "stop" || command[1] == "disable" || command[1] == "start" || command[1] == "enable" {
-		unit := command[2]
-		for _, prefix := range []string{"veil-caddy@", "veil-hysteria2@", "veil-olcrtc@"} {
-			if strings.HasPrefix(unit, prefix) && strings.HasSuffix(unit, ".service") {
-				return true
-			}
-		}
+	if isLifecycleAction(command[1]) && c.allowsLifecycleUnit(command[2]) {
+		return true
 	}
 	for _, runtime := range c.runtimes {
 		if runtime.PromotedVerb == "" {
@@ -101,6 +96,22 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 	return false
 }
 
+func (c ManagedRuntimeCatalog) LifecycleUnitPrefixes() []string {
+	prefixes := []string{}
+	seen := map[string]bool{}
+	for _, runtime := range c.runtimes {
+		for _, unit := range []string{runtime.TemplateUnit, runtime.Unit} {
+			prefix, ok := lifecycleUnitPrefix(unit)
+			if !ok || seen[prefix] {
+				continue
+			}
+			seen[prefix] = true
+			prefixes = append(prefixes, prefix)
+		}
+	}
+	return prefixes
+}
+
 func (c ManagedRuntimeCatalog) AllowsHealthUnit(unit string) bool {
 	for _, runtime := range c.runtimes {
 		if runtime.HealthCheckAfter && matchUnit(unit, runtime.Unit) {
@@ -108,6 +119,33 @@ func (c ManagedRuntimeCatalog) AllowsHealthUnit(unit string) bool {
 		}
 	}
 	return false
+}
+
+func (c ManagedRuntimeCatalog) allowsLifecycleUnit(unit string) bool {
+	for _, runtime := range c.runtimes {
+		if runtime.Unit != "" && matchUnit(unit, runtime.Unit) {
+			return true
+		}
+		if runtime.TemplateUnit != "" && matchUnit(unit, runtime.TemplateUnit) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLifecycleAction(action string) bool {
+	return action == "stop" || action == "disable" || action == "start" || action == "enable"
+}
+
+func lifecycleUnitPrefix(unit string) (string, bool) {
+	if !strings.HasSuffix(unit, ".service") {
+		return "", false
+	}
+	idx := strings.Index(unit, "@")
+	if idx == -1 {
+		return "", false
+	}
+	return unit[:idx+1], true
 }
 
 func matchUnit(candidate, catalogUnit string) bool {
