@@ -132,6 +132,31 @@ func TestValidationDetectsInboundErrors(t *testing.T) {
 	}
 }
 
+func TestValidationDetectsUnsupportedProtocolTransport(t *testing.T) {
+	body := []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[
+			{"name":"unknown","protocol":"unknown","transport":"tcp","port":8443,"enabled":true},
+			{"name":"bad-transport","protocol":"naiveproxy","transport":"udp","port":8444,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false}
+	}`)
+	result, err := NewValidation().ValidateBytes(body)
+	if err != nil {
+		t.Fatalf("ValidateBytes: %v", err)
+	}
+	expected := []string{
+		"inbounds[0].protocol/transport is unsupported: unknown/tcp",
+		"inbounds[1].protocol/transport is unsupported: naiveproxy/udp",
+	}
+	for _, want := range expected {
+		if !containsError(result.Errors, want) {
+			t.Fatalf("missing error %q in %+v", want, result)
+		}
+	}
+}
+
 func TestValidationDetectsInboundConflictWithPanel(t *testing.T) {
 	body := []byte(`{
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
