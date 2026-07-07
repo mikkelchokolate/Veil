@@ -1,17 +1,14 @@
 package api
 
-import (
-	"github.com/mikkelchokolate/Veil/internal/panelaccess"
-	"github.com/mikkelchokolate/Veil/internal/protocols"
-)
+import "github.com/mikkelchokolate/Veil/internal/protocols"
 
 type ApplyProtocolCapability struct {
-	Protocol               string
-	Config                 string
-	Action                 string
-	ValidateInboundRender  bool
-	RequiresRenderSettings bool
-	RequiresCaddySettings  bool
+	Protocol                 string
+	Config                   string
+	Action                   string
+	ValidateInboundRender    bool
+	RequiresRenderSettings   bool
+	ValidateSettingsRequired bool
 }
 
 type ApplyProtocolCapabilityCatalog struct {
@@ -41,9 +38,7 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 				cap.Action = "restart " + unit
 			}
 		}
-		if _, ok := protocols.AsValidator(p); ok {
-			cap.RequiresCaddySettings = meta.Protocol == "naiveproxy"
-		}
+		cap.ValidateSettingsRequired = protocolSettingsValidationRequired(p)
 		byProtocol[meta.Protocol] = cap
 	}
 	return ApplyProtocolCapabilityCatalog{byProtocol: byProtocol}
@@ -63,12 +58,32 @@ func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
 }
 
 func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
-	if c.RequiresCaddySettings {
-		return panelaccess.NewNaiveCaddySettingsRequirement().Validate(settings)
+	if !c.ValidateSettingsRequired {
+		return nil
 	}
-	return nil
+	return validateProtocolSettings(c.Protocol, settings)
 }
 
 func (c ApplyProtocolCapability) ShouldValidateRender(renderSettingsAvailable bool) bool {
 	return c.ValidateInboundRender && (!c.RequiresRenderSettings || renderSettingsAvailable)
+}
+
+func protocolSettingsValidationRequired(p protocols.ProtocolPlugin) bool {
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	return validator.ValidateSettings(Settings{}) != nil
+}
+
+func validateProtocolSettings(protocol string, settings Settings) error {
+	p, ok := protocols.NewRegistry().Get(protocol)
+	if !ok {
+		return nil
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateSettings(settings)
 }
