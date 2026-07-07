@@ -45,14 +45,24 @@ func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
 		Inbounds:  []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 
+	if containsApplyPlanString(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+		t.Fatalf("plan configs should not target fallback config: %+v", plan.Configs)
+	}
+	if !containsApplyPlanString(plan.Configs, "/etc/veil/generated/hysteria2/edge.yaml") {
+		t.Fatalf("missing per-inbound generated config: %+v", plan.Configs)
+	}
 	if containsApplyPlanString(plan.Actions, "restart veil-hysteria2@.service") {
 		t.Fatalf("plan actions should not target template unit: %+v", plan.Actions)
 	}
 	if !containsApplyPlanString(plan.Actions, "restart veil-hysteria2@edge.service") {
 		t.Fatalf("missing per-inbound restart action: %+v", plan.Actions)
 	}
-	want := model.ApplyOperation{Type: "restart_service", Unit: "veil-hysteria2@edge.service", InterruptionRisk: "connection-drop", RollbackAvailable: true, ValidationSource: "managed-unit-catalog"}
-	if !containsApplyOperation(plan.Operations, want) {
+	configOp := model.ApplyOperation{Type: "promote_file", Source: "/srv/veil/generated/hysteria2/edge.yaml", Destination: "/srv/veil/live/hysteria2/edge.yaml", InterruptionRisk: "reload", RollbackAvailable: true, ValidationSource: "render-and-live-host"}
+	if !containsApplyOperation(plan.Operations, configOp) {
+		t.Fatalf("missing per-inbound config operation in %+v", plan.Operations)
+	}
+	restartOp := model.ApplyOperation{Type: "restart_service", Unit: "veil-hysteria2@edge.service", InterruptionRisk: "connection-drop", RollbackAvailable: true, ValidationSource: "managed-unit-catalog"}
+	if !containsApplyOperation(plan.Operations, restartOp) {
 		t.Fatalf("missing per-inbound restart operation in %+v", plan.Operations)
 	}
 }
