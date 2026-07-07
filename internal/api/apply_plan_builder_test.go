@@ -42,7 +42,7 @@ func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		ApplyRoot: "/srv/veil",
 		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
-		Inbounds: []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "secret"}},
+		Inbounds:  []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 
 	if containsApplyPlanString(plan.Actions, "restart veil-hysteria2@.service") {
