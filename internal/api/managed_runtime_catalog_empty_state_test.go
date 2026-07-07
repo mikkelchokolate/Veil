@@ -2,8 +2,8 @@ package api
 
 import "testing"
 
-func TestManagedRuntimeCatalogEmptyStateListsOnlyPanel(t *testing.T) {
-	catalog := NewManagedRuntimeCatalogFor(nil, WarpConfig{})
+func TestVisibleManagedRuntimeCatalogEmptyStateListsOnlyPanel(t *testing.T) {
+	catalog := NewManagedRuntimeCatalogForSnapshot(Settings{}, nil, WarpConfig{})
 	runtimes := catalog.Runtimes()
 	if len(runtimes) != 1 {
 		t.Fatalf("expected only panel runtime, got %+v", runtimes)
@@ -13,9 +13,9 @@ func TestManagedRuntimeCatalogEmptyStateListsOnlyPanel(t *testing.T) {
 	}
 }
 
-func TestManagedRuntimeCatalogDoesNotExposeUnconfiguredProtocolRuntimes(t *testing.T) {
+func TestVisibleManagedRuntimeCatalogDoesNotExposeUnconfiguredProtocolRuntimes(t *testing.T) {
 	proto := "hysteria" + "2"
-	catalog := NewManagedRuntimeCatalogFor([]Inbound{{Name: "vip", Protocol: proto, Enabled: true}}, WarpConfig{})
+	catalog := NewManagedRuntimeCatalogForSnapshot(Settings{}, []Inbound{{Name: "vip", Protocol: proto, Enabled: true}}, WarpConfig{})
 	units := map[string]bool{}
 	for _, runtime := range catalog.Runtimes() {
 		units[runtime.Unit] = true
@@ -32,7 +32,7 @@ func TestManagedRuntimeCatalogDoesNotExposeUnconfiguredProtocolRuntimes(t *testi
 	}
 }
 
-func TestManagedRuntimeCatalogIncludesCaddyPanelOnlyForCaddyPanelAccess(t *testing.T) {
+func TestVisibleManagedRuntimeCatalogIncludesCaddyPanelOnlyForCaddyPanelAccess(t *testing.T) {
 	withoutCaddy := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "local"}, nil, WarpConfig{})
 	if _, ok := withoutCaddy.ServiceActionCommand("caddy-panel", "restart"); ok {
 		t.Fatalf("did not expect caddy-panel restart action without caddy panel access: %+v", withoutCaddy.Runtimes())
