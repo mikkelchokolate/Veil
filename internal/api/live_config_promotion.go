@@ -93,6 +93,12 @@ func (p LiveConfigPromotion) scanOrphans(liveFiles []string) ([]string, error) {
 	return scanLiveConfigOrphans(filepath.Join(p.applyRoot, "live"), liveFiles)
 }
 
+type liveConfigOrphanDir struct {
+	subpath string
+	ext     string
+	exclude string
+}
+
 func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error) {
 	orphaned := []string{}
 	activeMap := make(map[string]bool)
@@ -100,17 +106,7 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 		activeMap[filepath.Clean(f)] = true
 	}
 
-	dirs := []struct {
-		subpath string
-		ext     string
-		exclude string
-	}{
-		{subpath: "caddy", ext: ".Caddyfile", exclude: "panel.Caddyfile"},
-		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
-		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
-	}
-
-	for _, d := range dirs {
+	for _, d := range liveConfigOrphanDirs() {
 		dirPath := filepath.Join(liveRoot, d.subpath)
 		entries, err := os.ReadDir(dirPath)
 		if err != nil {
@@ -140,6 +136,56 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 		}
 	}
 	return orphaned, nil
+}
+
+func liveConfigOrphanDirs() []liveConfigOrphanDir {
+	dirs := []liveConfigOrphanDir{}
+	seen := map[liveConfigOrphanDir]bool{}
+	registry := protocols.NewRegistry()
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
+		}
+		if !hasTemplateRuntime(plugin) {
+			continue
+		}
+		sub := filepath.ToSlash(cr.ArtifactSpec().Subpath)
+		if sub == "" {
+			continue
+		}
+		dir := filepath.ToSlash(filepath.Dir(sub))
+		ext := filepath.Ext(filepath.Base(sub))
+		if dir == "." || ext == "" {
+			continue
+		}
+		d := liveConfigOrphanDir{subpath: dir, ext: ext, exclude: filepath.Base(sub)}
+		if seen[d] {
+			continue
+		}
+		seen[d] = true
+		dirs = append(dirs, d)
+	}
+	sort.SliceStable(dirs, func(i, j int) bool {
+		if dirs[i].subpath == dirs[j].subpath {
+			return dirs[i].ext < dirs[j].ext
+		}
+		return dirs[i].subpath < dirs[j].subpath
+	})
+	return dirs
+}
+
+func hasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
+	rp, ok := protocols.AsRuntimeProvider(plugin)
+	if !ok {
+		return false
+	}
+	for _, descriptor := range rp.RuntimeDescriptors(nil) {
+		if descriptor.TemplateUnit != "" || strings.Contains(descriptor.Unit, "@") {
+			return true
+		}
+	}
+	return false
 }
 
 func UnitForArtifactID(id string) (string, bool) {
@@ -241,7 +287,35 @@ func unitForPath(slashPath string) (string, bool) {
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {
-	return generatedconfig.NewArtifactCatalog().LivePathForStagedConfig(p.applyRoot, stagedPath)
+	return livePathForStagedConfig(p.applyRoot, stagedPath)
+}
+
+func livePathForStagedConfig(applyRoot string, stagedPath string) (string, bool) {
+	slashPath := filepath.ToSlash(stagedPath)
+	slashRoot := strings.TrimRight(filepath.ToSlash(applyRoot), "/")
+	prefix := slashRoot + "/generated/"
+	if !strings.HasPrefix(slashPath, prefix) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(slashPath, prefix)
+	if !isPromotableGeneratedConfig(slashPath, rel) {
+		return "", false
+	}
+	return filepath.Join(applyRoot, "live", filepath.FromSlash(rel)), true
+}
+
+func isPromotableGeneratedConfig(slashPath string, rel string) bool {
+	registry := protocols.NewRegistry()
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
+		}
+		if cr.ArtifactSpec().MatchesGeneratedPath(slashPath) {
+			return true
+		}
+	}
+	return rel == generatedconfig.WarpConfigSubpath
 }
 
 func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
