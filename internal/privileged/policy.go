@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type ErrorCode string
@@ -196,33 +198,68 @@ func managedArtifactPath(id string) (ArtifactPath, bool) {
 	if clean != id || strings.Contains(clean, `\`) {
 		return ArtifactPath{}, false
 	}
-	switch clean {
-	case "mieru/server_config.json", "sing-box/warp.json":
+	if clean == "sing-box/warp.json" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
-	parts := strings.Split(clean, "/")
-	if len(parts) != 2 {
-		return ArtifactPath{}, false
+	if managedProtocolArtifactID(clean) {
+		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
-	name := ""
-	switch parts[0] {
-	case "caddy":
-		name = strings.TrimSuffix(parts[1], ".Caddyfile")
-		if name == parts[1] {
-			return ArtifactPath{}, false
+	return ArtifactPath{}, false
+}
+
+func managedProtocolArtifactID(clean string) bool {
+	registry := protocols.NewRegistry()
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
 		}
-	case "hysteria2", "olcrtc":
-		name = strings.TrimSuffix(parts[1], ".yaml")
-		if name == parts[1] {
-			return ArtifactPath{}, false
+		sub := filepath.ToSlash(cr.ArtifactSpec().Subpath)
+		if sub == "" {
+			continue
 		}
-	default:
-		return ArtifactPath{}, false
+		if clean == sub {
+			return true
+		}
+		if !protocolAllowsDynamicArtifact(plugin, sub, clean) {
+			continue
+		}
+		return true
 	}
-	if !artifactNamePattern.MatchString(name) {
-		return ArtifactPath{}, false
+	return false
+}
+
+func protocolAllowsDynamicArtifact(plugin protocols.ProtocolPlugin, sub string, clean string) bool {
+	if !protocolHasTemplateRuntime(plugin) {
+		return false
 	}
-	return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+	dir := filepath.ToSlash(filepath.Dir(sub))
+	if dir == "." || !strings.HasPrefix(clean, dir+"/") {
+		return false
+	}
+	rest := strings.TrimPrefix(clean, dir+"/")
+	if strings.Contains(rest, "/") {
+		return false
+	}
+	ext := filepath.Ext(filepath.Base(sub))
+	if ext == "" || !strings.HasSuffix(rest, ext) {
+		return false
+	}
+	name := strings.TrimSuffix(rest, ext)
+	return artifactNamePattern.MatchString(name)
+}
+
+func protocolHasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
+	rp, ok := protocols.AsRuntimeProvider(plugin)
+	if !ok {
+		return false
+	}
+	for _, descriptor := range rp.RuntimeDescriptors(nil) {
+		if descriptor.TemplateUnit != "" || strings.Contains(descriptor.Unit, "@") {
+			return true
+		}
+	}
+	return false
 }
 
 func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
