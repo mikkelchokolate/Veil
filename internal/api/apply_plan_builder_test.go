@@ -38,6 +38,25 @@ func TestBuildApplyPlanUsesApplyRootForStructuredOperations(t *testing.T) {
 	}
 }
 
+func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		ApplyRoot: "/srv/veil",
+		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
+		Inbounds: []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "secret"}},
+	})
+
+	if containsApplyPlanString(plan.Actions, "restart veil-hysteria2@.service") {
+		t.Fatalf("plan actions should not target template unit: %+v", plan.Actions)
+	}
+	if !containsApplyPlanString(plan.Actions, "restart veil-hysteria2@edge.service") {
+		t.Fatalf("missing per-inbound restart action: %+v", plan.Actions)
+	}
+	want := model.ApplyOperation{Type: "restart_service", Unit: "veil-hysteria2@edge.service", InterruptionRisk: "connection-drop", RollbackAvailable: true, ValidationSource: "managed-unit-catalog"}
+	if !containsApplyOperation(plan.Operations, want) {
+		t.Fatalf("missing per-inbound restart operation in %+v", plan.Operations)
+	}
+}
+
 func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{},
@@ -94,6 +113,15 @@ func (e errApplyPlanTest) Error() string { return string(e) }
 func containsApplyPlanString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsApplyOperation(values []model.ApplyOperation, want model.ApplyOperation) bool {
+	for _, value := range values {
+		if reflect.DeepEqual(value, want) {
 			return true
 		}
 	}
