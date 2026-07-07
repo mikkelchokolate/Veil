@@ -21,7 +21,7 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 		"veil-hysteria2@h.service": {"hysteria2-h", "hysteria2-h"},
 		"veil-mieru.service":       {"mieru", "mieru"},
 		"veil-olcrtc@o.service":    {"olcrtc-o", "olcrtc-o"},
-		"veil-caddy@n.service":     {"naiveproxy-n", "naiveproxy-n"},
+		"veil-caddy@n.service":     {"caddy-n", "caddy-n"},
 		"veil-warp.service":        {"sing-box", "sing-box"},
 	}
 
