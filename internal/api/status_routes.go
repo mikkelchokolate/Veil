@@ -30,7 +30,7 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
 		info := service.StatusInfo{Version: routes.Info.Version, Mode: routes.Info.Mode}
-		catalog := NewManagedRuntimeCatalog()
+		catalog := NewVisibleManagedRuntimeCatalog()
 		runtimes := catalog.Runtimes()
 		units := make([]string, 0, len(runtimes))
 		for _, runtime := range runtimes {
