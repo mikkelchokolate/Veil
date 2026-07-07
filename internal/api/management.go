@@ -12,7 +12,7 @@ import (
 )
 
 var stagedConfigValidator = func(paths []string) []ConfigValidationResult {
-	return generatedconfig.NewStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
+	return newPluginStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
 }
 var serviceActionRunner = func(command []string) ServiceActionResult {
 	return service.RunFixedServiceAction(command, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
