@@ -20,6 +20,7 @@ type ProtocolCapability struct {
 	Protocol               string
 	Config                 string
 	Action                 string
+	ActionForInbound       func(model.Inbound) string
 	ValidateSettings       func(model.Settings) error
 	ValidateInboundRender  bool
 	RequiresRenderSettings bool
@@ -82,7 +83,13 @@ func Build(input Input) model.ApplyPlanResponse {
 			}
 		}
 		plan.Configs = appendUnique(plan.Configs, capability.Config)
-		plan.Actions = appendUnique(plan.Actions, capability.Action)
+		action := capability.Action
+		if capability.ActionForInbound != nil {
+			if perInboundAction := capability.ActionForInbound(inbound); perInboundAction != "" {
+				action = perInboundAction
+			}
+		}
+		plan.Actions = appendUnique(plan.Actions, action)
 		if capability.ShouldValidateRender(input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
 			if err := input.ValidateInboundRender(inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
