@@ -55,8 +55,10 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 		for _, runtime := range runtimes {
 			status := byUnit[runtime.Unit]
 			statuses = append(statuses, ServiceStatus{
-				Name: runtime.Name, Managed: true, Transport: runtime.Transport, Unit: runtime.Unit,
-				LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState, Error: status.Error,
+				Name: runtime.Name, ActionName: runtime.ActionName,
+				Managed: true, Restartable: runtime.ManualRestart,
+				Transport: runtime.Transport, Unit: runtime.Unit, LoadState: status.LoadState,
+				ActiveState: status.ActiveState, SubState: status.SubState, Error: status.Error,
 			})
 		}
 		writeJSON(w, service.NewStatusResponseBuilder(info, func() []ServiceStatus { return statuses }).Build())
