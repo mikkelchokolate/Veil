@@ -18,13 +18,60 @@ import (
 type ManagedRuntime = service.ManagedRuntime
 type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 
+// NewManagedRuntimeCatalog returns the broad management catalog used for apply,
+// repair, privileged policy checks, and backward-compatible service commands. It
+// intentionally includes fallback/template runtimes when no saved state exists so
+// first-apply and recovery paths can still validate, promote, and restart units.
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	settings, inbounds, warp := loadSnapshotFromState()
-	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+	_, inbounds, warp := loadSnapshotFromState()
+	return NewManagedRuntimeCatalogFor(inbounds, warp)
 }
 
+// NewManagedRuntimeCatalogFor returns the broad management catalog. Use
+// NewVisibleManagedRuntimeCatalog for operator-facing status/UI lists.
 func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
-	return NewManagedRuntimeCatalogForSnapshot(Settings{}, inbounds, warp)
+	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
+
+	registry := protocols.NewRegistry()
+	for _, p := range registry.All() {
+		rp, ok := protocols.AsRuntimeProvider(p)
+		if !ok {
+			continue
+		}
+		selected := enabledInboundsForProtocol(inbounds, p.Protocol())
+		if len(inbounds) == 0 {
+			runtimes = append(runtimes, rp.RuntimeDescriptors(nil)...)
+			continue
+		}
+		if len(selected) > 0 {
+			runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
+		}
+	}
+
+	if warp.Enabled || len(inbounds) == 0 {
+		runtimes = append(runtimes, ManagedRuntime{
+			Name:            "sing-box",
+			ActionName:      "sing-box",
+			Unit:            renderer.UnitWarp,
+			PromotedSubpath: generatedconfig.WarpConfigSubpath,
+			// restart, not reload: on first enable the unit is inactive (reload
+			// fails), and the warp unit's ExecReload only validates — restart is
+			// what actually applies a new WARP config.
+			PromotedVerb:     "restart",
+			ManualRestart:    true,
+			HealthCheckAfter: true,
+		})
+	}
+
+	return sortManagedRuntimes(runtimes)
+}
+
+// NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
+// dashboard and /api/status. Unlike the broad management catalog, it only exposes
+// services that are configured in the saved state, plus Veil itself.
+func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
+	settings, inbounds, warp := loadSnapshotFromState()
+	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
 }
 
 func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
@@ -57,22 +104,22 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 		}
 	}
 
-	// sing-box / warp
 	if warp.Enabled {
 		runtimes = append(runtimes, ManagedRuntime{
 			Name:            "sing-box",
 			ActionName:      "sing-box",
 			Unit:            renderer.UnitWarp,
 			PromotedSubpath: generatedconfig.WarpConfigSubpath,
-			// restart, not reload: on first enable the unit is inactive (reload
-			// fails), and the warp unit's ExecReload only validates — restart is
-			// what actually applies a new WARP config.
 			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})
 	}
 
+	return sortManagedRuntimes(runtimes)
+}
+
+func sortManagedRuntimes(runtimes []ManagedRuntime) ManagedRuntimeCatalog {
 	sort.SliceStable(runtimes, func(i, j int) bool {
 		if runtimes[i].Name == "veil" {
 			return true
@@ -82,7 +129,6 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 		}
 		return runtimes[i].Name < runtimes[j].Name
 	})
-
 	return service.NewManagedRuntimeCatalog(runtimes)
 }
 
