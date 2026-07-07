@@ -19,6 +19,7 @@ type Material struct {
 type ProtocolCapability struct {
 	Protocol               string
 	Config                 string
+	ConfigForInbound       func(model.Inbound) string
 	Action                 string
 	ActionForInbound       func(model.Inbound) string
 	ValidateSettings       func(model.Settings) error
@@ -82,7 +83,13 @@ func Build(input Input) model.ApplyPlanResponse {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
 		}
-		plan.Configs = appendUnique(plan.Configs, capability.Config)
+		config := capability.Config
+		if capability.ConfigForInbound != nil {
+			if perInboundConfig := capability.ConfigForInbound(inbound); perInboundConfig != "" {
+				config = perInboundConfig
+			}
+		}
+		plan.Configs = appendUnique(plan.Configs, config)
 		action := capability.Action
 		if capability.ActionForInbound != nil {
 			if perInboundAction := capability.ActionForInbound(inbound); perInboundAction != "" {
