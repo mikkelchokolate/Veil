@@ -149,6 +149,9 @@ func (v Validator) validateInbound(
 	}
 
 	issues = append(issues, requiredFieldIssues(request.Settings, inbound)...)
+	if supported {
+		issues = append(issues, protocolInboundIssues(request.Settings, inbound)...)
+	}
 	if supported && strings.TrimSpace(inbound.Name) != "" {
 		issues = append(issues, v.runtimeIssues(ctx, inbound)...)
 	}
@@ -237,6 +240,18 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 		))
 	}
 	return issues
+}
+
+func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
+	p, ok := protocolRegistry().Get(inbound.Protocol)
+	if !ok {
+		return nil
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateInbound(settings, inbound)
 }
 
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
