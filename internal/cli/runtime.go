@@ -92,7 +92,10 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	}
 	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch}, opts.Only)
 	if len(results) == 0 {
-		return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
+		if len(opts.Only) > 0 {
+			return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
+		}
+		return fmt.Errorf("no protocol runtimes are available for this platform")
 	}
 
 	fmt.Fprintln(out, "Installing protocol runtimes")
