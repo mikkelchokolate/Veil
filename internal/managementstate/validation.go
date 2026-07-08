@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
@@ -68,6 +69,8 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		for i, inbound := range snapshot.Inbounds {
 			if inbound.Name == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].name is required")
+			} else if !inbounds.IsSafeName(inbound.Name) {
+				errs = append(errs, "inbounds["+itoa(i)+"].name must contain only letters, digits, underscore, or hyphen")
 			}
 			if inbound.Protocol == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].protocol is required")
