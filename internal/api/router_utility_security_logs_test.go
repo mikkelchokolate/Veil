@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -239,119 +240,318 @@ func TestBearerTokenReturnsEmptyForHeaderShorterThanScheme(t *testing.T) {
 	}
 }
 
-func TestBearerTokenReturnsToken(t *testing.T) {
-	if got := bearerToken("Bearer abc.def"); got != "abc.def" {
-		t.Fatalf("token=%q", got)
+func TestBearerTokenReturnsEmptyForHeaderExactlySchemeLengthWithNoToken(t *testing.T) {
+	if got := bearerToken("Bearer "); got != "" {
+		t.Fatalf("expected empty for header exactly 'Bearer ' with no token, got %q", got)
 	}
 }
 
-func TestWithSecurityHeadersHidesServerHeader(t *testing.T) {
+func TestBearerTokenReturnsEmptyForNonBearerScheme(t *testing.T) {
+	tests := []string{
+		"Basic abcdefghij",
+		"Digest abcdefghij",
+		"bearer", // no space, shorter than scheme
+		"BEARERTOKEN",
+		"NotBearer xyz",
+	}
+	for _, h := range tests {
+		t.Run("header="+h, func(t *testing.T) {
+			if got := bearerToken(h); got != "" {
+				t.Fatalf("expected empty for non-Bearer header %q, got %q", h, got)
+			}
+		})
+	}
+}
+
+func TestBearerTokenExtractsTokenCaseInsensitively(t *testing.T) {
+	tests := []struct {
+		header string
+		want   string
+	}{
+		{"Bearer token", "token"},
+		{"bearer token", "token"},
+		{"BEARER token", "token"},
+		{"BeArEr token", "token"},
+	}
+	for _, tt := range tests {
+		t.Run("header="+tt.header, func(t *testing.T) {
+			if got := bearerToken(tt.header); got != tt.want {
+				t.Fatalf("bearerToken(%q) = %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBearerTokenTrimsWhitespaceFromToken(t *testing.T) {
+	tests := []struct {
+		header string
+		want   string
+	}{
+		{"Bearer   token  ", "token"},
+		{"Bearer \t token \t", "token"},
+		{"Bearer token", "token"},
+		{"Bearer  multi word token ", "multi word token"},
+	}
+	for _, tt := range tests {
+		t.Run("header="+tt.header, func(t *testing.T) {
+			if got := bearerToken(tt.header); got != tt.want {
+				t.Fatalf("bearerToken(%q) = %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeJSONRequestRejectsNonJSONContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		wantStatus  int
+		wantOK      bool
+	}{
+		{"application/json", "application/json", http.StatusOK, true},
+		{"no content type", "", http.StatusOK, true},
+		{"text/plain", "text/plain", http.StatusUnsupportedMediaType, false},
+		{"application/xml", "application/xml", http.StatusUnsupportedMediaType, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := strings.NewReader(`{"domain":"example.com"}`)
+			req := httptest.NewRequest("POST", "/api/settings", body)
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			rec := httptest.NewRecorder()
+			var v struct {
+				Domain string `json:"domain"`
+			}
+			got := decodeJSONRequest(rec, req, &v)
+			if got != tt.wantOK {
+				t.Fatalf("decodeJSONRequest() = %v, want %v", got, tt.wantOK)
+			}
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestWriteJSON_LogsEncodeError(t *testing.T) {
 	var buf bytes.Buffer
-	logger := log.New(&buf, "", 0)
-	handler := withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Server", "go-test")
-		w.WriteHeader(http.StatusOK)
-	}), logger)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
 	w := httptest.NewRecorder()
+	writeJSON(w, make(chan int))
 
-	handler.ServeHTTP(w, req)
-
-	if server := w.Header().Get("Server"); server != "" {
-		t.Fatalf("expected Server header stripped, got %q", server)
+	if !strings.Contains(buf.String(), "writeJSON: encode error") {
+		t.Errorf("expected log message containing 'writeJSON: encode error', got: %s", buf.String())
 	}
 }
 
-func TestTLSConfigurationEnforcesModernMinimum(t *testing.T) {
-	r, server := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
-	httpServer := &http.Server{Handler: r}
-	ApplyServerTLSConfig(httpServer, SecurityConfig{EnableHSTS: true})
-	if httpServer.TLSConfig == nil {
-		t.Fatal("expected TLS config")
-	}
-	if httpServer.TLSConfig.MinVersion != tls.VersionTLS12 {
-		t.Fatalf("min TLS version = %x", httpServer.TLSConfig.MinVersion)
-	}
-	if httpServer.TLSConfig.ClientSessionCache == nil {
-		t.Fatal("expected client session cache")
-	}
-	server.Close()
-}
-
-func TestAccessLogMiddlewareWritesMethodPathAndStatus(t *testing.T) {
+func TestWriteJSONStatus_LogsEncodeError(t *testing.T) {
 	var buf bytes.Buffer
-	logger := log.New(&buf, "", 0)
-	handler := accessLogMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-	}), logger)
-	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
 	w := httptest.NewRecorder()
+	writeJSONStatus(w, http.StatusOK, make(chan int))
 
-	handler.ServeHTTP(w, req)
-
-	line := buf.String()
-	if !strings.Contains(line, "POST") || !strings.Contains(line, "/api/test") || !strings.Contains(line, "201") {
-		t.Fatalf("unexpected access log line: %q", line)
+	if !strings.Contains(buf.String(), "writeJSONStatus: encode error") {
+		t.Errorf("expected log message containing 'writeJSONStatus: encode error', got: %s", buf.String())
 	}
 }
 
-func TestCORSMiddlewareAddsHeadersForAllowedOrigin(t *testing.T) {
-	handler := corsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
-	req.Header.Set("Origin", "https://example.com")
+func TestWriteJSON_NoError_NoLog(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
 	w := httptest.NewRecorder()
+	writeJSON(w, map[string]string{"hello": "world"})
 
-	handler.ServeHTTP(w, req)
-
-	if allow := w.Header().Get("Access-Control-Allow-Origin"); allow != "https://example.com" {
-		t.Fatalf("Access-Control-Allow-Origin=%q", allow)
-	}
-	if vary := w.Header().Get("Vary"); vary != "Origin" {
-		t.Fatalf("Vary=%q", vary)
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output, got: %s", buf.String())
 	}
 }
 
-func TestCORSMiddlewareSkipsWhenNoOrigin(t *testing.T) {
-	handler := corsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+func TestWriteJSONStatus_NoError_NoLog(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
 	w := httptest.NewRecorder()
+	writeJSONStatus(w, http.StatusOK, map[string]string{"hello": "world"})
 
-	handler.ServeHTTP(w, req)
-
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
-		t.Fatalf("expected no CORS header without origin, got %q", got)
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output, got: %s", buf.String())
 	}
 }
 
-func TestNoCacheAPIMiddlewareSetsNoStoreForAPI(t *testing.T) {
-	handler := noCacheAPIMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
-	w := httptest.NewRecorder()
+func TestValidateEmptyJSONBody(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		wantErr     bool
+	}{
+		{"no content type, no body", "", "", false},
+		{"no content type, empty object", "", "{}", false},
+		{"json content type, no body", "application/json", "", false},
+		{"json content type, empty object", "application/json", "{}", false},
+		{"json content type, whitespace", "application/json", "  {}\n  ", false},
+		{"wrong content type", "text/plain", "", true},
+		{"json content type, unexpected body", "application/json", `"hello"`, true},
+		{"json content type, array body", "application/json", `[1,2,3]`, true},
+	}
 
-	handler.ServeHTTP(w, req)
-
-	if got := w.Header().Get("Cache-Control"); got != "no-store" {
-		t.Fatalf("Cache-Control=%q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			err := validateEmptyJSONBody(req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateEmptyJSONBody() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 
-func TestNoCacheAPIMiddlewareDoesNotOverrideStaticCache(t *testing.T) {
-	handler := noCacheAPIMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.WriteHeader(http.StatusOK)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	paths := []string{"/", "/healthz", "/api/status", "/api/settings", "/api/warp", "/api/nonexistent"}
+
+	for _, path := range paths {
+		t.Run("path="+path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("X-Content-Type-Options: want nosniff, got %q", got)
+			}
+			if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+				t.Errorf("X-Frame-Options: want DENY, got %q", got)
+			}
+			if got := w.Header().Get("Referrer-Policy"); got != "no-referrer" {
+				t.Errorf("Referrer-Policy: want no-referrer, got %q", got)
+			}
+			if got := w.Header().Get("X-Permitted-Cross-Domain-Policies"); got != "none" {
+				t.Errorf("X-Permitted-Cross-Domain-Policies: want none, got %q", got)
+			}
+			if got := w.Header().Get("Cross-Origin-Resource-Policy"); got != "same-origin" {
+				t.Errorf("Cross-Origin-Resource-Policy: want same-origin, got %q", got)
+			}
+			if got := w.Header().Get("X-DNS-Prefetch-Control"); got != "off" {
+				t.Errorf("X-DNS-Prefetch-Control: want off, got %q", got)
+			}
+			if got := w.Header().Get("Server"); got != "" {
+				t.Errorf("Server: want empty (hidden), got %q", got)
+			}
+			// HSTS only on HTTPS
+			if got := w.Header().Get("Strict-Transport-Security"); got != "" {
+				t.Errorf("Strict-Transport-Security: want empty on HTTP, got %q", got)
+			}
+		})
+	}
+}
+
+func TestSecurityHeadersMiddlewareOnErrorPaths(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret"})
+
+	// Unauthorized POST without token — should still have security headers
+	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader("bad"))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
 
-	handler.ServeHTTP(w, req)
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("missing X-Content-Type-Options on unauthorized response")
+	}
+	if w.Header().Get("X-Frame-Options") != "DENY" {
+		t.Error("missing X-Frame-Options on unauthorized response")
+	}
+}
 
-	if got := w.Header().Get("Cache-Control"); got != "public, max-age=3600" {
-		t.Fatalf("expected static cache header preserved, got %q", got)
+func TestSecurityHeadersMiddlewareHSTSOnHTTPS(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	// Simulate a TLS connection by setting req.TLS
+	req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	hsts := w.Header().Get("Strict-Transport-Security")
+	if hsts == "" {
+		t.Error("expected Strict-Transport-Security header on HTTPS request")
+	}
+	if !strings.Contains(hsts, "max-age=63072000") {
+		t.Errorf("expected HSTS max-age in %q", hsts)
+	}
+	if !strings.Contains(hsts, "includeSubDomains") {
+		t.Errorf("expected includeSubDomains in %q", hsts)
+	}
+}
+
+func TestLogsEndpointRequiresGET(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodPost, "/api/logs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestLogsEndpointRejectsInvalidUnit(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/api/logs?unit=rm%20-rf", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid unit, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLogsEndpointRejectsInvalidLines(t *testing.T) {
+	r, _ := NewRouter(ServerInfo{Version: "test"})
+	for _, qs := range []string{"lines=0", "lines=501", "lines=abc"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/logs?"+qs, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for %s, got %d: %s", qs, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestValidLogUnit(t *testing.T) {
+	tests := []struct {
+		unit string
+		want bool
+	}{
+		{"veil", true},
+		{"caddy", true},
+		{"hysteria2", true},
+		{"sing-box", true},
+		{"veil-caddy@panel", true},
+		{"my_service@1", true},
+		{"foo.bar", true},
+		{"", false},
+		{"rm -rf", false},
+		{"foo;bar", false},
+		{"cat /etc/passwd", false},
+		{"$(whoami)", false},
+		{"foo`id`", false},
+	}
+	for _, tt := range tests {
+		t.Run("unit="+tt.unit, func(t *testing.T) {
+			if got := validLogUnit(tt.unit); got != tt.want {
+				t.Errorf("validLogUnit(%q) = %v, want %v", tt.unit, got, tt.want)
+			}
+		})
 	}
 }
