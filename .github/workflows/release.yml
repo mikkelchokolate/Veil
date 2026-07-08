@@ -48,10 +48,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh packaging/scripts/*.sh
       - run: make build
       - run: go test ./... -race -count=1
       - run: bash -n scripts/install.sh scripts/uninstall.sh
+      - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
       - run: git diff --check
