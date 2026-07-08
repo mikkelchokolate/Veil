@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
@@ -15,7 +14,7 @@ import (
 
 // runtimeInstallFunc is injectable so tests can exercise the command without
 // reaching the network.
-var runtimeInstallFunc = protocols.InstallAllRuntimes
+var runtimeInstallFunc = protocols.InstallSelectedRuntimes
 
 // installRuntimesFunc provisions protocol runtimes during `veil install`. It is
 // intentionally non-fatal: a fresh Panel install must still succeed even if a
@@ -91,8 +90,7 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch})
-	results = filterRuntimeResults(results, opts.Only)
+	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch}, opts.Only)
 	if len(results) == 0 {
 		return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
 	}
@@ -120,22 +118,4 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	}
 	fmt.Fprintln(out, "All requested protocol runtimes are installed.")
 	return nil
-}
-
-func filterRuntimeResults(results []runtimeinstall.Result, only []string) []runtimeinstall.Result {
-	if len(only) == 0 {
-		return results
-	}
-	want := make(map[string]struct{}, len(only))
-	for _, name := range only {
-		want[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
-	}
-	filtered := make([]runtimeinstall.Result, 0, len(results))
-	for _, result := range results {
-		if _, ok := want[strings.ToLower(result.Name)]; ok {
-			filtered = append(filtered, result)
-		}
-	}
-	sort.Slice(filtered, func(i, j int) bool { return filtered[i].Name < filtered[j].Name })
-	return filtered
 }
