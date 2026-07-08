@@ -209,7 +209,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"RemoveOnStop=true",
 	} {
 		if !strings.Contains(socket, want) {
-			t.Fatalf("veil-helper.socket missing %q:\n%s", socket)
+			t.Fatalf("veil-helper.socket missing %q:\n%s", want, socket)
 		}
 	}
 }
