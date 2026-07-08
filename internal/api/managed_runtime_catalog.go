@@ -67,16 +67,52 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 }
 
 // NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
-// dashboard and /api/status. Once a saved state exists, it only exposes services
-// configured in that state, plus Veil itself. If state is absent, it falls back to
-// the broad catalog so first-run/recovery environments retain their legacy
-// management affordances.
+// dashboard and /api/status when no live managementState is available. Once a
+// saved state exists, it only exposes services configured in that state, plus
+// Veil itself. If state is absent, it falls back to the broad catalog so
+// first-run/recovery environments retain their legacy management affordances.
 func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	settings, inbounds, warp, ok := loadSnapshotFromStateWithOK()
 	if !ok {
 		return NewManagedRuntimeCatalogFor(inbounds, warp)
 	}
 	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+}
+
+// NewVisibleManagedRuntimeCatalogForState returns the operator-facing catalog
+// from the active in-memory management state. Routes should prefer this over the
+// environment/file fallback above so status and panel controls reflect the state
+// already loaded by the running process, including changes made during this
+// process lifetime.
+func NewVisibleManagedRuntimeCatalogForState(state *managementState) ManagedRuntimeCatalog {
+	if state == nil {
+		return NewVisibleManagedRuntimeCatalog()
+	}
+	state.mu.Lock()
+	settings := state.settings
+	inbounds := append([]Inbound(nil), state.inbounds...)
+	warp := state.warp
+	statePath := state.statePath
+	state.mu.Unlock()
+
+	if !visibleStateHasRuntimeScope(settings, inbounds, warp) && !stateFileExists(statePath) {
+		return NewManagedRuntimeCatalogFor(nil, WarpConfig{})
+	}
+	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+}
+
+func visibleStateHasRuntimeScope(settings Settings, inbounds []Inbound, warp WarpConfig) bool {
+	return settings.PanelAccess == "caddy" || len(inbounds) > 0 || warp.Enabled
+}
+
+func stateFileExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	return true
 }
 
 func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
