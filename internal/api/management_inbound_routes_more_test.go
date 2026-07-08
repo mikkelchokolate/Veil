@@ -34,7 +34,7 @@ func TestWriteInboundManagementError(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name, protocol, transport"},
+		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name must contain only letters"},
 		{inbounds.ErrInboundDuplicateName, http.StatusConflict, "inbound name already exists"},
 		{inbounds.ErrInboundDuplicateTransportPort, http.StatusConflict, "transport/port already exists"},
 		{inbounds.ErrInboundUnsupportedProtocolTransport, http.StatusBadRequest, "unsupported inbound"},
@@ -105,5 +105,12 @@ func TestHandleInboundByNameValidation(t *testing.T) {
 	state.handleInboundByName(rec, get)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("nested path status=%d", rec.Code)
+	}
+
+	get = httptest.NewRequest(http.MethodGet, "/api/inbounds/bad.name", nil)
+	rec = httptest.NewRecorder()
+	state.handleInboundByName(rec, get)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unsafe name status=%d", rec.Code)
 	}
 }
