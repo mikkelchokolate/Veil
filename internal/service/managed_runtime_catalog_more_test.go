@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -75,7 +76,13 @@ func TestServiceActionCommandNotFound(t *testing.T) {
 }
 
 func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
-	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{})
+	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{
+		{Unit: "veil-caddy@.service"},
+		{Unit: "veil-hysteria2@y.service"},
+		{TemplateUnit: "veil-olcrtc@.service"},
+		{TemplateUnit: "veil-future@.service"},
+		{Unit: "veil-warp.service"},
+	})
 	tests := []struct {
 		command []string
 		want    bool
@@ -84,6 +91,8 @@ func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
 		{[]string{"systemctl", "stop", "veil-hysteria2@y.service"}, true},
 		{[]string{"systemctl", "enable", "veil-olcrtc@z.service"}, true},
 		{[]string{"systemctl", "disable", "veil-caddy@x.service"}, true},
+		{[]string{"systemctl", "start", "veil-future@edge.service"}, true},
+		{[]string{"systemctl", "enable", "veil-warp.service"}, true},
 		{[]string{"systemctl", "restart", "veil-caddy@x.service"}, false},
 		{[]string{"systemctl", "start", "veil-unknown@x.service"}, false},
 		{[]string{"systemctl", "start", "veil-caddy@x"}, false},
@@ -95,6 +104,19 @@ func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
 				t.Fatalf("AllowsPromotedAction(%v) = %v, want %v", tt.command, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLifecycleUnitPrefixesDerivedFromRuntimes(t *testing.T) {
+	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{
+		{Unit: "veil-caddy@panel.service", TemplateUnit: "veil-caddy@.service"},
+		{Unit: "veil-hysteria2@edge.service"},
+		{TemplateUnit: "veil-future@.service"},
+		{Unit: "veil-mieru.service"},
+	})
+	want := []string{"veil-caddy@", "veil-hysteria2@", "veil-future@"}
+	if got := catalog.LifecycleUnitPrefixes(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("LifecycleUnitPrefixes = %+v, want %+v", got, want)
 	}
 }
 
