@@ -35,6 +35,48 @@ func TestPackagingSystemdUnitsMatchDefaultRenderer(t *testing.T) {
 	}
 }
 
+func TestRenderedSystemdUnitsAvoidDuplicateSingletonDirectives(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{})
+	singletonDirectives := []string{
+		"NoNewPrivileges",
+		"ProtectSystem",
+		"ProtectHome",
+		"PrivateTmp",
+		"CapabilityBoundingSet",
+		"AmbientCapabilities",
+		"RestrictAddressFamilies",
+		"SystemCallArchitectures",
+		"ProtectKernelTunables",
+		"ProtectKernelModules",
+		"ProtectControlGroups",
+		"RestrictSUIDSGID",
+		"LockPersonality",
+		"RestrictRealtime",
+		"MemoryDenyWriteExecute",
+		"UMask",
+	}
+	for name, body := range units {
+		for _, directive := range singletonDirectives {
+			count := countSystemdDirective(body, directive)
+			if count > 1 {
+				t.Fatalf("%s repeats singleton directive %s %d times:\n%s", name, directive, count, body)
+			}
+		}
+	}
+}
+
+func countSystemdDirective(body, directive string) int {
+	prefix := directive + "="
+	count := 0
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, prefix) {
+			count++
+		}
+	}
+	return count
+}
+
 func TestRenderSystemdUnits(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{
 		VeilBinary:     "/usr/local/bin/veil",
@@ -167,7 +209,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"RemoveOnStop=true",
 	} {
 		if !strings.Contains(socket, want) {
-			t.Fatalf("veil-helper.socket missing %q:\n%s", want, socket)
+			t.Fatalf("veil-helper.socket missing %q:\n%s", socket)
 		}
 	}
 }
