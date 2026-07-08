@@ -20,15 +20,15 @@ type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 
 // NewManagedRuntimeCatalog returns the broad management catalog used for apply,
 // repair, privileged policy checks, and backward-compatible service commands. It
-// intentionally includes fallback/template runtimes when no saved state exists so
-// first-apply and recovery paths can still validate, promote, and restart units.
+// intentionally includes fallback/template runtimes so first-apply, recovery,
+// orphan cleanup, and rollback paths can validate, promote, stop, and restart
+// managed units even when the current saved state no longer references them.
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	_, inbounds, warp := loadSnapshotFromState()
-	return NewManagedRuntimeCatalogFor(inbounds, warp)
+	return NewManagedRuntimeCatalogFor(nil, WarpConfig{})
 }
 
-// NewManagedRuntimeCatalogFor returns the broad management catalog. Use
-// NewVisibleManagedRuntimeCatalog for operator-facing status/UI lists.
+// NewManagedRuntimeCatalogFor returns a state-scoped catalog for active apply
+// planning. Pass nil inbounds for the broad fallback/template catalog.
 func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 
