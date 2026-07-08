@@ -147,11 +147,6 @@ func enabledInboundsForProtocol(inbounds []Inbound, protocol string) []Inbound {
 	return selected
 }
 
-func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
-	settings, inbounds, warp, _ := loadSnapshotFromStateWithOK()
-	return settings, inbounds, warp
-}
-
 func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 	statePath := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
 	if statePath == "" {
