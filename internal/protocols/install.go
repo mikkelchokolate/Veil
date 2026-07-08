@@ -20,6 +20,10 @@ func InstallSelectedRuntimes(ctx context.Context, opts runtimeinstall.Options, o
 	return installRuntimesFor(ctx, opts, NewRegistry(), only)
 }
 
+func installAllRuntimesFor(ctx context.Context, opts runtimeinstall.Options, r *Registry) []runtimeinstall.Result {
+	return installRuntimesFor(ctx, opts, r, nil)
+}
+
 func installRuntimesFor(ctx context.Context, opts runtimeinstall.Options, r *Registry, only []string) []runtimeinstall.Result {
 	arch := opts.Arch
 	if arch == "" {
