@@ -21,9 +21,15 @@ func TestLivePathForStagedConfig(t *testing.T) {
 	}{
 		// Known live paths
 		{
-			name:       "caddy Caddyfile",
-			stagedPath: "/tmp/veil-test/generated/caddy/Caddyfile",
-			wantPath:   "/tmp/veil-test/live/caddy/Caddyfile",
+			name:       "caddy panel Caddyfile",
+			stagedPath: "/tmp/veil-test/generated/caddy/panel.Caddyfile",
+			wantPath:   "/tmp/veil-test/live/caddy/panel.Caddyfile",
+			wantOK:     true,
+		},
+		{
+			name:       "caddy per-inbound Caddyfile",
+			stagedPath: "/tmp/veil-test/generated/caddy/edge.Caddyfile",
+			wantPath:   "/tmp/veil-test/live/caddy/edge.Caddyfile",
 			wantOK:     true,
 		},
 		{
@@ -39,6 +45,12 @@ func TestLivePathForStagedConfig(t *testing.T) {
 			wantOK:     true,
 		},
 		// Unknown generated paths (valid prefix but not a known config)
+		{
+			name:       "legacy caddy Caddyfile",
+			stagedPath: "/tmp/veil-test/generated/caddy/Caddyfile",
+			wantPath:   "",
+			wantOK:     false,
+		},
 		{
 			name:       "unknown generated file",
 			stagedPath: "/tmp/veil-test/generated/unknown/config.yaml",
@@ -112,9 +124,9 @@ func TestLivePathForStagedConfigTrailingSlashRoot(t *testing.T) {
 		applyRoot: "/tmp/veil-test/",
 	}
 
-	gotPath, gotOK := state.livePathForStagedConfig("/tmp/veil-test/generated/caddy/Caddyfile")
+	gotPath, gotOK := state.livePathForStagedConfig("/tmp/veil-test/generated/caddy/panel.Caddyfile")
 	gotPath = filepath.ToSlash(gotPath)
-	wantPath := "/tmp/veil-test/live/caddy/Caddyfile"
+	wantPath := "/tmp/veil-test/live/caddy/panel.Caddyfile"
 	if gotPath != wantPath {
 		t.Fatalf("path = %q, want %q", gotPath, wantPath)
 	}
