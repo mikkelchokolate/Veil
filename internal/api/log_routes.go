@@ -30,16 +30,7 @@ func (routes LogRoutes) handleLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid unit name", http.StatusBadRequest)
 		return
 	}
-	runtime, ok := managedRuntimeByActionName(unit)
-	if !ok {
-		for _, candidate := range NewManagedRuntimeCatalog().Runtimes() {
-			if candidate.Unit == unit || strings.TrimSuffix(candidate.Unit, ".service") == unit {
-				runtime = candidate
-				ok = true
-				break
-			}
-		}
-	}
+	resolvedUnit, ok := routes.resolveLogUnit(unit)
 	if !ok {
 		writeError(w, "unknown managed unit", http.StatusBadRequest)
 		return
@@ -60,13 +51,40 @@ func (routes LogRoutes) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	journal, err := routes.State.privileged.Journal(r.Context(), privileged.JournalRequest{
-		Unit: runtime.Unit, Lines: lines,
+		Unit: resolvedUnit, Lines: lines,
 	})
 	if err != nil {
 		writePrivilegedError(w, err)
 		return
 	}
 	writeJSON(w, service.LogResult{Unit: unit, Output: strings.Join(journal.Lines, "\n")})
+}
+
+func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {
+	for _, catalog := range routes.logUnitCatalogs() {
+		for _, candidate := range catalog.Runtimes() {
+			if candidate.ActionName == unit || candidate.Name == unit {
+				return candidate.Unit, true
+			}
+			if candidate.Unit == unit || strings.TrimSuffix(candidate.Unit, ".service") == unit {
+				return candidate.Unit, true
+			}
+		}
+		policy := service.NewCommandPolicy(catalog)
+		if strings.HasSuffix(unit, ".service") && policy.AllowsHealth(unit) {
+			return unit, true
+		}
+	}
+	return "", false
+}
+
+func (routes LogRoutes) logUnitCatalogs() []ManagedRuntimeCatalog {
+	catalogs := []ManagedRuntimeCatalog{}
+	if routes.State != nil {
+		catalogs = append(catalogs, NewManagedRuntimeCatalogFor(routes.State.inbounds, routes.State.warp))
+	}
+	catalogs = append(catalogs, NewManagedRuntimeCatalog())
+	return catalogs
 }
 
 func validLogUnit(unit string) bool {
