@@ -50,6 +50,13 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck scripts/*.sh packaging/scripts/*.sh
       - run: make build
+      - name: Validate packaged systemd units
+        run: |
+          sudo install -m 0755 dist/veil /usr/local/bin/veil
+          for bin in caddy hysteria mita olcrtc sing-box; do
+            sudo ln -sf /usr/local/bin/veil "/usr/local/bin/${bin}"
+          done
+          systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
       - run: go test ./... -race -count=1
       - run: bash -n scripts/install.sh scripts/uninstall.sh
       - run: sh -n packaging/scripts/*.sh
