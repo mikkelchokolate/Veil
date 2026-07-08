@@ -29,8 +29,8 @@ func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
 
 func TestLiveConfigPromotionPromotesBacksUpAndRollsBack(t *testing.T) {
 	root := t.TempDir()
-	staged := filepath.Join(root, "generated", "caddy", "Caddyfile")
-	live := filepath.Join(root, "live", "caddy", "Caddyfile")
+	staged := filepath.Join(root, "generated", "caddy", "panel.Caddyfile")
+	live := filepath.Join(root, "live", "caddy", "panel.Caddyfile")
 	if err := atomicfile.Write(staged, []byte("new"), 0o600, 0o700); err != nil {
 		t.Fatalf("write staged: %v", err)
 	}
@@ -147,6 +147,11 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 			ok:     true,
 		},
 		{
+			staged: filepath.Join(root, "generated", "caddy", "panel.Caddyfile"),
+			live:   filepath.Join(root, "live", "caddy", "panel.Caddyfile"),
+			ok:     true,
+		},
+		{
 			staged: filepath.Join(root, "generated", "mieru", "server_config.json"),
 			live:   filepath.Join(root, "live", "mieru", "server_config.json"),
 			ok:     true,
@@ -155,6 +160,22 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 			staged: filepath.Join(root, "generated", "sing-box", "warp.json"),
 			live:   filepath.Join(root, "live", "sing-box", "warp.json"),
 			ok:     true,
+		},
+		{
+			staged: filepath.Join(root, "generated", "hysteria2", "edge.txt"),
+			ok:     false,
+		},
+		{
+			staged: filepath.Join(root, "generated", "hysteria2", "bad.name.yaml"),
+			ok:     false,
+		},
+		{
+			staged: filepath.Join(root, "generated", "hysteria2", "nested", "edge.yaml"),
+			ok:     false,
+		},
+		{
+			staged: filepath.Join(root, "generated", "mieru", "sidecar.json"),
+			ok:     false,
 		},
 		{
 			staged: filepath.Join(root, "generated", "unknown", "config.json"),
@@ -166,6 +187,15 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 		if ok != tc.ok || got != tc.live {
 			t.Fatalf("livePathForStagedConfig(%q) = (%q, %v), want (%q, %v)", tc.staged, got, ok, tc.live, tc.ok)
 		}
+	}
+}
+
+func TestUnitForPathRejectsUnsafeDynamicArtifactNames(t *testing.T) {
+	if unit, ok := UnitForArtifactID("hysteria2/bad.name.yaml"); ok || unit != "" {
+		t.Fatalf("UnitForArtifactID unsafe name = %q %v", unit, ok)
+	}
+	if unit, ok := UnitForArtifactID("hysteria2/edge.yaml"); !ok || unit != "veil-hysteria2@edge.service" {
+		t.Fatalf("UnitForArtifactID safe name = %q %v", unit, ok)
 	}
 }
 
