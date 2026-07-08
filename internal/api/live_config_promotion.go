@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
@@ -250,7 +251,7 @@ func unitForPath(slashPath string) (string, bool) {
 			continue
 		}
 		name := strings.TrimSuffix(rest, suffix)
-		if name == "" || strings.Contains(name, "/") {
+		if name == "" || strings.Contains(name, "/") || !inbounds.IsSafeName(name) {
 			continue
 		}
 		rp, ok := protocols.AsRuntimeProvider(plugin)
@@ -298,24 +299,52 @@ func livePathForStagedConfig(applyRoot string, stagedPath string) (string, bool)
 		return "", false
 	}
 	rel := strings.TrimPrefix(slashPath, prefix)
-	if !isPromotableGeneratedConfig(slashPath, rel) {
+	cleanRel := filepath.ToSlash(filepath.Clean(rel))
+	if cleanRel != rel || cleanRel == "." || cleanRel == ".." || strings.HasPrefix(cleanRel, "../") {
 		return "", false
 	}
-	return filepath.Join(applyRoot, "live", filepath.FromSlash(rel)), true
+	if !isPromotableGeneratedConfig(cleanRel) {
+		return "", false
+	}
+	return filepath.Join(applyRoot, "live", filepath.FromSlash(cleanRel)), true
 }
 
-func isPromotableGeneratedConfig(slashPath string, rel string) bool {
+func isPromotableGeneratedConfig(rel string) bool {
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		cr, ok := protocols.AsConfigRenderer(plugin)
 		if !ok {
 			continue
 		}
-		if cr.ArtifactSpec().MatchesGeneratedPath(slashPath) {
+		sub := filepath.ToSlash(cr.ArtifactSpec().Subpath)
+		if sub == "" {
+			continue
+		}
+		if rel == sub || isPromotableDynamicProtocolArtifact(plugin, sub, rel) {
 			return true
 		}
 	}
 	return rel == generatedconfig.WarpConfigSubpath
+}
+
+func isPromotableDynamicProtocolArtifact(plugin protocols.ProtocolPlugin, sub string, rel string) bool {
+	if !hasTemplateRuntime(plugin) {
+		return false
+	}
+	dir := filepath.ToSlash(filepath.Dir(sub))
+	if dir == "." || !strings.HasPrefix(rel, dir+"/") {
+		return false
+	}
+	rest := strings.TrimPrefix(rel, dir+"/")
+	if strings.Contains(rest, "/") {
+		return false
+	}
+	ext := filepath.Ext(filepath.Base(sub))
+	if ext == "" || !strings.HasSuffix(rest, ext) {
+		return false
+	}
+	name := strings.TrimSuffix(rest, ext)
+	return inbounds.IsSafeName(name)
 }
 
 func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
