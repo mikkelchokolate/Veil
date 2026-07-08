@@ -250,7 +250,18 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `RestrictAddressFamilies=AF_NETLINK
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
 ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
