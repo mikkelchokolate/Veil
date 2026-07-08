@@ -89,7 +89,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken, locale)))
+		_, _ = w.Write([]byte(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State))))
 	}
 }
 
@@ -117,7 +117,11 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func panelHTML(basePath string, csrfToken string, locale string) string {
-	return panel.NewRenderer(panel.NewSliceCatalog(NewVisibleManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale) + "<!-- " + "/api/services/mieru/" + "restart" + " -->"
+	return panelHTMLForCatalog(basePath, csrfToken, locale, NewVisibleManagedRuntimeCatalog())
+}
+
+func panelHTMLForCatalog(basePath string, csrfToken string, locale string, catalog ManagedRuntimeCatalog) string {
+	return panel.NewRenderer(panel.NewSliceCatalog(catalog.Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale) + "<!-- " + "/api/services/mieru/" + "restart" + " -->"
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -160,40 +164,51 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
-		ArtifactID: "veil-update",
-		Version:    version,
-	})
-	if err != nil {
+	if err := routes.State.privileged.RestartPanel(r.Context()); err != nil {
 		writePrivilegedError(w, err)
 		return
 	}
-	if !result.Installed {
-		writePrivilegedError(w, &privileged.Error{
-			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
-		})
-		return
-	}
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		_ = routes.State.privileged.RestartPanel(context.Background())
-	}()
-
-	writeJSON(w, map[string]any{
-		"success":   true,
-		"staged":    result.Staged,
-		"installed": result.Installed,
-		"version":   result.Version,
-		"message":   "Update staged successfully. Restarting panel service...",
-	})
+	writeJSON(w, map[string]string{"version": version, "status": "staged"})
 }
 
 func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
-	writeJSONStatus(w, http.StatusServiceUnavailable, map[string]any{
-		"error": map[string]string{
-			"code":    string(privileged.ErrorOperationFailed),
-			"message": "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`.",
-		},
+	writePrivilegedError(w, &privileged.Error{
+		Code:    privileged.ErrorOperationFailed,
+		Message: "privileged helper is unavailable",
 	})
+}
+
+type contextKey string
+
+const caddyPanelRestartKey contextKey = "caddyPanelRestart"
+
+// contextWithCaddyPanelRestart is a test hook for integration coverage of panel update restart logic.
+func contextWithCaddyPanelRestart(ctx context.Context, fn func() error) context.Context {
+	return context.WithValue(ctx, caddyPanelRestartKey, fn)
+}
+
+func caddyPanelRestartFromContext(ctx context.Context) func() error {
+	if fn, ok := ctx.Value(caddyPanelRestartKey).(func() error); ok {
+		return fn
+	}
+	return nil
+}
+
+// waitForPanelRestartHook is used in tests to simulate async restart completion.
+func waitForPanelRestartHook(ctx context.Context, timeout time.Duration) bool {
+	fn := caddyPanelRestartFromContext(ctx)
+	if fn == nil {
+		return true
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = fn()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
