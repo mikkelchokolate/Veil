@@ -130,7 +130,7 @@ func (s *managementState) handleOlcrtcRoom(w http.ResponseWriter, r *http.Reques
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/inbounds/")
-	if name == "" || strings.Contains(name, "/") {
+	if name == "" || strings.Contains(name, "/") || !inbounds.IsSafeName(name) {
 		writeNotFound(w)
 		return
 	}
@@ -201,7 +201,7 @@ func (s *managementState) handleProtocols(w http.ResponseWriter, r *http.Request
 func writeInboundManagementError(w http.ResponseWriter, err error) {
 	switch err {
 	case inbounds.ErrInboundInvalid:
-		writeError(w, "name, protocol, transport, and positive port are required", http.StatusBadRequest)
+		writeError(w, "name must contain only letters, digits, underscore, or hyphen; protocol, transport, and positive port are required", http.StatusBadRequest)
 	case inbounds.ErrInboundDuplicateName:
 		writeError(w, "inbound name already exists", http.StatusConflict)
 	case inbounds.ErrInboundDuplicateTransportPort:
