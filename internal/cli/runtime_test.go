@@ -98,3 +98,51 @@ func TestRuntimeInstallCommandOnlyFiltersByProtocolBeforeInstall(t *testing.T) {
 		t.Fatalf("--only mieru should not report other runtimes:\n%s", got)
 	}
 }
+
+func TestRuntimeInstallCommandUnknownOnlyReportsSelection(t *testing.T) {
+	old := runtimeInstallFunc
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) []runtimeinstall.Result {
+		if !reflect.DeepEqual(only, []string{"unknown"}) {
+			t.Fatalf("runtime installer received only = %v, want [unknown]", only)
+		}
+		return nil
+	}
+	t.Cleanup(func() { runtimeInstallFunc = old })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"runtime", "install", "--only", "unknown"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected unknown runtime selection to fail")
+	}
+	if !strings.Contains(err.Error(), "no matching runtimes for --only unknown") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRuntimeInstallCommandNoRuntimeResultsReportsPlatform(t *testing.T) {
+	old := runtimeInstallFunc
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) []runtimeinstall.Result {
+		if len(only) != 0 {
+			t.Fatalf("only = %v, want empty", only)
+		}
+		return nil
+	}
+	t.Cleanup(func() { runtimeInstallFunc = old })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"runtime", "install"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected empty runtime catalog to fail")
+	}
+	if !strings.Contains(err.Error(), "no protocol runtimes are available for this platform") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
