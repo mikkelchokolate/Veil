@@ -35,7 +35,7 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		BackupRoot:           state.backupDir,
 		UpdateRoot:           filepath.Join(stateRoot, "updates"),
 		ManagedUnits:         units,
-		ManagedUnitPrefixes:  []string{"veil-caddy@", "veil-hysteria2@", "veil-olcrtc@"},
+		ManagedUnitPrefixes:  catalog.LifecycleUnitPrefixes(),
 		UpdateArtifacts:      map[string]string{"veil-update": "veil-update.tar.gz"},
 		Artifacts:            map[string]privileged.ArtifactPath{},
 		FirewallRules:        map[string]struct{}{},
