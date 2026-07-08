@@ -109,7 +109,8 @@ func TestValidationDetectsInboundErrors(t *testing.T) {
 		"inbounds":[
 			{"name":"","protocol":"","transport":"","port":0,"enabled":true},
 			{"name":"a","protocol":"mieru","transport":"tcp","port":443,"enabled":true},
-			{"name":"b","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}
+			{"name":"b","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"bad.name","protocol":"mieru","transport":"tcp","port":8443,"enabled":true}
 		],
 		"routingRules":[],
 		"warp":{"enabled":false}
@@ -124,6 +125,7 @@ func TestValidationDetectsInboundErrors(t *testing.T) {
 		"inbounds[0].transport is required",
 		"inbounds[0].port must be 1-65535, got: 0",
 		"inbounds[2]: duplicate transport/port tcp:443",
+		"inbounds[3].name must contain only letters, digits, underscore, or hyphen",
 	}
 	for _, want := range expected {
 		if !containsError(result.Errors, want) {
