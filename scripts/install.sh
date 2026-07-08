@@ -263,7 +263,11 @@ curl -fsSL "${checksums_url}" -o "${checksums}"
   awk -v asset="${asset}" '$2 == asset { print }' checksums.txt | sha256sum -c -
 )
 
-tar -xzf "${archive}" -C "${tmpdir}"
+tar -xzf "${archive}" -C "${tmpdir}" veil
+if [[ ! -f "${tmpdir}/veil" || -L "${tmpdir}/veil" ]]; then
+  echo "Downloaded archive did not contain a regular veil binary" >&2
+  exit 1
+fi
 if [[ ! -x "${tmpdir}/veil" ]]; then
   chmod +x "${tmpdir}/veil"
 fi
