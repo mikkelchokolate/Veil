@@ -52,6 +52,10 @@ type Policy struct {
 	Artifacts            map[string]ArtifactPath
 	UpdateArtifacts      map[string]string
 	FirewallRules        map[string]struct{}
+	// AllowedArtifactNames restricts dynamically promoted artifact names to a
+	// known set. Static per-protocol artifacts and update artifacts are not
+	// constrained by this set. A nil or empty map means no extra restriction.
+	AllowedArtifactNames map[string]struct{}
 }
 
 type ResolvedArtifact struct {
@@ -169,7 +173,7 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 		seen[id] = struct{}{}
 		spec, ok := p.Artifacts[id]
 		if !ok {
-			spec, ok = managedArtifactPath(id)
+			spec, ok = p.managedArtifactPath(id)
 		}
 		if !ok {
 			return nil, newError(ErrorNotFound, "unknown artifact id")
@@ -193,7 +197,7 @@ var (
 	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
 )
 
-func managedArtifactPath(id string) (ArtifactPath, bool) {
+func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {
 	clean := filepath.ToSlash(filepath.Clean(id))
 	if clean != id || strings.Contains(clean, `\`) {
 		return ArtifactPath{}, false
@@ -201,13 +205,10 @@ func managedArtifactPath(id string) (ArtifactPath, bool) {
 	if clean == "sing-box/warp.json" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
-	if managedProtocolArtifactID(clean) {
-		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
-	}
-	return ArtifactPath{}, false
+	return managedProtocolArtifactID(clean, p.AllowedArtifactNames)
 }
 
-func managedProtocolArtifactID(clean string) bool {
+func managedProtocolArtifactID(clean string, allowedNames map[string]struct{}) (ArtifactPath, bool) {
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		cr, ok := protocols.AsConfigRenderer(plugin)
@@ -219,34 +220,42 @@ func managedProtocolArtifactID(clean string) bool {
 			continue
 		}
 		if clean == sub {
-			return true
+			return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 		}
-		if !protocolAllowsDynamicArtifact(plugin, sub, clean) {
-			continue
+		if ok, name := protocolAllowsDynamicArtifact(plugin, sub, clean, allowedNames); ok {
+			_ = name
+			return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 		}
-		return true
 	}
-	return false
+	return ArtifactPath{}, false
 }
 
-func protocolAllowsDynamicArtifact(plugin protocols.ProtocolPlugin, sub string, clean string) bool {
+func protocolAllowsDynamicArtifact(plugin protocols.ProtocolPlugin, sub string, clean string, allowedNames map[string]struct{}) (bool, string) {
 	if !protocolHasTemplateRuntime(plugin) {
-		return false
+		return false, ""
 	}
 	dir := filepath.ToSlash(filepath.Dir(sub))
 	if dir == "." || !strings.HasPrefix(clean, dir+"/") {
-		return false
+		return false, ""
 	}
 	rest := strings.TrimPrefix(clean, dir+"/")
 	if strings.Contains(rest, "/") {
-		return false
+		return false, ""
 	}
 	ext := filepath.Ext(filepath.Base(sub))
 	if ext == "" || !strings.HasSuffix(rest, ext) {
-		return false
+		return false, ""
 	}
 	name := strings.TrimSuffix(rest, ext)
-	return artifactNamePattern.MatchString(name)
+	if !artifactNamePattern.MatchString(name) {
+		return false, ""
+	}
+	if len(allowedNames) > 0 {
+		if _, ok := allowedNames[name]; !ok {
+			return false, ""
+		}
+	}
+	return true, name
 }
 
 func protocolHasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
@@ -311,7 +320,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	return resolved, nil
 }
 
-var ufwAllowRulePattern = regexp.MustCompile(`^(\d{1,5})/(tcp|udp)$`)
+var ufwAllowRulePattern = regexp.MustCompile(`^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])/(tcp|udp)$`)
 
 func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, error) {
 	if len(request.Rules) > 0 {
@@ -335,6 +344,22 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 	return ResolvedFirewall{RuleIDs: rules}, nil
 }
 
+func isUFWCommentClause(args []string, idx int) bool {
+	if idx >= len(args) {
+		return false
+	}
+	if args[idx] != "comment" {
+		return false
+	}
+	if idx != len(args)-2 {
+		return false
+	}
+	if len(args[idx+1]) == 0 {
+		return false
+	}
+	return true
+}
+
 func validateUFWRule(rule FirewallRule) error {
 	if rule.Command != "ufw" {
 		return fmt.Errorf("unsupported firewall command %q", rule.Command)
@@ -348,18 +373,17 @@ func validateUFWRule(rule FirewallRule) error {
 	if !ufwAllowRulePattern.MatchString(rule.Args[1]) {
 		return fmt.Errorf("invalid ufw allow target %q", rule.Args[1])
 	}
-	// Only allow an optional trailing "comment <free text>" clause.
 	for i, arg := range rule.Args[2:] {
 		if strings.ContainsAny(arg, ";|&$`\"'\\") {
 			return fmt.Errorf("disallowed character in firewall rule argument")
 		}
 		if arg == "comment" {
-			// comment must be followed by exactly one argument and be the penultimate token.
-			if i != len(rule.Args[2:])-2 {
+			if !isUFWCommentClause(rule.Args[2:], i) {
 				return fmt.Errorf("comment must be the final clause")
 			}
-			break
+			return nil
 		}
+		return fmt.Errorf("unsupported firewall argument %q", arg)
 	}
 	return nil
 }

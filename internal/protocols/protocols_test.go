@@ -82,8 +82,7 @@ type mockValidator struct {
 	needsDomain      func(model.Settings, model.Inbound) bool
 	hasCredential    func(model.Settings, model.Inbound) bool
 }
-
-func (m *mockValidator) ValidateSettings(settings model.Settings) error {
+func (m *mockValidator) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
 	if m.validateSettings != nil {
 		return m.validateSettings(settings)
 	}
@@ -892,7 +891,7 @@ func TestInstallAllRuntimesForSkipsPluginsWithoutRuntimeProvider(t *testing.T) {
 		},
 	}
 
-	results := installAllRuntimesFor(ctx, opts, r)
+	results := installRuntimesFor(ctx, opts, r, nil)
 	// The registry contributes "demo"; WARP is always appended from the catalog.
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results (plain plugin skipped, warp included), got %d", len(results))

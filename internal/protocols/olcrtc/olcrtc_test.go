@@ -292,7 +292,7 @@ func TestValidator(t *testing.T) {
 	settings := model.Settings{}
 	inbound := model.Inbound{}
 
-	if err := p.ValidateSettings(settings); err != nil {
+	if err := p.ValidateSettings(settings, inbound); err != nil {
 		t.Errorf("ValidateSettings returned error: %v", err)
 	}
 	if issues := p.ValidateInbound(settings, inbound); len(issues) != 0 {

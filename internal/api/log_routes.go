@@ -70,10 +70,6 @@ func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {
 				return candidate.Unit, true
 			}
 		}
-		policy := service.NewCommandPolicy(catalog)
-		if strings.HasSuffix(unit, ".service") && policy.AllowsHealth(unit) {
-			return unit, true
-		}
 	}
 	return "", false
 }
@@ -81,11 +77,7 @@ func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {
 func (routes LogRoutes) logUnitCatalogs() []ManagedRuntimeCatalog {
 	catalogs := []ManagedRuntimeCatalog{}
 	if routes.State != nil {
-		routes.State.mu.Lock()
-		inbounds := append([]Inbound(nil), routes.State.inbounds...)
-		warp := routes.State.warp
-		routes.State.mu.Unlock()
-		catalogs = append(catalogs, NewManagedRuntimeCatalogFor(inbounds, warp))
+		catalogs = append(catalogs, NewVisibleManagedRuntimeCatalogForState(routes.State))
 	}
 	catalogs = append(catalogs, NewManagedRuntimeCatalog())
 	return catalogs

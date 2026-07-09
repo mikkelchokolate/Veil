@@ -8,22 +8,11 @@ import (
 
 // RuntimeDescriptors returns the single aggregated mieru unit.
 func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.ManagedRuntime {
-	for _, inbound := range enabledInbounds {
-		if inbound.Protocol == p.Protocol() {
-			return []service.ManagedRuntime{{
-				Name:             "mieru",
-				ActionName:       "mieru",
-				Protocol:         p.Protocol(),
-				Unit:             "veil-mieru.service",
-				PromotedSubpath:  "mieru/server_config.json",
-				PromotedVerb:     "restart",
-				ManualRestart:    true,
-				HealthCheckAfter: true,
-			}}
-		}
-	}
 	// Always expose the aggregated unit so capability metadata and empty-state
-	// runtime catalogs can discover it.
+	// runtime catalogs can discover it. Mieru configs aggregate all enabled
+	// inbounds into a single server_config.json, so there is no per-inbound
+	// branch.
+	_ = enabledInbounds
 	return []service.ManagedRuntime{{
 		Name:             "mieru",
 		ActionName:       "mieru",

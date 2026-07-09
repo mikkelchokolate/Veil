@@ -75,7 +75,7 @@ func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 			name: "capability ValidateSettings error",
 			input: Input{
 				Inbounds:     []model.Inbound{{Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}},
-				Capabilities: []ProtocolCapability{{Protocol: "mieru", ValidateSettings: func(model.Settings) error { return errors.New("settings invalid") }}},
+				Capabilities: []ProtocolCapability{{Protocol: "mieru", ValidateSettings: func(model.Settings, model.Inbound) error { return errors.New("settings invalid") }}},
 			},
 			wantErr:   []string{"settings invalid"},
 			wantValid: false,

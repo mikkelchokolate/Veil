@@ -100,10 +100,10 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("apply plan should not target fallback configs for enabled inbounds: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "restart veil-caddy@naive.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
+	if !containsString(response.Actions, "reload veil-caddy@naive.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
-	if containsString(response.Actions, "restart veil-caddy@.service") || containsString(response.Actions, "restart veil-hysteria2@.service") {
+	if containsString(response.Actions, "reload veil-caddy@.service") || containsString(response.Actions, "restart veil-hysteria2@.service") {
 		t.Fatalf("apply plan should not target template units as active actions: %+v", response.Actions)
 	}
 }

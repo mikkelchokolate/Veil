@@ -167,6 +167,39 @@ func liveConfigOrphanDirs() []liveConfigOrphanDir {
 		seen[d] = true
 		dirs = append(dirs, d)
 	}
+	// Aggregate protocols (e.g. mieru) generate a single config file.
+	// Their directories must also be scanned so that the config file becomes
+	// orphaned and removed when the protocol is disabled or no longer inbounds.
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
+		}
+		if hasTemplateRuntime(plugin) {
+			continue
+		}
+		if _, ok := protocols.AsRuntimeProvider(plugin); !ok {
+			continue
+		}
+		sub := filepath.ToSlash(cr.ArtifactSpec().Subpath)
+		if sub == "" {
+			continue
+		}
+		dir := filepath.ToSlash(filepath.Dir(sub))
+		ext := filepath.Ext(filepath.Base(sub))
+		if dir == "." || ext == "" {
+			continue
+		}
+		// For aggregate protocols the main config file itself is eligible for
+		// cleanup when it is no longer in the active promotion set, so no
+		// exclude file is set.
+		d := liveConfigOrphanDir{subpath: dir, ext: ext}
+		if seen[d] {
+			continue
+		}
+		seen[d] = true
+		dirs = append(dirs, d)
+	}
 	sort.SliceStable(dirs, func(i, j int) bool {
 		if dirs[i].subpath == dirs[j].subpath {
 			return dirs[i].ext < dirs[j].ext
@@ -368,7 +401,7 @@ func (p LiveConfigPromotion) Rollback(records []livePromotionRecord, liveFiles [
 	sort.Strings(rollbackFiles)
 	rollbackActions := []ServiceActionResult{}
 	if len(rollbackFiles) > 0 && p.reload != nil {
-		rollbackActions = p.reload(liveFiles)
+		rollbackActions = p.reload(rollbackFiles)
 	}
 	return rollbackFiles, rollbackActions
 }

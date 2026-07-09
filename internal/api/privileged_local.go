@@ -21,6 +21,9 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	// the corresponding feature off. Instance units are covered by prefixes below.
 	units[renderer.UnitWarp] = struct{}{}
 	units[renderer.UnitMieru] = struct{}{}
+
+	allowedArtifactNames := allowedArtifactNamesFromState(state)
+
 	stateRoot := filepath.Dir(state.statePath)
 	if state.statePath == "" {
 		stateRoot = filepath.Join(state.applyRoot, "state")
@@ -39,6 +42,7 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		UpdateArtifacts:      map[string]string{"veil-update": "veil-update.tar.gz"},
 		Artifacts:            map[string]privileged.ArtifactPath{},
 		FirewallRules:        map[string]struct{}{},
+		AllowedArtifactNames: allowedArtifactNames,
 	}
 	production := privileged.NewProductionExecutor(privileged.ProductionConfig{
 		PromotionBackupRoot:  filepath.Join(state.applyRoot, "backups"),
@@ -95,4 +99,26 @@ func managedRuntimeByActionName(state *managementState, name string) (ManagedRun
 		}
 	}
 	return ManagedRuntime{}, false
+}
+
+
+func allowedArtifactNamesFromState(state *managementState) map[string]struct{} {
+	names := map[string]struct{}{}
+	if state == nil {
+		return names
+	}
+	state.mu.Lock()
+	settings := state.settings
+	inbounds := append([]Inbound(nil), state.inbounds...)
+	state.mu.Unlock()
+
+	for _, inbound := range inbounds {
+		if inbound.Name != "" {
+			names[inbound.Name] = struct{}{}
+		}
+	}
+	if settings.PanelAccess == "caddy" {
+		names["panel"] = struct{}{}
+	}
+	return names
 }

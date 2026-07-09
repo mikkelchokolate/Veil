@@ -38,7 +38,7 @@ type mockValidatorPlugin struct {
 	mockProtocolPlugin
 }
 
-func (mockValidatorPlugin) ValidateSettings(model.Settings) error { return nil }
+func (mockValidatorPlugin) ValidateSettings(model.Settings, model.Inbound) error { return nil }
 func (mockValidatorPlugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationIssue {
 	return nil
 }
