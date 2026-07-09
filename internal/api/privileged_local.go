@@ -101,7 +101,6 @@ func managedRuntimeByActionName(state *managementState, name string) (ManagedRun
 	return ManagedRuntime{}, false
 }
 
-
 func allowedArtifactNamesFromState(state *managementState) map[string]struct{} {
 	names := map[string]struct{}{}
 	if state == nil {
