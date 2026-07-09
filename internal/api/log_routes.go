@@ -81,7 +81,11 @@ func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {
 func (routes LogRoutes) logUnitCatalogs() []ManagedRuntimeCatalog {
 	catalogs := []ManagedRuntimeCatalog{}
 	if routes.State != nil {
-		catalogs = append(catalogs, NewManagedRuntimeCatalogFor(routes.State.inbounds, routes.State.warp))
+		routes.State.mu.Lock()
+		inbounds := append([]Inbound(nil), routes.State.inbounds...)
+		warp := routes.State.warp
+		routes.State.mu.Unlock()
+		catalogs = append(catalogs, NewManagedRuntimeCatalogFor(inbounds, warp))
 	}
 	catalogs = append(catalogs, NewManagedRuntimeCatalog())
 	return catalogs
