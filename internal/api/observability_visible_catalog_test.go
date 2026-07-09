@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -69,6 +70,31 @@ func TestPanelHTMLUsesActiveStateServiceSlots(t *testing.T) {
 	}
 	if strings.Contains(html, `data-veil-restart-service="hysteria2"`) || strings.Contains(html, `data-veil-restart-service="sing-box"`) {
 		t.Fatalf("panel HTML leaked broad fallback service slots")
+	}
+}
+
+func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
+	client := &recordingPrivilegedClient{}
+	state := newObservabilityTestState(t, client)
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+
+	ok := httptest.NewRecorder()
+	state.handleServiceActionRoute(ok, httptest.NewRequest(http.MethodPost, "/api/services/hysteria2-edge/restart", strings.NewReader(`{"confirm":true}`)))
+	if ok.Code != http.StatusOK {
+		t.Fatalf("active restart status=%d body=%s", ok.Code, ok.Body.String())
+	}
+	want := []privileged.ServiceActionRequest{{Unit: "veil-hysteria2@edge.service", Action: privileged.ServiceAction("restart")}}
+	if !reflect.DeepEqual(client.serviceActions, want) {
+		t.Fatalf("service actions=%+v", client.serviceActions)
+	}
+
+	blocked := httptest.NewRecorder()
+	state.handleServiceActionRoute(blocked, httptest.NewRequest(http.MethodPost, "/api/services/hysteria2/restart", strings.NewReader(`{"confirm":true}`)))
+	if blocked.Code != http.StatusBadRequest {
+		t.Fatalf("broad fallback restart status=%d body=%s", blocked.Code, blocked.Body.String())
+	}
+	if !reflect.DeepEqual(client.serviceActions, want) {
+		t.Fatalf("broad fallback restart should not call privileged helper, got %+v", client.serviceActions)
 	}
 }
 
