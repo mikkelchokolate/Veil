@@ -88,8 +88,8 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	return privileged.NewLocalAdapter(policy, production)
 }
 
-func managedRuntimeByActionName(name string) (ManagedRuntime, bool) {
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+func managedRuntimeByActionName(state *managementState, name string) (ManagedRuntime, bool) {
+	for _, runtime := range NewVisibleManagedRuntimeCatalogForState(state).Runtimes() {
 		if runtime.ActionName == name {
 			return runtime, true
 		}
