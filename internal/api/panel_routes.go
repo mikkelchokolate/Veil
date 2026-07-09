@@ -178,8 +178,6 @@ func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
 	})
 }
 
-type contextKey string
-
 const caddyPanelRestartKey contextKey = "caddyPanelRestart"
 
 // contextWithCaddyPanelRestart is a test hook for integration coverage of panel update restart logic.
