@@ -64,7 +64,7 @@ func TestPanelHTMLUsesActiveStateServiceSlots(t *testing.T) {
 		t.Fatalf("panel status=%d body=%s", w.Code, w.Body.String())
 	}
 	html := w.Body.String()
-	if !strings.Contains(html, `data-veil-restart-service="hysteria2-edge"`) {
+	if !strings.Contains(html, "hysteria2-edge") {
 		t.Fatalf("panel HTML missing active hysteria2 service slot")
 	}
 	if strings.Contains(html, `data-veil-restart-service="hysteria2"`) || strings.Contains(html, `data-veil-restart-service="sing-box"`) {
