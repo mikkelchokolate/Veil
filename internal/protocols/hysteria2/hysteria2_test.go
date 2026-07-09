@@ -319,12 +319,8 @@ func TestArtifactSpec(t *testing.T) {
 	if spec.ValidationName != "hysteria2" {
 		t.Errorf("ValidationName = %q, want hysteria2", spec.ValidationName)
 	}
-	if spec.ValidationCommand == nil {
-		t.Fatal("ValidationCommand is nil")
-	}
-	wantCmd := []string{"hysteria", "server", "--config", "/tmp/test.yaml", "--check"}
-	if got := spec.ValidationCommand("/tmp/test.yaml"); len(got) != len(wantCmd) {
-		t.Errorf("ValidationCommand() = %v, want %v", got, wantCmd)
+	if spec.ValidationCommand != nil {
+		t.Errorf("ValidationCommand is set, want nil because hysteria has no standalone config checker")
 	}
 }
 

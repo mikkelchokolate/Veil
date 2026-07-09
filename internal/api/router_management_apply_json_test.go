@@ -256,7 +256,6 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{
 			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")}, Valid: true},
-			{Name: "hysteria2", Config: filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), Command: []string{"hysteria", "server", "--config", filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml"), "--check"}, Valid: true},
 		}
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
@@ -271,10 +270,10 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Validations) != 2 {
-		t.Fatalf("expected two validation results: %+v", response.Validations)
+	if len(response.Validations) != 1 {
+		t.Fatalf("expected one validation result: %+v", response.Validations)
 	}
-	if response.Validations[0].Name != "caddy" || !containsString(response.Validations[0].Command, "validate") || response.Validations[1].Name != "hysteria2" || !containsString(response.Validations[1].Command, "--check") {
+	if response.Validations[0].Name != "caddy" || !containsString(response.Validations[0].Command, "validate") {
 		t.Fatalf("unexpected fixed validation commands: %+v", response.Validations)
 	}
 }

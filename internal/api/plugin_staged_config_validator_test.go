@@ -51,15 +51,8 @@ func TestPluginValidationSpecIgnoresUnknownGeneratedPath(t *testing.T) {
 }
 
 func TestPluginValidationSpecUsesHysteriaPluginCommand(t *testing.T) {
-	spec, ok := pluginValidationSpec("/etc/veil/generated/hysteria2/demo.yaml")
-	if !ok {
-		t.Fatal("expected hysteria2 plugin validation spec")
-	}
-	if spec.Name != "hysteria2" || len(spec.Command) == 0 || spec.Command[0] != "hysteria" {
-		t.Fatalf("unexpected hysteria2 validation spec: %+v", spec)
-	}
-	if spec.Config != "/etc/veil/generated/hysteria2/demo.yaml" {
-		t.Fatalf("config path = %q", spec.Config)
+	if _, ok := pluginValidationSpec("/etc/veil/generated/hysteria2/demo.yaml"); ok {
+		t.Fatal("hysteria2 should have no plugin validation spec; it has no standalone config checker")
 	}
 }
 

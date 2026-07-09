@@ -34,9 +34,6 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 	return generatedconfig.ArtifactSpec{
 		Subpath:        generatedconfig.Hysteria2ConfigSubpath,
 		ValidationName: "hysteria2",
-		ValidationCommand: func(path string) []string {
-			return []string{"hysteria", "server", "--config", path, "--check"}
-		},
 	}
 }
 
