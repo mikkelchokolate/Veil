@@ -164,49 +164,40 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	if err := routes.State.privileged.RestartPanel(r.Context()); err != nil {
+	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
+		ArtifactID: "veil-update",
+		Version:    version,
+	})
+	if err != nil {
 		writePrivilegedError(w, err)
 		return
 	}
-	writeJSON(w, map[string]string{"version": version, "status": "staged"})
-}
+	if !result.Installed {
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
+		})
+		return
+	}
 
-func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
-	writePrivilegedError(w, &privileged.Error{
-		Code:    privileged.ErrorOperationFailed,
-		Message: "privileged helper is unavailable",
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_ = routes.State.privileged.RestartPanel(context.Background())
+	}()
+
+	writeJSON(w, map[string]any{
+		"success":   true,
+		"staged":    result.Staged,
+		"installed": result.Installed,
+		"version":   result.Version,
+		"message":   "Update staged successfully. Restarting panel service...",
 	})
 }
 
-const caddyPanelRestartKey contextKey = "caddyPanelRestart"
-
-// contextWithCaddyPanelRestart is a test hook for integration coverage of panel update restart logic.
-func contextWithCaddyPanelRestart(ctx context.Context, fn func() error) context.Context {
-	return context.WithValue(ctx, caddyPanelRestartKey, fn)
-}
-
-func caddyPanelRestartFromContext(ctx context.Context) func() error {
-	if fn, ok := ctx.Value(caddyPanelRestartKey).(func() error); ok {
-		return fn
-	}
-	return nil
-}
-
-// waitForPanelRestartHook is used in tests to simulate async restart completion.
-func waitForPanelRestartHook(ctx context.Context, timeout time.Duration) bool {
-	fn := caddyPanelRestartFromContext(ctx)
-	if fn == nil {
-		return true
-	}
-	done := make(chan struct{})
-	go func() {
-		_ = fn()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
+func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
+	writeJSONStatus(w, http.StatusServiceUnavailable, map[string]any{
+		"error": map[string]string{
+			"code":    string(privileged.ErrorOperationFailed),
+			"message": "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`.",
+		},
+	})
 }
