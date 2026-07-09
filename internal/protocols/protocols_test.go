@@ -82,6 +82,7 @@ type mockValidator struct {
 	needsDomain      func(model.Settings, model.Inbound) bool
 	hasCredential    func(model.Settings, model.Inbound) bool
 }
+
 func (m *mockValidator) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
 	if m.validateSettings != nil {
 		return m.validateSettings(settings)

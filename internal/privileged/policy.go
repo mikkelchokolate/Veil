@@ -373,17 +373,17 @@ func validateUFWRule(rule FirewallRule) error {
 	if !ufwAllowRulePattern.MatchString(rule.Args[1]) {
 		return fmt.Errorf("invalid ufw allow target %q", rule.Args[1])
 	}
-	for i, arg := range rule.Args[2:] {
+	if len(rule.Args) > 2 {
+		arg := rule.Args[2]
 		if strings.ContainsAny(arg, ";|&$`\"'\\") {
 			return fmt.Errorf("disallowed character in firewall rule argument")
 		}
-		if arg == "comment" {
-			if !isUFWCommentClause(rule.Args[2:], i) {
-				return fmt.Errorf("comment must be the final clause")
-			}
-			return nil
+		if arg != "comment" {
+			return fmt.Errorf("unsupported firewall argument %q", arg)
 		}
-		return fmt.Errorf("unsupported firewall argument %q", arg)
+		if !isUFWCommentClause(rule.Args[2:], 0) {
+			return fmt.Errorf("comment must be the final clause")
+		}
 	}
 	return nil
 }
