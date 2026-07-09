@@ -22,7 +22,7 @@ type ProtocolCapability struct {
 	ConfigForInbound       func(model.Inbound) string
 	Action                 string
 	ActionForInbound       func(model.Inbound) string
-	ValidateSettings       func(model.Settings) error
+	ValidateSettings       func(model.Settings, model.Inbound) error
 	ValidateInboundRender  bool
 	RequiresRenderSettings bool
 }
@@ -79,7 +79,7 @@ func Build(input Input) model.ApplyPlanResponse {
 			continue
 		}
 		if capability.ValidateSettings != nil {
-			if err := capability.ValidateSettings(input.Settings); err != nil {
+			if err := capability.ValidateSettings(input.Settings, inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
 		}

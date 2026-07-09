@@ -12,7 +12,7 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		requiresRenderSettings bool
 		settingsError          bool
 	}{
-		{"naiveproxy", "/etc/veil/generated/caddy/panel.Caddyfile", "restart veil-caddy@.service", true, true, true},
+		{"naiveproxy", "/etc/veil/generated/caddy/panel.Caddyfile", "reload veil-caddy@.service", true, false, true},
 		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
 		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
 	}
@@ -24,7 +24,7 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		if capability.Config != tc.config || capability.Action != tc.action || capability.ValidateInboundRender != tc.validateRender || capability.RequiresRenderSettings != tc.requiresRenderSettings {
 			t.Fatalf("capability for %s = %+v", tc.protocol, capability)
 		}
-		err := capability.ValidateSettings(Settings{})
+		err := capability.ValidateSettings(Settings{}, Inbound{})
 		if tc.settingsError && err == nil {
 			t.Fatalf("expected settings error for %s", tc.protocol)
 		}

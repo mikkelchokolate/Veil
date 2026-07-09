@@ -457,7 +457,7 @@ func TestRenderConfigErrorInvalidPort(t *testing.T) {
 	}
 }
 
-func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
+func TestRenderConfigInvalidPanelListenErrors(t *testing.T) {
 	p := New()
 	settings := model.Settings{
 		Domain:      "example.com",
@@ -482,13 +482,12 @@ func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
 		Inbounds: []model.Inbound{inbound},
 	}
 
-	artifacts, _, err := p.RenderConfig(input)
-	if err != nil {
-		t.Fatalf("RenderConfig error: %v", err)
+	_, _, err := p.RenderConfig(input)
+	if err == nil {
+		t.Fatalf("expected error for invalid panelListen with caddy panel access, got nil")
 	}
-	// panelCaddyRoute errors are intentionally swallowed by renderNaive.
-	if strings.Contains(artifacts[0].Body, "handle /panel") {
-		t.Errorf("body unexpectedly contains panel route with invalid panelListen:\n%s", artifacts[0].Body)
+	if !strings.Contains(err.Error(), "panelListen must be host:port") {
+		t.Fatalf("expected panelListen error, got: %v", err)
 	}
 }
 
@@ -553,7 +552,7 @@ func TestRuntimeDescriptorsNoMatchingInbounds(t *testing.T) {
 		Unit:             "veil-caddy@panel.service",
 		TemplateUnit:     templateUnit,
 		PromotedSubpath:  "caddy/panel.Caddyfile",
-		PromotedVerb:     "restart",
+		PromotedVerb:     "reload",
 		ManualRestart:    true,
 		HealthCheckAfter: true,
 	}
@@ -586,8 +585,12 @@ func TestValidateSettings(t *testing.T) {
 			"naivePassword": "p",
 		},
 	}
-	if err := p.ValidateSettings(valid); err != nil {
+	if err := p.ValidateSettings(valid, model.Inbound{}); err != nil {
 		t.Errorf("ValidateSettings(valid) = %v, want nil", err)
+	}
+
+	if err := p.ValidateSettings(valid, model.Inbound{NaiveUsername: "u", NaivePassword: "p"}); err != nil {
+		t.Errorf("ValidateSettings with inbound credentials = %v, want nil", err)
 	}
 
 	cases := []struct {
@@ -604,11 +607,11 @@ func TestValidateSettings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := valid
 			tc.mod(&s)
-			err := p.ValidateSettings(s)
+			err := p.ValidateSettings(s, model.Inbound{})
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if !strings.Contains(err.Error(), "domain, email, naive username, and naive password") {
+			if !strings.Contains(err.Error(), "naive") {
 				t.Errorf("error message = %q, want required-fields message", err.Error())
 			}
 		})
@@ -617,9 +620,29 @@ func TestValidateSettings(t *testing.T) {
 
 func TestValidateInbound(t *testing.T) {
 	p := New()
-	issues := p.ValidateInbound(model.Settings{}, model.Inbound{})
-	if len(issues) != 0 {
-		t.Errorf("ValidateInbound = %v, want empty", issues)
+	settings := model.Settings{}
+
+	issues := p.ValidateInbound(settings, model.Inbound{})
+	if len(issues) != 1 {
+		t.Fatalf("ValidateInbound empty = %v, want 1 issue", issues)
+	}
+	if issues[0].Code != "naive_credential_required" {
+		t.Errorf("issue code = %q, want naive_credential_required", issues[0].Code)
+	}
+
+	noIssues := p.ValidateInbound(settings, model.Inbound{NaiveUsername: "u", NaivePassword: "p"})
+	if len(noIssues) != 0 {
+		t.Errorf("ValidateInbound with credentials = %v, want empty", noIssues)
+	}
+
+	fallbackIssues := p.ValidateInbound(settings, model.Inbound{})
+	if len(fallbackIssues) != 1 {
+		t.Errorf("ValidateInbound without fallback = %v, want 1 issue", fallbackIssues)
+	}
+
+	fallbackOk := p.ValidateInbound(model.Settings{NaiveUsername: "u", NaivePassword: "p"}, model.Inbound{})
+	if len(fallbackOk) != 0 {
+		t.Errorf("ValidateInbound with fallback settings = %v, want empty", fallbackOk)
 	}
 }
 

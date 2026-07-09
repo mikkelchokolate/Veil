@@ -25,7 +25,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 			Unit:             "veil-caddy@" + inbound.Name + ".service",
 			TemplateUnit:     templateUnit,
 			PromotedSubpath:  "caddy/" + inbound.Name + ".Caddyfile",
-			PromotedVerb:     "restart",
+			PromotedVerb:     "reload",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})
@@ -39,7 +39,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 			Unit:             "veil-caddy@panel.service",
 			TemplateUnit:     templateUnit,
 			PromotedSubpath:  "caddy/panel.Caddyfile",
-			PromotedVerb:     "restart",
+			PromotedVerb:     "reload",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})

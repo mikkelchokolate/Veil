@@ -270,7 +270,7 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		{"caddy/sub/dir.Caddyfile", false},
 	}
 	for _, tc := range tests {
-		_, ok := managedArtifactPath(tc.id)
+		_, ok := Policy{}.managedArtifactPath(tc.id)
 		if ok != tc.allowed {
 			t.Errorf("managedArtifactPath(%q) got %v, want %v", tc.id, ok, tc.allowed)
 		}
@@ -333,6 +333,14 @@ func TestPolicyResolveFirewall(t *testing.T) {
 	if len(resolved.Rules) != 1 {
 		t.Fatalf("unexpected rules: %+v", resolved.Rules)
 	}
+	_, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "0/tcp", "comment", "bad"}}}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	_, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "99999/tcp", "comment", "bad"}}}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	_, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp", "foo", "bar"}}}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	_, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp", "; reboot"}}}})
+	assertOperationErrorCode(t, err, ErrorInvalidRequest)
 }
 
 func TestPolicyValidateUFWRule(t *testing.T) {
@@ -348,6 +356,9 @@ func TestPolicyValidateUFWRule(t *testing.T) {
 		{Command: "ufw", Args: []string{"allow", "443/tcp", "comment"}},
 		{Command: "ufw", Args: []string{"allow", "443/tcp", "; reboot"}},
 		{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "x", "extra"}},
+		{Command: "ufw", Args: []string{"allow", "0/tcp"}},
+		{Command: "ufw", Args: []string{"allow", "99999/tcp"}},
+		{Command: "ufw", Args: []string{"allow", "443/tcp", "foo", "bar"}},
 	}
 	for _, rule := range bad {
 		if err := validateUFWRule(rule); err == nil {

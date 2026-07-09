@@ -92,8 +92,10 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 		t.Fatalf("unexpected liveFiles: %+v", liveFiles)
 	}
 
-	if len(backupFiles) != 2 {
-		t.Fatalf("expected 2 backup files, got %+v", backupFiles)
+	// Three backups: orphan caddy, orphan hysteria2, and the aggregate mieru
+	// sidecar that is not a promoted artifact.
+	if len(backupFiles) != 3 {
+		t.Fatalf("expected 3 backup files, got %+v", backupFiles)
 	}
 
 	if _, err := os.Stat(orphanCaddy); !os.IsNotExist(err) {
@@ -102,26 +104,32 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 	if _, err := os.Stat(orphanHysteria2); !os.IsNotExist(err) {
 		t.Fatalf("orphan hysteria2 file should be removed, but stat got: %v", err)
 	}
+	// With aggregate protocol directories also scanned, the mieru sidecar
+	// file is not a promoted artifact and is treated as an orphan.
+	if _, err := os.Stat(aggregateOnlyMieruSidecar); !os.IsNotExist(err) {
+		t.Fatalf("aggregate-only mieru sidecar should be removed as orphan, but stat got: %v", err)
+	}
 	assertFileBody(t, nonOrphanCaddy, "non-orphan caddy")
-	assertFileBody(t, aggregateOnlyMieruSidecar, "do not scan aggregate-only dir")
 
 	rollbackFiles, _ := promotion.Rollback(records, liveFiles)
-	if len(rollbackFiles) != 3 {
-		t.Fatalf("expected 3 rollback files, got %+v", rollbackFiles)
+	if len(rollbackFiles) != 4 {
+		t.Fatalf("expected 4 rollback files, got %+v", rollbackFiles)
 	}
 
 	assertFileBody(t, orphanCaddy, "orphan caddy content")
 	assertFileBody(t, orphanHysteria2, "orphan hysteria2 content")
+	assertFileBody(t, aggregateOnlyMieruSidecar, "do not scan aggregate-only dir")
 	if _, err := os.Stat(liveMieru); !os.IsNotExist(err) {
 		t.Fatalf("new live file should be removed on rollback, stat got: %v", err)
 	}
 }
 
-func TestLiveConfigOrphanDirsComeFromTemplateProtocolPlugins(t *testing.T) {
+func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *testing.T) {
 	got := liveConfigOrphanDirs()
 	want := []liveConfigOrphanDir{
 		{subpath: "caddy", ext: ".Caddyfile", exclude: "panel.Caddyfile"},
 		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
+		{subpath: "mieru", ext: ".json"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
 	}
 	if len(got) != len(want) {

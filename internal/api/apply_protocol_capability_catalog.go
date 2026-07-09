@@ -1,6 +1,9 @@
 package api
 
-import "github.com/mikkelchokolate/Veil/internal/protocols"
+import (
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+)
 
 type ApplyProtocolCapability struct {
 	Protocol               string
@@ -34,7 +37,7 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 				if descs[0].TemplateUnit != "" {
 					unit = descs[0].TemplateUnit
 				}
-				cap.Action = "restart " + unit
+				cap.Action = descs[0].PromotedVerb + " " + unit
 			}
 		}
 		byProtocol[meta.Protocol] = cap
@@ -55,15 +58,11 @@ func (c ApplyProtocolCapabilityCatalog) All() []ApplyProtocolCapability {
 	return capabilities
 }
 
-func (c ApplyProtocolCapability) ValidateSettings(settings Settings) error {
-	return validateProtocolSettings(c.Protocol, settings)
+func (c ApplyProtocolCapability) ValidateSettings(settings Settings, inbound Inbound) error {
+	return validateProtocolSettings(c.Protocol, settings, inbound)
 }
 
-func (c ApplyProtocolCapability) ShouldValidateRender(renderSettingsAvailable bool) bool {
-	return c.ValidateInboundRender && (!c.RequiresRenderSettings || renderSettingsAvailable)
-}
-
-func validateProtocolSettings(protocol string, settings Settings) error {
+func validateProtocolSettings(protocol string, settings Settings, inbound Inbound) error {
 	p, ok := protocols.NewRegistry().Get(protocol)
 	if !ok {
 		return nil
@@ -72,5 +71,25 @@ func validateProtocolSettings(protocol string, settings Settings) error {
 	if !ok {
 		return nil
 	}
-	return validator.ValidateSettings(settings)
+	return validator.ValidateSettings(settings, inbound)
+}
+
+func (c ApplyProtocolCapability) ValidateInbound(settings Settings, inbound Inbound) []model.ValidationIssue {
+	return validateProtocolInbound(c.Protocol, settings, inbound)
+}
+
+func validateProtocolInbound(protocol string, settings Settings, inbound Inbound) []model.ValidationIssue {
+	p, ok := protocols.NewRegistry().Get(protocol)
+	if !ok {
+		return nil
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateInbound(settings, inbound)
+}
+
+func (c ApplyProtocolCapability) ShouldValidateRender(renderSettingsAvailable bool) bool {
+	return c.ValidateInboundRender && (!c.RequiresRenderSettings || renderSettingsAvailable)
 }

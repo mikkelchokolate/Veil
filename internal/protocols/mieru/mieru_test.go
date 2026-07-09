@@ -289,7 +289,7 @@ func TestRuntimeInstall(t *testing.T) {
 
 func TestValidateSettings(t *testing.T) {
 	p := New()
-	if err := p.ValidateSettings(model.Settings{}); err != nil {
+	if err := p.ValidateSettings(model.Settings{}, model.Inbound{}); err != nil {
 		t.Errorf("ValidateSettings error = %v, want nil", err)
 	}
 }

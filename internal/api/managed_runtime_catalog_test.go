@@ -48,7 +48,7 @@ func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T
 		{Name: "o", Protocol: "olcrtc", Enabled: true},
 	}, WarpConfig{Enabled: true})
 	for _, tc := range []struct{ key, action string }{
-		{"naiveproxy", "restart veil-caddy@n.service"},
+		{"naiveproxy", "reload veil-caddy@n.service"},
 		{"hysteria2", "restart veil-hysteria2@h.service"},
 		{"mieru", "restart veil-mieru.service"},
 		{"sing-box", "restart veil-warp.service"},
@@ -80,7 +80,7 @@ func TestManagedRuntimeCatalogBuildsPromotedCommandsFromLiveFiles(t *testing.T) 
 		filepath.Join(root, "live", "mieru", "server_config.json"),
 	})
 	want := [][]string{
-		{"systemctl", "restart", "veil-caddy@panel.service"},
+		{"systemctl", "reload", "veil-caddy@panel.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
 	}
 	if len(commands) != len(want) {
@@ -100,7 +100,7 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 		{Name: "o", Protocol: "olcrtc", Enabled: true},
 	}, WarpConfig{Enabled: true})
 	for _, command := range [][]string{
-		{"systemctl", "restart", "veil-caddy@panel.service"},
+		{"systemctl", "reload", "veil-caddy@panel.service"},
 		{"systemctl", "restart", "veil-hysteria2@h.service"},
 		{"systemctl", "restart", "veil-warp.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
@@ -109,6 +109,9 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 		if !catalog.AllowsPromotedAction(command) {
 			t.Fatalf("expected promoted command allowed: %+v", command)
 		}
+	}
+	if catalog.AllowsPromotedAction([]string{"systemctl", "restart", "veil-caddy@panel.service"}) {
+		t.Fatal("Caddy panel has reload semantics, restart should not be promoted")
 	}
 	if catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-mieru.service"}) {
 		t.Fatal("Mieru has no reload semantics in its managed unit")

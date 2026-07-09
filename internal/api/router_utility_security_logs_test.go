@@ -104,9 +104,14 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "restart naive",
-			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			name:    "reload caddy panel",
+			command: []string{"systemctl", "reload", "veil-caddy@panel.service"},
 			want:    true,
+		},
+		{
+			name:    "restart caddy panel disallowed",
+			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			want:    false,
 		},
 		{
 			name:    "restart hysteria2 template",

@@ -57,7 +57,7 @@ type RuntimeProvider interface {
 
 // Validator contributes protocol-specific validation issues.
 type Validator interface {
-	ValidateSettings(settings model.Settings) error
+	ValidateSettings(settings model.Settings, inbound model.Inbound) error
 	ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue
 	NeedsDomain(settings model.Settings, inbound model.Inbound) bool
 	HasCredential(settings model.Settings, inbound model.Inbound) bool

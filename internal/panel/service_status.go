@@ -11,17 +11,17 @@ const ServiceStatusActionsPlaceholder = "__VEIL_PANEL_SERVICE_STATUS_ACTIONS__"
 const ServiceRestartActionsPlaceholder = "__VEIL_PANEL_SERVICE_RESTART_ACTIONS__"
 
 func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
-	return `    <div class="card">
-      <h2>Service status</h2>
-      <p>Read live systemd state for Veil, NaiveProxy/Caddy, Hysteria2, Mieru, and WARP/sing-box through <code>/api/status</code>.</p>
-      <div class="actions">
-        <button id="load-service-status" type="button">Load service status</button>
-        <button id="toggle-auto-refresh" class="secondary" type="button">Auto-refresh: OFF</button>
-      </div>
-  <pre id="service-status-output" role="status" aria-live="polite">Not loaded</pre>
-      <div class="actions" id="service-restart-controls">
-` + ServiceRestartControlsHTML(runtimes) + `      </div>
-    </div>`
+	return "    \u003cdiv class=\"card\"\u003e\n" +
+		"      \u003ch2\u003eService status\u003c/h2\u003e\n" +
+		"      \u003cp\u003eRead live systemd state for managed services through \u003ccode\u003e/api/status\u003c/code\u003e.\u003c/p\u003e\n" +
+		"      \u003cdiv class=\"actions\"\u003e\n" +
+		"        \u003cbutton id=\"load-service-status\" type=\"button\"\u003eLoad service status\u003c/button\u003e\n" +
+		"        \u003cbutton id=\"toggle-auto-refresh\" class=\"secondary\" type=\"button\"\u003eAuto-refresh: OFF\u003c/button\u003e\n" +
+		"      \u003c/div\u003e\n" +
+		"  \u003cpre id=\"service-status-output\" role=\"status\" aria-live=\"polite\"\u003eNot loaded\u003c/pre\u003e\n" +
+		"      \u003cdiv class=\"actions\" id=\"service-restart-controls\"\u003e\n" +
+		ServiceRestartControlsHTML(runtimes) + "      \u003c/div\u003e\n" +
+		"    \u003c/div\u003e"
 }
 
 func ServiceStatusActionsJS() string {

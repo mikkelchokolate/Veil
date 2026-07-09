@@ -1000,7 +1000,6 @@ const panelHTMLBase = `<!doctype html>
     <div class="bg-image"></div>
   </div>
 
-  <!-- SidebarPERSISTENT -->
   <aside class="sidebar">
     <div class="logo">
       Veil Panel

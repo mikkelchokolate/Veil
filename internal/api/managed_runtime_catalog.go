@@ -127,7 +127,7 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 			Unit:             "veil-caddy@panel.service",
 			TemplateUnit:     renderer.UnitCaddy,
 			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
-			PromotedVerb:     "restart",
+			PromotedVerb:     "reload",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})

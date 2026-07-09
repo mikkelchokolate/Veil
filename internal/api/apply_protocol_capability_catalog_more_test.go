@@ -34,7 +34,7 @@ func TestApplyProtocolCapabilityShouldValidateRender(t *testing.T) {
 
 func TestApplyProtocolCapabilityValidateSettingsUsesProtocolValidator(t *testing.T) {
 	cap := ApplyProtocolCapability{Protocol: "naiveproxy"}
-	err := cap.ValidateSettings(Settings{})
+	err := cap.ValidateSettings(Settings{}, Inbound{})
 	if err == nil {
 		t.Fatal("expected naiveproxy settings validation error")
 	}
@@ -43,7 +43,7 @@ func TestApplyProtocolCapabilityValidateSettingsUsesProtocolValidator(t *testing
 	}
 
 	cap = ApplyProtocolCapability{Protocol: "hysteria2"}
-	if err := cap.ValidateSettings(Settings{}); err != nil {
+	if err := cap.ValidateSettings(Settings{}, Inbound{}); err != nil {
 		t.Fatalf("unexpected settings error: %v", err)
 	}
 }
