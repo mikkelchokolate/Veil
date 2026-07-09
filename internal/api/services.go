@@ -36,7 +36,7 @@ func (s *managementState) handleServiceActionRoute(w http.ResponseWriter, r *htt
 }
 
 func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Request, name, action string) {
-	runtime, ok := managedRuntimeByActionName(name)
+	runtime, ok := managedRuntimeByActionName(s, name)
 	if !ok || !runtime.ManualRestart {
 		writeError(w, "unknown service: "+name, http.StatusBadRequest)
 		return
