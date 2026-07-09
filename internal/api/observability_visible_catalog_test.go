@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func TestVisibleRuntimeCatalogUsesActiveStateScope(t *testing.T) {
-	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state := newObservabilityTestState(t, nil)
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 
 	catalog := NewVisibleManagedRuntimeCatalogForState(state)
@@ -29,7 +30,7 @@ func TestVisibleRuntimeCatalogUsesActiveStateScope(t *testing.T) {
 
 func TestStatusEndpointRequestsActiveStateUnits(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	state := newManagementState(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	state := newObservabilityTestState(t, client)
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 
 	routes := StatusRoutes{Info: ServerInfo{Version: "test", Mode: "dev"}, State: state}
@@ -52,7 +53,7 @@ func TestStatusEndpointRequestsActiveStateUnits(t *testing.T) {
 }
 
 func TestPanelHTMLUsesActiveStateServiceSlots(t *testing.T) {
-	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state := newObservabilityTestState(t, nil)
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 
 	w := httptest.NewRecorder()
@@ -63,17 +64,17 @@ func TestPanelHTMLUsesActiveStateServiceSlots(t *testing.T) {
 		t.Fatalf("panel status=%d body=%s", w.Code, w.Body.String())
 	}
 	html := w.Body.String()
-	if !strings.Contains(html, "/api/services/hysteria2-edge/restart") {
+	if !strings.Contains(html, `data-veil-restart-service="hysteria2-edge"`) {
 		t.Fatalf("panel HTML missing active hysteria2 service slot")
 	}
-	if strings.Contains(html, "/api/services/hysteria2/restart") || strings.Contains(html, "/api/services/sing-box/restart") {
+	if strings.Contains(html, `data-veil-restart-service="hysteria2"`) || strings.Contains(html, `data-veil-restart-service="sing-box"`) {
 		t.Fatalf("panel HTML leaked broad fallback service slots")
 	}
 }
 
 func TestLogsEndpointReturnsResolvedUnit(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	state := newManagementState(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	state := newObservabilityTestState(t, client)
 
 	routes := LogRoutes{State: state}
 	w := httptest.NewRecorder()
@@ -92,6 +93,22 @@ func TestLogsEndpointReturnsResolvedUnit(t *testing.T) {
 	if result["unit"] != "veil-caddy@panel.service" {
 		t.Fatalf("logs response should expose resolved unit, got %+v", result)
 	}
+}
+
+func newObservabilityTestState(t *testing.T, client *recordingPrivilegedClient) *managementState {
+	t.Helper()
+	dir := t.TempDir()
+	info := ServerInfo{
+		Version:   "test",
+		Mode:      "dev",
+		StatePath: filepath.Join(dir, "state.json"),
+		KeyPath:   filepath.Join(dir, "state.key"),
+		ApplyRoot: filepath.Join(dir, "apply"),
+	}
+	if client != nil {
+		info.Privileged = client
+	}
+	return newManagementState(info)
 }
 
 func runtimeUnits(catalog ManagedRuntimeCatalog) []string {
