@@ -18,6 +18,25 @@ func TestDiagnosticsCardsRenderToolControlsAndManagedLogUnits(t *testing.T) {
 	}
 }
 
+func TestManagedLogUnitOptionsEscapeRuntimeDerivedHTML(t *testing.T) {
+	runtimes := []service.ManagedRuntime{{
+		Name: `hysteria2-\"><img src=x onerror=alert(1)>`,
+		Unit: `veil-hysteria2@\"><svg onload=alert(1)>.service`,
+	}}
+	options := ManagedLogUnitOptionsHTML(runtimes)
+
+	for _, unsafe := range []string{`<img`, `<svg`, `onerror=`, `onload=`} {
+		if strings.Contains(options, unsafe) {
+			t.Fatalf("diagnostic runtime option contains unsafe fragment %q: %s", unsafe, options)
+		}
+	}
+	for _, want := range []string{`&lt;img`, `&lt;svg`, `&#34;&gt;`} {
+		if !strings.Contains(options, want) {
+			t.Fatalf("diagnostic runtime option missing escaped fragment %q: %s", want, options)
+		}
+	}
+}
+
 func TestDiagnosticsActionsRenderToolActions(t *testing.T) {
 	actions := DiagnosticsActionsJS()
 	for _, want := range []string{`run-speedtest`, `/api/tools/speedtest`, `load-logs`, `/api/logs?unit=`, `load-firewall`, `/api/firewall`, `run-dns-lookup`, `/api/tools/dns-lookup`, `run-ping`, `/api/tools/ping`} {
