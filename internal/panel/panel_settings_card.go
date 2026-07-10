@@ -3,19 +3,19 @@ package panel
 const panelSettingsCardPlaceholder = "__VEIL_PANEL_SETTINGS_CARD__"
 
 func panelSettingsCardHTML() string {
-	return `      <div class="card">
+	return `      <div class="card" id="settings-card">
         <h2>Settings</h2>
         <p>Panel/global settings endpoint: <code>/api/settings</code></p>
-        <p class="hint">Redacted proxy passwords are preserved by the API when saved back as [REDACTED].</p>
+        <p class="hint">Protocol settings are rendered from plugin schemas. Redacted passwords are preserved by the API when saved back as <code>[REDACTED]</code>.</p>
         <form id="settings-form">
           <div class="form-grid">
             <div>
               <label for="settings-panel-listen">Panel listen</label>
-              <input id="settings-panel-listen" autocomplete="off" placeholder="127.0.0.1:2096">
+              <input id="settings-panel-listen" required autocomplete="off" placeholder="127.0.0.1:2096">
             </div>
             <div>
               <label for="settings-mode">Mode</label>
-              <input id="settings-mode" autocomplete="off" placeholder="server">
+              <input id="settings-mode" required autocomplete="off" placeholder="server">
             </div>
             <div>
               <label for="settings-panel-access">Panel access</label>
@@ -37,44 +37,9 @@ func panelSettingsCardHTML() string {
               <label for="settings-email">Email</label>
               <input id="settings-email" type="email" autocomplete="off" placeholder="admin@example.com">
             </div>
-            <div>
-              <label for="settings-naive-username">Naive username</label>
-              <input id="settings-naive-username" autocomplete="off" placeholder="veil">
-            </div>
-            <div>
-              <label for="settings-naive-password">Naive password</label>
-              <input id="settings-naive-password" type="password" autocomplete="off" placeholder="NaiveProxy password">
-            </div>
-            <div>
-              <label for="settings-hysteria2-password">Hysteria2 password</label>
-              <input id="settings-hysteria2-password" type="password" autocomplete="off" placeholder="Hysteria2 password">
-            </div>
-            <div>
-              <label for="settings-hysteria2-insecure" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input id="settings-hysteria2-insecure" type="checkbox" style="width:auto">
-                Hysteria2 insecure mode (allow self-signed cert)
-              </label>
-            </div>
-            <div>
-              <label for="settings-masquerade-url">Masquerade URL</label>
-              <input id="settings-masquerade-url" autocomplete="off" placeholder="https://example.com">
-            </div>
-            <div>
-              <label for="settings-fallback-root">Fallback root</label>
-              <input id="settings-fallback-root" autocomplete="off" placeholder="/var/lib/veil/www">
-            </div>
-            <div>
-              <label for="settings-olcrtc-auth">olcRTC Auth Provider</label>
-              <input id="settings-olcrtc-auth" autocomplete="off" placeholder="jitsi">
-            </div>
-            <div>
-              <label for="settings-olcrtc-transport">olcRTC Transport</label>
-              <input id="settings-olcrtc-transport" autocomplete="off" placeholder="datachannel">
-            </div>
-            <div>
-              <label for="settings-olcrtc-room-id">olcRTC Room ID</label>
-              <input id="settings-olcrtc-room-id" autocomplete="off" placeholder="Room ID">
-            </div>
+          </div>
+          <div id="settings-protocol-fields" style="display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+            <p class="hint">Loading protocol settings…</p>
           </div>
           <div class="actions">
             <button id="save-settings" type="submit">Save settings</button>
