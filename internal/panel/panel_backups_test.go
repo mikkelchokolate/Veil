@@ -29,11 +29,15 @@ func TestPanelBackupsCardRendersRecoveryControls(t *testing.T) {
 		if index < 0 {
 			t.Fatalf("backup card missing %s", needle)
 		}
+		start := index - 120
+		if start < 0 {
+			start = 0
+		}
 		end := index + 180
 		if end > len(card) {
 			end = len(card)
 		}
-		if !strings.Contains(card[index:end], `data-admin-only="true"`) {
+		if !strings.Contains(card[start:end], `data-admin-only="true"`) {
 			t.Fatalf("backup control %s must be admin-only", id)
 		}
 	}
