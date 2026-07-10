@@ -9,7 +9,7 @@ func TestPanelReliabilityRuntimesAreMountedExactlyOnce(t *testing.T) {
 	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
 	for _, marker := range []string{
 		`let veilEditingInboundName = '';`,
-		`let inboundSaveInFlight = false;`,
+		`const veilBaseEnsureProtocolSchemas = ensureProtocolSchemas;`,
 		`loadJSON = async function(path, outputId, options)`,
 	} {
 		if count := strings.Count(html, marker); count != 1 {
@@ -22,6 +22,7 @@ func TestClientProfileModuleDoesNotInjectCrossCuttingRuntimes(t *testing.T) {
 	js := panelClientProfileActionsJS()
 	for _, unwanted := range []string{
 		`let veilEditingInboundName = '';`,
+		`const veilBaseEnsureProtocolSchemas = ensureProtocolSchemas;`,
 		`loadJSON = async function(path, outputId, options)`,
 		`panelRequestReliabilityJS`,
 	} {
