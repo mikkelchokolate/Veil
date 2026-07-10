@@ -1,5 +1,7 @@
 package panel
 
+import "github.com/mikkelchokolate/Veil/internal/protocols"
+
 func init() {
 	installTranslationCatalog(LocaleEnglish, map[string]string{
 		"common.actions":                                "Actions",
@@ -33,7 +35,6 @@ func init() {
 		"placeholder.ipAddress":                         "8.8.8.8",
 		"placeholder.userPassword":                      "Password",
 		"placeholder.keepPassword":                      "Leave blank to keep current",
-		"dashboard.managementSummary":                   "NaiveProxy, Hysteria2, olcRTC, and Mieru management",
 		"dashboard.systemOnline":                        "System Online",
 		"dashboard.coreUptime":                          "Core Uptime",
 		"dashboard.monitoringSummary":                   "Continuous service orchestration and connection monitoring",
@@ -196,7 +197,6 @@ func init() {
 		"validation.credential_required.remediation":    "Set an inbound credential or enable a client profile with credentials.",
 		"inbounds.title":                                "Inbounds",
 		"inbounds.summaryStart":                         "Create, update, or delete",
-		"inbounds.summary":                              "Create, update, or delete NaiveProxy, Hysteria2, olcRTC, and Mieru inbound definitions through",
 		"inbounds.add":                                  "Add Inbound",
 		"inbounds.editTitle":                            "Edit Inbound: {name}",
 		"inbounds.nameRequired":                         "Inbound name is required",
@@ -241,7 +241,6 @@ func init() {
 		"confirm.deleteRoutingRule":                     "Delete routing rule {name}?",
 		"clientLinks.title":                             "Client links",
 		"clientLinks.generateCurrent":                   "Generate current",
-		"clientLinks.summary":                           "Generate current NaiveProxy, Hysteria2, olcRTC, and Mieru client connection URIs/client config artifacts from saved settings and enabled inbounds through",
 		"clientLinks.load":                              "Load client links",
 		"clientLinks.openExport":                        "Open QR/export modal",
 		"clientLinks.loadBase64":                        "Load base64 subscription",
@@ -379,7 +378,6 @@ func init() {
 		"placeholder.ipAddress":                         "8.8.8.8",
 		"placeholder.userPassword":                      "Пароль",
 		"placeholder.keepPassword":                      "Оставьте пустым, чтобы сохранить текущий",
-		"dashboard.managementSummary":                   "Управление NaiveProxy, Hysteria2, olcRTC и Mieru",
 		"dashboard.systemOnline":                        "Система в сети",
 		"dashboard.coreUptime":                          "Время работы",
 		"dashboard.monitoringSummary":                   "Непрерывное управление сервисами и наблюдение за подключениями",
@@ -542,7 +540,6 @@ func init() {
 		"validation.credential_required.remediation":    "Укажите учётные данные подключения или включите профиль клиента с учётными данными.",
 		"inbounds.title":                                "Входящие подключения",
 		"inbounds.summaryStart":                         "Создание, обновление и удаление",
-		"inbounds.summary":                              "Создание, обновление и удаление подключений NaiveProxy, Hysteria2, olcRTC и Mieru через",
 		"inbounds.add":                                  "Добавить подключение",
 		"inbounds.editTitle":                            "Изменение подключения: {name}",
 		"inbounds.nameRequired":                         "Укажите имя подключения",
@@ -587,7 +584,6 @@ func init() {
 		"confirm.deleteRoutingRule":                     "Удалить правило маршрутизации {name}?",
 		"clientLinks.title":                             "Ссылки клиентов",
 		"clientLinks.generateCurrent":                   "Создать текущие",
-		"clientLinks.summary":                           "Создание URI и клиентских конфигураций NaiveProxy, Hysteria2, olcRTC и Mieru из сохранённых настроек и включённых подключений через",
 		"clientLinks.load":                              "Загрузить ссылки клиентов",
 		"clientLinks.openExport":                        "Открыть QR и экспорт",
 		"clientLinks.loadBase64":                        "Загрузить подписку base64",
@@ -692,6 +688,48 @@ func init() {
 		"warp.load":                                     "Загрузить WARP",
 		"warp.save":                                     "Сохранить конфигурацию WARP",
 	})
+
+	catalog := protocols.NewCatalog()
+	enList := catalog.DisplayNameList()
+	names := make([]string, 0, len(catalog.Choices()))
+	for _, choice := range catalog.Choices() {
+		names = append(names, choice.DisplayName)
+	}
+	ruList := russianList(names)
+	installTranslationCatalog(LocaleEnglish, map[string]string{
+		"dashboard.managementSummary": enList + " management",
+		"inbounds.summary":            "Create, update, or delete " + enList + " inbound definitions through",
+		"clientLinks.summary":         "Generate current " + enList + " client connection URIs/client config artifacts from saved settings and enabled inbounds through",
+	})
+	installTranslationCatalog(LocaleRussian, map[string]string{
+		"dashboard.managementSummary": "Управление " + ruList,
+		"inbounds.summary":            "Создание, обновление и удаление подключений " + ruList + " через",
+		"clientLinks.summary":         "Создание URI и клиентских конфигураций " + ruList + " из сохранённых настроек и включённых подключений через",
+	})
+}
+
+func russianList(values []string) string {
+	switch len(values) {
+	case 0:
+		return ""
+	case 1:
+		return values[0]
+	case 2:
+		return values[0] + " и " + values[1]
+	default:
+		out := ""
+		for i, value := range values {
+			if i > 0 {
+				if i == len(values)-1 {
+					out += " и "
+				} else {
+					out += ", "
+				}
+			}
+			out += value
+		}
+		return out
+	}
 }
 
 func installTranslationCatalog(locale string, entries map[string]string) {

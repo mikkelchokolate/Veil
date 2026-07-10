@@ -7,17 +7,33 @@ package generatedconfig
 // dynamic ProtocolFields maps as well as the legacy flat fields. The policy
 // checks both locations so protocols that require render settings (currently
 // Hysteria2) are not silently skipped when only ProtocolFields are populated.
-type GeneratedRenderSettingsPolicy struct{}
+//
+// A field-key provider can be supplied so the policy stays in sync with the
+// protocol registry instead of hardcoding protocol-specific keys.
+type GeneratedRenderSettingsPolicy struct {
+	fieldKeys []string
+}
 
 func NewGeneratedRenderSettingsPolicy() GeneratedRenderSettingsPolicy {
 	return GeneratedRenderSettingsPolicy{}
 }
 
-func (GeneratedRenderSettingsPolicy) HasRenderSettings(settings Settings, inbounds []Inbound) bool {
+// NewGeneratedRenderSettingsPolicyWithFieldKeys creates a policy that treats
+// the supplied protocol-field keys as render-relevant. This lets callers build
+// the key set from the current protocol registry rather than the built-in
+// legacy list.
+func NewGeneratedRenderSettingsPolicyWithFieldKeys(fieldKeys []string) GeneratedRenderSettingsPolicy {
+	keys := make([]string, len(fieldKeys))
+	copy(keys, fieldKeys)
+	return GeneratedRenderSettingsPolicy{fieldKeys: keys}
+}
+
+func (p GeneratedRenderSettingsPolicy) HasRenderSettings(settings Settings, inbounds []Inbound) bool {
 	if settings.Domain != "" || settings.Email != "" {
 		return true
 	}
-	if settingsHaveRenderSettings(settings) {
+	keys := p.protocolFieldKeys()
+	if settingsHaveRenderSettings(settings, keys) {
 		return true
 	}
 	for _, inbound := range inbounds {
@@ -27,7 +43,7 @@ func (GeneratedRenderSettingsPolicy) HasRenderSettings(settings Settings, inboun
 		if inbound.Password != "" || len(inbound.Profiles) > 0 {
 			return true
 		}
-		if inboundHaveRenderSettings(inbound) {
+		if inboundHaveRenderSettings(inbound, keys) {
 			return true
 		}
 	}
@@ -46,9 +62,16 @@ var renderSettingsProtocolFieldKeys = []string{
 	"fallbackRoot",
 }
 
-func settingsHaveRenderSettings(settings Settings) bool {
+func (p GeneratedRenderSettingsPolicy) protocolFieldKeys() []string {
+	if len(p.fieldKeys) > 0 {
+		return p.fieldKeys
+	}
+	return renderSettingsProtocolFieldKeys
+}
+
+func settingsHaveRenderSettings(settings Settings, keys []string) bool {
 	if settings.ProtocolFields != nil {
-		for _, key := range renderSettingsProtocolFieldKeys {
+		for _, key := range keys {
 			if s, ok := settings.ProtocolFields[key].(string); ok && s != "" {
 				return true
 			}
@@ -61,9 +84,9 @@ func settingsHaveRenderSettings(settings Settings) bool {
 		settings.FallbackRoot != ""
 }
 
-func inboundHaveRenderSettings(inbound Inbound) bool {
+func inboundHaveRenderSettings(inbound Inbound, keys []string) bool {
 	if inbound.ProtocolFields != nil {
-		for _, key := range renderSettingsProtocolFieldKeys {
+		for _, key := range keys {
 			if s, ok := inbound.ProtocolFields[key].(string); ok && s != "" {
 				return true
 			}
