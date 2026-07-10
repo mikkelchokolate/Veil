@@ -63,3 +63,18 @@ func TestPanelClientProfileActionsPreserveInvalidJSONAndRevalidate(t *testing.T)
 		t.Fatal("client profile generation must not discard invalid JSON")
 	}
 }
+
+func TestPanelRequestReliabilityDistinguishesEmptySuccessFromFailure(t *testing.T) {
+	js := panelRequestReliabilityJS()
+	for _, want := range []string{
+		`if (!response.ok)`,
+		`return null`,
+		`if (!text)`,
+		`return true`,
+		`veilT('common.ok')`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("request reliability JS missing %q", want)
+		}
+	}
+}
