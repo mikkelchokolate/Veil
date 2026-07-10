@@ -20,12 +20,17 @@ func TestDiagnosticsCardsRenderToolControlsAndManagedLogUnits(t *testing.T) {
 
 func TestManagedLogUnitOptionsEscapeRuntimeDerivedHTML(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{
-		Name: `hysteria2-\"><img src=x onerror=alert(1)>`,
-		Unit: `veil-hysteria2@\"><svg onload=alert(1)>.service`,
+		Name: `hysteria2-"><img src=x onerror=alert(1)>`,
+		Unit: `veil-hysteria2@"><svg onload=alert(1)>.service`,
 	}}
+	// Remove the Go/JSON transport escapes so the renderer receives the exact
+	// quote-and-tag payload that would break an option attribute without escaping.
+	runtimes[0].Name = strings.ReplaceAll(runtimes[0].Name, `\"`, `"`)
+	runtimes[0].Unit = strings.ReplaceAll(runtimes[0].Unit, `\"`, `"`)
 	options := ManagedLogUnitOptionsHTML(runtimes)
 
-	for _, unsafe := range []string{`<img`, `<svg`, `value="veil-hysteria2@\">`} {
+	for _, unsafe := range []string{`<img`, `<svg`, `value="veil-hysteria2@">`} {
+		unsafe = strings.ReplaceAll(unsafe, `\"`, `"`)
 		if strings.Contains(options, unsafe) {
 			t.Fatalf("diagnostic runtime option contains unsafe fragment %q: %s", unsafe, options)
 		}
