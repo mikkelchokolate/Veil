@@ -58,6 +58,64 @@ func TestEffectiveAuthStatusFallsBackToCookieForInvalidStaticToken(t *testing.T)
 	}
 }
 
+func TestEffectiveAuthStatusReportsDevAnonymousAdmin(t *testing.T) {
+	state := &managementState{
+		allowDevAnonymous: true,
+		sessions:          mustNewSessionRegistry(""),
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	rec := httptest.NewRecorder()
+
+	state.handleEffectiveAuthStatus(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, want := range []string{`"authenticated":true`, `"username":"dev-anonymous"`, `"role":"admin"`, `"authMethod":"dev-anonymous"`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("body missing %q: %s", want, rec.Body.String())
+		}
+	}
+}
+
+func TestEffectiveAuthStatusDoesNotGrantDevAnonymousWhenDisabledOrUsersExist(t *testing.T) {
+	tests := []struct {
+		name  string
+		state *managementState
+	}{
+		{
+			name:  "disabled",
+			state: &managementState{sessions: mustNewSessionRegistry("")},
+		},
+		{
+			name: "users exist",
+			state: &managementState{
+				allowDevAnonymous: true,
+				users:             []User{{Username: "admin", Role: "admin"}},
+				sessions:          mustNewSessionRegistry(""),
+			},
+		},
+		{
+			name: "static token configured",
+			state: &managementState{
+				allowDevAnonymous: true,
+				authToken:         "static-secret",
+				sessions:          mustNewSessionRegistry(""),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+			rec := httptest.NewRecorder()
+			tt.state.handleEffectiveAuthStatus(rec, req)
+			if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"authenticated":false`) {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestEffectiveAuthStatusRejectsNonGetMethods(t *testing.T) {
 	state := &managementState{authToken: "static-secret", sessions: mustNewSessionRegistry("")}
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/status", nil)
