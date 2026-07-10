@@ -8,6 +8,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -36,7 +37,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
-	mux.HandleFunc("/api/olcrtc/room", s.handleOlcrtcRoom)
+	s.registerProtocolRoomRoutes(mux)
 	mux.HandleFunc("/api/client-links/qr", s.handleClientLinkQR)
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
@@ -60,6 +61,19 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
 	mux.HandleFunc("/api/users", s.handleUsersRoute)
 	mux.HandleFunc("/api/users/", s.handleUsersRoute)
+}
+
+// registerProtocolRoomRoutes registers per-protocol room generation routes for
+// any plugin that implements protocols.RoomGenerator. This keeps the router
+// agnostic of the concrete protocol set.
+func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
+	for _, p := range protocols.NewRegistry().All() {
+		if _, ok := protocols.AsRoomGenerator(p); !ok {
+			continue
+		}
+		protocol := p.Protocol()
+		mux.HandleFunc("/api/"+protocol+"/room", s.handleProtocolRoom(protocol))
+	}
 }
 
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {

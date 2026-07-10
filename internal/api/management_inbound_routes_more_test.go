@@ -61,7 +61,7 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 	post := httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"jitsi"}`))
 	post.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	state.handleOlcrtcRoom(rec, post)
+	state.handleProtocolRoom("olcrtc")(rec, post)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -71,7 +71,7 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 
 	get := httptest.NewRequest(http.MethodGet, "/api/olcrtc/room", nil)
 	rec = httptest.NewRecorder()
-	state.handleOlcrtcRoom(rec, get)
+	state.handleProtocolRoom("olcrtc")(rec, get)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}

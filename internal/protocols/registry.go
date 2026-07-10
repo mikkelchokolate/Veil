@@ -139,6 +139,12 @@ func AsUIProvider(p ProtocolPlugin) (UIProvider, bool) {
 	return c, ok
 }
 
+// AsRoomGenerator returns the RoomGenerator capability or nil.
+func AsRoomGenerator(p ProtocolPlugin) (RoomGenerator, bool) {
+	c, ok := p.(RoomGenerator)
+	return c, ok
+}
+
 // SettingsFieldSchemas returns the aggregate settings-scoped field schemas from
 // every registered plugin. This lets protocol-agnostic code such as settings
 // validation/redaction know which protocol-specific keys exist and which ones
