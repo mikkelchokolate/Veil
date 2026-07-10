@@ -216,12 +216,18 @@ func panelRuntimeStatsActionsJS() string {
 
     // System telemetry auto-refresh: re-fetch CPU/mem/disk once per second and
     // update the gauges directly, without the manual button's loading-text flicker.
+    let telemetryRefreshInFlight = false;
     async function refreshSystemTelemetry() {
+      if (telemetryRefreshInFlight) return;
+      telemetryRefreshInFlight = true;
       try {
         const resp = await fetch('/api/system', { headers: authHeaders() });
         if (!resp.ok) return;
         updateSystemTelemetry(await resp.json());
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        telemetryRefreshInFlight = false;
+      }
     }
 
     let telemetryRefreshInterval = null;
