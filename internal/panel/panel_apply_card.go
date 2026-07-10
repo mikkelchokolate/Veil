@@ -8,9 +8,9 @@ func panelApplyCardHTML() string {
       <p>Validate current management state and show staged config/reload actions before any real service changes: <code>/api/apply/plan</code></p>
       <p>Service reload also runs fixed health checks and automatically rolls live configs back if reload or health fails.</p>
       <button id="build-apply-plan" type="button">Build apply plan</button>
-      <button id="apply-staged-files" type="button">Apply staged files</button>
-      <button id="apply-live-configs" type="button">Apply live configs</button>
-      <button id="reload-services" type="button">Reload and health check services</button>
+      <button id="apply-staged-files" type="button" disabled>Apply staged files</button>
+      <button id="apply-live-configs" type="button" disabled>Apply live configs</button>
+      <button id="reload-services" type="button" disabled>Reload and health check services</button>
       <h3>Safe apply preview</h3>
       <p class="hint">Shows file-level config changes, runtime actions, and DNS/TLS/firewall warnings without exposing generated config contents or secrets.</p>
       <p id="apply-safety-warnings" class="hint" role="status" aria-live="polite">Safety warnings: build a plan first</p>
