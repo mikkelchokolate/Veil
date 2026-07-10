@@ -13,7 +13,7 @@ import (
 func TestPanelMieruHTML(t *testing.T) {
 	html := panelHTMLForCatalog("/", "", "en", NewManagedRuntimeCatalog())
 	for _, want := range []string{
-		`<option value="mieru">mieru</option>`,
+		`<option value="mieru">Mieru</option>`,
 		`"mieru":["tcp","udp"]`,
 		`download-mieru-configs`,
 		`mieru-client-configs.json`,

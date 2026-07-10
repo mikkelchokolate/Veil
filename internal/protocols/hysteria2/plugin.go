@@ -19,6 +19,8 @@ func (Plugin) RequiresCaddy() bool     { return false }
 func (Plugin) FirewallService() string { return "Veil Hysteria2" }
 func (Plugin) MaxEnabled() int         { return 0 }
 
+func (Plugin) NeedsCaddyCertSync() bool { return true }
+
 func protocolString(m map[string]any, key, fallback string) string {
 	if m == nil {
 		return fallback
