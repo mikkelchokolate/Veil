@@ -165,3 +165,23 @@ func (r *Registry) SettingsFieldSchemas() []schema.FieldSchema {
 	}
 	return out
 }
+
+// InboundFieldSchemas returns the aggregate inbound-scoped field schemas from
+// every registered plugin. This lets protocol-agnostic code such as secret
+// policy know which protocol-specific inbound fields are secrets.
+func (r *Registry) InboundFieldSchemas() []schema.FieldSchema {
+	out := make([]schema.FieldSchema, 0)
+	for _, protocol := range r.order {
+		plugin := r.byProtocol[protocol]
+		ui, ok := AsUIProvider(plugin)
+		if !ok {
+			continue
+		}
+		for _, f := range ui.InboundFieldSchema() {
+			if f.Scope == "" || f.Scope == "inbound" {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}

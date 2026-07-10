@@ -27,7 +27,7 @@ type SnapshotTarget struct {
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 	return model.ManagementSnapshot{
 		Setup:         input.Setup,
-		Settings:      input.Settings,
+		Settings:      cloneSettings(input.Settings),
 		Inbounds:      cloneInbounds(input.Inbounds),
 		Rules:         append([]model.RoutingRule(nil), input.Rules...),
 		RoutingPreset: input.RoutingPreset,
@@ -35,6 +35,12 @@ func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 		Warp:          input.Warp,
 		Users:         cloneUsers(input.Users),
 	}
+}
+
+func cloneSettings(settings model.Settings) model.Settings {
+	cloned := settings
+	cloned.ProtocolFields = cloneProtocolFields(settings.ProtocolFields)
+	return cloned
 }
 
 func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
@@ -92,6 +98,18 @@ func cloneInbounds(inbounds []model.Inbound) []model.Inbound {
 	for i, inbound := range inbounds {
 		out[i] = inbound
 		out[i].Profiles = append([]model.ClientProfile(nil), inbound.Profiles...)
+		out[i].ProtocolFields = cloneProtocolFields(inbound.ProtocolFields)
+	}
+	return out
+}
+
+func cloneProtocolFields(pf map[string]any) map[string]any {
+	if pf == nil {
+		return nil
+	}
+	out := make(map[string]any, len(pf))
+	for k, v := range pf {
+		out[k] = v
 	}
 	return out
 }

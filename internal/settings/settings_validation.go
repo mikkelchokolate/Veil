@@ -136,7 +136,7 @@ func protocolFieldUpdateValue(settings *Settings, f schema.FieldSchema) (any, bo
 
 func flatFieldValue(settings Settings, key string) (any, bool) {
 	v := reflect.ValueOf(settings)
-	field := v.FieldByName(structFieldName(key))
+	field := v.FieldByName(StructFieldName(key))
 	if !field.IsValid() {
 		return nil, false
 	}
@@ -154,7 +154,7 @@ func flatFieldValue(settings Settings, key string) (any, bool) {
 }
 
 func setFlatFieldValue(settings *Settings, key string, val any) {
-	field := reflect.ValueOf(settings).Elem().FieldByName(structFieldName(key))
+	field := reflect.ValueOf(settings).Elem().FieldByName(StructFieldName(key))
 	if !field.IsValid() {
 		return
 	}
@@ -174,7 +174,7 @@ func setFlatFieldValue(settings *Settings, key string, val any) {
 	}
 }
 
-func structFieldName(key string) string {
+func StructFieldName(key string) string {
 	if key == "" {
 		return ""
 	}
