@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"html"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -27,9 +28,7 @@ func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
 func ServiceStatusActionsJS() string {
 	return `    function loadServiceStatus() {
       return loadJSON('/api/status', 'service-status-output').then((status) => {
-        if (status) {
-          renderServiceRestartControls(status);
-        }
+        if (status) renderServiceRestartControls(status);
         return status;
       });
     }
@@ -45,14 +44,13 @@ func ServiceStatusActionsJS() string {
         btn.classList.remove('danger');
         btn.classList.add('secondary');
       } else {
-        loadServiceStatus(); // immediate refresh
+        loadServiceStatus();
         autoRefreshInterval = setInterval(loadServiceStatus, 10000);
         btn.textContent = veilT('service.autoRefreshOn');
         btn.classList.remove('secondary');
         btn.classList.add('danger');
       }
     });
-    // Clean up interval on page unload
     window.addEventListener('beforeunload', function() {
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     });`
@@ -64,12 +62,13 @@ func ServiceRestartControlsHTML(runtimes []service.ManagedRuntime) string {
 		if !runtime.ManualRestart {
 			continue
 		}
+		actionName := html.EscapeString(runtime.ActionName)
 		b.WriteString(`        <button id="restart-`)
-		b.WriteString(runtime.ActionName)
+		b.WriteString(actionName)
 		b.WriteString(`" class="danger" type="button" data-veil-restart-service="`)
-		b.WriteString(runtime.ActionName)
+		b.WriteString(actionName)
 		b.WriteString(`">`)
-		b.WriteString(runtime.ActionName)
+		b.WriteString(actionName)
 		b.WriteString("</button>\n")
 	}
 	return b.String()
@@ -77,44 +76,42 @@ func ServiceRestartControlsHTML(runtimes []service.ManagedRuntime) string {
 
 func ServiceRestartActionsJS(runtimes []service.ManagedRuntime) string {
 	var b strings.Builder
-	b.WriteString(`    function escapeHTML(value) {
-      const div = document.createElement('div');
-      div.textContent = value == null ? '' : String(value);
-      return div.innerHTML;
-    }
-
-    function bindServiceRestartButton(button) {
-      if (!button || button.dataset.veilRestartBound === 'true') {
-        return;
-      }
+	b.WriteString(`    function bindServiceRestartButton(button) {
+      if (!button || button.dataset.veilRestartBound === 'true') return;
       button.dataset.veilRestartBound = 'true';
       button.textContent = veilT('service.restart', { service: button.dataset.veilRestartService });
       button.addEventListener('click', async () => {
         const serviceName = button.dataset.veilRestartService;
-        await loadJSON('/api/services/' + encodeURIComponent(serviceName) + '/restart', 'service-status-output', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ confirm: true })
-        });
-        await loadServiceStatus();
+        button.disabled = true;
+        try {
+          const restarted = await loadJSON('/api/services/' + encodeURIComponent(serviceName) + '/restart', 'service-status-output', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true })
+          });
+          if (restarted) await loadServiceStatus();
+        } finally {
+          if (!isViewerRole()) button.disabled = false;
+        }
       });
     }
 
     function renderServiceRestartControls(status) {
       const container = document.getElementById('service-restart-controls');
-      if (!container || !status || !Array.isArray(status.services)) {
-        return;
-      }
-      const restartable = status.services.filter((service) => {
-        return service && service.restartable && (service.actionName || service.name);
+      if (!container || !status || !Array.isArray(status.services)) return;
+      const restartable = status.services.filter((service) => service && service.restartable && (service.actionName || service.name));
+      container.textContent = '';
+      restartable.forEach((service) => {
+        const actionName = String(service.actionName || service.name);
+        const button = document.createElement('button');
+        button.id = 'restart-' + actionName;
+        button.className = 'danger';
+        button.type = 'button';
+        button.dataset.veilRestartService = actionName;
+        button.textContent = actionName;
+        container.appendChild(button);
+        bindServiceRestartButton(button);
       });
-      container.innerHTML = restartable.map((service) => {
-        const actionName = service.actionName || service.name;
-        return '<button id="restart-' + escapeHTML(actionName) + '" class="danger" type="button" data-veil-restart-service="' + escapeHTML(actionName) + '">' + escapeHTML(actionName) + '</button>';
-      }).join('\n');
-      container.querySelectorAll('[data-veil-restart-service]').forEach(bindServiceRestartButton);
-      if (typeof applyViewerRoleGuard === 'function') {
-        applyViewerRoleGuard();
-      }
+      if (typeof applyViewerRoleGuard === 'function') applyViewerRoleGuard();
     }
 
     document.querySelectorAll('[data-veil-restart-service]').forEach(bindServiceRestartButton);
