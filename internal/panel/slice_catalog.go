@@ -26,7 +26,7 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "intro",
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
-				{Placeholder: panelIntroActionsPlaceholder, Render: func() string { return panelIntroActionsJS() + panelSettingsActionsJS() }},
+				{Placeholder: panelIntroActionsPlaceholder, Render: func() string { return panelIntroActionsJS() + panelSettingsActionsJS() + panelRoleTabVisibilityJS() }},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "settings-form", Handler: "saveSettings", Event: "submit"},
