@@ -17,7 +17,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
-		w.Header()["Server"] = nil // hide Go version from Server header
+		w.Header()["Server"] = nil
 		if r.TLS != nil {
 			host, _, _ := net.SplitHostPort(r.Host)
 			if host == "" {
@@ -74,7 +74,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var role string
 		var isCookieSession bool
 
-		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
 			username = "api-token"
@@ -82,7 +81,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			hasStaticToken = true
 		}
 
-		// 2. If no static token, check cookie session
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
@@ -94,7 +92,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// 3. Fallback check: if there are no registered users in state, and token is empty, we allow access
 		if username == "" {
 			state.mu.Lock()
 			noUsers := len(state.users) == 0
@@ -111,8 +108,8 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			return
 		}
 
-		// 4. CSRF check for cookie-session POST/PUT/DELETE requests. Read-only
-		// diagnostic POSTs remain CSRF-protected even though viewers may run them.
+		// Cookie-session POST/PUT/DELETE requests always remain CSRF-protected,
+		// including read-only POST actions available to viewers.
 		if isCookieSession && isMutatingRequest(r) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
 			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
@@ -121,9 +118,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// 5. RBAC check for actual state-changing operations. A small exact-path
-		// allowlist covers diagnostics that use POST only to carry structured input.
-		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
+		// A small exact-purpose allowlist covers read-only actions whose APIs use
+		// POST for structured input. All actual state mutations still require admin.
+		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyPostRequest(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
 		}
@@ -145,16 +142,21 @@ func isSelfServiceMutation(r *http.Request) bool {
 	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
 }
 
-func isReadOnlyDiagnosticRequest(r *http.Request) bool {
+func isReadOnlyPostRequest(r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		return false
 	}
 	switch r.URL.Path {
 	case "/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest":
 		return true
-	default:
-		return false
 	}
+	const backupPrefix = "/api/backups/"
+	const verifySuffix = "/verify"
+	if strings.HasPrefix(r.URL.Path, backupPrefix) && strings.HasSuffix(r.URL.Path, verifySuffix) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, backupPrefix), verifySuffix)
+		return name != "" && !strings.Contains(strings.Trim(name, "/"), "/")
+	}
+	return false
 }
 
 type contextKey string
