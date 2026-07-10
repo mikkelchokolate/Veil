@@ -5,6 +5,8 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 	"github.com/mikkelchokolate/Veil/internal/routing"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
@@ -32,8 +34,9 @@ type MutationTarget struct {
 type ManagementStateMutationTarget = MutationTarget
 
 type Mutation struct {
-	target MutationTarget
-	save   func() error
+	target               MutationTarget
+	save                 func() error
+	settingsFieldSchemas []schema.FieldSchema
 }
 
 type ManagementStateMutation = Mutation
@@ -42,7 +45,11 @@ func NewMutation(target MutationTarget, save func() error) Mutation {
 	if save == nil {
 		save = func() error { return nil }
 	}
-	return Mutation{target: target, save: save}
+	return Mutation{
+		target:               target,
+		save:                 save,
+		settingsFieldSchemas: protocols.NewRegistry().SettingsFieldSchemas(),
+	}
 }
 
 func NewManagementStateMutation(target ManagementStateMutationTarget, save func() error) ManagementStateMutation {
@@ -53,7 +60,7 @@ func (m Mutation) Settings() Settings {
 	if m.target.Settings == nil {
 		return Settings{}
 	}
-	return veilsettings.NewSettingsRedaction().Redact(*m.target.Settings)
+	return veilsettings.NewSettingsRedactionWithFieldSchemas(m.settingsFieldSchemas).Redact(*m.target.Settings)
 }
 
 func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
@@ -61,7 +68,7 @@ func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
 	if m.target.Settings != nil {
 		current = *m.target.Settings
 	}
-	if err := veilsettings.NewSettingsValidation().NormalizeAndValidate(&update, current); err != nil {
+	if err := veilsettings.NewSettingsValidationWithFieldSchemas(m.settingsFieldSchemas).NormalizeAndValidate(&update, current); err != nil {
 		return Settings{}, err
 	}
 	if m.target.Settings != nil {
@@ -70,7 +77,7 @@ func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
 	if err := m.save(); err != nil {
 		return Settings{}, err
 	}
-	return veilsettings.NewSettingsRedaction().Redact(update), nil
+	return veilsettings.NewSettingsRedactionWithFieldSchemas(m.settingsFieldSchemas).Redact(update), nil
 }
 
 func (m Mutation) Inbounds() []Inbound {

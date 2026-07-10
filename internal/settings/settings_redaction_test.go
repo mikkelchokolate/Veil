@@ -3,12 +3,26 @@ package settings
 import "testing"
 
 func TestSettingsRedactionRedactsOnlyPresentSecrets(t *testing.T) {
-	settings := NewSettingsRedaction().Redact(Settings{NaivePassword: "naive", Hysteria2Password: "hy", OlcrtcAuth: "olcrtc", Domain: "example.com"})
-	if settings.NaivePassword != "[REDACTED]" || settings.Hysteria2Password != "[REDACTED]" || settings.OlcrtcAuth != "[REDACTED]" || settings.Domain != "example.com" {
-		t.Fatalf("settings = %+v", settings)
+	settings := NewSettingsRedactionWithFieldSchemas(testSettingsFieldSchemas()).Redact(Settings{
+		Domain: "example.com",
+		ProtocolFields: map[string]any{
+			"naivePassword":     "naive",
+			"hysteria2Password": "hy",
+			"olcrtcAuth":        "jitsi",
+		},
+	})
+	if settings.ProtocolFields["naivePassword"] != RedactedSecret ||
+		settings.ProtocolFields["hysteria2Password"] != RedactedSecret {
+		t.Fatalf("passwords were not redacted: %+v", settings)
 	}
-	settings = NewSettingsRedaction().Redact(Settings{})
-	if settings.NaivePassword != "" || settings.Hysteria2Password != "" || settings.OlcrtcAuth != "" {
+	if settings.ProtocolFields["olcrtcAuth"] != "jitsi" {
+		t.Fatalf("non-secret field was redacted: %+v", settings)
+	}
+	if settings.Domain != "example.com" {
+		t.Fatalf("domain was changed: %+v", settings)
+	}
+	settings = NewSettingsRedactionWithFieldSchemas(testSettingsFieldSchemas()).Redact(Settings{})
+	if settings.ProtocolFields != nil {
 		t.Fatalf("empty secrets should stay empty: %+v", settings)
 	}
 }

@@ -1,6 +1,10 @@
 package protocols
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+)
 
 // Registry holds all registered protocol plugins.
 type Registry struct {
@@ -133,4 +137,25 @@ func AsClientAccessAggregator(p ProtocolPlugin) (ClientAccessAggregator, bool) {
 func AsUIProvider(p ProtocolPlugin) (UIProvider, bool) {
 	c, ok := p.(UIProvider)
 	return c, ok
+}
+
+// SettingsFieldSchemas returns the aggregate settings-scoped field schemas from
+// every registered plugin. This lets protocol-agnostic code such as settings
+// validation/redaction know which protocol-specific keys exist and which ones
+// are secrets.
+func (r *Registry) SettingsFieldSchemas() []schema.FieldSchema {
+	out := make([]schema.FieldSchema, 0)
+	for _, protocol := range r.order {
+		plugin := r.byProtocol[protocol]
+		ui, ok := AsUIProvider(plugin)
+		if !ok {
+			continue
+		}
+		for _, f := range ui.SettingsFieldSchema() {
+			if f.Scope == "" || f.Scope == "settings" {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }
