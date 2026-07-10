@@ -37,7 +37,7 @@ func (r SettingsRedaction) Redact(settings Settings) Settings {
 				redacted.ProtocolFields[f.Key] = disclosure.Redact(s)
 			}
 		}
-		field := reflect.ValueOf(&redacted).Elem().FieldByName(structFieldName(f.Key))
+		field := reflect.ValueOf(&redacted).Elem().FieldByName(StructFieldName(f.Key))
 		if field.IsValid() && field.Kind() == reflect.String {
 			field.SetString(disclosure.Redact(field.String()))
 		}
