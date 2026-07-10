@@ -1,23 +1,31 @@
 package runtime
 
-type RuntimeProcFS struct{}
-
-func NewRuntimeProcFS() RuntimeProcFS {
-	return RuntimeProcFS{}
+type RuntimeProcFS struct {
+	policy ManagedProcessPolicy
 }
 
-func (RuntimeProcFS) System() (SystemStats, error) {
+func NewRuntimeProcFS() RuntimeProcFS {
+	return NewRuntimeProcFSWithPolicy(NewManagedProcessPolicy())
+}
+
+// NewRuntimeProcFSWithPolicy creates a procfs reader that filters managed
+// processes through the given policy.
+func NewRuntimeProcFSWithPolicy(policy ManagedProcessPolicy) RuntimeProcFS {
+	return RuntimeProcFS{policy: policy}
+}
+
+func (r RuntimeProcFS) System() (SystemStats, error) {
 	return readSystemStats()
 }
 
-func (RuntimeProcFS) Network() (NetworkStats, error) {
+func (r RuntimeProcFS) Network() (NetworkStats, error) {
 	return readNetworkStats()
 }
 
-func (RuntimeProcFS) Connections() (ConnectionsStats, error) {
+func (r RuntimeProcFS) Connections() (ConnectionsStats, error) {
 	return NewConnectionDiscovery().Read()
 }
 
-func (RuntimeProcFS) Processes() (ProcessesStats, error) {
-	return readProcessesStats()
+func (r RuntimeProcFS) Processes() (ProcessesStats, error) {
+	return readProcessesStats(r.policy)
 }

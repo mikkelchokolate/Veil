@@ -24,13 +24,17 @@ type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 // orphan cleanup, and rollback paths can validate, promote, stop, and restart
 // managed units even when the current saved state no longer references them.
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	return NewManagedRuntimeCatalogFor(nil, WarpConfig{})
+	return NewManagedRuntimeCatalogFor(Settings{}, nil, WarpConfig{})
 }
 
 // NewManagedRuntimeCatalogFor returns a state-scoped catalog for active apply
 // planning. Pass nil inbounds for the broad fallback/template catalog.
-func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
+func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
+
+	if settings.PanelAccess == "caddy" {
+		runtimes = append(runtimes, panelCaddyRuntime())
+	}
 
 	registry := protocols.NewRegistry()
 	for _, p := range registry.All() {
@@ -66,6 +70,20 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 	return sortManagedRuntimes(runtimes)
 }
 
+func panelCaddyRuntime() ManagedRuntime {
+	return ManagedRuntime{
+		Name:             "caddy-panel",
+		ActionName:       "caddy-panel",
+		Transport:        "tcp",
+		Unit:             "veil-caddy@panel.service",
+		TemplateUnit:     renderer.UnitCaddy,
+		PromotedSubpath:  generatedconfig.CaddyfileSubpath,
+		PromotedVerb:     "reload",
+		ManualRestart:    true,
+		HealthCheckAfter: true,
+	}
+}
+
 // NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
 // dashboard and /api/status when no live managementState is available. Once a
 // saved state exists, it only exposes services configured in that state, plus
@@ -74,7 +92,7 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	settings, inbounds, warp, ok := loadSnapshotFromStateWithOK()
 	if !ok {
-		return NewManagedRuntimeCatalogFor(inbounds, warp)
+		return NewManagedRuntimeCatalogFor(settings, inbounds, warp)
 	}
 	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
 }
@@ -96,7 +114,7 @@ func NewVisibleManagedRuntimeCatalogForState(state *managementState) ManagedRunt
 	state.mu.Unlock()
 
 	if !visibleStateHasRuntimeScope(settings, inbounds, warp) && !stateFileExists(statePath) {
-		return NewManagedRuntimeCatalogFor(nil, WarpConfig{})
+		return NewManagedRuntimeCatalogFor(Settings{}, nil, WarpConfig{})
 	}
 	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
 }

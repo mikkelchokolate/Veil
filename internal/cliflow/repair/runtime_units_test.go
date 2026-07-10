@@ -8,7 +8,7 @@ import (
 )
 
 func TestRuntimeUnitNamesForStateUsesPassedSnapshot(t *testing.T) {
-	units := runtimeUnitNamesForState([]api.Inbound{
+	units := runtimeUnitNamesForState(api.Settings{}, []api.Inbound{
 		{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},
 	}, api.WarpConfig{})
 
@@ -21,7 +21,7 @@ func TestRuntimeUnitNamesForStateUsesPassedSnapshot(t *testing.T) {
 }
 
 func TestRuntimeUnitNamesForStateIncludesWarpWhenEnabled(t *testing.T) {
-	units := runtimeUnitNamesForState(nil, api.WarpConfig{Enabled: true})
+	units := runtimeUnitNamesForState(api.Settings{}, nil, api.WarpConfig{Enabled: true})
 	if !slices.Contains(units, "veil-warp.service") {
 		t.Fatalf("expected WARP unit, got %+v", units)
 	}

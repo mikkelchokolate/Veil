@@ -40,7 +40,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
 	}
-	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
+	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Settings, input.Inbounds, input.Warp)
 	runtimeUnits := service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits()
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""

@@ -4,7 +4,34 @@ import (
 	"net/http"
 
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
+
+var runtimeTelemetryPolicy = newManagedProcessPolicy()
+
+func newManagedProcessPolicy() veilruntime.ManagedProcessPolicy {
+	names := map[string]struct{}{"veil": {}}
+	for _, p := range protocols.NewRegistry().All() {
+		rp, ok := protocols.AsRuntimeProvider(p)
+		if !ok {
+			continue
+		}
+		rt := rp.RuntimeInstall("")
+		if rt.Name != "" {
+			names[rt.Name] = struct{}{}
+		}
+		if rt.Binary != "" {
+			names[rt.Binary] = struct{}{}
+		}
+	}
+	// WARP is managed by sing-box but is not a protocol plugin.
+	names["sing-box"] = struct{}{}
+	out := make([]string, 0, len(names))
+	for name := range names {
+		out = append(out, name)
+	}
+	return veilruntime.NewManagedProcessPolicyFor(out)
+}
 
 type RuntimeRoutes struct{}
 
@@ -84,7 +111,7 @@ func handleProcessesRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := veilruntime.NewRuntimeTelemetry().Processes()
+		stats, err := veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).Processes()
 		if err != nil {
 			writeError(w, "failed to read processes", http.StatusInternalServerError)
 			return
@@ -111,6 +138,6 @@ func handleRuntimeObservation(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, veilruntime.NewRuntimeTelemetry().Observation())
+		writeJSON(w, veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).Observation())
 	}
 }

@@ -14,7 +14,7 @@ func TestProcessDiscoveryReturnsOnlyManagedProcesses(t *testing.T) {
 		uptime: map[int]int64{10: 100, 30: 50},
 		system: 200,
 	}
-	stats, err := NewProcessDiscovery(source).Read()
+	stats, err := NewProcessDiscovery(source, NewManagedProcessPolicyFor([]string{"caddy", "veil"})).Read()
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestProcessDiscoveryReturnsOnlyManagedProcesses(t *testing.T) {
 }
 
 func TestProcessDiscoveryReturnsPIDListErrors(t *testing.T) {
-	_, err := NewProcessDiscovery(fakeProcessSource{err: errors.New("boom")}).Read()
+	_, err := NewProcessDiscovery(fakeProcessSource{err: errors.New("boom")}, NewManagedProcessPolicy()).Read()
 	if err == nil {
 		t.Fatal("expected error")
 	}
