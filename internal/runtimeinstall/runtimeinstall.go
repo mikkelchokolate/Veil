@@ -1,18 +1,16 @@
-// Package runtimeinstall acquires and installs the external protocol runtime
-// binaries that Veil's managed systemd units invoke: caddy (NaiveProxy),
-// hysteria (Hysteria2), mita (Mieru server), sing-box (WARP), and olcrtc.
+// Package runtimeinstall acquires and installs the external runtime binaries
+// that Veil's managed systemd units invoke. After the plugin-based protocol
+// refactor, protocol plugins contribute their own install descriptors via
+// RuntimeProvider.RuntimeInstall; this package's Catalog only holds runtimes
+// that are not tied to a protocol plugin, such as WARP (sing-box).
 //
 // Veil install only writes the Panel and the dormant managed unit files; before
 // this package, those units pointed at /usr/local/bin/<binary> paths that were
 // never created, so every protocol failed to start with systemd status
 // 203/EXEC ("Failed to locate executable"). This package fills that gap by
 // downloading each runtime from its upstream GitHub release (verifying SHA256
-// checksums where the project publishes them) or, for olcRTC which ships no
-// release binaries, building it from source with `go install`.
-//
-// NaiveProxy requires a Caddy build with the forward_proxy plugin (klzgrad's
-// naive fork). Vanilla Caddy releases do not include it, so the runtime is
-// built from source via a self-contained Go build.
+// checksums where the project publishes them) or, for runtimes that ship no
+// release binaries, building them from source with `go install`.
 package runtimeinstall
 
 import (
@@ -71,42 +69,11 @@ type Runtime struct {
 	SourcePackage string
 }
 
-// Catalog returns the runtime install descriptors for linux/amd64 and
-// linux/arm64. Asset matchers are written against the upstream release naming
-// conventions verified against each project's GitHub releases.
+// Catalog returns the runtime install descriptors for non-plugin runtimes such
+// as WARP (sing-box). Protocol plugins supply their own descriptors via
+// RuntimeProvider.RuntimeInstall, so they are not duplicated here.
 func Catalog(arch string) []Runtime {
 	return []Runtime{
-		{
-			Name:   "naiveproxy",
-			Binary: "caddy",
-			Method: MethodCaddyNaive,
-		},
-		{
-			Name:   "hysteria2",
-			Binary: "hysteria",
-			Method: MethodRawBinary,
-			Repo:   "apernet/hysteria",
-			AssetMatch: func(name string) bool {
-				return name == "hysteria-linux-"+arch
-			},
-			ChecksumMatch: func(name string) bool {
-				return name == "hashes.txt"
-			},
-		},
-		{
-			Name:   "mieru",
-			Binary: "mita",
-			Method: MethodArchive,
-			Repo:   "enfein/mieru",
-			AssetMatch: func(name string) bool {
-				return strings.HasPrefix(name, "mita_") &&
-					strings.HasSuffix(name, "_linux_"+arch+".tar.gz")
-			},
-			ChecksumMatch: func(name string) bool {
-				return strings.HasPrefix(name, "mita_") &&
-					strings.HasSuffix(name, "_linux_"+arch+".tar.gz.sha256.txt")
-			},
-		},
 		{
 			Name:   "warp",
 			Binary: "sing-box",
@@ -117,12 +84,6 @@ func Catalog(arch string) []Runtime {
 					strings.HasSuffix(name, "-linux-"+arch+".tar.gz") &&
 					!strings.Contains(name, "-musl") && !strings.Contains(name, "-glibc")
 			},
-		},
-		{
-			Name:          "olcrtc",
-			Binary:        "olcrtc",
-			Method:        MethodGoInstall,
-			SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
 		},
 	}
 }
@@ -253,7 +214,10 @@ func (o Options) withDefaults() Options {
 // so a single broken upstream release should not block the others.
 func InstallAll(ctx context.Context, opts Options) []Result {
 	opts = opts.withDefaults()
-	runtimes := Catalog(opts.Arch)
+	return installRuntimes(ctx, opts, Catalog(opts.Arch))
+}
+
+func installRuntimes(ctx context.Context, opts Options, runtimes []Runtime) []Result {
 	results := make([]Result, 0, len(runtimes))
 	for _, runtime := range runtimes {
 		results = append(results, Install(ctx, opts, runtime))

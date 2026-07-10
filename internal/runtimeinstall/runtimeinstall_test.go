@@ -40,23 +40,14 @@ func makeTarGz(t *testing.T, files map[string][]byte) []byte {
 	return buf.Bytes()
 }
 
-func TestCatalogCoversEveryProtocolRuntime(t *testing.T) {
+func TestCatalogCoversWarpRuntime(t *testing.T) {
 	runtimes := Catalog("amd64")
-	wantBinaries := map[string]string{
-		"naiveproxy": "caddy",
-		"hysteria2":  "hysteria",
-		"mieru":      "mita",
-		"warp":       "sing-box",
-		"olcrtc":     "olcrtc",
-	}
 	got := map[string]string{}
 	for _, r := range runtimes {
 		got[r.Name] = r.Binary
 	}
-	for name, binary := range wantBinaries {
-		if got[name] != binary {
-			t.Fatalf("catalog missing %s -> %s, got %q", name, binary, got[name])
-		}
+	if got["warp"] != "sing-box" {
+		t.Fatalf("catalog missing warp -> sing-box, got %q", got["warp"])
 	}
 }
 
@@ -65,19 +56,9 @@ func TestCatalogAssetMatchersMatchUpstreamNames(t *testing.T) {
 	for _, r := range Catalog("amd64") {
 		byBinary[r.Binary] = r
 	}
-	cases := []struct {
-		binary string
-		asset  string
-	}{
-		{"hysteria", "hysteria-linux-amd64"},
-		{"mita", "mita_3.34.0_linux_amd64.tar.gz"},
-		{"sing-box", "sing-box-1.13.13-linux-amd64.tar.gz"},
-	}
-	for _, c := range cases {
-		r := byBinary[c.binary]
-		if r.AssetMatch == nil || !r.AssetMatch(c.asset) {
-			t.Fatalf("%s asset matcher did not match %q", c.binary, c.asset)
-		}
+	sb := byBinary["sing-box"]
+	if sb.AssetMatch == nil || !sb.AssetMatch("sing-box-1.13.13-linux-amd64.tar.gz") {
+		t.Fatalf("sing-box asset matcher did not match expected upstream name")
 	}
 }
 
@@ -85,12 +66,7 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 
-	var caddyNaive Runtime
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "caddy" {
-			caddyNaive = r
-		}
-	}
+	caddyNaive := caddyRuntime(t)
 	if caddyNaive.Method != MethodCaddyNaive {
 		t.Fatalf("expected naiveproxy method=caddy-naive, got %s", caddyNaive.Method)
 	}
@@ -120,12 +96,7 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 }
 
 func TestSingBoxMatcherRejectsMuslAndGlibcVariants(t *testing.T) {
-	var sb Runtime
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "sing-box" {
-			sb = r
-		}
-	}
+	sb := warpRuntime(t)
 	for _, name := range []string{
 		"sing-box-1.13.13-linux-amd64-musl.tar.gz",
 		"sing-box-1.13.13-linux-amd64-glibc.tar.gz",
@@ -237,12 +208,7 @@ func TestInstallArchiveRuntimeWritesExecutableBinary(t *testing.T) {
 	archive := makeTarGz(t, map[string][]byte{"mita": mitaBinary})
 	checksums := fmt.Sprintf("%s  mita_3.34.0_linux_amd64.tar.gz\n", sha256Hex(archive))
 
-	mieru := Runtime{}
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "mita" {
-			mieru = r
-		}
-	}
+	mieru := mieruRuntime(t)
 
 	opts := Options{
 		BinDir: binDir,
@@ -288,12 +254,7 @@ func TestInstallRawBinaryRuntimeVerifiesChecksum(t *testing.T) {
 	hysteriaBinary := []byte("hysteria-executable")
 	checksums := fmt.Sprintf("%s  build/hysteria-linux-amd64\n", sha256Hex(hysteriaBinary))
 
-	var hysteria Runtime
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "hysteria" {
-			hysteria = r
-		}
-	}
+	hysteria := hysteriaRuntime(t)
 
 	opts := Options{
 		BinDir: binDir,
@@ -329,12 +290,7 @@ func TestInstallRawBinaryFailsOnChecksumMismatch(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 
-	var hysteria Runtime
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "hysteria" {
-			hysteria = r
-		}
-	}
+	hysteria := hysteriaRuntime(t)
 
 	opts := Options{
 		BinDir: binDir,
@@ -369,12 +325,7 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 
-	var olcrtc Runtime
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "olcrtc" {
-			olcrtc = r
-		}
-	}
+	olcrtc := olcrtcRuntime(t)
 
 	var gotPackage, gotBinDir string
 	opts := Options{
@@ -411,29 +362,54 @@ func TestInstallAllContinuesPastFailures(t *testing.T) {
 		GoInstall: func(ctx context.Context, binDir, sourcePackage string) error {
 			return os.WriteFile(filepath.Join(binDir, "olcrtc"), []byte("built"), 0o755)
 		},
-		BuildCaddy: func(ctx context.Context, outPath string) error {
-			return os.WriteFile(outPath, []byte("caddy-built"), 0o755)
-		},
 		EnsureGo: func(ctx context.Context) (string, error) { return "/usr/local/go/bin/go", nil },
+	}
+	// Use installRuntimes directly so we can verify that a failing release-based
+	// runtime does not stop a later source-built runtime from being installed.
+	runtimes := []Runtime{
+		hysteriaRuntime(t),
+		olcrtcRuntime(t),
+	}
+	results := installRuntimes(context.Background(), opts, runtimes)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].Err == nil {
+		t.Fatalf("expected hysteria install to fail")
+	}
+	if !results[1].Installed {
+		t.Fatalf("expected olcrtc install to succeed, got %+v", results[1])
+	}
+}
+
+func TestInstallAllInstallsCatalogRuntimes(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	archive := makeTarGz(t, map[string][]byte{"sing-box": []byte("sing-box-bin")})
+	opts := Options{
+		BinDir: binDir,
+		Arch:   "amd64",
+		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
+			if repo != "SagerNet/sing-box" {
+				return nil, fmt.Errorf("unexpected repo %s", repo)
+			}
+			return &Release{TagName: "v1.0.0", Assets: []Asset{
+				{Name: "sing-box-1.0.0-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/sb"},
+			}}, nil
+		},
+		Download: func(ctx context.Context, url string) ([]byte, error) {
+			if url != "https://example/sb" {
+				return nil, fmt.Errorf("unexpected url %s", url)
+			}
+			return archive, nil
+		},
 	}
 	results := InstallAll(context.Background(), opts)
 	if len(results) != len(Catalog("amd64")) {
-		t.Fatalf("expected one result per runtime, got %d", len(results))
+		t.Fatalf("expected %d results, got %d", len(Catalog("amd64")), len(results))
 	}
-	var builtOK, releaseFailures int
-	for _, r := range results {
-		if (r.Method == MethodGoInstall || r.Method == MethodCaddyNaive) && r.Installed {
-			builtOK++
-		}
-		if r.Method != MethodGoInstall && r.Method != MethodCaddyNaive && r.Err != nil {
-			releaseFailures++
-		}
-	}
-	if builtOK != 2 {
-		t.Fatalf("expected olcrtc + caddy builds to succeed (2), got %d", builtOK)
-	}
-	if releaseFailures != 3 {
-		t.Fatalf("expected 3 release-based runtimes to fail, got %d", releaseFailures)
+	if !results[0].Installed || results[0].Name != "warp" {
+		t.Fatalf("expected warp to be installed, got %+v", results[0])
 	}
 }
 
