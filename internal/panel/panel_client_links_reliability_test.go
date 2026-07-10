@@ -50,9 +50,52 @@ func TestClientLinksClipboardRejectionIsAwaited(t *testing.T) {
 	}
 }
 
+func TestClientLinksActionsAreSerializedAndGenerationSafe(t *testing.T) {
+	js := panelClientLinksReliabilityJS()
+	for _, want := range []string{
+		`let clientLinksActionInFlight = false;`,
+		`let clientLinksOutputGeneration = 0;`,
+		`if (clientLinksActionInFlight) return null;`,
+		`const generation = ++clientLinksOutputGeneration;`,
+		`if (generation !== clientLinksOutputGeneration) return;`,
+		`setClientLinksActionControlsDisabled(true);`,
+		`clientLinksActionInFlight = false;`,
+		`loadClientLinks = async function()`,
+		`loadClientSubscriptionPath = async function(path)`,
+		`downloadClientLinksJSON = async function()`,
+		`downloadClientConfigArtifacts = async function()`,
+		`downloadClientSubscriptionPath = async function(path, filename)`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("client-links action reliability missing %q", want)
+		}
+	}
+}
+
+func TestClientLinksDownloadsValidateArtifactsAndDelayURLRevocation(t *testing.T) {
+	js := panelClientLinksReliabilityJS()
+	for _, want := range []string{
+		`const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];`,
+		`config = JSON.parse(artifact.content);`,
+		`throw new Error('Invalid client config artifact '`,
+		`setTimeout(() => URL.revokeObjectURL(url), 1000);`,
+		`const text = await response.text();`,
+		`if (!response.ok) throw new Error(formatAPIError(text, response.status));`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("client-links download validation missing %q", want)
+		}
+	}
+}
+
 func TestPanelCatalogMountsClientLinksReliabilityGuards(t *testing.T) {
 	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
-	if !strings.Contains(html, `let clientLinksModalRequestSequence = 0;`) {
-		t.Fatal("rendered Panel does not mount client-links reliability guards")
+	for _, want := range []string{
+		`let clientLinksModalRequestSequence = 0;`,
+		`let clientLinksActionInFlight = false;`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("rendered Panel does not mount client-links reliability guard %q", want)
+		}
 	}
 }
