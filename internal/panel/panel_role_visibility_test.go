@@ -5,30 +5,18 @@ import (
 	"testing"
 )
 
-func TestPanelRoleVisibilityHidesAdminOnlySectionsFromViewers(t *testing.T) {
-	js := panelRoleVisibilityJS()
-	for _, want := range []string{
-		`const veilBaseApplyViewerRoleGuard = applyViewerRoleGuard`,
-		`['backups', 'users']`,
-		`link.hidden = viewer`,
-		`section.hidden = viewer`,
-		`window.location.hash === '#backups'`,
-		`window.location.hash === '#users'`,
-		`switchTab('dashboard')`,
-	} {
-		if !strings.Contains(js, want) {
-			t.Fatalf("role visibility JS missing %q", want)
-		}
-	}
-	for _, visible := range []string{"diagnostics", "settings", "inbounds"} {
-		if strings.Contains(js, `'#`+visible+`'`) {
-			t.Fatalf("read-only-capable section %q must remain available to viewers", visible)
-		}
+func TestPanelRoleVisibilityCompatibilityHookDoesNotWrapGuard(t *testing.T) {
+	if got := panelRoleVisibilityJS(); got != "" {
+		t.Fatalf("compatibility role visibility hook must be empty, got %q", got)
 	}
 }
 
-func TestPanelClientProfileActionsMountRoleVisibilityGuard(t *testing.T) {
-	if !strings.Contains(panelClientProfileActionsJS(), `applyViewerRoleGuard = function()`) {
-		t.Fatal("Panel runtime must mount the viewer section visibility guard")
+func TestPanelClientProfileActionsDoNotMountDuplicateRoleGuard(t *testing.T) {
+	actions := panelClientProfileActionsJS()
+	if strings.Contains(actions, `const veilBaseApplyViewerRoleGuard`) {
+		t.Fatal("client profile actions must not mount a second role visibility wrapper")
+	}
+	if strings.Contains(actions, `applyViewerRoleGuard = function()`) {
+		t.Fatal("client profile actions must not redefine the shared role guard")
 	}
 }
