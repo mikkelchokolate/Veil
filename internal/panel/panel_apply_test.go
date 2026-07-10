@@ -23,6 +23,10 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`apply-file-diff-preview-body`,
 		`apply-safety-warnings`,
 		`No file content is shown`,
+		`function setApplyMutationButtonsDisabled(disabled)`,
+		`if (result === null)`,
+		`setApplyMutationButtonsDisabled(true)`,
+		`return null`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)
