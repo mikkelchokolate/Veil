@@ -58,8 +58,10 @@ func (c SliceCatalog) Slices() []Slice {
 		{
 			Name: "client-links",
 			RenderSlots: []RenderSlot{
-				{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksCardHTML},
-				{Placeholder: panelClientLinksActionsPlaceholder, Render: func() string { return panelClientLinksActionsJS() + panelClientLinksReliabilityJS() }},
+				{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksHardenedCardHTML},
+				{Placeholder: panelClientLinksActionsPlaceholder, Render: func() string {
+					return panelClientLinksActionsJS() + panelClientLinksReliabilityJS() + panelClientLinksControlsJS()
+				}},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "load-client-links", Handler: "loadClientLinks", Event: "click"},
