@@ -34,7 +34,8 @@ func (r ManagementConfigRenderer) Render() (map[string]string, error) {
 }
 
 func (r ManagementConfigRenderer) HasRenderSettings() bool {
-	return generatedconfig.NewGeneratedRenderSettingsPolicy().HasRenderSettings(r.input.Settings, r.input.Inbounds)
+	keys := protocols.NewGeneratedConfigRegistry().RenderSettingFieldKeys()
+	return generatedconfig.NewGeneratedRenderSettingsPolicyWithFieldKeys(keys).HasRenderSettings(r.input.Settings, r.input.Inbounds)
 }
 
 func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error) {
