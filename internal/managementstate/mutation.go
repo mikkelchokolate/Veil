@@ -21,6 +21,7 @@ var (
 	ErrRoutingRuleInvalid       = routing.ErrRoutingRuleInvalid
 	ErrRoutingRuleNotFound      = routing.ErrRoutingRuleNotFound
 	ErrRoutingRuleDuplicateName = routing.ErrRoutingRuleDuplicateName
+	ErrLastAdministrator        = errors.New("cannot remove the last administrator")
 )
 
 type MutationTarget struct {
@@ -297,6 +298,9 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 	if update.Role != "admin" && update.Role != "viewer" {
 		return model.User{}, errors.New("invalid role")
 	}
+	if (*m.target.Users)[idx].Role == "admin" && update.Role != "admin" && administratorCount(*m.target.Users) <= 1 {
+		return model.User{}, ErrLastAdministrator
+	}
 	if !validUserLocale(update.Locale) {
 		return model.User{}, errors.New("invalid user locale")
 	}
@@ -315,6 +319,16 @@ func validUserLocale(locale string) bool {
 	return locale == "" || locale == "en" || locale == "ru"
 }
 
+func administratorCount(users []model.User) int {
+	count := 0
+	for _, user := range users {
+		if user.Role == "admin" {
+			count++
+		}
+	}
+	return count
+}
+
 func (m Mutation) DeleteUser(username string) error {
 	idx := -1
 	for i, existing := range *m.target.Users {
@@ -325,6 +339,9 @@ func (m Mutation) DeleteUser(username string) error {
 	}
 	if idx == -1 {
 		return errors.New("user not found")
+	}
+	if (*m.target.Users)[idx].Role == "admin" && administratorCount(*m.target.Users) <= 1 {
+		return ErrLastAdministrator
 	}
 	*m.target.Users = append((*m.target.Users)[:idx], (*m.target.Users)[idx+1:]...)
 	return m.save()
