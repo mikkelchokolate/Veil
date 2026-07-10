@@ -47,7 +47,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	if action, ok := runtimeCatalog.ApplyAction("sing-box"); ok {
 		warpAction = action
 	}
-	return applyplan.Build(applyplan.Input{
+	plan := applyplan.Build(applyplan.Input{
 		Settings:                input.Settings,
 		Inbounds:                input.Inbounds,
 		Rules:                   input.Rules,
@@ -71,6 +71,47 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
 		LiveRoot:              filepath.Join(applyRoot, "live"),
 	})
+	appendProtocolInboundValidation(&plan, catalog, input.Settings, input.Inbounds)
+	return plan
+}
+
+func appendProtocolInboundValidation(plan *ApplyPlanResponse, catalog ApplyProtocolCapabilityCatalog, settings Settings, inbounds []Inbound) {
+	if plan == nil {
+		return
+	}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled {
+			continue
+		}
+		capability, ok := catalog.ForProtocol(inbound.Protocol)
+		if !ok {
+			continue
+		}
+		for _, issue := range capability.ValidateInbound(settings, inbound) {
+			plan.Issues = append(plan.Issues, issue)
+			if issue.Severity != "error" {
+				continue
+			}
+			plan.Valid = false
+			message := issue.Message
+			if message == "" {
+				message = issue.Code
+			}
+			plan.Errors = appendUniqueApplyPlanError(plan.Errors, message)
+		}
+	}
+}
+
+func appendUniqueApplyPlanError(errors []string, message string) []string {
+	if message == "" {
+		return errors
+	}
+	for _, existing := range errors {
+		if existing == message {
+			return errors
+		}
+	}
+	return append(errors, message)
 }
 
 func configForInboundRuntime(inbound Inbound) string {
