@@ -132,29 +132,57 @@ func ManagedLogUnitOptionsHTML(runtimes []service.ManagedRuntime) string {
 }
 
 func DiagnosticsActionsJS() string {
-	return `    document.getElementById('run-speedtest').addEventListener('click', async () => {
-      await loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' });
+	return `    async function runDiagnosticAction(buttonID, action) {
+      const button = document.getElementById(buttonID);
+      if (!button || button.dataset.diagnosticInFlight === 'true') return null;
+      button.dataset.diagnosticInFlight = 'true';
+      button.disabled = true;
+      try {
+        return await action();
+      } finally {
+        delete button.dataset.diagnosticInFlight;
+        button.disabled = false;
+      }
+    }
+
+    function diagnosticIntegerValue(id, fallback) {
+      const input = document.getElementById(id);
+      const raw = input && input.value.trim() ? input.value.trim() : String(fallback);
+      if (!input || !input.checkValidity()) {
+        if (input) input.reportValidity();
+        return null;
+      }
+      const value = Number(raw);
+      if (!Number.isInteger(value)) {
+        input.setCustomValidity('Enter a whole number.');
+        input.reportValidity();
+        input.setCustomValidity('');
+        return null;
+      }
+      return value;
+    }
+
+    document.getElementById('run-speedtest').addEventListener('click', async () => {
+      await runDiagnosticAction('run-speedtest', () => loadJSON('/api/tools/speedtest', 'speedtest-output', { method: 'POST' }));
     });
 
     // Service logs
     document.getElementById('load-logs').addEventListener('click', async () => {
       const unit = document.getElementById('log-unit').value;
-      const lines = document.getElementById('log-lines').value || '50';
-      await loadJSON('/api/logs?unit=' + encodeURIComponent(unit) + '&lines=' + encodeURIComponent(lines), 'logs-output');
-      try {
-        const el = document.getElementById('logs-output');
-        const data = JSON.parse(el.textContent);
+      const lines = diagnosticIntegerValue('log-lines', 50);
+      if (lines === null) return;
+      await runDiagnosticAction('load-logs', async () => {
+        const data = await loadJSON('/api/logs?unit=' + encodeURIComponent(unit) + '&lines=' + encodeURIComponent(lines), 'logs-output');
         if (data && data.output) {
-          el.textContent = data.output;
+          document.getElementById('logs-output').textContent = data.output;
         }
-      } catch (_) {
-        // keep raw JSON if parsing fails
-      }
+        return data;
+      });
     });
 
     // Firewall
     document.getElementById('load-firewall').addEventListener('click', async () => {
-      await loadJSON('/api/firewall', 'firewall-output');
+      await runDiagnosticAction('load-firewall', () => loadJSON('/api/firewall', 'firewall-output'));
     });
 
     // DNS lookup
@@ -164,25 +192,26 @@ func DiagnosticsActionsJS() string {
         document.getElementById('dns-lookup-output').textContent = veilT('diagnostics.hostnameRequired');
         return;
       }
-      await loadJSON('/api/tools/dns-lookup', 'dns-lookup-output', {
+      await runDiagnosticAction('run-dns-lookup', () => loadJSON('/api/tools/dns-lookup', 'dns-lookup-output', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostname })
-      });
+      }));
     });
 
     // Ping
     document.getElementById('run-ping').addEventListener('click', async () => {
       const host = document.getElementById('ping-host').value.trim();
-      const count = document.getElementById('ping-count').value || '3';
+      const count = diagnosticIntegerValue('ping-count', 3);
       if (!host) {
         document.getElementById('ping-output').textContent = veilT('diagnostics.hostRequired');
         return;
       }
-      await loadJSON('/api/tools/ping', 'ping-output', {
+      if (count === null) return;
+      await runDiagnosticAction('run-ping', () => loadJSON('/api/tools/ping', 'ping-output', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host, count: Number(count) })
-      });
+        body: JSON.stringify({ host, count })
+      }));
     });`
 }
