@@ -48,8 +48,13 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 		}
 	}
 
-	if settings.PanelAccess == "caddy" && !hasRuntimeUnit(runtimes, "veil-caddy@panel.service") {
-		runtimes = append(runtimes, panelCaddyRuntime())
+	// Ensure the panel caddy runtime is present and uses the canonical empty
+	// Protocol. In the broad fallback catalog (nil inbounds) the naiveproxy
+	// plugin's fallback descriptor contributes the same unit with
+	// Protocol="naiveproxy"; replace it so panel caddy is consistently
+	// classified as a panel runtime, not a protocol runtime.
+	if settings.PanelAccess == "caddy" || len(inbounds) == 0 {
+		runtimes = replaceOrAppendRuntime(runtimes, panelCaddyRuntime())
 	}
 
 	if warp.Enabled || len(inbounds) == 0 {
@@ -70,13 +75,14 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 	return sortManagedRuntimes(runtimes)
 }
 
-func hasRuntimeUnit(runtimes []ManagedRuntime, unit string) bool {
-	for _, r := range runtimes {
-		if r.Unit == unit {
-			return true
+func replaceOrAppendRuntime(runtimes []ManagedRuntime, runtime ManagedRuntime) []ManagedRuntime {
+	for i, r := range runtimes {
+		if r.Unit == runtime.Unit {
+			runtimes[i] = runtime
+			return runtimes
 		}
 	}
-	return false
+	return append(runtimes, runtime)
 }
 
 func panelCaddyRuntime() ManagedRuntime {
