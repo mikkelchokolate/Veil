@@ -67,6 +67,9 @@ type Runtime struct {
 	ChecksumMatch func(assetName string) bool
 	// SourcePackage is the Go package path for MethodGoInstall.
 	SourcePackage string
+	// Description is a human-readable sentence describing how the runtime is
+	// acquired. It is used by the CLI to build protocol-agnostic help text.
+	Description string
 }
 
 // Catalog returns the runtime install descriptors for non-plugin runtimes such
@@ -75,10 +78,11 @@ type Runtime struct {
 func Catalog(arch string) []Runtime {
 	return []Runtime{
 		{
-			Name:   "warp",
-			Binary: "sing-box",
-			Method: MethodArchive,
-			Repo:   "SagerNet/sing-box",
+			Name:        "warp",
+			Binary:      "sing-box",
+			Method:      MethodArchive,
+			Repo:        "SagerNet/sing-box",
+			Description: "sing-box is downloaded from its upstream GitHub release",
 			AssetMatch: func(name string) bool {
 				return strings.HasPrefix(name, "sing-box-") &&
 					strings.HasSuffix(name, "-linux-"+arch+".tar.gz") &&
