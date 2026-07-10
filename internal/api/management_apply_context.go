@@ -113,6 +113,9 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 		!slices.Contains(removeIDs, generatedconfig.WarpConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
+	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
+		return nil, nil, nil, nil
+	}
 	if ctx.state.privileged == nil {
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
 	}
@@ -214,18 +217,34 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}}
 	}
 	rollbackFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
-	rollbackActions := ctx.reloadPromotedServicesLocked(liveFiles)
+	// The units removed during the failed apply are about to be restored; do not
+	// stop/disable them again while reloading services for the restored state.
+	ctx.state.orphanedUnits = nil
+	rollbackActions := ctx.reloadPromotedServicesLocked(rollbackFiles)
 
 	liveFilesMap := make(map[string]bool)
 	for _, lf := range liveFiles {
 		liveFilesMap[filepath.Clean(lf)] = true
 	}
+	rollbackFilesMap := make(map[string]bool)
+	for _, rf := range rollbackFiles {
+		rollbackFilesMap[filepath.Clean(rf)] = true
+	}
 	var restoredUnits []string
 	for _, record := range records {
-		if !liveFilesMap[filepath.Clean(record.LivePath)] {
-			if unit, ok := UnitForLiveConfig(record.LivePath); ok {
-				restoredUnits = append(restoredUnits, unit)
-			}
+		cleanPath := filepath.Clean(record.LivePath)
+		if liveFilesMap[cleanPath] {
+			// File stayed live after the apply; it was only updated, so the
+			// service reload above already applied the restored config.
+			continue
+		}
+		if !rollbackFilesMap[cleanPath] {
+			// The file was removed during apply but was not restored; leave the
+			// unit stopped.
+			continue
+		}
+		if unit, ok := UnitForLiveConfig(record.LivePath); ok {
+			restoredUnits = append(restoredUnits, unit)
 		}
 	}
 	if len(restoredUnits) > 0 {

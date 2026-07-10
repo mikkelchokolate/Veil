@@ -2,7 +2,9 @@ package api
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/firewall"
@@ -153,5 +155,67 @@ func TestSyncFirewallLockedReportsNonFatalErrors(t *testing.T) {
 
 	if len(results) != 1 || results[0].Success || results[0].Error != "ufw not found" {
 		t.Fatalf("expected non-fatal enable error, got %+v", results)
+	}
+}
+
+func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
+	root := t.TempDir()
+	staged := filepath.Join(root, "generated", "hysteria2", "edge.yaml")
+	if err := os.MkdirAll(filepath.Dir(staged), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("config"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive",
+		promoteResult: privileged.PromoteResult{
+			BackupID:         "20260608T120000.000000000Z",
+			WrittenArtifacts: []string{"hysteria2/edge.yaml"},
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, Privileged: client})
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	ctx := NewManagementApplyContext(state)
+
+	liveFiles, _, records, err := ctx.promoteStagedConfigsLocked([]string{staged})
+	if err != nil {
+		t.Fatalf("promote staged configs: %v", err)
+	}
+	if len(liveFiles) != 1 {
+		t.Fatalf("expected one live file, got %+v", liveFiles)
+	}
+
+	// Simulate a rollback where the newly added config has no previous version
+	// to restore; the helper removes it again.
+	client.promoteResult = privileged.PromoteResult{
+		BackupID:         "20260608T120000.000000000Z",
+		WrittenArtifacts: []string{},
+	}
+	rollbackFiles, rollbackActions := ctx.rollbackPromotedConfigsLocked(records, liveFiles)
+	if len(rollbackFiles) != 0 {
+		t.Fatalf("expected no rollback files for newly added inbound, got %+v", rollbackFiles)
+	}
+	for _, action := range rollbackActions {
+		if strings.Contains(action.Name, "hysteria2@edge") {
+			t.Fatalf("rollback should not restart a newly added inbound that was removed, got %+v", rollbackActions)
+		}
+	}
+}
+
+func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
+	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
+	ctx := NewManagementApplyContext(state)
+
+	liveFiles, backupFiles, records, err := ctx.promoteStagedConfigsLocked(nil)
+	if err != nil {
+		t.Fatalf("expected no error when nothing to promote, got %v", err)
+	}
+	if len(client.promotions) != 0 {
+		t.Fatalf("expected no promotion calls, got %+v", client.promotions)
+	}
+	if len(liveFiles) != 0 || len(backupFiles) != 0 || len(records) != 0 {
+		t.Fatalf("expected empty result, got live=%+v backup=%+v records=%+v", liveFiles, backupFiles, records)
 	}
 }
