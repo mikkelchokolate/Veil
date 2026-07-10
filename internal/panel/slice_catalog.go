@@ -27,13 +27,17 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
 				{Placeholder: panelIntroActionsPlaceholder, Render: func() string {
-					return panelIntroActionsJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS()
+					return panelIntroActionsJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
 				}},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "settings-form", Handler: "saveSettings", Event: "submit"},
 				{ElementID: "load-settings", Handler: "loadSettingsIntoForm", Event: "click"},
 			},
+		},
+		{
+			Name:        "navigation",
+			RenderSlots: panelNavigationInlineHandlerSlots(),
 		},
 		{
 			Name: "service-status",
