@@ -33,3 +33,19 @@ func (p Paths) Mieru() string {
 func (p Paths) Warp() string {
 	return p.Generated(WarpConfigSubpath)
 }
+
+func (p Paths) CertPath(domain string) string {
+	return filepath.Join(p.ApplyRoot, "certs", domain+".crt")
+}
+
+func (p Paths) KeyPath(domain string) string {
+	return filepath.Join(p.ApplyRoot, "certs", domain+".key")
+}
+
+func (p Paths) PanelCertPath() string {
+	return filepath.Join(p.ApplyRoot, "panel", "tls.crt")
+}
+
+func (p Paths) PanelKeyPath() string {
+	return filepath.Join(p.ApplyRoot, "panel", "tls.key")
+}

@@ -134,8 +134,11 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 		MasqueradeURL: masqueradeURL,
 	}
 	if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
-		hystConfig.CertPath = "/etc/veil/certs/" + r.settings.Domain + ".crt"
-		hystConfig.KeyPath = "/etc/veil/certs/" + r.settings.Domain + ".key"
+		hystConfig.CertPath = r.paths.CertPath(r.settings.Domain)
+		hystConfig.KeyPath = r.paths.KeyPath(r.settings.Domain)
+	} else {
+		hystConfig.CertPath = r.paths.PanelCertPath()
+		hystConfig.KeyPath = r.paths.PanelKeyPath()
 	}
 	if r.warp.Enabled {
 		socksPort := r.warp.SocksPort
@@ -190,7 +193,7 @@ func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig, inc
 }
 
 func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
-	return NewInboundRenderer(settings, Paths{}, warp).RenderHysteria2(inbound)
+	return NewInboundRenderer(settings, NewPaths("/etc/veil"), warp).RenderHysteria2(inbound)
 }
 
 func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {

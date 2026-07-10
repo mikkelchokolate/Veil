@@ -89,8 +89,8 @@ func TestRenderConfigWithInbound(t *testing.T) {
 		"listen: :8443",
 		"password: global-secret",
 		"url: https://example.com",
-		"cert: /etc/veil/panel/tls.crt",
-		"key: /etc/veil/panel/tls.key",
+		"cert: " + paths.PanelCertPath(),
+		"key: " + paths.PanelKeyPath(),
 	} {
 		if !strings.Contains(artifacts[0].Body, want) {
 			t.Errorf("rendered config missing %q:\n%s", want, artifacts[0].Body)
@@ -187,10 +187,10 @@ func TestRenderConfigWithCaddyPanelAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "cert: /etc/veil/certs/example.com.crt") {
+	if !strings.Contains(artifacts[0].Body, "cert: "+paths.CertPath("example.com")) {
 		t.Errorf("expected caddy cert path, got:\n%s", artifacts[0].Body)
 	}
-	if !strings.Contains(artifacts[0].Body, "key: /etc/veil/certs/example.com.key") {
+	if !strings.Contains(artifacts[0].Body, "key: "+paths.KeyPath("example.com")) {
 		t.Errorf("expected caddy key path, got:\n%s", artifacts[0].Body)
 	}
 }
