@@ -45,6 +45,7 @@ type managementState struct {
 	liveRoot                       string
 	keyPath                        string
 	cipher                         *secrets.Cipher
+	authToken                      string
 	setupAllowed                   bool
 	setup                          SetupState
 	settings                       Settings
