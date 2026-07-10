@@ -5,6 +5,9 @@ package panel
 // generic client-profile controls to the transport and persistence modules.
 func panelInboundReliabilityJS() string {
 	return `    let veilEditingInboundName = '';
+    let inboundLoadGeneration = 0;
+    let inboundLoadController = null;
+    let inboundMutationInFlight = false;
 
     function veilShowInboundLocalError(message, field) {
       inboundValidationValid = false;
@@ -27,6 +30,93 @@ func panelInboundReliabilityJS() string {
       const saveButton = document.getElementById('save-inbound');
       if (saveButton) saveButton.disabled = true;
     }
+
+    function setInboundMutationControlsDisabled(disabled) {
+      const busy = Boolean(disabled);
+      const viewer = isViewerRole();
+      const saveButton = document.getElementById('save-inbound');
+      if (saveButton) saveButton.disabled = busy || !inboundValidationValid || viewer;
+      ['add-inbound-btn', 'delete-inbound'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = busy || viewer;
+      });
+      const loadButton = document.getElementById('load-inbounds');
+      if (loadButton) loadButton.disabled = busy;
+      document.querySelectorAll('#inbounds-table input[data-admin-only="true"], [data-inbound-action="edit"], [data-inbound-action="delete"]').forEach((control) => {
+        control.disabled = busy || viewer;
+      });
+    }
+
+    function cancelInboundLoad() {
+      inboundLoadGeneration += 1;
+      if (inboundLoadController) {
+        inboundLoadController.abort();
+        inboundLoadController = null;
+      }
+    }
+
+    async function withInboundMutation(action) {
+      if (inboundMutationInFlight) return null;
+      inboundMutationInFlight = true;
+      cancelInboundLoad();
+      setInboundMutationControlsDisabled(true);
+      try {
+        return await action();
+      } finally {
+        inboundMutationInFlight = false;
+        setInboundMutationControlsDisabled(false);
+        applyViewerRoleGuard();
+      }
+    }
+
+    loadInboundsIntoOutput = async function() {
+      if (inboundMutationInFlight) return null;
+      const generation = ++inboundLoadGeneration;
+      if (inboundLoadController) inboundLoadController.abort();
+      const controller = new AbortController();
+      inboundLoadController = controller;
+      const output = document.getElementById('inbounds-output');
+      const loadButton = document.getElementById('load-inbounds');
+      if (loadButton) loadButton.disabled = true;
+      if (output) output.textContent = veilT('status.loadingPath', { path: '/api/inbounds' });
+      try {
+        const response = await fetch('/api/inbounds', {
+          headers: authHeaders(),
+          signal: controller.signal
+        });
+        const text = await response.text();
+        if (generation !== inboundLoadGeneration || controller.signal.aborted) return null;
+        if (!response.ok) {
+          if (output) output.textContent = formatAPIError(text, response.status);
+          return null;
+        }
+        const inbounds = text ? JSON.parse(text) : [];
+        if (!Array.isArray(inbounds)) throw new Error('Invalid inbounds response.');
+        if (output) output.textContent = JSON.stringify(inbounds, null, 2);
+        window.cachedInbounds = inbounds;
+        const tbody = document.getElementById('inbounds-tbody');
+        if (tbody) {
+          tbody.textContent = '';
+          if (inbounds.length === 0) {
+            appendInboundEmptyState(tbody);
+          } else {
+            inbounds.forEach((inbound) => tbody.appendChild(createInboundRow(inbound)));
+          }
+        }
+        applyViewerRoleGuard();
+        return inbounds;
+      } catch (error) {
+        if (error && error.name === 'AbortError') return null;
+        if (generation !== inboundLoadGeneration) return null;
+        if (output) {
+          output.textContent = veilT('status.requestFailed', { error: String(error && error.message ? error.message : error) });
+        }
+        return null;
+      } finally {
+        if (inboundLoadController === controller) inboundLoadController = null;
+        if (loadButton && generation === inboundLoadGeneration) loadButton.disabled = inboundMutationInFlight;
+      }
+    };
 
     const veilBaseEnsureProtocolSchemas = ensureProtocolSchemas;
     ensureProtocolSchemas = function() {
@@ -74,36 +164,68 @@ func panelInboundReliabilityJS() string {
     };
 
     saveInbound = async function(event) {
-      event.preventDefault();
-      if (!await validateInboundCandidate()) return;
-
-      let payload;
-      try {
-        payload = buildInboundCandidate();
-      } catch (err) {
-        veilShowInboundLocalError('Client profiles must be valid JSON: ' + String(err));
-        return;
-      }
-
-      const editingName = veilEditingInboundName;
-      const saved = await loadJSON(editingName ? '/api/inbounds/' + encodeURIComponent(editingName) : '/api/inbounds', 'inbounds-output', {
-        method: editingName ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      if (event) event.preventDefault();
+      const saved = await withInboundMutation(async () => {
+        if (!await validateInboundCandidate()) return null;
+        setInboundMutationControlsDisabled(true);
+        let payload;
+        try {
+          payload = buildInboundCandidate();
+        } catch (err) {
+          veilShowInboundLocalError('Client profiles must be valid JSON: ' + String(err));
+          return null;
+        }
+        const editingName = veilEditingInboundName;
+        return loadJSON(editingName ? '/api/inbounds/' + encodeURIComponent(editingName) : '/api/inbounds', 'inbounds-output', {
+          method: editingName ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
       });
-      if (!saved) return;
-
+      if (!saved) return null;
       closeInboundModal();
-      loadInboundsIntoOutput();
+      await loadInboundsIntoOutput();
+      return saved;
     };
 
     deleteInbound = async function() {
       const name = veilEditingInboundName || document.getElementById('inbound-name').value.trim();
-      if (!name || !confirm(veilT('confirm.deleteInbound', { name }))) return;
-      const deleted = await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
-      if (!deleted) return;
+      if (!name || !confirm(veilT('confirm.deleteInbound', { name }))) return null;
+      const deleted = await withInboundMutation(() => loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' }));
+      if (!deleted) return null;
       closeInboundModal();
-      loadInboundsIntoOutput();
+      await loadInboundsIntoOutput();
+      return deleted;
+    };
+
+    window.toggleInboundActive = async function(name, checked, control) {
+      const updated = await withInboundMutation(async () => {
+        const inbound = Array.isArray(window.cachedInbounds) ? window.cachedInbounds.find((item) => item.name === name) : null;
+        if (!inbound) return null;
+        const payload = Object.assign({}, inbound, { enabled: checked });
+        return loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      });
+      if (!updated) {
+        if (control) {
+          control.checked = !checked;
+          control.disabled = isViewerRole();
+        }
+        return null;
+      }
+      await loadInboundsIntoOutput();
+      return updated;
+    };
+
+    window.directDeleteInbound = async function(name) {
+      if (!confirm(veilT('confirm.deleteInbound', { name }))) return null;
+      const deleted = await withInboundMutation(() => loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' }));
+      if (!deleted) return null;
+      await loadInboundsIntoOutput();
+      return deleted;
     };
 
     window.renderDynamicProtocolFields = function(inbound) {
@@ -116,7 +238,7 @@ func panelInboundReliabilityJS() string {
         scheduleInboundValidation();
         return true;
       }).catch((error) => {
-        container.innerHTML = '';
+        container.textContent = '';
         veilShowInboundLocalError('Could not load protocol fields: ' + String(error && error.message ? error.message : error), 'protocol');
         return false;
       });
