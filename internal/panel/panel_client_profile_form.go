@@ -113,5 +113,5 @@ func panelClientProfileActionsJS() string {
     document.getElementById('generate-client-profile-password').addEventListener('click', genClientProfilePassword);
     document.getElementById('add-client-profile').addEventListener('click', addClientProfile);
     document.getElementById('generate-and-add-profile').addEventListener('click', generateAndAddProfile);
-` + panelInboundReliabilityJS() + panelRequestReliabilityJS() + panelRoleVisibilityJS()
+`
 }
