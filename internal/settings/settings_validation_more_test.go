@@ -22,7 +22,7 @@ func TestSettingsValidationRejectsMissingRequiredFields(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := NewSettingsValidation().NormalizeAndValidate(&tc.settings, Settings{})
+			err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&tc.settings, Settings{})
 			if err == nil || err.Error() != "panelListen and mode are required" {
 				t.Fatalf("expected required-field error, got %v", err)
 			}
@@ -32,7 +32,7 @@ func TestSettingsValidationRejectsMissingRequiredFields(t *testing.T) {
 
 func TestSettingsValidationRejectsInvalidPanelAccess(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", PanelAccess: "invalid"}
-	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
 	if err == nil || err.Error() != "panel access must be direct, local, or caddy" {
 		t.Fatalf("err = %v", err)
 	}
@@ -52,7 +52,7 @@ func TestSettingsValidationAcceptsValidPanelAccessValues(t *testing.T) {
 				settings.Domain = "example.com"
 				settings.Email = "admin@example.com"
 			}
-			if err := NewSettingsValidation().NormalizeAndValidate(&settings, current); err != nil {
+			if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, current); err != nil {
 				t.Fatalf("access %q: %v", access, err)
 			}
 		})
@@ -84,7 +84,7 @@ func TestSettingsValidationDomainAndEmailErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := NewSettingsValidation().NormalizeAndValidate(&tc.settings, Settings{})
+			err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&tc.settings, Settings{})
 			if err == nil || err.Error() != tc.wantErrContains {
 				t.Fatalf("expected %q, got %v", tc.wantErrContains, err)
 			}
@@ -104,7 +104,7 @@ func TestSettingsValidationPanelListenErrors(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.listen, func(t *testing.T) {
 			settings := Settings{PanelListen: tc.listen, Mode: "server"}
-			err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+			err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
 			if err == nil || err.Error() != tc.errStr {
 				t.Fatalf("listen %q: expected %q, got %v", tc.listen, tc.errStr, err)
 			}
@@ -114,7 +114,7 @@ func TestSettingsValidationPanelListenErrors(t *testing.T) {
 
 func TestSettingsValidationFallbackRootEscapesVarLibVeil(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", FallbackRoot: "../../etc/passwd"}
-	err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{})
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
 	if err == nil || err.Error() != "fallbackRoot must be within /var/lib/veil" {
 		t.Fatalf("err = %v", err)
 	}
@@ -122,15 +122,17 @@ func TestSettingsValidationFallbackRootEscapesVarLibVeil(t *testing.T) {
 
 func TestSettingsValidationFallsBackToCurrentValues(t *testing.T) {
 	current := Settings{
-		PanelAccess:     "local",
-		WebBasePath:     "/panel/",
-		OlcrtcAuth:      "old-auth",
-		OlcrtcTransport: "old-transport",
-		OlcrtcRoomID:    "old-room",
+		PanelAccess: "local",
+		WebBasePath: "/panel/",
+		ProtocolFields: map[string]any{
+			"olcrtcAuth":      "old-auth",
+			"olcrtcTransport": "old-transport",
+			"olcrtcRoomID":    "old-room",
+		},
 	}
 	update := Settings{PanelListen: "127.0.0.1:2096", Mode: "server"}
 
-	if err := NewSettingsValidation().NormalizeAndValidate(&update, current); err != nil {
+	if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&update, current); err != nil {
 		t.Fatalf("NormalizeAndValidate: %v", err)
 	}
 
@@ -140,14 +142,14 @@ func TestSettingsValidationFallsBackToCurrentValues(t *testing.T) {
 	if update.WebBasePath != current.WebBasePath {
 		t.Fatalf("WebBasePath = %q, want %q", update.WebBasePath, current.WebBasePath)
 	}
-	if update.OlcrtcAuth != current.OlcrtcAuth {
-		t.Fatalf("OlcrtcAuth = %q, want %q", update.OlcrtcAuth, current.OlcrtcAuth)
+	if update.ProtocolFields["olcrtcAuth"] != "old-auth" {
+		t.Fatalf("olcrtcAuth = %v, want %q", update.ProtocolFields["olcrtcAuth"], "old-auth")
 	}
-	if update.OlcrtcTransport != current.OlcrtcTransport {
-		t.Fatalf("OlcrtcTransport = %q, want %q", update.OlcrtcTransport, current.OlcrtcTransport)
+	if update.ProtocolFields["olcrtcTransport"] != "old-transport" {
+		t.Fatalf("olcrtcTransport = %v, want %q", update.ProtocolFields["olcrtcTransport"], "old-transport")
 	}
-	if update.OlcrtcRoomID != current.OlcrtcRoomID {
-		t.Fatalf("OlcrtcRoomID = %q, want %q", update.OlcrtcRoomID, current.OlcrtcRoomID)
+	if update.ProtocolFields["olcrtcRoomID"] != "old-room" {
+		t.Fatalf("olcrtcRoomID = %v, want %q", update.ProtocolFields["olcrtcRoomID"], "old-room")
 	}
 }
 
@@ -166,7 +168,7 @@ func TestSettingsValidationNormalizesWebBasePathFromUpdate(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
 			settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", WebBasePath: tc.input}
-			if err := NewSettingsValidation().NormalizeAndValidate(&settings, Settings{}); err != nil {
+			if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{}); err != nil {
 				t.Fatalf("NormalizeAndValidate: %v", err)
 			}
 			if settings.WebBasePath != tc.want {
@@ -202,7 +204,7 @@ func TestNormalizeWebBasePath(t *testing.T) {
 func TestSettingsValidationCaddyRequiresWebBasePathEvenFromCurrent(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", PanelAccess: "caddy"}
 	current := Settings{}
-	err := NewSettingsValidation().NormalizeAndValidate(&settings, current)
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, current)
 	if err == nil || !strings.Contains(err.Error(), "webBasePath is required for caddy Panel access") {
 		t.Fatalf("err = %v", err)
 	}

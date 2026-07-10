@@ -22,7 +22,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			candidate := settings
-			if err := veilsettings.NewSettingsValidation().NormalizeAndValidate(&candidate, s.settings); err != nil {
+			if err := veilsettings.NewSettingsValidationWithFieldSchemas(protocols.NewRegistry().SettingsFieldSchemas()).NormalizeAndValidate(&candidate, s.settings); err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
 			}
