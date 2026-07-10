@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"html"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -116,13 +117,15 @@ func DiagnosticsCardsHTML(runtimes []service.ManagedRuntime) string {
 func ManagedLogUnitOptionsHTML(runtimes []service.ManagedRuntime) string {
 	var b strings.Builder
 	for _, runtime := range runtimes {
-		unitName := strings.TrimSuffix(runtime.Unit, ".service")
+		unitName := html.EscapeString(strings.TrimSuffix(runtime.Unit, ".service"))
+		displayName := html.EscapeString(runtime.Name)
+		displayUnit := html.EscapeString(runtime.Unit)
 		b.WriteString(`            <option value="`)
 		b.WriteString(unitName)
 		b.WriteString(`">`)
-		b.WriteString(runtime.Name)
+		b.WriteString(displayName)
 		b.WriteString(" (")
-		b.WriteString(runtime.Unit)
+		b.WriteString(displayUnit)
 		b.WriteString(")</option>\n")
 	}
 	return b.String()
