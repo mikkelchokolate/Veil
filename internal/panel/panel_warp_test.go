@@ -22,24 +22,40 @@ func TestPanelWarpActionsModuleRendersLoadAndSaveActions(t *testing.T) {
 	}
 }
 
-// TestPanelWarpToggleAppliesImmediately guards the fix for the WARP slider
-// behaving like an inert checkbox: flipping it must save AND apply so WARP
-// actually turns on/off (and the routing rule is added/removed) without the
-// user hunting for a separate save button. Both the toggle change and the
-// form submit route through a single commit that PUTs /api/warp then POSTs
-// /api/apply to make the change live.
+// TestPanelWarpToggleAppliesImmediately guards that flipping the WARP slider
+// saves and applies the config immediately. Save and apply results remain
+// separate so a failed live apply cannot make the UI lie about persisted state.
 func TestPanelWarpToggleAppliesImmediately(t *testing.T) {
 	actions := panelWarpActionsJS()
 	for _, want := range []string{
 		`async function applyWarpToggle()`,
 		`async function commitWarp(`,
-		`/api/apply`,
+		`const applied = await loadJSON('/api/apply'`,
 		`applyServices: true`,
 		`applyLive: true`,
 		`confirm: true`,
+		`return { saved, applied: applied !== null };`,
+		`return { saved: null, applied: false };`,
+		`toggle.checked = Boolean(result.saved.enabled);`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("WARP actions missing %q", want)
+		}
+	}
+}
+
+func TestPanelWarpToggleOnlyRevertsWhenSaveFails(t *testing.T) {
+	actions := panelWarpActionsJS()
+	for _, want := range []string{
+		`if (!result || !result.saved) {`,
+		`toggle.checked = !enabled;`,
+		`toggle.checked = Boolean(result.saved.enabled);`,
+		`if (output) output.textContent = veilT('status.requestFailed'`,
+		`if (toggle) { toggle.disabled = isViewerRole(); }`,
+		`if (saveBtn) { saveBtn.disabled = isViewerRole(); }`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("WARP failure-state handling missing %q", want)
 		}
 	}
 }
