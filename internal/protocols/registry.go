@@ -123,6 +123,12 @@ func AsClientAccessProvider(p ProtocolPlugin) (ClientAccessProvider, bool) {
 	return c, ok
 }
 
+// AsClientAccessAggregator returns the ClientAccessAggregator capability or nil.
+func AsClientAccessAggregator(p ProtocolPlugin) (ClientAccessAggregator, bool) {
+	c, ok := p.(ClientAccessAggregator)
+	return c, ok
+}
+
 // AsUIProvider returns the UIProvider capability or nil.
 func AsUIProvider(p ProtocolPlugin) (UIProvider, bool) {
 	c, ok := p.(UIProvider)

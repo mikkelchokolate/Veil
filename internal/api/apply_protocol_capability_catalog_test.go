@@ -15,6 +15,7 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		{"naiveproxy", "/etc/veil/generated/caddy/panel.Caddyfile", "reload veil-caddy@.service", true, false, true},
 		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
 		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
+		{"olcrtc", "/etc/veil/generated/olcrtc/server.yaml", "restart veil-olcrtc@.service", true, false, false},
 	}
 	for _, tc := range cases {
 		capability, ok := catalog.ForProtocol(tc.protocol)
