@@ -15,6 +15,9 @@ func (Plugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationI
 // NeedsDomain reports that Hysteria2 needs a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return true }
 
+// NeedsEmail reports that Hysteria2 does not need an email address.
+func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
+
 // HasCredential reports whether the inbound has a usable Hysteria2 credential.
 func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	for _, profile := range inbound.Profiles {

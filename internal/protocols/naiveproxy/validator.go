@@ -41,6 +41,9 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 // NeedsDomain reports that naiveproxy needs a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return true }
 
+// NeedsEmail reports that naiveproxy needs an email for ACME TLS.
+func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return true }
+
 // HasCredential reports whether the inbound has a usable naiveproxy credential.
 func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	for _, profile := range inbound.Profiles {
