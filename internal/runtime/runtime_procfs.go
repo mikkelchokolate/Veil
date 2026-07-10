@@ -4,10 +4,6 @@ type RuntimeProcFS struct {
 	policy ManagedProcessPolicy
 }
 
-func NewRuntimeProcFS() RuntimeProcFS {
-	return NewRuntimeProcFSWithPolicy(NewManagedProcessPolicy())
-}
-
 // NewRuntimeProcFSWithPolicy creates a procfs reader that filters managed
 // processes through the given policy.
 func NewRuntimeProcFSWithPolicy(policy ManagedProcessPolicy) RuntimeProcFS {

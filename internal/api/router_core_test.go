@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
 
 func TestRouterHealthz(t *testing.T) {
@@ -307,6 +310,18 @@ func TestStatusEndpointSupportsHEAD(t *testing.T) {
 }
 
 func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
+	orig := warpRegisterFunc
+	t.Cleanup(func() { warpRegisterFunc = orig })
+	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
+		return veilwarp.Registration{
+			PrivateKey:    "auto-private",
+			PeerPublicKey: "auto-peer",
+			Endpoint:      "engage.cloudflareclient.com:2408",
+			LocalAddress:  "172.16.0.2/32",
+			Reserved:      []int{1, 2, 3},
+		}, nil
+	}
+
 	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)

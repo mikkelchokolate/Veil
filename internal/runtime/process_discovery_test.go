@@ -30,7 +30,7 @@ func TestProcessDiscoveryReturnsOnlyManagedProcesses(t *testing.T) {
 }
 
 func TestProcessDiscoveryReturnsPIDListErrors(t *testing.T) {
-	_, err := NewProcessDiscovery(fakeProcessSource{err: errors.New("boom")}, NewManagedProcessPolicy()).Read()
+	_, err := NewProcessDiscovery(fakeProcessSource{err: errors.New("boom")}, NewManagedProcessPolicyFor([]string{"caddy", "veil"})).Read()
 	if err == nil {
 		t.Fatal("expected error")
 	}
