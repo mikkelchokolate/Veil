@@ -42,13 +42,13 @@ func IntroActionsJS() string                  { return panelIntroActionsJS() }
 func RoutingCardHTML() string                 { return panelRoutingCardHTML() }
 func RoutingActionsJS() string                { return panelRoutingActionsJS() }
 func RuntimeStatsCardsHTML() string           { return panelRuntimeStatsCardsHTML() }
-func RuntimeStatsActionsJS() string           { return panelRuntimeStatsActionsJS() }
+func RuntimeStatsActionsJS() string            { return panelRuntimeStatsActionsJS() }
 func SettingsCardHTML() string                { return panelSettingsCardHTML() }
 func SettingsActionsJS() string               { return panelSettingsActionsJS() }
 func UtilityActionsJS() string                { return panelUtilityActionsJS() }
 func WarpCardHTML() string                    { return panelWarpCardHTML() }
 func WarpActionsJS() string                   { return panelWarpActionsJS() }
 func UsersCardHTML() string                   { return panelUsersCardHTML() }
-func UsersActionsJS() string                  { return panelUsersActionsJS() }
+func UsersActionsJS() string                  { return panelUsersActionsJS() + panelUsersReliabilityJS() }
 func BackupsCardHTML() string                 { return panelBackupsCardHTML() }
 func BackupsActionsJS() string                { return panelBackupsActionsJS() }
