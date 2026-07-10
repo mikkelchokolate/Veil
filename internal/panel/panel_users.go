@@ -108,7 +108,7 @@ func panelUsersCardHTML() string {
 func panelUsersActionsJS() string {
 	return `
     function setUserTableMessage(tbody, colspan, text, color) {
-      tbody.innerHTML = '';
+      tbody.textContent = '';
       const row = document.createElement('tr');
       const cell = document.createElement('td');
       cell.colSpan = colspan;
@@ -117,6 +117,23 @@ func panelUsersActionsJS() string {
       cell.textContent = text;
       row.appendChild(cell);
       tbody.appendChild(row);
+    }
+
+    function appendUserRoleBadge(cell, role) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = String(role || '');
+      cell.appendChild(badge);
+    }
+
+    function currentPanelUsername() {
+      return localStorage.getItem('veil_username') || '';
+    }
+
+    function clearStoredPanelIdentity() {
+      localStorage.removeItem('veil_csrf_token');
+      localStorage.removeItem('veil_username');
+      localStorage.removeItem('veil_user_role');
     }
 
     async function loadUsers() {
@@ -138,7 +155,7 @@ func panelUsersActionsJS() string {
           setUserTableMessage(tbody, 4, veilT('status.noUsers'), 'var(--text-muted)');
           return;
         }
-        tbody.innerHTML = '';
+        tbody.textContent = '';
         users.forEach(u => {
           const tr = document.createElement('tr');
           
@@ -147,7 +164,7 @@ func panelUsersActionsJS() string {
           tr.appendChild(tdUser);
           
           const tdRole = document.createElement('td');
-          tdRole.innerHTML = '<span class="badge">' + u.role + '</span>';
+          appendUserRoleBadge(tdRole, u.role);
           tr.appendChild(tdRole);
 
           const tdLocale = document.createElement('td');
@@ -156,7 +173,6 @@ func panelUsersActionsJS() string {
           
           const tdActions = document.createElement('td');
           
-          // Edit button
           const editBtn = document.createElement('button');
           editBtn.textContent = veilT('users.edit');
           editBtn.className = 'secondary';
@@ -167,7 +183,6 @@ func panelUsersActionsJS() string {
           editBtn.addEventListener('click', () => editUser(u.username, u.role, u.locale));
           tdActions.appendChild(editBtn);
           
-          // Delete button
           const deleteBtn = document.createElement('button');
           deleteBtn.textContent = veilT('action.delete');
           deleteBtn.className = 'danger';
@@ -180,6 +195,7 @@ func panelUsersActionsJS() string {
           tr.appendChild(tdActions);
           tbody.appendChild(tr);
         });
+        applyViewerRoleGuard();
       } catch (err) {
         setUserTableMessage(tbody, 4, veilT('status.requestFailed', { error: String(err) }), 'var(--accent-danger)');
       }
@@ -201,14 +217,14 @@ func panelUsersActionsJS() string {
           setUserTableMessage(tbody, 5, veilT('status.noSessions'), 'var(--text-muted)');
           return;
         }
-        tbody.innerHTML = '';
+        tbody.textContent = '';
         sessions.forEach((session) => {
           const tr = document.createElement('tr');
           const user = document.createElement('td');
           user.textContent = session.username;
           tr.appendChild(user);
           const role = document.createElement('td');
-          role.innerHTML = '<span class="badge">' + session.role + '</span>';
+          appendUserRoleBadge(role, session.role);
           tr.appendChild(role);
           const expires = document.createElement('td');
           expires.textContent = session.expiresAt || '';
@@ -250,7 +266,7 @@ func panelUsersActionsJS() string {
           return;
         }
         if (isCurrent) {
-          localStorage.removeItem('veil_csrf_token');
+          clearStoredPanelIdentity();
           window.location.reload();
           return;
         }
@@ -362,6 +378,11 @@ func panelUsersActionsJS() string {
           return;
         }
         output.textContent = isEdit ? veilT('users.updated') : veilT('users.created');
+        if (isEdit && username === currentPanelUsername()) {
+          clearStoredPanelIdentity();
+          window.location.reload();
+          return;
+        }
         cancelUserEdit();
         await loadUsers();
       } catch (err) {
@@ -391,6 +412,11 @@ func panelUsersActionsJS() string {
           return;
         }
         output.textContent = veilT('users.deleted');
+        if (username === currentPanelUsername()) {
+          clearStoredPanelIdentity();
+          window.location.reload();
+          return;
+        }
         cancelUserEdit();
         await loadUsers();
       } catch (err) {
