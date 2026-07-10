@@ -6,10 +6,10 @@ func panelSettingsReliabilityJS() string {
     let settingsSaveInFlight = false;
 
     function setSettingsControlsDisabled(disabled) {
-      ['save-settings', 'load-settings'].forEach((id) => {
-        const button = document.getElementById(id);
-        if (button) button.disabled = Boolean(disabled) || isViewerRole();
-      });
+      const saveButton = document.getElementById('save-settings');
+      if (saveButton) saveButton.disabled = Boolean(disabled) || isViewerRole();
+      const loadButton = document.getElementById('load-settings');
+      if (loadButton) loadButton.disabled = Boolean(disabled);
     }
 
     async function applySettingsData(data, generation) {
@@ -63,7 +63,7 @@ func panelSettingsReliabilityJS() string {
         }
         return null;
       } finally {
-        if (loadButton && generation === settingsLoadGeneration) loadButton.disabled = isViewerRole();
+        if (loadButton && generation === settingsLoadGeneration) loadButton.disabled = false;
       }
     };
 
