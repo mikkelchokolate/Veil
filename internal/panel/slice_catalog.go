@@ -23,8 +23,15 @@ func NewSliceCatalog(runtimes []service.ManagedRuntime) SliceCatalog {
 func (c SliceCatalog) Slices() []Slice {
 	return []Slice{
 		{
-			Name:        "intro",
-			RenderSlots: []RenderSlot{{Placeholder: panelIntroCardsPlaceholder, Render: panelIntroCardsHTML}, {Placeholder: panelIntroActionsPlaceholder, Render: panelIntroActionsJS}},
+			Name: "intro",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
+				{Placeholder: panelIntroActionsPlaceholder, Render: func() string { return panelIntroActionsJS() + panelSettingsActionsJS() }},
+			},
+			EventBindings: []EventBinding{
+				{ElementID: "settings-form", Handler: "saveSettings", Event: "submit"},
+				{ElementID: "load-settings", Handler: "loadSettingsIntoForm", Event: "click"},
+			},
 		},
 		{
 			Name: "service-status",
@@ -52,7 +59,6 @@ func (c SliceCatalog) Slices() []Slice {
 				{ElementID: "copy-client-links", Handler: "copyClientLinksOutput", Event: "click"},
 			},
 		},
-
 		{
 			Name: "inbounds",
 			RenderSlots: []RenderSlot{
@@ -165,5 +171,6 @@ func EventBindingsJS(bindings []EventBinding) string {
     syncInboundTransportOptions();
 
     // Auto-load settings and service status on panel open.
+    loadSettingsIntoForm();
     loadServiceStatus();`
 }
