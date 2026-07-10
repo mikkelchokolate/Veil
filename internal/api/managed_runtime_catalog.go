@@ -32,10 +32,6 @@ func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
 func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 
-	if settings.PanelAccess == "caddy" {
-		runtimes = append(runtimes, panelCaddyRuntime())
-	}
-
 	registry := protocols.NewRegistry()
 	for _, p := range registry.All() {
 		rp, ok := protocols.AsRuntimeProvider(p)
@@ -50,6 +46,10 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 		if len(selected) > 0 {
 			runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
 		}
+	}
+
+	if settings.PanelAccess == "caddy" && !hasRuntimeUnit(runtimes, "veil-caddy@panel.service") {
+		runtimes = append(runtimes, panelCaddyRuntime())
 	}
 
 	if warp.Enabled || len(inbounds) == 0 {
@@ -68,6 +68,15 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 	}
 
 	return sortManagedRuntimes(runtimes)
+}
+
+func hasRuntimeUnit(runtimes []ManagedRuntime, unit string) bool {
+	for _, r := range runtimes {
+		if r.Unit == unit {
+			return true
+		}
+	}
+	return false
 }
 
 func panelCaddyRuntime() ManagedRuntime {
