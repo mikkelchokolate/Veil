@@ -5,6 +5,8 @@ func panelClientLinksReliabilityJS() string {
     let clientLinksModalRequestSequence = 0;
     let clientLinksModalController = null;
     const clientLinkQRControllers = new Map();
+    let clientLinksActionInFlight = false;
+    let clientLinksOutputGeneration = 0;
 
     function setClientLinksModalMessage(container, message, isError) {
       container.textContent = '';
@@ -182,6 +184,156 @@ func panelClientLinksReliabilityJS() string {
           clientLinkQRControllers.delete(qrId);
         }
       }
+    };
+
+    function setClientLinksActionControlsDisabled(disabled) {
+      [
+        'load-client-links',
+        'load-client-subscription',
+        'load-client-subscription-raw',
+        'download-client-links-json',
+        'download-client-configs',
+        'download-client-subscription',
+        'download-client-subscription-raw'
+      ].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = Boolean(disabled);
+      });
+    }
+
+    function setClientLinksOutput(generation, value) {
+      if (generation !== clientLinksOutputGeneration) return;
+      const output = document.getElementById('client-links-output');
+      if (output) output.textContent = String(value === undefined || value === null ? '' : value);
+    }
+
+    async function runClientLinksAction(action) {
+      if (clientLinksActionInFlight) return null;
+      clientLinksActionInFlight = true;
+      const generation = ++clientLinksOutputGeneration;
+      setClientLinksActionControlsDisabled(true);
+      try {
+        return await action(generation);
+      } finally {
+        clientLinksActionInFlight = false;
+        setClientLinksActionControlsDisabled(false);
+      }
+    }
+
+    async function fetchClientLinksText(path) {
+      const response = await fetch(path, { headers: requestHeaders() });
+      const text = await response.text();
+      if (!response.ok) throw new Error(formatAPIError(text, response.status));
+      return text;
+    }
+
+    function downloadClientLinksBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    loadClientLinks = async function() {
+      return runClientLinksAction(async (generation) => {
+        setClientLinksOutput(generation, veilT('status.loadingPath', { path: '/api/client-links' }));
+        try {
+          const text = await fetchClientLinksText('/api/client-links');
+          const body = text ? JSON.parse(text) : {};
+          setClientLinksOutput(generation, JSON.stringify(body, null, 2));
+          return body;
+        } catch (error) {
+          setClientLinksOutput(generation, String(error && error.message ? error.message : error));
+          return null;
+        }
+      });
+    };
+
+    loadClientSubscriptionPath = async function(path) {
+      return runClientLinksAction(async (generation) => {
+        setClientLinksOutput(generation, veilT('status.loadingPath', { path }));
+        try {
+          const text = await fetchClientLinksText(path);
+          setClientLinksOutput(generation, text);
+          return text;
+        } catch (error) {
+          setClientLinksOutput(generation, String(error && error.message ? error.message : error));
+          return null;
+        }
+      });
+    };
+
+    downloadClientLinksJSON = async function() {
+      return runClientLinksAction(async (generation) => {
+        setClientLinksOutput(generation, veilT('clientLinks.downloadingJSON'));
+        try {
+          const text = await fetchClientLinksText('/api/client-links');
+          const body = text ? JSON.parse(text) : {};
+          downloadClientLinksBlob(
+            new Blob([JSON.stringify(body, null, 2) + '\n'], { type: 'application/json;charset=utf-8' }),
+            'veil-client-links.json'
+          );
+          setClientLinksOutput(generation, veilT('clientLinks.downloaded', { filename: 'veil-client-links.json' }));
+          return true;
+        } catch (error) {
+          setClientLinksOutput(generation, veilT('status.downloadFailed', { error: String(error && error.message ? error.message : error) }));
+          return null;
+        }
+      });
+    };
+
+    downloadClientConfigArtifacts = async function() {
+      return runClientLinksAction(async (generation) => {
+        setClientLinksOutput(generation, veilT('clientLinks.loadingClientConfigs'));
+        try {
+          const text = await fetchClientLinksText('/api/client-links');
+          const body = text ? JSON.parse(text) : {};
+          const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
+          const configs = [];
+          artifacts.forEach((artifact) => {
+            if (!artifact || artifact.kind !== 'client_config' || !artifact.content) return;
+            let config;
+            try {
+              config = JSON.parse(artifact.content);
+            } catch (error) {
+              throw new Error('Invalid client config artifact ' + String(artifact.name || artifact.filename || 'unknown') + ': ' + String(error));
+            }
+            configs.push({ name: artifact.name, config });
+          });
+          if (configs.length === 0) {
+            setClientLinksOutput(generation, veilT('clientLinks.noClientConfigs'));
+            return null;
+          }
+          downloadClientLinksBlob(
+            new Blob([JSON.stringify(configs, null, 2) + '\n'], { type: 'application/json;charset=utf-8' }),
+            'veil-client-configs.json'
+          );
+          setClientLinksOutput(generation, veilT('clientLinks.downloaded', { filename: 'veil-client-configs.json' }));
+          return true;
+        } catch (error) {
+          setClientLinksOutput(generation, veilT('clientLinks.clientConfigsFailed', { error: String(error && error.message ? error.message : error) }));
+          return null;
+        }
+      });
+    };
+
+    downloadClientSubscriptionPath = async function(path, filename) {
+      return runClientLinksAction(async (generation) => {
+        setClientLinksOutput(generation, veilT('clientLinks.downloading', { path }));
+        try {
+          const text = await fetchClientLinksText(path);
+          downloadClientLinksBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), filename);
+          setClientLinksOutput(generation, veilT('clientLinks.downloaded', { filename }));
+          return true;
+        } catch (error) {
+          setClientLinksOutput(generation, veilT('status.downloadFailed', { error: String(error && error.message ? error.message : error) }));
+          return null;
+        }
+      });
     };
 `
 }
