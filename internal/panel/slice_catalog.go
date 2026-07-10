@@ -144,7 +144,7 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "users",
 			RenderSlots: []RenderSlot{
 				{Placeholder: UsersCardPlaceholder, Render: UsersCardHTML},
-				{Placeholder: UsersActionsPlaceholder, Render: UsersActionsJS},
+				{Placeholder: UsersActionsPlaceholder, Render: func() string { return UsersActionsJS() + panelUserIdentityCleanupJS() }},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "user-form", Handler: "saveUser", Event: "submit"},
