@@ -117,11 +117,11 @@ func TestInboundRendererNaiveReadsProtocolFields(t *testing.T) {
 		FallbackRoot:  "/var/lib/veil/global",
 	}, NewPaths("/etc/veil"), WarpConfig{})
 	inbound := Inbound{
-		Name:     "naive",
-		Protocol: "naiveproxy",
+		Name:      "naive",
+		Protocol:  "naiveproxy",
 		Transport: "tcp",
-		Port:     443,
-		Enabled:  true,
+		Port:      443,
+		Enabled:   true,
 		ProtocolFields: map[string]any{
 			"naiveUsername": "fields-user",
 			"naivePassword": "fields-secret",
@@ -269,9 +269,9 @@ func TestInboundRendererOlcrtcReadsProtocolFields(t *testing.T) {
 
 func TestInboundRendererOlcrtcProtocolFieldsPrecedence(t *testing.T) {
 	renderer := NewInboundRenderer(Settings{
-		Domain:        "vpn.example.com",
-		OlcrtcAuth:    "settings-auth",
-		OlcrtcRoomID:  "settings-room",
+		Domain:          "vpn.example.com",
+		OlcrtcAuth:      "settings-auth",
+		OlcrtcRoomID:    "settings-room",
 		OlcrtcTransport: "settings-transport",
 	}, NewPaths("/etc/veil"), WarpConfig{})
 	inbound := Inbound{

@@ -34,5 +34,3 @@ func TestRenderSystemdUnitsIncludesHardenedEncryptedBackupTimer(t *testing.T) {
 		}
 	}
 }
-
-
