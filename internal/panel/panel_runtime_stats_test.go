@@ -44,7 +44,12 @@ func TestPanelRuntimeStatsActionsModuleRendersRuntimeLoadActions(t *testing.T) {
 func TestPanelTelemetryAutoRefreshesEverySecondByDefault(t *testing.T) {
 	actions := panelRuntimeStatsActionsJS()
 	for _, want := range []string{
+		`let telemetryRefreshInFlight = false;`,
 		`async function refreshSystemTelemetry`,
+		`if (telemetryRefreshInFlight) return;`,
+		`telemetryRefreshInFlight = true;`,
+		`finally {`,
+		`telemetryRefreshInFlight = false;`,
 		`setInterval(refreshSystemTelemetry, 1000)`,
 		`startTelemetryAutoRefresh()`,
 	} {
