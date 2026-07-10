@@ -40,11 +40,9 @@ func panelWarpActionsJS() string {
     }
 
     // commitWarp persists the WARP config and then applies it so the change
-    // takes effect on the running system. The slider toggle is a one-click
-    // on/off control: flipping it (or pressing Save) must both save the
-    // desired state (which adds/removes the WARP routing rule) and apply it
-    // (which starts/stops the sing-box WARP service). Returns the saved config
-    // on success, or null if the save was rejected.
+    // takes effect on the running system. It reports save and apply outcomes
+    // separately because an apply failure must not make the UI invert a config
+    // that was already saved successfully.
     let warpCommitInFlight = false;
     async function commitWarp(enabled) {
       if (warpCommitInFlight) {
@@ -53,42 +51,51 @@ func panelWarpActionsJS() string {
       warpCommitInFlight = true;
       const toggle = document.getElementById('warp-enabled');
       const saveBtn = document.getElementById('save-warp-config');
+      const output = document.getElementById('warp-output');
       if (toggle) { toggle.disabled = true; }
       if (saveBtn) { saveBtn.disabled = true; }
       try {
+        const payload = warpFormPayload(enabled);
         const saved = await loadJSON('/api/warp', 'warp-output', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(warpFormPayload(enabled))
+          body: JSON.stringify(payload)
         });
         if (!saved) {
-          return null;
+          return { saved: null, applied: false };
         }
         fillWarpForm(saved);
         // Promote staged configs and reload services so WARP actually turns
         // on/off now, rather than only after a separate manual apply.
-        await loadJSON('/api/apply', 'warp-output', {
+        const applied = await loadJSON('/api/apply', 'warp-output', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ confirm: true, applyLive: true, applyServices: true })
         });
-        return saved;
+        return { saved, applied: applied !== null };
+      } catch (err) {
+        if (output) output.textContent = veilT('status.requestFailed', { error: String(err) });
+        return { saved: null, applied: false };
       } finally {
-        if (toggle) { toggle.disabled = false; }
-        if (saveBtn) { saveBtn.disabled = false; }
         warpCommitInFlight = false;
+        if (toggle) { toggle.disabled = isViewerRole(); }
+        if (saveBtn) { saveBtn.disabled = isViewerRole(); }
+        applyViewerRoleGuard();
       }
     }
 
     async function applyWarpToggle() {
       const toggle = document.getElementById('warp-enabled');
       const enabled = toggle.checked;
-      const saved = await commitWarp(enabled);
-      if (!saved) {
-        // Save was rejected: snap the slider back to its real state and keep
-        // the error visible in the console.
+      const result = await commitWarp(enabled);
+      if (!result || !result.saved) {
+        // Save was rejected: snap the slider back to its previous state.
         toggle.checked = !enabled;
+        return;
       }
+      // The saved state remains authoritative even if the subsequent live apply
+      // failed. loadJSON keeps the apply error visible for the operator.
+      toggle.checked = Boolean(result.saved.enabled);
     }
 
     async function saveWarpConfig(event) {
