@@ -61,6 +61,7 @@ func newManagementState(info ServerInfo) *managementState {
 		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,
 		authToken:                      info.AuthToken,
+		allowDevAnonymous:              !info.PublicListen,
 		setupAllowed:                   info.SetupAllowed,
 		settings:                       model.Settings,
 		inbounds:                       model.Inbounds,
