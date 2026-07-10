@@ -20,8 +20,8 @@ func TestDefaultPolicyProvidesManagedPathsAndUnits(t *testing.T) {
 			t.Fatalf("expected managed unit prefix %s in %+v", prefix, policy.ManagedUnitPrefixes)
 		}
 	}
-	if _, ok := policy.Artifacts["mieru"]; !ok {
-		t.Fatal("expected mieru artifact to be registered")
+	if _, ok := policy.Artifacts["caddy-panel"]; !ok {
+		t.Fatal("expected caddy-panel artifact to be registered")
 	}
 	if _, ok := policy.UpdateArtifacts["veil-update"]; !ok {
 		t.Fatal("expected veil-update artifact to be registered")

@@ -26,22 +26,6 @@ func DefaultPolicy() Policy {
 				Staged:    filepath.FromSlash("caddy/panel.Caddyfile"),
 				Generated: filepath.FromSlash("caddy/panel.Caddyfile"),
 			},
-			"hysteria2": {
-				Staged:    filepath.FromSlash("hysteria2/server.yaml"),
-				Generated: filepath.FromSlash("hysteria2/server.yaml"),
-			},
-			"mieru": {
-				Staged:    filepath.FromSlash("mieru/server_config.json"),
-				Generated: filepath.FromSlash("mieru/server_config.json"),
-			},
-			"olcrtc": {
-				Staged:    filepath.FromSlash("olcrtc/server.yaml"),
-				Generated: filepath.FromSlash("olcrtc/server.yaml"),
-			},
-			"warp": {
-				Staged:    filepath.FromSlash("sing-box/warp.json"),
-				Generated: filepath.FromSlash("sing-box/warp.json"),
-			},
 		},
 		UpdateArtifacts: map[string]string{
 			"veil-update": "veil-update.tar.gz",
