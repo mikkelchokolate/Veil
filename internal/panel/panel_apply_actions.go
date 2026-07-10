@@ -28,7 +28,7 @@ func panelApplyActionsJS() string {
     // applyWorkflowCommands is emitted by PanelActionsJS() as raw JavaScript.
     // The data is JSON-marshalled server-side and treated as code, not a quoted string.
     // lgtm[go/unsafe-quoting]
-` + NewApplyWorkflowCommandCatalog().PanelActionsJS() + `
+` + NewApplyWorkflowCommandCatalog().PanelActionsJS() + panelApplyReliabilityJS() + `
 
     document.getElementById('load-apply-history').addEventListener('click', loadApplyHistory);`
 }
