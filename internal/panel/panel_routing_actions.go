@@ -14,10 +14,10 @@ func panelRoutingActionsJS() string {
       
       if (!modal) return;
 
-      // Query WARP status dynamically to decide if we add "warp"
+      // Query WARP status dynamically to decide if we add "warp".
       let warpEnabled = false;
       try {
-        const response = await fetch('/api/warp');
+        const response = await fetch('/api/warp', { headers: authHeaders() });
         if (response.ok) {
           const warpData = await response.json();
           warpEnabled = Boolean(warpData.enabled);
@@ -26,7 +26,7 @@ func panelRoutingActionsJS() string {
         console.error('Failed to query WARP status:', err);
       }
 
-      // Rebuild options in outboundSelect
+      // Rebuild options in outboundSelect.
       outboundSelect.innerHTML = '';
       const optionDirect = document.createElement('option');
       optionDirect.value = 'direct';
@@ -51,7 +51,7 @@ func panelRoutingActionsJS() string {
         nameInput.readOnly = true;
         matchInput.value = rule.match || '';
         
-        // Ensure "warp" option exists if the rule already uses it, even if currently disabled
+        // Ensure "warp" remains selectable for an existing rule while WARP is disabled.
         if (rule.outbound === 'warp' && !warpEnabled) {
           const optionWarp = document.createElement('option');
           optionWarp.value = 'warp';
@@ -76,9 +76,7 @@ func panelRoutingActionsJS() string {
     
     function closeRoutingModal() {
       const modal = document.getElementById('routing-modal');
-      if (modal) {
-        closeVeilDialog(modal);
-      }
+      if (modal) closeVeilDialog(modal);
     }
 
     function renderRoutingRulesTable(rules) {
@@ -92,19 +90,16 @@ func panelRoutingActionsJS() string {
       rules.forEach((rule) => {
         const tr = document.createElement('tr');
         
-        // Name Cell
         const tdName = document.createElement('td');
         tdName.className = 'font-semibold';
         tdName.textContent = rule.name || '';
         
-        // Match Cell
         const tdMatch = document.createElement('td');
         const codeMatch = document.createElement('code');
         codeMatch.className = 'match-badge';
         codeMatch.textContent = rule.match || '';
         tdMatch.appendChild(codeMatch);
         
-        // Outbound Cell
         const tdOutbound = document.createElement('td');
         const spanOutbound = document.createElement('span');
         const outbound = rule.outbound || 'direct';
@@ -112,7 +107,6 @@ func panelRoutingActionsJS() string {
         spanOutbound.textContent = outbound;
         tdOutbound.appendChild(spanOutbound);
         
-        // Status Cell with switch toggle
         const tdStatus = document.createElement('td');
         const labelSwitch = document.createElement('label');
         labelSwitch.className = 'switch small-switch';
@@ -140,16 +134,13 @@ func panelRoutingActionsJS() string {
         labelSwitch.appendChild(spanSlider);
         tdStatus.appendChild(labelSwitch);
         
-        // Actions Cell
         const tdActions = document.createElement('td');
         const btnEdit = document.createElement('button');
         btnEdit.type = 'button';
         btnEdit.className = 'btn-action-edit';
         btnEdit.dataset.adminOnly = 'true';
         btnEdit.textContent = veilT('users.edit');
-        btnEdit.addEventListener('click', () => {
-          openRoutingModal(rule);
-        });
+        btnEdit.addEventListener('click', () => openRoutingModal(rule));
         
         tdActions.appendChild(btnEdit);
         tr.appendChild(tdName);
@@ -180,15 +171,13 @@ func panelRoutingActionsJS() string {
         outbound: document.getElementById('routing-rule-outbound').value,
         enabled: document.getElementById('routing-rule-enabled').checked
       };
-      
       const isEdit = document.getElementById('routing-rule-name').readOnly;
-      
-      await loadJSON(isEdit ? '/api/routing/rules/' + encodeURIComponent(name) : '/api/routing/rules', 'routing-output', {
+      const saved = await loadJSON(isEdit ? '/api/routing/rules/' + encodeURIComponent(name) : '/api/routing/rules', 'routing-output', {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+      if (!saved) return;
       closeRoutingModal();
       loadRoutingRules();
     }
@@ -200,7 +189,8 @@ func panelRoutingActionsJS() string {
         return;
       }
       if (confirm(veilT('confirm.deleteRoutingRule', { name }))) {
-        await loadJSON('/api/routing/rules/' + encodeURIComponent(name), 'routing-output', { method: 'DELETE' });
+        const deleted = await loadJSON('/api/routing/rules/' + encodeURIComponent(name), 'routing-output', { method: 'DELETE' });
+        if (!deleted) return;
         closeRoutingModal();
         loadRoutingRules();
       }
@@ -208,10 +198,10 @@ func panelRoutingActionsJS() string {
 
     async function applyRoutingPreset() {
       const profile = document.getElementById('routing-preset-profile').value;
-      await loadJSON('/api/routing/presets/' + encodeURIComponent(profile), 'routing-output', { method: 'POST' });
-      setTimeout(loadRoutingRules, 800);
+      const applied = await loadJSON('/api/routing/presets/' + encodeURIComponent(profile), 'routing-output', { method: 'POST' });
+      if (applied) setTimeout(loadRoutingRules, 800);
     }
 
-    // Auto-load routing rules on page mount
+    // Auto-load routing rules on page mount.
     setTimeout(loadRoutingRules, 100);`
 }
