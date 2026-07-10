@@ -6,21 +6,19 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
-	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func newLocalPrivilegedClient(state *managementState) privileged.Client {
+	// The broad management catalog already includes singleton runtimes (veil,
+	// warp, and any protocol plugin runtimes such as mieru) so that apply,
+	// repair, and privileged policy checks can manage them even when the
+	// feature is currently disabled. No per-protocol hardcoding is needed here.
 	catalog := NewManagedRuntimeCatalog()
 	units := make(map[string]struct{})
 	for _, runtime := range catalog.Runtimes() {
 		units[runtime.Unit] = struct{}{}
 	}
-	// These singleton units stay managed even when disabled so apply can first
-	// enable them, query status, or stop/disable them after the operator turns
-	// the corresponding feature off. Instance units are covered by prefixes below.
-	units[renderer.UnitWarp] = struct{}{}
-	units[renderer.UnitMieru] = struct{}{}
 
 	allowedArtifactNames := allowedArtifactNamesFromState(state)
 
