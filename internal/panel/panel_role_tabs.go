@@ -12,19 +12,22 @@ func panelRoleTabVisibilityJS() string {
         const navigation = document.querySelector('.nav-item[href="#' + tabID + '"]');
         const section = document.getElementById(tabID);
         if (navigation) {
-          navigation.style.display = viewer ? 'none' : '';
+          navigation.hidden = viewer;
           navigation.setAttribute('aria-hidden', viewer ? 'true' : 'false');
+          navigation.tabIndex = viewer ? -1 : 0;
         }
         if (section) {
-          if (viewer && section.classList.contains('active')) {
-            activeAdminTab = true;
-          }
-          section.style.display = viewer ? 'none' : '';
+          if (viewer && section.classList.contains('active')) activeAdminTab = true;
+          section.hidden = viewer;
           section.setAttribute('aria-hidden', viewer ? 'true' : 'false');
         }
       });
-      if (viewer && activeAdminTab) {
+      const hashTargetsAdminTab = window.location.hash === '#backups' || window.location.hash === '#users';
+      if (viewer && (activeAdminTab || hashTargetsAdminTab)) {
         switchTab('dashboard');
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', '#dashboard');
+        }
       }
     };
     applyViewerRoleGuard();
