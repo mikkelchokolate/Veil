@@ -27,7 +27,7 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
 				{Placeholder: panelIntroActionsPlaceholder, Render: func() string {
-					return panelIntroActionsJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
+					return panelIntroActionsJS() + panelRequestReliabilityJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
 				}},
 			},
 			EventBindings: []EventBinding{
@@ -77,7 +77,9 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "inbounds",
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelInboundFormPlaceholder, Render: panelInboundFormHTML},
-				{Placeholder: panelInboundActionsPlaceholder, Render: func() string { return panelInboundActionsJS() + panelInboundControlsJS() }},
+				{Placeholder: panelInboundActionsPlaceholder, Render: func() string {
+					return panelInboundActionsJS() + panelInboundReliabilityJS() + panelInboundControlsJS()
+				}},
 				{Placeholder: panelDynamicFieldsPlaceholder, Render: panelDynamicFieldsJS},
 				{Placeholder: panelClientProfileControlsPlaceholder, Render: panelClientProfileControlsHTML},
 				{Placeholder: panelClientProfileActionsPlaceholder, Render: panelClientProfileActionsJS},
