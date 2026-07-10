@@ -12,5 +12,9 @@ func panelRuntimeStatsVisibilityJS() string {
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && telemetryRefreshInterval) refreshSystemTelemetry();
     });
+
+    document.querySelectorAll('[data-raw-output]').forEach((button) => {
+      button.addEventListener('click', () => toggleRawView(button.dataset.rawOutput));
+    });
 `
 }
