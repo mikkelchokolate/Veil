@@ -33,6 +33,22 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 	}
 }
 
+func TestPanelLoadJSONTreatsNoContentAsSuccess(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`const requestOptions = Object.assign({}, options || {});`,
+		`if (!text) {`,
+		`return { success: true };`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("loadJSON success contract missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `const parsed = text ? JSON.parse(text) : null;`) {
+		t.Fatal("loadJSON must not return null for a successful empty response")
+	}
+}
+
 func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T) {
 	cards := panelIntroCardsHTML()
 	for _, want := range []string{
