@@ -35,6 +35,24 @@ func panelNavigationHardeningJS() string {
       return window.switchTab(normalizedPanelTabFromLocation());
     }
 
+    document.querySelectorAll('.nav-menu .nav-item[href^="#"]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        const requestedTab = String(link.getAttribute('href') || '').replace(/^#/, '');
+        if (!veilPanelTabIds.includes(requestedTab)) {
+          event.preventDefault();
+          window.switchTab('dashboard');
+          return;
+        }
+        // A browser does not dispatch hashchange when the selected hash is
+        // already active. Preserve the old sidebar behavior by refreshing the
+        // tab loader explicitly on a repeated click.
+        if (window.location.hash === '#' + requestedTab) {
+          event.preventDefault();
+          window.switchTab(requestedTab);
+        }
+      });
+    });
+
     window.addEventListener('hashchange', syncPanelTabFromLocation);
     normalizedPanelTabFromLocation();
 `
