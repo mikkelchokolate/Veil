@@ -17,7 +17,7 @@ func panelClientLinksCardHTML() string {
         <button id="download-client-links-json" class="secondary" type="button">Download links JSON</button>
         <button id="download-client-subscription" class="secondary" type="button">Download base64 subscription</button>
         <button id="download-client-subscription-raw" class="secondary" type="button">Download raw subscription</button>
-        <button id="download-mieru-configs" class="secondary" type="button">Download Mieru client configs</button>
+        <button id="download-client-configs" class="secondary" type="button">Download client configs</button>
         <button id="copy-client-links" class="secondary" type="button">Copy output</button>
       </div>
       <p class="hint">QR codes are rendered locally by the Panel API; connection strings are never sent to a third-party QR service.</p>

@@ -48,7 +48,7 @@ func (c SliceCatalog) Slices() []Slice {
 				{ElementID: "load-client-subscription", Handler: "loadClientSubscription", Event: "click"},
 				{ElementID: "load-client-subscription-raw", Handler: "loadRawClientSubscription", Event: "click"},
 				{ElementID: "download-client-links-json", Handler: "downloadClientLinksJSON", Event: "click"},
-				{ElementID: "download-mieru-configs", Handler: "downloadMieruConfigs", Event: "click"},
+				{ElementID: "download-client-configs", Handler: "downloadClientConfigArtifacts", Event: "click"},
 				{ElementID: "copy-client-links", Handler: "copyClientLinksOutput", Event: "click"},
 			},
 		},

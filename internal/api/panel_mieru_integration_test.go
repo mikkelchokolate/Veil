@@ -15,8 +15,8 @@ func TestPanelMieruHTML(t *testing.T) {
 	for _, want := range []string{
 		`<option value="mieru">Mieru</option>`,
 		`"mieru":["tcp","udp"]`,
-		`download-mieru-configs`,
-		`mieru-client-configs.json`,
+		`download-client-configs`,
+		`downloadClientConfigArtifacts`,
 		`restart-mieru`,
 		`/api/services/' + encodeURIComponent(serviceName) + '/restart`,
 	} {
