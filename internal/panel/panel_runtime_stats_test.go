@@ -18,9 +18,22 @@ func TestPanelRuntimeStatsActionsModuleRendersRuntimeLoadActions(t *testing.T) {
 		`/api/processes`,
 		`load-disk-stats`,
 		`/api/disk`,
+		`function finiteTelemetryNumber(value, fallback)`,
+		`function appendTelemetryCell(row, text, className)`,
+		`process.textContent = String(listener.process)`,
+		`path.textContent = String(directory && directory.path || '')`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Runtime stats actions missing %q", want)
+		}
+	}
+	for _, unsafe := range []string{
+		`row.innerHTML`,
+		`badge.innerHTML`,
+		`dirCard.innerHTML`,
+	} {
+		if strings.Contains(actions, unsafe) {
+			t.Fatalf("runtime host data must not be rendered through %q", unsafe)
 		}
 	}
 }
