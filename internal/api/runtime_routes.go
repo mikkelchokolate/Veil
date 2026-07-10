@@ -3,35 +3,11 @@ package api
 import (
 	"net/http"
 
-	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
-var runtimeTelemetryPolicy = newManagedProcessPolicy()
-
-func newManagedProcessPolicy() veilruntime.ManagedProcessPolicy {
-	names := map[string]struct{}{"veil": {}}
-	for _, p := range protocols.NewRegistry().All() {
-		rp, ok := protocols.AsRuntimeProvider(p)
-		if !ok {
-			continue
-		}
-		rt := rp.RuntimeInstall("")
-		if rt.Name != "" {
-			names[rt.Name] = struct{}{}
-		}
-		if rt.Binary != "" {
-			names[rt.Binary] = struct{}{}
-		}
-	}
-	// WARP is managed by sing-box but is not a protocol plugin.
-	names["sing-box"] = struct{}{}
-	out := make([]string, 0, len(names))
-	for name := range names {
-		out = append(out, name)
-	}
-	return veilruntime.NewManagedProcessPolicyFor(out)
-}
+var runtimeTelemetryPolicy = protocols.ManagedProcessPolicy()
 
 type RuntimeRoutes struct{}
 
@@ -52,7 +28,7 @@ func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := veilruntime.NewRuntimeTelemetry().System()
+		stats, err := veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).System()
 		if err != nil {
 			writeError(w, "failed to read system stats", http.StatusInternalServerError)
 			return
@@ -68,7 +44,7 @@ func handleTLSRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, veilruntime.NewRuntimeTelemetry().TLS())
+		writeJSON(w, veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).TLS())
 	}
 }
 
@@ -79,7 +55,7 @@ func handleNetworkRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := veilruntime.NewRuntimeTelemetry().Network()
+		stats, err := veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).Network()
 		if err != nil {
 			writeError(w, "failed to read network stats", http.StatusInternalServerError)
 			return
@@ -95,7 +71,7 @@ func handleConnectionsRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		stats, err := veilruntime.NewRuntimeTelemetry().Connections()
+		stats, err := veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).Connections()
 		if err != nil {
 			writeError(w, "failed to read connections", http.StatusInternalServerError)
 			return
@@ -127,7 +103,7 @@ func handleDiskRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	setJSONHeaders(w)
 	if r.Method == http.MethodGet {
-		writeJSON(w, veilruntime.NewRuntimeTelemetry().Disk())
+		writeJSON(w, veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).Disk())
 	}
 }
 

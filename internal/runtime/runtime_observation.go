@@ -16,7 +16,7 @@ type RuntimeObservationSnapshot struct {
 
 func NewRuntimeObservation(telemetry RuntimeTelemetry) RuntimeObservation {
 	if telemetry.readSystem == nil || telemetry.readTLSCertPath == nil || telemetry.readNetwork == nil || telemetry.readConnections == nil || telemetry.readProcesses == nil || telemetry.readDisk == nil {
-		telemetry = NewRuntimeTelemetry()
+		telemetry = NewRuntimeTelemetryWithPolicy(ManagedProcessPolicy{})
 	}
 	return RuntimeObservation{telemetry: telemetry}
 }

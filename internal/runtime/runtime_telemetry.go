@@ -11,14 +11,10 @@ type RuntimeTelemetry struct {
 	readDisk        func() DiskStats
 }
 
-func NewRuntimeTelemetry() RuntimeTelemetry {
-	return NewRuntimeTelemetryWithPolicy(NewManagedProcessPolicy())
-}
-
 // NewRuntimeTelemetryWithPolicy creates a telemetry reader that uses the given
 // managed-process policy for process discovery. Callers that can reach the
-// protocol registry should use this constructor so the policy reflects the
-// installed set of protocol plugins.
+// protocol registry should derive the policy from RuntimeProvider.RuntimeInstall
+// so it reflects the installed set of protocol plugins.
 func NewRuntimeTelemetryWithPolicy(policy ManagedProcessPolicy) RuntimeTelemetry {
 	procfs := NewRuntimeProcFSWithPolicy(policy)
 	return RuntimeTelemetry{
