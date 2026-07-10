@@ -34,29 +34,39 @@ func panelDynamicFieldsJS() string {
       return 'protocol-field-' + key;
     }
 
+    function protocolOptionAttributeName(name) {
+      const normalized = String(name || '').trim().toLowerCase();
+      if (!normalized) return '';
+      return normalized.indexOf('data-') === 0 ? normalized : 'data-' + normalized;
+    }
+
     function renderProtocolFieldInput(field) {
       const id = protocolFieldElementId(field.key);
+      const required = field.required ? ' required' : '';
       if (field.type === 'select') {
         const options = (field.options || []).map((opt) => {
           const attrs = [];
           if (opt.attributes) {
-            Object.entries(opt.attributes).forEach(([k, v]) => attrs.push(' data-' + k + '="' + String(v).replace(/"/g, '&quot;') + '"'));
+            Object.entries(opt.attributes).forEach(([k, v]) => {
+              const attributeName = protocolOptionAttributeName(k);
+              if (attributeName) attrs.push(' ' + attributeName + '="' + String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"');
+            });
           }
-          return '<option value="' + String(opt.value).replace(/"/g, '&quot;') + '"' + attrs.join('') + '>' + String(opt.label).replace(/</g, '&lt;') + '</option>';
+          return '<option value="' + String(opt.value).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' + attrs.join('') + '>' + String(opt.label).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
         }).join('');
-        return '<select id="' + id + '" autocomplete="off">' + options + '</select>';
+        return '<select id="' + id + '" autocomplete="off"' + required + '>' + options + '</select>';
       }
       if (field.type === 'checkbox') {
         return '<label for="' + id + '" style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
-          '<input id="' + id + '" type="checkbox" style="width:auto">' +
-          String(field.label).replace(/</g, '&lt;') + '</label>';
+          '<input id="' + id + '" type="checkbox" style="width:auto"' + required + '>' +
+          String(field.label).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
       }
       if (field.type === 'number') {
-        return '<input id="' + id + '" type="number" autocomplete="off">';
+        return '<input id="' + id + '" type="number" autocomplete="off"' + required + '>';
       }
       const inputType = field.type === 'password' ? 'password' : 'text';
-      const placeholder = field.placeholder ? ' placeholder="' + String(field.placeholder).replace(/"/g, '&quot;') + '"' : '';
-      return '<input id="' + id + '" type="' + inputType + '" autocomplete="off"' + placeholder + '>';
+      const placeholder = field.placeholder ? ' placeholder="' + String(field.placeholder).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' : '';
+      return '<input id="' + id + '" type="' + inputType + '" autocomplete="off"' + placeholder + required + '>';
     }
 
     window.veilRenderDynamicProtocolFields = function(container, protocol, values) {
@@ -79,11 +89,12 @@ func panelDynamicFieldsJS() string {
           wrapper.appendChild(label);
         }
 
-        let inputHtml = renderProtocolFieldInput(field);
+        const inputHtml = renderProtocolFieldInput(field);
         if (field.generateAction) {
           const row = document.createElement('div');
           row.style = 'display:flex;gap:8px';
-          const tmp = document.createElement('div'); tmp.innerHTML = inputHtml;
+          const tmp = document.createElement('div');
+          tmp.innerHTML = inputHtml;
           const inputEl = tmp.firstElementChild;
           inputEl.style.flex = '1';
           row.appendChild(inputEl);
@@ -97,7 +108,8 @@ func panelDynamicFieldsJS() string {
           row.appendChild(btn);
           wrapper.appendChild(row);
         } else {
-          const tmp = document.createElement('div'); tmp.innerHTML = inputHtml;
+          const tmp = document.createElement('div');
+          tmp.innerHTML = inputHtml;
           wrapper.appendChild(tmp.firstElementChild);
         }
         grid.appendChild(wrapper);
