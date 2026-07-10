@@ -32,3 +32,21 @@ func TestSetupHTMLContainsAccessibleFirstRunControls(t *testing.T) {
 		t.Fatalf("setup HTML should not load external resources")
 	}
 }
+
+func TestSetupHTMLKeepsSuccessfulSubmissionLockedUntilReload(t *testing.T) {
+	html := SetupHTML("/", "en")
+	for _, want := range []string{
+		`let setupInFlight = false;`,
+		`if (setupInFlight) return;`,
+		`setupInFlight = true;`,
+		`let completed = false;`,
+		`completed = true;`,
+		`if (!completed) {`,
+		`setupInFlight = false;`,
+		`button.disabled = false;`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("setup single-flight behavior missing %q", want)
+		}
+	}
+}
