@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -217,5 +218,34 @@ func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	}
 	if len(liveFiles) != 0 || len(backupFiles) != 0 || len(records) != 0 {
 		t.Fatalf("expected empty result, got live=%+v backup=%+v records=%+v", liveFiles, backupFiles, records)
+	}
+}
+
+func TestReloadPromotedServicesStopsOrphansBeforeReloading(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
+	state.liveRoot = filepath.Join(state.applyRoot, "live")
+	state.inbounds = []Inbound{{Name: "new", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+
+	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
+	state.privileged = client
+	state.privilegedLocal = false
+
+	ctx := NewManagementApplyContext(state)
+	state.orphanedUnits = []string{"veil-hysteria2@old.service"}
+	liveFiles := []string{filepath.Join(state.liveRoot, "hysteria2", "new.yaml")}
+
+	ctx.reloadPromotedServicesLocked(liveFiles)
+
+	var got []string
+	for _, a := range client.serviceActions {
+		got = append(got, a.Unit+":"+string(a.Action))
+	}
+	want := []string{
+		"veil-hysteria2@old.service:stop",
+		"veil-hysteria2@old.service:disable",
+		"veil-hysteria2@new.service:restart",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("service actions = %v, want %v", got, want)
 	}
 }
