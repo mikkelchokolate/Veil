@@ -7,35 +7,30 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-// ValidateSettings ensures the global settings and per-inbound credentials
-// required by NaiveProxy/Caddy are present.
-func (Plugin) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
+// ValidateSettings ensures the global settings and credentials required by
+// NaiveProxy/Caddy are present.
+func (p Plugin) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
 	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" {
 		return errNaiveCaddySettingsRequired{}
 	}
-	username := naiveUsername(settings, inbound)
-	password := naivePassword(settings, inbound)
-	if strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
+	if !p.HasCredential(settings, inbound) {
 		return errors.New("naive username and password are required")
 	}
 	return nil
 }
 
 // ValidateInbound checks one inbound for naiveproxy-specific problems.
-func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
-	var issues []model.ValidationIssue
-	username := naiveUsername(settings, inbound)
-	password := naivePassword(settings, inbound)
-	if username == "" || password == "" {
-		issues = append(issues, model.ValidationIssue{
-			Code:      "naive_credential_required",
-			Severity:  "error",
-			Field:     "inbound",
-			InboundID: inbound.Name,
-			Message:   "NaiveProxy inbound requires a username and password",
-		})
+func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
+	if p.HasCredential(settings, inbound) {
+		return nil
 	}
-	return issues
+	return []model.ValidationIssue{{
+		Code:      "naive_credential_required",
+		Severity:  "error",
+		Field:     "inbound",
+		InboundID: inbound.Name,
+		Message:   "NaiveProxy inbound requires a username and password",
+	}}
 }
 
 // NeedsDomain reports that naiveproxy needs a public domain.
