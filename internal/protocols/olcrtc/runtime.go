@@ -1,6 +1,7 @@
 package olcrtc
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -38,7 +39,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 			Transport:        "udp",
 			Unit:             templateUnit,
 			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "olcrtc/server.yaml",
+			PromotedSubpath:  generatedconfig.OlcrtcConfigSubpath,
 			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,

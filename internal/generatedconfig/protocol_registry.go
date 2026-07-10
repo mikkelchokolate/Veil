@@ -18,6 +18,7 @@ type Protocol struct {
 	MaxEnabled             int
 	RequiresRenderSettings bool
 	Render                 func(ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error)
+	ArtifactSpec           ArtifactSpec
 }
 
 type ProtocolRenderInput struct {
@@ -102,4 +103,17 @@ func (ProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, p
 		}
 	}
 	return selected
+}
+
+// ArtifactSpecs returns the artifact metadata for every registered protocol that
+// contributes generated config artifacts. The result preserves registration order.
+func (r ProtocolRegistry) ArtifactSpecs() []ArtifactSpec {
+	out := make([]ArtifactSpec, 0, len(r.protocols))
+	for _, protocol := range r.protocols {
+		if protocol.ArtifactSpec.Subpath == "" {
+			continue
+		}
+		out = append(out, protocol.ArtifactSpec)
+	}
+	return out
 }

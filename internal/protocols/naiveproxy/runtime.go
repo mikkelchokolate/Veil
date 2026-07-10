@@ -1,6 +1,7 @@
 package naiveproxy
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -38,7 +39,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 			Transport:        "tcp",
 			Unit:             "veil-caddy@panel.service",
 			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "caddy/panel.Caddyfile",
+			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
 			PromotedVerb:     "reload",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
