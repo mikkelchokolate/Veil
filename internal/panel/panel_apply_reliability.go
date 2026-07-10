@@ -3,7 +3,7 @@ package panel
 // panelApplyReliabilityJS keeps mutating apply controls disabled when the plan
 // request itself fails. A missing response must never be interpreted as an empty
 // valid plan. It also serializes workflow commands so double-clicks cannot submit
-// overlapping apply mutations.
+// overlapping apply mutations or history requests that overwrite the same output.
 func panelApplyReliabilityJS() string {
 	return `    let applyWorkflowInFlight = false;
     let applyMutationButtonsDisabled = true;
@@ -21,11 +21,21 @@ func panelApplyReliabilityJS() string {
       if (button) button.disabled = Boolean(disabled);
     }
 
+    function setApplyHistoryButtonDisabled(disabled) {
+      const button = document.getElementById('load-apply-history');
+      if (button) button.disabled = Boolean(disabled);
+    }
+
+    function setApplyWorkflowBusy(busy) {
+      applyWorkflowInFlight = Boolean(busy);
+      setApplyPlanButtonDisabled(applyWorkflowInFlight);
+      setApplyHistoryButtonDisabled(applyWorkflowInFlight);
+      setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);
+    }
+
     runApplyWorkflowCommand = async function(command) {
       if (applyWorkflowInFlight) return null;
-      applyWorkflowInFlight = true;
-      setApplyPlanButtonDisabled(true);
-      setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);
+      setApplyWorkflowBusy(true);
       try {
         const options = { method: 'POST' };
         if (command.request && Object.keys(command.request).length > 0) {
@@ -54,9 +64,30 @@ func panelApplyReliabilityJS() string {
         renderApplySafePreview(result);
         return result;
       } finally {
-        applyWorkflowInFlight = false;
-        setApplyPlanButtonDisabled(false);
-        setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);
+        setApplyWorkflowBusy(false);
+        applyViewerRoleGuard();
+      }
+    };
+
+    loadApplyHistory = async function() {
+      if (applyWorkflowInFlight) return null;
+      const limitInput = document.getElementById('apply-history-limit');
+      if (limitInput && !limitInput.checkValidity()) {
+        limitInput.reportValidity();
+        return null;
+      }
+      const rawLimit = limitInput ? limitInput.value.trim() : '';
+      if (rawLimit && !Number.isInteger(Number(rawLimit))) {
+        limitInput.setCustomValidity('Enter a whole number.');
+        limitInput.reportValidity();
+        limitInput.setCustomValidity('');
+        return null;
+      }
+      setApplyWorkflowBusy(true);
+      try {
+        return await loadJSON(applyHistoryPath(), 'apply-plan-output');
+      } finally {
+        setApplyWorkflowBusy(false);
         applyViewerRoleGuard();
       }
     };
