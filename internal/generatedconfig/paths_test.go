@@ -18,3 +18,19 @@ func TestGeneratedConfigPathsBuildsKnownGeneratedPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratedConfigPathsBuildsCertPaths(t *testing.T) {
+	paths := NewPaths("/apply")
+	if got, want := paths.CertPath("example.com"), filepath.Join("/apply", "certs", "example.com.crt"); got != want {
+		t.Fatalf("CertPath = %q, want %q", got, want)
+	}
+	if got, want := paths.KeyPath("example.com"), filepath.Join("/apply", "certs", "example.com.key"); got != want {
+		t.Fatalf("KeyPath = %q, want %q", got, want)
+	}
+	if got, want := paths.PanelCertPath(), filepath.Join("/apply", "panel", "tls.crt"); got != want {
+		t.Fatalf("PanelCertPath = %q, want %q", got, want)
+	}
+	if got, want := paths.PanelKeyPath(), filepath.Join("/apply", "panel", "tls.key"); got != want {
+		t.Fatalf("PanelKeyPath = %q, want %q", got, want)
+	}
+}
