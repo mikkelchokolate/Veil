@@ -80,7 +80,9 @@ func (c SliceCatalog) Slices() []Slice {
 				{Placeholder: panelInboundActionsPlaceholder, Render: func() string {
 					return panelInboundActionsJS() + panelInboundReliabilityJS() + panelInboundControlsJS()
 				}},
-				{Placeholder: panelDynamicFieldsPlaceholder, Render: panelDynamicFieldsJS},
+				{Placeholder: panelDynamicFieldsPlaceholder, Render: func() string {
+					return panelDynamicFieldsJS() + panelDynamicFieldsGenerationReliabilityJS()
+				}},
 				{Placeholder: panelClientProfileControlsPlaceholder, Render: panelClientProfileControlsHTML},
 				{Placeholder: panelClientProfileActionsPlaceholder, Render: panelClientProfileActionsJS},
 			},
