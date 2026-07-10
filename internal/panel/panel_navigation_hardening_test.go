@@ -34,6 +34,20 @@ func TestPanelNavigationSynchronizesHashAndFallsBackSafely(t *testing.T) {
 	}
 }
 
+func TestPanelNavigationRefreshesRepeatedActiveTabClicks(t *testing.T) {
+	js := panelNavigationHardeningJS()
+	for _, want := range []string{
+		`document.querySelectorAll('.nav-menu .nav-item[href^="#"]').forEach((link) => {`,
+		`if (window.location.hash === '#' + requestedTab) {`,
+		`event.preventDefault();`,
+		`window.switchTab(requestedTab);`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("navigation repeated-click refresh missing %q", want)
+		}
+	}
+}
+
 func TestSliceCatalogMountsNavigationHardening(t *testing.T) {
 	catalog := NewSliceCatalog(nil)
 	if _, ok := catalog.Slice("navigation"); !ok {
