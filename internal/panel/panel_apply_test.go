@@ -9,7 +9,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 	actions := panelApplyActionsJS()
 	for _, want := range []string{
 		`function applyHistoryPath()`,
-		`async function loadApplyHistory()`,
+		`loadApplyHistory = async function()`,
 		`build-apply-plan`,
 		`apply-staged-files`,
 		`apply-live-configs`,
@@ -41,14 +41,32 @@ func TestPanelApplyWorkflowSerializesCommandsAndRestoresPlanState(t *testing.T) 
 		`let applyWorkflowInFlight = false;`,
 		`let applyMutationButtonsDisabled = true;`,
 		`if (applyWorkflowInFlight) return null;`,
-		`applyWorkflowInFlight = true;`,
+		`function setApplyWorkflowBusy(busy)`,
+		`applyWorkflowInFlight = Boolean(busy);`,
 		`button.disabled = applyMutationButtonsDisabled || applyWorkflowInFlight || isViewerRole();`,
+		`setApplyWorkflowBusy(true);`,
 		`finally {`,
-		`applyWorkflowInFlight = false;`,
-		`setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);`,
+		`setApplyWorkflowBusy(false);`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply workflow single-flight guard missing %q", want)
+		}
+	}
+}
+
+func TestPanelApplyHistoryUsesWorkflowLockAndValidatesLimit(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`loadApplyHistory = async function()`,
+		`if (applyWorkflowInFlight) return null;`,
+		`limitInput && !limitInput.checkValidity()`,
+		`!Number.isInteger(Number(rawLimit))`,
+		`limitInput.reportValidity();`,
+		`return await loadJSON(applyHistoryPath(), 'apply-plan-output');`,
+		`setApplyHistoryButtonDisabled(applyWorkflowInFlight);`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Apply history reliability missing %q", want)
 		}
 	}
 }
