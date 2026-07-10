@@ -66,7 +66,9 @@ func panelIntroActionsJS() string {
     }
 
     function isViewerRole() {
-      return currentUserRole() === 'viewer';
+      // Unknown, stale, or failed role resolution must remain read-only. Only an
+      // explicitly authenticated administrator may use mutating controls.
+      return currentUserRole() !== 'admin';
     }
 
     const adminOnlyControlIds = [
@@ -151,7 +153,21 @@ func panelIntroActionsJS() string {
       document.body.dataset.veilRole = currentUserRole();
     }
 
+    async function staticTokenHasAdminAccess() {
+      if (!localStorage.getItem('veil_api_token')) return false;
+      try {
+        const response = await fetch('/api/version', { headers: authHeaders() });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
     async function refreshCurrentUserRole() {
+      // Clear cached authority before checking it. This prevents a role from a
+      // revoked session or replaced API token from enabling controls briefly.
+      setCurrentUserRole('');
+      applyViewerRoleGuard();
       try {
         const response = await fetch('/api/auth/status', { headers: authHeaders() });
         if (!response.ok) {
@@ -161,12 +177,11 @@ func panelIntroActionsJS() string {
         const data = await response.json();
         if (data && data.authenticated) {
           setCurrentUserRole(data.role || '');
-        } else if (localStorage.getItem('veil_api_token')) {
+        } else if (await staticTokenHasAdminAccess()) {
           setCurrentUserRole('admin');
-        } else {
-          setCurrentUserRole('');
         }
       } catch (_) {
+        setCurrentUserRole('');
       }
       applyViewerRoleGuard();
     }
@@ -248,28 +263,26 @@ func panelIntroActionsJS() string {
         
         output.textContent = (data && data.log ? data.log + "\n\n" : "") + veilT('version.updateStaged');
         
-        setTimeout(() => {
-          let attempts = 0;
+        setTimeout(async () => {
           const maxAttempts = 20;
-          const pollInterval = setInterval(async () => {
-            attempts++;
-            output.textContent = veilT('version.waitingRestart', { attempt: attempts, max: maxAttempts });
+          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            output.textContent = veilT('version.waitingRestart', { attempt, max: maxAttempts });
             try {
               const checkResp = await fetch('/api/version', { headers: authHeaders() });
               if (checkResp.ok) {
                 const checkData = await checkResp.json();
-                clearInterval(pollInterval);
                 btn.disabled = false;
                 output.textContent = veilT('version.backOnline', { details: JSON.stringify(checkData, null, 2) });
+                return;
               }
             } catch (_) {
             }
-            if (attempts >= maxAttempts) {
-              clearInterval(pollInterval);
-              btn.disabled = false;
-              output.textContent = veilT('version.restartSlow');
+            if (attempt < maxAttempts) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
             }
-          }, 2000);
+          }
+          btn.disabled = false;
+          output.textContent = veilT('version.restartSlow');
         }, 3000);
         
       } catch (err) {
