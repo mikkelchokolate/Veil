@@ -197,7 +197,7 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 }
 
 func (ctx ManagementApplyContext) managedRuntimeCatalogLocked() ManagedRuntimeCatalog {
-	return NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp)
+	return NewManagedRuntimeCatalogFor(ctx.state.settings, ctx.state.inbounds, ctx.state.warp)
 }
 
 func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {

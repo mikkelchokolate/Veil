@@ -281,8 +281,8 @@ func repairStateCipher(keyPath string) *secrets.Cipher {
 	return cipher
 }
 
-func runtimeUnitNamesForState(inbounds []api.Inbound, warp api.WarpConfig) []string {
-	return service.NewProtocolRuntimeProvisioning(api.NewManagedRuntimeCatalogFor(inbounds, warp)).Plan(inbounds, warp).SystemdUnits()
+func runtimeUnitNamesForState(settings api.Settings, inbounds []api.Inbound, warp api.WarpConfig) []string {
+	return service.NewProtocolRuntimeProvisioning(api.NewManagedRuntimeCatalogFor(settings, inbounds, warp)).Plan(inbounds, warp).SystemdUnits()
 }
 
 func appendRepairUnit(units []string, unit string) []string {

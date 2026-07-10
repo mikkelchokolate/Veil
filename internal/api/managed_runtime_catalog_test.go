@@ -41,7 +41,7 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 }
 
 func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T) {
-	catalog := NewManagedRuntimeCatalogFor([]Inbound{
+	catalog := NewManagedRuntimeCatalogFor(Settings{}, []Inbound{
 		{Name: "n", Protocol: "naiveproxy", Enabled: true},
 		{Name: "h", Protocol: "hysteria2", Enabled: true},
 		{Name: "m", Protocol: "mieru", Enabled: true},
@@ -128,7 +128,7 @@ func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	}
 	warp := WarpConfig{Enabled: true}
 
-	catalog := NewManagedRuntimeCatalogFor(inbounds, warp)
+	catalog := NewManagedRuntimeCatalogFor(Settings{}, inbounds, warp)
 	runtimes := catalog.Runtimes()
 
 	// Veil is always present

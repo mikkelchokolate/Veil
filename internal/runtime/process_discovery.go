@@ -2,6 +2,7 @@ package runtime
 
 type ProcessDiscovery struct {
 	source processSource
+	policy ManagedProcessPolicy
 }
 
 type processSource interface {
@@ -13,8 +14,10 @@ type processSource interface {
 	UptimeSeconds(pid int, systemUptime int64) int64
 }
 
-func NewProcessDiscovery(source processSource) ProcessDiscovery {
-	return ProcessDiscovery{source: source}
+// NewProcessDiscovery creates a discovery reader that filters processes through
+// the given policy.
+func NewProcessDiscovery(source processSource, policy ManagedProcessPolicy) ProcessDiscovery {
+	return ProcessDiscovery{source: source, policy: policy}
 }
 
 func (d ProcessDiscovery) Read() (ProcessesStats, error) {
@@ -26,7 +29,7 @@ func (d ProcessDiscovery) Read() (ProcessesStats, error) {
 	uptimeSec, _ := d.source.SystemUptime()
 	for _, pid := range pids {
 		name := d.source.Name(pid)
-		if !isManagedProcess(name) {
+		if !d.policy.IsManaged(name) {
 			continue
 		}
 		stats.Processes = append(stats.Processes, ProcessInfo{

@@ -175,7 +175,10 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 	if !ok {
 		return nil
 	}
-	install := rp.RuntimeInstall("amd64")
+	// RuntimeInstall is called only to obtain the binary name; the architecture
+	// argument is irrelevant for that field, so an empty value keeps validation
+	// host-architecture-agnostic.
+	install := rp.RuntimeInstall("")
 	unit := unitForInbound(p.Protocol(), inbound, rp.RuntimeDescriptors([]model.Inbound{inbound}))
 
 	issues := []model.ValidationIssue{}
@@ -228,7 +231,7 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 	if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
 		issues = append(issues, issue(
 			"email_required", SeverityError, "settings.email", inbound.Name,
-			"NaiveProxy automatic TLS requires an email address",
+			"This protocol requires an email address",
 			"Set the ACME contact email.", "candidate",
 		))
 	}
