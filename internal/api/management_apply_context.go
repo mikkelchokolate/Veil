@@ -153,6 +153,25 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			return results
 		}
 	}
+
+	// Stop and disable units whose configs were removed before reloading the
+	// promoted services. This frees ports and other resources so the new
+	// configuration can bind them without conflicting with the previous state.
+	if len(ctx.state.orphanedUnits) > 0 {
+		for _, unit := range ctx.state.orphanedUnits {
+			stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
+			results = append(results, stop)
+			if !stop.Success {
+				return results
+			}
+			disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
+			results = append(results, disable)
+			if !disable.Success {
+				return results
+			}
+		}
+	}
+
 	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
@@ -174,20 +193,6 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		results = append(results, result)
 		if !result.Success {
 			return results
-		}
-	}
-	if len(ctx.state.orphanedUnits) > 0 {
-		for _, unit := range ctx.state.orphanedUnits {
-			stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
-			results = append(results, stop)
-			if !stop.Success {
-				return results
-			}
-			disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
-			results = append(results, disable)
-			if !disable.Success {
-				return results
-			}
 		}
 	}
 
