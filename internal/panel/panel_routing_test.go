@@ -21,6 +21,9 @@ func TestPanelRoutingActionsModuleRendersRuleAndPresetActions(t *testing.T) {
 		`const deleted = await loadJSON`,
 		`if (!deleted) return`,
 		`if (applied) setTimeout(loadRoutingRules, 800)`,
+		`if (rules === null) return;`,
+		`if (updated === null)`,
+		`inputSwitch.checked = !requestedState;`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Routing actions missing %q", want)
