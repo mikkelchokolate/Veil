@@ -95,13 +95,17 @@ func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 	for _, want := range []string{
 		`id="client-profile-name"`,
 		`id="client-profile-username"`,
-		`id="client-profile-password"`,
-		`onclick="genClientProfilePassword()"`,
-		`onclick="addClientProfile()"`,
+		`id="client-profile-password" type="password" autocomplete="new-password"`,
+		`id="generate-client-profile-password"`,
+		`id="add-client-profile"`,
+		`id="generate-and-add-profile"`,
 	} {
 		if !strings.Contains(controls, want) {
 			t.Fatalf("Client profile controls missing %q", want)
 		}
+	}
+	if strings.Contains(controls, `onclick=`) {
+		t.Fatal("Client profile controls must not use inline event handlers")
 	}
 
 	actions := panelClientProfileActionsJS()
@@ -113,6 +117,9 @@ func TestPanelClientProfileFormModuleRendersControlsAndActions(t *testing.T) {
 		`name: name`,
 		`password: password`,
 		`enabled: true`,
+		`addEventListener('click', genClientProfilePassword)`,
+		`addEventListener('click', addClientProfile)`,
+		`addEventListener('click', generateAndAddProfile)`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Client profile actions missing %q", want)
