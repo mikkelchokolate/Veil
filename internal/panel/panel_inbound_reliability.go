@@ -97,6 +97,15 @@ func panelInboundReliabilityJS() string {
       loadInboundsIntoOutput();
     };
 
+    deleteInbound = async function() {
+      const name = veilEditingInboundName || document.getElementById('inbound-name').value.trim();
+      if (!name || !confirm(veilT('confirm.deleteInbound', { name }))) return;
+      const deleted = await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+      if (!deleted) return;
+      closeInboundModal();
+      loadInboundsIntoOutput();
+    };
+
     window.renderDynamicProtocolFields = function(inbound) {
       const container = document.getElementById('inbound-protocol-fields');
       if (!container) return Promise.resolve(false);
