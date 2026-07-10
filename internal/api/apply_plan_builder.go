@@ -2,6 +2,7 @@ package api
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -80,7 +81,7 @@ func appendProtocolInboundValidation(plan *ApplyPlanResponse, catalog ApplyProto
 		return
 	}
 	for _, inbound := range inbounds {
-		if !inbound.Enabled {
+		if !inbound.Enabled || !protocolInboundValidationReady(settings, inbound) {
 			continue
 		}
 		capability, ok := catalog.ForProtocol(inbound.Protocol)
@@ -100,6 +101,24 @@ func appendProtocolInboundValidation(plan *ApplyPlanResponse, catalog ApplyProto
 			plan.Errors = appendUniqueApplyPlanError(plan.Errors, message)
 		}
 	}
+}
+
+func protocolInboundValidationReady(settings Settings, inbound Inbound) bool {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
+		return false
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	if validator.NeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
+		return false
+	}
+	if validator.NeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
+		return false
+	}
+	return true
 }
 
 func appendUniqueApplyPlanError(errors []string, message string) []string {
