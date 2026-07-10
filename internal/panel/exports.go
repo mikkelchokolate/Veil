@@ -42,7 +42,7 @@ func IntroActionsJS() string                  { return panelIntroActionsJS() }
 func RoutingCardHTML() string                 { return panelRoutingCardHTML() }
 func RoutingActionsJS() string                { return panelRoutingActionsJS() }
 func RuntimeStatsCardsHTML() string           { return panelRuntimeStatsCardsHTML() }
-func RuntimeStatsActionsJS() string            { return panelRuntimeStatsActionsJS() }
+func RuntimeStatsActionsJS() string           { return panelRuntimeStatsActionsJS() }
 func SettingsCardHTML() string                { return panelSettingsCardHTML() }
 func SettingsActionsJS() string               { return panelSettingsActionsJS() }
 func UtilityActionsJS() string                { return panelUtilityActionsJS() }
