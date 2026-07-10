@@ -109,7 +109,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		}
 
 		// Cookie-session POST/PUT/DELETE requests always remain CSRF-protected,
-		// including read-only POST actions available to viewers.
+		// including read-only diagnostic POST actions available to viewers.
 		if isCookieSession && isMutatingRequest(r) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
 			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
@@ -118,9 +118,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// A small exact-purpose allowlist covers read-only actions whose APIs use
-		// POST for structured input. All actual state mutations still require admin.
-		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyPostRequest(r) {
+		// A small exact-path allowlist covers diagnostics that use POST only to
+		// carry structured input. All actual state mutations still require admin.
+		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
 		}
@@ -142,21 +142,16 @@ func isSelfServiceMutation(r *http.Request) bool {
 	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
 }
 
-func isReadOnlyPostRequest(r *http.Request) bool {
+func isReadOnlyDiagnosticRequest(r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		return false
 	}
 	switch r.URL.Path {
 	case "/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest":
 		return true
+	default:
+		return false
 	}
-	const backupPrefix = "/api/backups/"
-	const verifySuffix = "/verify"
-	if strings.HasPrefix(r.URL.Path, backupPrefix) && strings.HasSuffix(r.URL.Path, verifySuffix) {
-		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, backupPrefix), verifySuffix)
-		return name != "" && !strings.Contains(strings.Trim(name, "/"), "/")
-	}
-	return false
 }
 
 type contextKey string
