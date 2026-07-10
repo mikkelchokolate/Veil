@@ -115,18 +115,25 @@ func panelRoutingActionsJS() string {
         inputSwitch.dataset.adminOnly = 'true';
         inputSwitch.checked = Boolean(rule.enabled);
         inputSwitch.addEventListener('change', async () => {
+          const requestedState = inputSwitch.checked;
+          inputSwitch.disabled = true;
           const payload = {
             name: rule.name,
             match: rule.match,
             outbound: rule.outbound,
-            enabled: inputSwitch.checked
+            enabled: requestedState
           };
-          await loadJSON('/api/routing/rules/' + encodeURIComponent(rule.name), 'routing-output', {
+          const updated = await loadJSON('/api/routing/rules/' + encodeURIComponent(rule.name), 'routing-output', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
           });
-          loadRoutingRules();
+          if (updated === null) {
+            inputSwitch.checked = !requestedState;
+            inputSwitch.disabled = isViewerRole();
+            return;
+          }
+          await loadRoutingRules();
         });
         const spanSlider = document.createElement('span');
         spanSlider.className = 'slider round';
@@ -155,6 +162,7 @@ func panelRoutingActionsJS() string {
 
     async function loadRoutingRules() {
       const rules = await loadJSON('/api/routing/rules', 'routing-output');
+      if (rules === null) return;
       renderRoutingRulesTable(rules);
     }
 
