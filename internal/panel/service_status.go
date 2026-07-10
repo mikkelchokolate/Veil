@@ -26,11 +26,27 @@ func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
 }
 
 func ServiceStatusActionsJS() string {
-	return `    function loadServiceStatus() {
-      return loadJSON('/api/status', 'service-status-output').then((status) => {
+	return `    let serviceStatusLoadInFlight = false;
+    async function loadServiceStatus(options) {
+      const automatic = Boolean(options && options.automatic);
+      const dashboard = document.getElementById('dashboard');
+      if (automatic && (document.hidden || !dashboard || !dashboard.classList.contains('active'))) return null;
+      if (serviceStatusLoadInFlight) return null;
+      serviceStatusLoadInFlight = true;
+      const loadButton = document.getElementById('load-service-status');
+      if (loadButton) loadButton.disabled = true;
+      try {
+        const status = await loadJSON('/api/status', 'service-status-output');
         if (status) renderServiceRestartControls(status);
         return status;
-      });
+      } finally {
+        serviceStatusLoadInFlight = false;
+        if (loadButton) loadButton.disabled = false;
+      }
+    }
+
+    function refreshServiceStatusAutomatically() {
+      return loadServiceStatus({ automatic: true });
     }
 
     // Auto-refresh for service status (10s interval)
@@ -44,12 +60,15 @@ func ServiceStatusActionsJS() string {
         btn.classList.remove('danger');
         btn.classList.add('secondary');
       } else {
-        loadServiceStatus();
-        autoRefreshInterval = setInterval(loadServiceStatus, 10000);
+        refreshServiceStatusAutomatically();
+        autoRefreshInterval = setInterval(refreshServiceStatusAutomatically, 10000);
         btn.textContent = veilT('service.autoRefreshOn');
         btn.classList.remove('secondary');
         btn.classList.add('danger');
       }
+    });
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && autoRefreshInterval) refreshServiceStatusAutomatically();
     });
     window.addEventListener('beforeunload', function() {
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
