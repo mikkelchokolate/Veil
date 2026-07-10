@@ -7,7 +7,7 @@ func panelBackupsCardHTML() string {
 	return `
 <div class="card">
   <h2><span class="pulse-static"></span>&nbsp;Disaster Recovery</h2>
-  <p class="hint">Archives are encrypted with the server-side scheduled backup passphrase. Configure it once with <code>sudo veil backup schedule enable</code>; the browser never receives the passphrase.</p>
+  <p class="hint">Archives are encrypted with the server-side scheduled backup passphrase. Configure it once with <code>sudo veil backup schedule enable</code>; the browser never receives the passphrase. Backup access requires the admin role.</p>
   <div class="form-grid">
     <div>
       <label for="backup-daily">Daily copies</label>
@@ -24,7 +24,7 @@ func panelBackupsCardHTML() string {
   </div>
   <div class="actions">
     <button type="button" id="btn-create-backup" data-admin-only="true">Create encrypted backup</button>
-    <button type="button" id="btn-load-backups" class="secondary">Refresh</button>
+    <button type="button" id="btn-load-backups" class="secondary" data-admin-only="true">Refresh</button>
     <button type="button" id="btn-prune-backups" class="danger" data-admin-only="true">Apply retention</button>
   </div>
   <div class="table-container">
@@ -66,6 +66,12 @@ func panelBackupsActionsJS() string {
     async function loadBackups() {
       const tbody = document.getElementById('backups-table-body');
       if (!tbody) return;
+      if (isViewerRole()) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);"></td></tr>';
+        tbody.firstElementChild.firstElementChild.textContent = 'Backup access requires the admin role.';
+        applyViewerRoleGuard();
+        return;
+      }
       tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);"></td></tr>';
       tbody.firstElementChild.firstElementChild.textContent = veilT('backups.loading');
       try {
@@ -94,12 +100,14 @@ func panelBackupsActionsJS() string {
           const verify = document.createElement('button');
           verify.type = 'button';
           verify.className = 'secondary';
+          verify.dataset.adminOnly = 'true';
           verify.textContent = veilT('backups.verify');
           verify.addEventListener('click', () => verifyBackup(item.name));
           actions.appendChild(verify);
           const download = document.createElement('button');
           download.type = 'button';
           download.className = 'secondary';
+          download.dataset.adminOnly = 'true';
           download.textContent = veilT('action.download');
           download.addEventListener('click', () => downloadBackup(item.name));
           actions.appendChild(download);
@@ -121,58 +129,74 @@ func panelBackupsActionsJS() string {
 
     async function createBackup() {
       setBackupOutput(veilT('backups.creating'));
-      const response = await fetch('/api/backups', {
-        method: 'POST',
-        headers: requestHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(Object.assign({ prune: true }, backupRetention()))
-      });
-      const text = await response.text();
-      if (!response.ok) {
-        setBackupOutput(formatAPIError(text, response.status));
-        return;
+      try {
+        const response = await fetch('/api/backups', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(Object.assign({ prune: true }, backupRetention()))
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          setBackupOutput(formatAPIError(text, response.status));
+          return;
+        }
+        setBackupOutput(text ? JSON.parse(text) : { success: true });
+        await loadBackups();
+      } catch (err) {
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
       }
-      setBackupOutput(JSON.parse(text));
-      await loadBackups();
     }
 
     async function pruneBackups() {
       if (!confirm(veilT('confirm.pruneBackups'))) return;
-      const response = await fetch('/api/backups/prune', {
-        method: 'POST',
-        headers: requestHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(backupRetention())
-      });
-      const text = await response.text();
-      setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
-      if (response.ok) await loadBackups();
+      try {
+        const response = await fetch('/api/backups/prune', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(backupRetention())
+        });
+        const text = await response.text();
+        setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
+        if (response.ok) await loadBackups();
+      } catch (err) {
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
+      }
     }
 
     async function verifyBackup(name) {
       setBackupOutput(veilT('backups.verifying', { name }));
-      const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/verify', {
-        method: 'POST',
-        headers: requestHeaders({ 'Content-Type': 'application/json' }),
-        body: '{}'
-      });
-      const text = await response.text();
-      setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
+      try {
+        const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/verify', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: '{}'
+        });
+        const text = await response.text();
+        setBackupOutput(response.ok && text ? JSON.parse(text) : formatAPIError(text, response.status));
+      } catch (err) {
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
+      }
     }
 
     async function downloadBackup(name) {
-      const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/download', { headers: authHeaders() });
-      if (!response.ok) {
-        setBackupOutput(formatAPIError(await response.text(), response.status));
-        return;
+      try {
+        const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/download', { headers: authHeaders() });
+        if (!response.ok) {
+          setBackupOutput(formatAPIError(await response.text(), response.status));
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
     }
 
     async function restoreBackup(name) {
@@ -181,25 +205,12 @@ func panelBackupsActionsJS() string {
         setBackupOutput(veilT('status.restoreCancelled'));
         return;
       }
-      const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/restore', {
-        method: 'POST',
-        headers: requestHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ confirm: true })
-      });
-      const text = await response.text();
-      if (!response.ok) {
-        setBackupOutput(formatAPIError(text, response.status));
-        return;
-      }
-      const job = JSON.parse(text);
-      setBackupOutput(job);
-      await pollBackupRestore(job.id);
-    }
-
-    async function pollBackupRestore(id) {
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const response = await fetch('/api/backup-restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
+      try {
+        const response = await fetch('/api/backups/' + encodeURIComponent(name) + '/restore', {
+          method: 'POST',
+          headers: requestHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ confirm: true })
+        });
         const text = await response.text();
         if (!response.ok) {
           setBackupOutput(formatAPIError(text, response.status));
@@ -207,13 +218,35 @@ func panelBackupsActionsJS() string {
         }
         const job = JSON.parse(text);
         setBackupOutput(job);
-        if (job.status === 'succeeded') {
-          localStorage.removeItem('veil_csrf_token');
-          localStorage.removeItem('veil_user_role');
-          window.location.reload();
+        await pollBackupRestore(job.id);
+      } catch (err) {
+        setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
+      }
+    }
+
+    async function pollBackupRestore(id) {
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+          const response = await fetch('/api/backup-restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
+          const text = await response.text();
+          if (!response.ok) {
+            setBackupOutput(formatAPIError(text, response.status));
+            return;
+          }
+          const job = JSON.parse(text);
+          setBackupOutput(job);
+          if (job.status === 'succeeded') {
+            localStorage.removeItem('veil_csrf_token');
+            localStorage.removeItem('veil_user_role');
+            window.location.reload();
+            return;
+          }
+          if (job.status === 'failed') return;
+        } catch (err) {
+          setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
           return;
         }
-        if (job.status === 'failed') return;
       }
       setBackupOutput(veilT('status.restoreTimedOut'));
     }
