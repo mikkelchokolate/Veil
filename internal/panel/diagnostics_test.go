@@ -25,7 +25,7 @@ func TestManagedLogUnitOptionsEscapeRuntimeDerivedHTML(t *testing.T) {
 	}}
 	options := ManagedLogUnitOptionsHTML(runtimes)
 
-	for _, unsafe := range []string{`<img`, `<svg`, `onerror=`, `onload=`} {
+	for _, unsafe := range []string{`<img`, `<svg`, `value="veil-hysteria2@\">`} {
 		if strings.Contains(options, unsafe) {
 			t.Fatalf("diagnostic runtime option contains unsafe fragment %q: %s", unsafe, options)
 		}
