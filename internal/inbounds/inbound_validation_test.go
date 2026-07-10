@@ -36,9 +36,15 @@ func TestInboundValidationCreateRequiresSafeName(t *testing.T) {
 	}
 }
 
-func TestInboundValidationUpdateDoesNotRequireName(t *testing.T) {
+func TestInboundValidationUpdateRequiresSafeName(t *testing.T) {
 	validator := NewInboundValidation()
-	if err := validator.ValidateUpdate(Inbound{Protocol: "naiveproxy", Transport: "tcp", Port: 443}); err != nil {
-		t.Fatalf("ValidateUpdate: %v", err)
+	if err := validator.ValidateUpdate(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443}); err != nil {
+		t.Fatalf("ValidateUpdate valid: %v", err)
+	}
+	for _, name := range []string{"", "../naive", "naive/service", "naive%25"} {
+		inbound := Inbound{Name: name, Protocol: "naiveproxy", Transport: "tcp", Port: 443}
+		if err := validator.ValidateUpdate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateUpdate(%q) = %v, want ErrInboundInvalid", name, err)
+		}
 	}
 }
