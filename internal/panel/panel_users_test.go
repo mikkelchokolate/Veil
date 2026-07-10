@@ -33,9 +33,22 @@ func TestPanelUsersActionsRenderSessionAndTokenManagement(t *testing.T) {
 		`function generateReplacementAPIToken()`,
 		`crypto.getRandomValues`,
 		`async function copyGeneratedAPIToken()`,
+		`function appendUserRoleBadge(cell, role)`,
+		`badge.textContent = String(role || '')`,
+		`function clearStoredPanelIdentity()`,
+		`if (isEdit && username === currentPanelUsername())`,
+		`if (username === currentPanelUsername())`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Users actions missing %q", want)
+		}
+	}
+	for _, unsafe := range []string{
+		`tdRole.innerHTML`,
+		`role.innerHTML`,
+	} {
+		if strings.Contains(actions, unsafe) {
+			t.Fatalf("user-controlled role data must not use %q", unsafe)
 		}
 	}
 }
