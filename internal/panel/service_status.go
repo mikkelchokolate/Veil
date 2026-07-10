@@ -27,10 +27,7 @@ func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
 
 func ServiceStatusActionsJS() string {
 	return `    let serviceStatusLoadInFlight = false;
-    async function loadServiceStatus(options) {
-      const automatic = Boolean(options && options.automatic);
-      const dashboard = document.getElementById('dashboard');
-      if (automatic && (document.hidden || !dashboard || !dashboard.classList.contains('active'))) return null;
+    async function loadServiceStatus() {
       if (serviceStatusLoadInFlight) return null;
       serviceStatusLoadInFlight = true;
       const loadButton = document.getElementById('load-service-status');
@@ -46,7 +43,9 @@ func ServiceStatusActionsJS() string {
     }
 
     function refreshServiceStatusAutomatically() {
-      return loadServiceStatus({ automatic: true });
+      const dashboard = document.getElementById('dashboard');
+      if (document.hidden || !dashboard || !dashboard.classList.contains('active')) return null;
+      return loadServiceStatus();
     }
 
     // Auto-refresh for service status (10s interval)
