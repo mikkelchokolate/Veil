@@ -47,8 +47,11 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML}, {Placeholder: panelRuntimeStatsActionsPlaceholder, Render: panelRuntimeStatsActionsJS}},
 		},
 		{
-			Name:        "client-links",
-			RenderSlots: []RenderSlot{{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksCardHTML}, {Placeholder: panelClientLinksActionsPlaceholder, Render: panelClientLinksActionsJS}},
+			Name: "client-links",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksCardHTML},
+				{Placeholder: panelClientLinksActionsPlaceholder, Render: func() string { return panelClientLinksActionsJS() + panelClientLinksReliabilityJS() }},
+			},
 			EventBindings: []EventBinding{
 				{ElementID: "load-client-links", Handler: "loadClientLinks", Event: "click"},
 				{ElementID: "open-client-links-modal", Handler: "openClientLinksModal", Event: "click"},
