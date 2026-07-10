@@ -281,6 +281,7 @@ func TestRuntimeInstall(t *testing.T) {
 		Binary:        "olcrtc",
 		Method:        runtimeinstall.MethodGoInstall,
 		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+		Description:   "olcrtc is built from source with \"go install\"",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("RuntimeInstall mismatch:\ngot  %+v\nwant %+v", got, want)
@@ -338,6 +339,9 @@ func TestInboundFieldSchema(t *testing.T) {
 	}
 	if fields[2].GenerateAction != "room" {
 		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[2].GenerateAction)
+	}
+	if fields[2].GenerateActionField != "olcrtcAuth" {
+		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[2].GenerateActionField)
 	}
 }
 

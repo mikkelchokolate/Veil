@@ -35,7 +35,7 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 			},
 			Scope: "inbound",
 		},
-		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, GenerateAction: "room", Scope: "inbound"},
+		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, GenerateAction: "room", GenerateActionField: "olcrtcAuth", Scope: "inbound"},
 	}
 }
 

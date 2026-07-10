@@ -2423,6 +2423,9 @@ components:
           description: Protocol-defined default value for the field.
         generateAction:
           type: string
+        generateActionField:
+          type: string
+          description: Field key that provides input for generateAction (e.g. the provider used by a room generator).
         options:
           type: array
           items:

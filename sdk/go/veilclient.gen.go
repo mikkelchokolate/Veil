@@ -470,13 +470,16 @@ type FieldOption struct {
 // FieldSchema defines model for FieldSchema.
 type FieldSchema struct {
 	// Default Protocol-defined default value for the field.
-	Default        *interface{}   `json:"default,omitempty"`
-	GenerateAction *string        `json:"generateAction,omitempty"`
-	Key            string         `json:"key"`
-	Label          string         `json:"label"`
-	Options        *[]FieldOption `json:"options,omitempty"`
-	Placeholder    *string        `json:"placeholder,omitempty"`
-	Type           string         `json:"type"`
+	Default        *interface{} `json:"default,omitempty"`
+	GenerateAction *string      `json:"generateAction,omitempty"`
+
+	// GenerateActionField Field key that provides input for generateAction (e.g. the provider used by a room generator).
+	GenerateActionField *string        `json:"generateActionField,omitempty"`
+	Key                 string         `json:"key"`
+	Label               string         `json:"label"`
+	Options             *[]FieldOption `json:"options,omitempty"`
+	Placeholder         *string        `json:"placeholder,omitempty"`
+	Type                string         `json:"type"`
 }
 
 // FirewallRule defines model for FirewallRule.
