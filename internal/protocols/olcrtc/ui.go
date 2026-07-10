@@ -42,8 +42,31 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 // SettingsFieldSchema returns the dynamic fields for global settings.
 func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
-		{Key: "olcrtcAuth", Label: "olcRTC Auth Provider", Type: schema.FieldText, Scope: "settings"},
-		{Key: "olcrtcTransport", Label: "olcRTC Transport", Type: schema.FieldText, Scope: "settings"},
+		{
+			Key:     "olcrtcAuth",
+			Label:   "olcRTC Auth Provider",
+			Type:    schema.FieldSelect,
+			Default: "jitsi",
+			Options: []schema.FieldOption{
+				{Label: "jitsi", Value: "jitsi", Attributes: map[string]string{"data-autoroom": "true"}},
+				{Label: "telemost", Value: "telemost", Attributes: map[string]string{"data-autoroom": "false"}},
+				{Label: "wbstream", Value: "wbstream", Attributes: map[string]string{"data-autoroom": "false"}},
+			},
+			Scope: "settings",
+		},
+		{
+			Key:     "olcrtcTransport",
+			Label:   "olcRTC Transport",
+			Type:    schema.FieldSelect,
+			Default: "datachannel",
+			Options: []schema.FieldOption{
+				{Label: "datachannel", Value: "datachannel"},
+				{Label: "vp8channel", Value: "vp8channel"},
+				{Label: "seichannel", Value: "seichannel"},
+				{Label: "videochannel", Value: "videochannel"},
+			},
+			Scope: "settings",
+		},
 		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, Scope: "settings"},
 	}
 }

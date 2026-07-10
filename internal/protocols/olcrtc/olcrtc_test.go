@@ -347,13 +347,35 @@ func TestSettingsFieldSchema(t *testing.T) {
 	if len(fields) != 3 {
 		t.Fatalf("expected 3 settings fields, got %d", len(fields))
 	}
-	for _, f := range fields {
-		if f.Type != schema.FieldText {
-			t.Errorf("field %q type = %q, want text", f.Key, f.Type)
+	wantKeys := []string{"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
+	for i, key := range wantKeys {
+		if fields[i].Key != key {
+			t.Errorf("field[%d].Key = %q, want %q", i, fields[i].Key, key)
 		}
-		if f.Scope != "settings" {
-			t.Errorf("field %q scope = %q, want settings", f.Key, f.Scope)
+		if fields[i].Scope != "settings" {
+			t.Errorf("field[%d].Scope = %q, want settings", i, fields[i].Scope)
 		}
+	}
+	if fields[0].Type != schema.FieldSelect {
+		t.Errorf("olcrtcAuth type = %q, want select", fields[0].Type)
+	}
+	if fields[0].Default != "jitsi" {
+		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[0].Default)
+	}
+	if len(fields[0].Options) != 3 {
+		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[0].Options))
+	}
+	if fields[1].Type != schema.FieldSelect {
+		t.Errorf("olcrtcTransport type = %q, want select", fields[1].Type)
+	}
+	if fields[1].Default != "datachannel" {
+		t.Errorf("olcrtcTransport default = %v, want datachannel", fields[1].Default)
+	}
+	if len(fields[1].Options) != 4 {
+		t.Errorf("olcrtcTransport options = %d, want 4", len(fields[1].Options))
+	}
+	if fields[2].Type != schema.FieldText {
+		t.Errorf("olcrtcRoomID type = %q, want text", fields[2].Type)
 	}
 }
 
