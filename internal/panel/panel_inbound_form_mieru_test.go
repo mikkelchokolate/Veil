@@ -8,10 +8,10 @@ import (
 func TestPanelInboundFormExposesMieruAndTransportChoices(t *testing.T) {
 	html := panelInboundFormHTML()
 	for _, want := range []string{
-		`<option value="naiveproxy">naiveproxy</option>`,
-		`<option value="hysteria2">hysteria2</option>`,
-		`<option value="olcrtc">olcrtc</option>`,
-		`<option value="mieru">mieru</option>`,
+		`<option value="naiveproxy">NaiveProxy</option>`,
+		`<option value="hysteria2">Hysteria2</option>`,
+		`<option value="olcrtc">olcRTC</option>`,
+		`<option value="mieru">Mieru</option>`,
 		`<option value="tcp">tcp</option>`,
 		`<option value="udp">udp</option>`,
 		"NaiveProxy, Hysteria2, olcRTC, and Mieru",

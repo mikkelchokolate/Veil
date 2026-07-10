@@ -25,6 +25,18 @@ func newGeneratedConfigRegistryFrom(r *Registry) generatedconfig.ProtocolRegistr
 	return generatedconfig.NewProtocolRegistry(protocolRenderers)
 }
 
+// NeedsCaddyCertSync reports whether a protocol requires Caddy-managed TLS
+// certificates to be synced to disk when PanelAccess is "caddy".
+func NeedsCaddyCertSync(protocol string) bool {
+	registry := NewRegistry()
+	p, ok := registry.Get(protocol)
+	if !ok {
+		return false
+	}
+	csp, ok := p.(interface{ NeedsCaddyCertSync() bool })
+	return ok && csp.NeedsCaddyCertSync()
+}
+
 // Legacy unit constants remain here until all callers migrate to the registry.
 const (
 	UnitCaddy     = "veil-caddy@.service"

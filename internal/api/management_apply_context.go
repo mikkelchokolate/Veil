@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -143,8 +144,8 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
-	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.hysteria2ConfigReloadNeeded(liveFiles) {
-		results = append(results, ctx.syncCaddyCertForHysteria2())
+	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.caddyCertSyncNeeded(liveFiles) {
+		results = append(results, ctx.syncCaddyCert())
 		if !results[len(results)-1].Success {
 			return results
 		}
@@ -238,9 +239,9 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 	return rollbackFiles, rollbackActions
 }
 
-func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
+func (ctx ManagementApplyContext) caddyCertSyncNeeded(liveFiles []string) bool {
 	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
-		if runtime.Protocol != "hysteria2" {
+		if !protocols.NeedsCaddyCertSync(runtime.Protocol) {
 			continue
 		}
 		if runtime.PromotedSubpath == "" {
@@ -254,7 +255,7 @@ func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string
 	return false
 }
 
-func (ctx ManagementApplyContext) syncCaddyCertForHysteria2() ServiceActionResult {
+func (ctx ManagementApplyContext) syncCaddyCert() ServiceActionResult {
 	result := ServiceActionResult{
 		Name:    "sync-caddy-cert",
 		Command: []string{"helper", "sync_caddy_cert", ctx.state.settings.Domain},

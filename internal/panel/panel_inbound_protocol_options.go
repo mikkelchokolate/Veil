@@ -10,7 +10,7 @@ func panelInboundProtocolOptionsHTML() string {
 		b.WriteString(`                <option value="`)
 		b.WriteString(choice.Protocol)
 		b.WriteString(`">`)
-		b.WriteString(choice.Protocol)
+		b.WriteString(choice.DisplayName)
 		b.WriteString("</option>\n")
 	}
 	return b.String()
