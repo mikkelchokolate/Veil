@@ -179,7 +179,7 @@ func panelIntroActionsJS() string {
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = veilT('status.loadingPath', { path });
-      const requestOptions = options || {};
+      const requestOptions = Object.assign({}, options || {});
       requestOptions.headers = requestHeaders(requestOptions.headers || {});
       try {
         const response = await fetch(path, requestOptions);
@@ -188,8 +188,12 @@ func panelIntroActionsJS() string {
           output.textContent = formatAPIError(text, response.status);
           return null;
         }
-        const parsed = text ? JSON.parse(text) : null;
-        output.textContent = parsed === null ? veilT('common.ok') : JSON.stringify(parsed, null, 2);
+        if (!text) {
+          output.textContent = veilT('common.ok');
+          return { success: true };
+        }
+        const parsed = JSON.parse(text);
+        output.textContent = JSON.stringify(parsed, null, 2);
         return parsed;
       } catch (err) {
         output.textContent = String(err);
