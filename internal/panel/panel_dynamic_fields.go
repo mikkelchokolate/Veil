@@ -51,6 +51,9 @@ func panelDynamicFieldsJS() string {
           '<input id="' + id + '" type="checkbox" style="width:auto">' +
           String(field.label).replace(/</g, '&lt;') + '</label>';
       }
+      if (field.type === 'number') {
+        return '<input id="' + id + '" type="number" autocomplete="off">';
+      }
       const inputType = field.type === 'password' ? 'password' : 'text';
       const placeholder = field.placeholder ? ' placeholder="' + String(field.placeholder).replace(/"/g, '&quot;') + '"' : '';
       return '<input id="' + id + '" type="' + inputType + '" autocomplete="off"' + placeholder + '>';
@@ -140,6 +143,9 @@ func panelDynamicFieldsJS() string {
         if (!el) return;
         if (field.type === 'checkbox') {
           out[field.key] = el.checked;
+        } else if (field.type === 'number') {
+          const num = parseFloat(el.value);
+          out[field.key] = isNaN(num) ? '' : num;
         } else {
           out[field.key] = el.value.trim();
         }
