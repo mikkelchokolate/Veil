@@ -55,5 +55,6 @@ func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
 		Binary:        "olcrtc",
 		Method:        runtimeinstall.MethodGoInstall,
 		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+		Description:   "olcrtc is built from source with \"go install\"",
 	}
 }

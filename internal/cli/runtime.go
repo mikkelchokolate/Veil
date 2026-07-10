@@ -68,6 +68,25 @@ func runtimeNames() []string {
 	return out
 }
 
+// runtimeDescription returns the human-readable acquisition description for a
+// registered runtime, if one is provided by the plugin or catalog.
+func runtimeDescription(name string) string {
+	for _, p := range protocols.NewRegistry().All() {
+		if rp, ok := protocols.AsRuntimeProvider(p); ok {
+			rt := rp.RuntimeInstall("")
+			if rt.Name == name {
+				return rt.Description
+			}
+		}
+	}
+	for _, rt := range runtimeinstall.Catalog("") {
+		if rt.Name == name {
+			return rt.Description
+		}
+	}
+	return ""
+}
+
 // binaryNames returns the sorted list of binary filenames managed by the
 // runtime install system. Used for the Short help text.
 func binaryNames() []string {
@@ -128,19 +147,8 @@ func newRuntimeInstallCommand() *cobra.Command {
 	// current set of registered runtimes.
 	var longParts []string
 	for _, name := range names {
-		var desc string
-		switch name {
-		case "naiveproxy":
-			desc = "caddy is built from source with the naive forwardproxy fork"
-		case "hysteria2":
-			desc = "hysteria is downloaded from its upstream GitHub release"
-		case "mieru":
-			desc = "mita is downloaded from its upstream GitHub release"
-		case "warp":
-			desc = "sing-box is downloaded from its upstream GitHub release"
-		case "olcrtc":
-			desc = "olcrtc is built from source with \"go install\""
-		default:
+		desc := runtimeDescription(name)
+		if desc == "" {
 			desc = fmt.Sprintf("%s runtime", name)
 		}
 		longParts = append(longParts, desc)

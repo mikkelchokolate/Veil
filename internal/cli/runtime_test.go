@@ -146,3 +146,23 @@ func TestRuntimeInstallCommandNoRuntimeResultsReportsPlatform(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestRuntimeInstallCommandHelpUsesRuntimeDescriptions(t *testing.T) {
+	cmd := newRuntimeInstallCommand()
+	long := cmd.Long
+	for _, want := range []string{
+		"caddy is built from source with the naive forwardproxy fork",
+		"hysteria is downloaded from its upstream GitHub release",
+		"mita is downloaded from its upstream GitHub release",
+		"olcrtc is built from source",
+		"sing-box is downloaded from its upstream GitHub release",
+	} {
+		if !strings.Contains(long, want) {
+			t.Fatalf("runtime install help missing description %q:\n%s", want, long)
+		}
+	}
+	// Help text must no longer be produced by a hardcoded switch statement.
+	if strings.Contains(long, "switch") {
+		t.Fatalf("runtime install help should not contain a hardcoded switch; got:\n%s", long)
+	}
+}

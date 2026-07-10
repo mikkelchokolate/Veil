@@ -51,10 +51,11 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 // RuntimeInstall returns the Hysteria2 runtime descriptor.
 func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
 	return runtimeinstall.Runtime{
-		Name:   "hysteria2",
-		Binary: "hysteria",
-		Method: runtimeinstall.MethodRawBinary,
-		Repo:   "apernet/hysteria",
+		Name:        "hysteria2",
+		Binary:      "hysteria",
+		Method:      runtimeinstall.MethodRawBinary,
+		Repo:        "apernet/hysteria",
+		Description: "hysteria is downloaded from its upstream GitHub release",
 		AssetMatch: func(name string) bool {
 			return name == "hysteria-linux-"+arch
 		},
