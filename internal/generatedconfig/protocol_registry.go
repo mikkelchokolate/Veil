@@ -58,7 +58,7 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 		if len(selected) == 0 {
 			continue
 		}
-		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicy().HasRenderSettings(input.Settings) {
+		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicy().HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
 		}
 		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
