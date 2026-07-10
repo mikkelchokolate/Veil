@@ -48,14 +48,10 @@ func runtimeCatalogFor(arch string, r *Registry) []runtimeinstall.Runtime {
 		runtimes = append(runtimes, rp.RuntimeInstall(arch))
 	}
 
-	// WARP is managed as a runtime but is not an inbound protocol plugin, so its
-	// descriptor is still sourced from the runtimeinstall catalog.
-	for _, r := range runtimeinstall.Catalog(arch) {
-		if r.Name == "warp" {
-			runtimes = append(runtimes, r)
-			break
-		}
-	}
+	// Append non-plugin runtimes (e.g. WARP) from the runtimeinstall catalog.
+	// The catalog is intentionally scoped to runtimes that are not already
+	// contributed by protocol plugins.
+	runtimes = append(runtimes, runtimeinstall.Catalog(arch)...)
 	return runtimes
 }
 
