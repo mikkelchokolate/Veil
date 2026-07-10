@@ -87,9 +87,10 @@ func panelDynamicFieldsJS() string {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'secondary';
+          btn.id = protocolFieldElementId(field.key) + '-generate';
           btn.style = 'white-space:nowrap;padding:12px 14px';
           btn.textContent = 'Generate';
-          btn.onclick = function() { window.veilGenerateProtocolField(protocol, field.key, field.generateAction); };
+          btn.onclick = function() { window.veilGenerateProtocolField(protocol, field.key, field.generateAction, field.generateActionField); };
           row.appendChild(btn);
           wrapper.appendChild(row);
         } else {
@@ -113,9 +114,21 @@ func panelDynamicFieldsJS() string {
         }
       });
 
-      if (typeof updateOlcrtcGenerateButton === 'function') {
-        updateOlcrtcGenerateButton();
-      }
+      // Wire provider-aware generate buttons (e.g. olcRTC room generation).
+      info.inboundFieldSchema.forEach((field) => {
+        if (field.generateAction !== 'room' || !field.generateActionField) return;
+        const authEl = document.getElementById(protocolFieldElementId(field.generateActionField));
+        const btn = document.getElementById(protocolFieldElementId(field.key) + '-generate');
+        if (!authEl || !btn) return;
+        function updateRoomGenerateButton() {
+          const opt = authEl.selectedOptions[0];
+          const auto = !!(opt && opt.dataset.autoroom === 'true');
+          btn.disabled = !auto;
+          btn.title = auto ? '' : 'This provider needs a room created on its website first; auto-generate is unavailable.';
+        }
+        authEl.addEventListener('change', updateRoomGenerateButton);
+        updateRoomGenerateButton();
+      });
     };
 
     window.veilCollectProtocolFields = function(protocol) {
@@ -134,16 +147,16 @@ func panelDynamicFieldsJS() string {
       return out;
     };
 
-    window.veilGenerateProtocolField = async function(protocol, key, action) {
+    window.veilGenerateProtocolField = async function(protocol, key, action, actionField) {
       const el = document.getElementById(protocolFieldElementId(key));
       if (!el) return;
       if (action === 'password') {
         el.value = randomPassword();
       } else if (action === 'room') {
-        const authEl = document.getElementById(protocolFieldElementId('olcrtcAuth'));
-        const provider = authEl ? authEl.value : 'jitsi';
+        const authEl = actionField ? document.getElementById(protocolFieldElementId(actionField)) : null;
+        const provider = authEl ? authEl.value : '';
         try {
-          const resp = await fetch('/api/olcrtc/room', {
+          const resp = await fetch('/api/' + encodeURIComponent(protocol) + '/room', {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ provider })

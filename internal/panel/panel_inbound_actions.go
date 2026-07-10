@@ -189,7 +189,8 @@ func panelInboundActionsJS() string {
       document.getElementById('inbound-modal-title').innerText = veilT('modal.addInbound');
       document.getElementById('inbound-name').value = '';
       document.getElementById('inbound-name').readOnly = false;
-      document.getElementById('inbound-protocol').value = 'naiveproxy';
+      const protocolSelect = document.getElementById('inbound-protocol');
+      protocolSelect.value = protocolSelect.options[0] ? protocolSelect.options[0].value : '';
       document.getElementById('inbound-transport').value = 'tcp';
       document.getElementById('inbound-port').value = '';
       document.getElementById('inbound-password').value = '';
@@ -336,37 +337,6 @@ func panelInboundActionsJS() string {
       const el = document.getElementById('inbound-hysteria2-password');
       if (el) el.value = randomPassword();
       scheduleInboundValidation();
-    };
-
-    // updateOlcrtcGenerateButton enables the room "Generate" button only for
-    // providers that support automatic rooms (Jitsi). Telemost/WbStream require
-    // a room created on the service first, so the button is disabled for them.
-    window.updateOlcrtcGenerateButton = function() {
-      const authSelect = document.getElementById('protocol-field-olcrtcAuth');
-      const btn = document.getElementById('protocol-field-olcrtcRoomID-generate');
-      if (!authSelect || !btn) return;
-      const opt = authSelect.selectedOptions[0];
-      const auto = !!(opt && opt.dataset.autoroom === 'true');
-      btn.disabled = !auto;
-      btn.title = auto ? '' : 'This provider needs a room created on its website first; auto-generate is unavailable.';
-    };
-
-    window.genInboundOlcrtcRoomID = async function() {
-      const authSelect = document.getElementById('inbound-olcrtc-auth');
-      const provider = authSelect ? authSelect.value : 'jitsi';
-      const el = document.getElementById('inbound-olcrtc-room-id');
-      if (!el) return;
-      try {
-        const resp = await fetch('/api/olcrtc/room', {
-          method: 'POST',
-          headers: requestHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ provider })
-        });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        el.value = data.roomID || '';
-        scheduleInboundValidation();
-      } catch (_) {}
     };
 
     window.renderDynamicProtocolFields = function(inbound) {
