@@ -23,7 +23,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`apply-file-diff-preview-body`,
 		`apply-safety-warnings`,
 		`No file content is shown`,
-		`function setApplyMutationButtonsDisabled(disabled)`,
+		`setApplyMutationButtonsDisabled = function(disabled)`,
 		`if (result === null)`,
 		`setApplyMutationButtonsDisabled(true)`,
 		`setApplyMutationButtonsDisabled(!plan || plan.valid !== true)`,
@@ -31,6 +31,24 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)
+		}
+	}
+}
+
+func TestPanelApplyWorkflowSerializesCommandsAndRestoresPlanState(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`let applyWorkflowInFlight = false;`,
+		`let applyMutationButtonsDisabled = true;`,
+		`if (applyWorkflowInFlight) return null;`,
+		`applyWorkflowInFlight = true;`,
+		`button.disabled = applyMutationButtonsDisabled || applyWorkflowInFlight || isViewerRole();`,
+		`finally {`,
+		`applyWorkflowInFlight = false;`,
+		`setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Apply workflow single-flight guard missing %q", want)
 		}
 	}
 }
