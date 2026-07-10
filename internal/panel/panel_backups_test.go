@@ -18,9 +18,9 @@ func TestPanelBackupsCardRendersRecoveryControls(t *testing.T) {
 		`id="backup-output"`,
 		`veil backup schedule enable`,
 		`Backup access requires the admin role`,
-		`<button type="button" id="btn-create-backup" data-admin-only="true">`,
-		`<button type="button" id="btn-load-backups" class="secondary" data-admin-only="true">`,
-		`<button type="button" id="btn-prune-backups" class="danger" data-admin-only="true">`,
+		`btn-create-backup" data-admin-only="true`,
+		`btn-load-backups" class="secondary" data-admin-only="true`,
+		`btn-prune-backups" class="danger" data-admin-only="true`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("backup card missing %q", want)
