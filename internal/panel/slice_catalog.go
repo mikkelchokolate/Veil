@@ -84,8 +84,11 @@ func (c SliceCatalog) Slices() []Slice {
 			},
 		},
 		{
-			Name:        "routing",
-			RenderSlots: []RenderSlot{{Placeholder: panelRoutingCardPlaceholder, Render: panelRoutingCardHTML}, {Placeholder: panelRoutingActionsPlaceholder, Render: panelRoutingActionsJS}},
+			Name: "routing",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelRoutingCardPlaceholder, Render: panelRoutingHardenedCardHTML},
+				{Placeholder: panelRoutingActionsPlaceholder, Render: func() string { return panelRoutingActionsJS() + panelRoutingControlsJS() }},
+			},
 			EventBindings: []EventBinding{
 				{ElementID: "routing-rule-form", Handler: "saveRoutingRule", Event: "submit"},
 				{ElementID: "delete-routing-rule", Handler: "deleteRoutingRule", Event: "click"},
