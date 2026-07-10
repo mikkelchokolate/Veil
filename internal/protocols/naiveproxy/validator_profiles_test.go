@@ -20,7 +20,6 @@ func TestValidationAcceptsEnabledClientProfileCredentials(t *testing.T) {
 		Enabled:   true,
 		Profiles: []model.ClientProfile{{
 			Name:     "alice",
-			Username: "alice",
 			Password: "secret",
 			Enabled:  true,
 		}},
@@ -47,9 +46,8 @@ func TestValidationRejectsIncompleteClientProfileWithoutFallback(t *testing.T) {
 		Port:      443,
 		Enabled:   true,
 		Profiles: []model.ClientProfile{{
-			Name:     "alice",
-			Username: "alice",
-			Enabled:  true,
+			Name:    "alice",
+			Enabled: true,
 		}},
 	}
 
