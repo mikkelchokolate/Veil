@@ -43,8 +43,11 @@ func (c SliceCatalog) Slices() []Slice {
 			EventBindings: []EventBinding{{ElementID: "load-service-status", Handler: "loadServiceStatus", Event: "click"}},
 		},
 		{
-			Name:        "runtime-stats",
-			RenderSlots: []RenderSlot{{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML}, {Placeholder: panelRuntimeStatsActionsPlaceholder, Render: panelRuntimeStatsActionsJS}},
+			Name: "runtime-stats",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML},
+				{Placeholder: panelRuntimeStatsActionsPlaceholder, Render: func() string { return panelRuntimeStatsActionsJS() + panelRuntimeStatsVisibilityJS() }},
+			},
 		},
 		{
 			Name: "client-links",
