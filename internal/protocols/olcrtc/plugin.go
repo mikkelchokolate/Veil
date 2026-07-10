@@ -19,6 +19,11 @@ func (Plugin) RequiresCaddy() bool     { return false }
 func (Plugin) FirewallService() string { return "" }
 func (Plugin) MaxEnabled() int         { return 0 }
 
+// GenerateRoom implements the RoomGenerator capability for olcRTC.
+func (Plugin) GenerateRoom(provider string) (string, error) {
+	return GenerateRoom(provider)
+}
+
 func protocolString(m map[string]any, key, fallback string) string {
 	if m == nil {
 		return fallback

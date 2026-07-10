@@ -75,3 +75,10 @@ type UIProvider interface {
 	SettingsFieldSchema() []schema.FieldSchema
 	Autofill(inbound model.Inbound) (model.Inbound, error)
 }
+
+// RoomGenerator contributes server-side generation of one-click values such as
+// meeting room IDs. The API registers a per-protocol /api/{protocol}/room route
+// for every plugin that implements this interface.
+type RoomGenerator interface {
+	GenerateRoom(provider string) (string, error)
+}

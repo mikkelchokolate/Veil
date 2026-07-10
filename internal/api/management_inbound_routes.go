@@ -7,7 +7,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
-	"github.com/mikkelchokolate/Veil/internal/protocols/olcrtc"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
@@ -55,9 +54,9 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 			if !decodeJSONRequest(w, r, &inbound) {
 				return nil
 			}
-			inbound, autoErr := autofillOlcrtcInbound(inbound)
+			inbound, autoErr := autofillInbound(inbound)
 			if autoErr != nil {
-				s.logUserAction(r, "create_inbound", inbound.Name, false, "olcrtc provisioning failed")
+				s.logUserAction(r, "create_inbound", inbound.Name, false, "provisioning failed")
 				writeError(w, autoErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
@@ -86,8 +85,8 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// autofillOlcrtcInbound delegates one-click provisioning to the olcRTC plugin.
-func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
+// autofillInbound delegates one-click provisioning to the inbound's protocol plugin.
+func autofillInbound(inbound Inbound) (Inbound, error) {
 	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
 	if !ok {
 		return inbound, nil
@@ -103,29 +102,43 @@ func autofillOlcrtcInbound(inbound Inbound) (Inbound, error) {
 	return filled, nil
 }
 
-// handleOlcrtcRoom backs the panel's "Generate" room button. It returns a fresh
-// auto-generated room id for providers that support it, and refuses (400) for
-// providers that require a manually created room.
-func (s *managementState) handleOlcrtcRoom(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
+// handleProtocolRoom returns a handler that backs the panel's "Generate" room
+// button for the given protocol. It returns a fresh auto-generated room id for
+// providers that support it, and refuses (400) for providers that require a
+// manually created room.
+func (s *managementState) handleProtocolRoom(protocol string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		var req struct {
+			Provider string `json:"provider"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		if req.Provider == "" {
+			req.Provider = "jitsi"
+		}
+
+		p, ok := protocols.NewRegistry().Get(protocol)
+		if !ok {
+			writeNotFound(w)
+			return
+		}
+		gen, ok := protocols.AsRoomGenerator(p)
+		if !ok {
+			writeNotFound(w)
+			return
+		}
+		room, err := gen.GenerateRoom(req.Provider)
+		if err != nil {
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]any{"provider": req.Provider, "roomID": room})
 	}
-	var req struct {
-		Provider string `json:"provider"`
-	}
-	if !decodeJSONRequest(w, r, &req) {
-		return
-	}
-	if req.Provider == "" {
-		req.Provider = "jitsi"
-	}
-	room, err := olcrtc.GenerateRoom(req.Provider)
-	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, map[string]any{"provider": req.Provider, "roomID": room})
 }
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
