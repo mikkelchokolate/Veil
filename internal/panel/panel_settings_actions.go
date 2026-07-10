@@ -135,8 +135,13 @@ func panelSettingsActionsJS() string {
         if (type === 'checkbox') {
           protocolFields[key] = input.checked;
         } else if (type === 'number') {
-          const value = Number(input.value);
-          protocolFields[key] = Number.isFinite(value) ? value : '';
+          const raw = input.value.trim();
+          if (raw === '') {
+            protocolFields[key] = '';
+          } else {
+            const value = Number(raw);
+            protocolFields[key] = Number.isFinite(value) ? value : '';
+          }
         } else {
           protocolFields[key] = input.value.trim();
         }
