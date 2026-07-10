@@ -18,10 +18,16 @@ func TestPanelSettingsActionsModuleRendersLoadAndSaveActions(t *testing.T) {
 		`field.type === 'password'`,
 		`field.type === 'checkbox'`,
 		`field.type === 'number'`,
+		`const raw = input.value.trim();`,
+		`if (raw === '')`,
+		`protocolFields[key] = '';`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Settings actions missing %q", want)
 		}
+	}
+	if strings.Contains(actions, `const value = Number(input.value);`) {
+		t.Fatal("blank number settings must not be coerced to zero")
 	}
 }
 
