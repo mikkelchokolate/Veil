@@ -108,5 +108,5 @@ func panelClientProfileActionsJS() string {
       document.getElementById('client-profile-name').value = '';
       document.getElementById('client-profile-username').value = '';
       document.getElementById('client-profile-password').value = '';
-    }` + panelInboundReliabilityJS() + panelRequestReliabilityJS()
+    }` + panelInboundReliabilityJS() + panelRequestReliabilityJS() + panelRoleVisibilityJS()
 }
