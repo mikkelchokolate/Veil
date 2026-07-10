@@ -18,27 +18,12 @@ func TestPanelBackupsCardRendersRecoveryControls(t *testing.T) {
 		`id="backup-output"`,
 		`veil backup schedule enable`,
 		`Backup access requires the admin role`,
+		`id="btn-create-backup" data-admin-only="true"`,
+		`id="btn-load-backups" class="secondary" data-admin-only="true"`,
+		`id="btn-prune-backups" class="danger" data-admin-only="true"`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("backup card missing %q", want)
-		}
-	}
-	for _, id := range []string{"btn-create-backup", "btn-load-backups", "btn-prune-backups"} {
-		needle := `id="` + id + `"`
-		index := strings.Index(card, needle)
-		if index < 0 {
-			t.Fatalf("backup card missing %s", needle)
-		}
-		start := index - 120
-		if start < 0 {
-			start = 0
-		}
-		end := index + 180
-		if end > len(card) {
-			end = len(card)
-		}
-		if !strings.Contains(card[start:end], `data-admin-only="true"`) {
-			t.Fatalf("backup control %s must be admin-only", id)
 		}
 	}
 }
