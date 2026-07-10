@@ -183,18 +183,43 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 	return nil
 }
 
-func (l ManagementStateLifecycle) loadOrCreateSetupToken() (string, error) {
-	if l.state.setup.Token != "" {
-		return l.state.setup.Token, nil
+func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot) {
+	if state == nil {
+		return
 	}
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
+	managementstate.ApplySnapshot(managementstate.SnapshotTarget{
+		Setup:         &state.setup,
+		Settings:      &state.settings,
+		Inbounds:      &state.inbounds,
+		Rules:         &state.rules,
+		RoutingPreset: &state.routingPreset,
+		RoutingSource: &state.routingSource,
+		Warp:          &state.warp,
+		Users:         &state.users,
+	}, snapshot)
+}
+
+func defaultApplyRoot(root string) string {
+	if root != "" {
+		return root
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil")
+	}
+	return "/etc/veil"
+}
+
+// randomReader is swapped in tests to exercise generateRandomHex error paths.
+var randomReader = rand.Read
+
+func generateRandomHex(length int) (string, error) {
+	b := make([]byte, length/2)
+	if _, err := randomReader(b); err != nil {
 		return "", err
 	}
-	token := hex.EncodeToString(raw[:])
-	l.state.setup.Token = token
-	if err := l.SaveLocked(); err != nil {
-		return "", err
-	}
-	return token, nil
+	return hex.EncodeToString(b), nil
 }
