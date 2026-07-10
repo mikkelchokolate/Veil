@@ -15,6 +15,12 @@ func TestPanelRoutingActionsModuleRendersRuleAndPresetActions(t *testing.T) {
 		`/api/routing/presets/`,
 		`routing-rule-name`,
 		`routing-preset-profile`,
+		`fetch('/api/warp', { headers: authHeaders() })`,
+		`const saved = await loadJSON`,
+		`if (!saved) return`,
+		`const deleted = await loadJSON`,
+		`if (!deleted) return`,
+		`if (applied) setTimeout(loadRoutingRules, 800)`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Routing actions missing %q", want)
