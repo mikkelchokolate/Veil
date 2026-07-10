@@ -38,8 +38,15 @@ jobs:
         run: go test ./sdk/go -race -count=1
       - name: Test product code with race detector and coverage
         run: |
+          set -o pipefail
           packages="$(go list ./... | grep -v '/sdk/go$')"
-          go test ${packages} -race -count=1 -coverprofile=coverage.out
+          go test ${packages} -race -count=1 -coverprofile=coverage.out 2>&1 | tee product-test.log
+      - name: Archive failed product test log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: product-test-log
+          path: product-test.log
       - name: Verify coverage threshold (min 70%)
         run: |
           total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
