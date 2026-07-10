@@ -30,25 +30,13 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 	var buf strings.Builder
 	buf.WriteString("{\n  order forward_proxy before file_server\n  servers {\n    protocols h1 h2\n  }\n}\n\n")
 
-	password := inbound.Password
-	if password == "" {
-		password = inbound.NaivePassword
-		if password == "" {
-			password = r.settings.NaivePassword
-		}
-	}
+	password := naivePassword(r.settings, inbound)
 	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
 	if err != nil {
 		return "", err
 	}
-	username := inbound.NaiveUsername
-	if username == "" {
-		username = r.settings.NaiveUsername
-	}
-	fallbackRoot := inbound.FallbackRoot
-	if fallbackRoot == "" {
-		fallbackRoot = r.settings.FallbackRoot
-	}
+	username := naiveUsername(r.settings, inbound)
+	root := fallbackRoot(r.settings, inbound)
 	naiveConfig := renderer.NaiveConfig{
 		Domain:       r.settings.Domain,
 		Email:        r.settings.Email,
@@ -56,7 +44,7 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 		Username:     username,
 		Password:     password,
 		Users:        access.NaiveUsers(),
-		FallbackRoot: fallbackRoot,
+		FallbackRoot: root,
 	}
 	if r.warp.Enabled {
 		socksPort := r.warp.SocksPort
@@ -111,27 +99,18 @@ func (r InboundRenderer) RenderPanelStandalone() (string, error) {
 }
 
 func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
-	password := inbound.Password
-	if password == "" {
-		password = inbound.Hysteria2Password
-		if password == "" {
-			password = r.settings.Hysteria2Password
-		}
-	}
+	password := hysteria2Password(r.settings, inbound)
 	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
 	if err != nil {
 		return "", err
 	}
-	masqueradeURL := inbound.MasqueradeURL
-	if masqueradeURL == "" {
-		masqueradeURL = r.settings.MasqueradeURL
-	}
+	url := masqueradeURL(r.settings, inbound)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
 		Domain:        r.settings.Domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
-		MasqueradeURL: masqueradeURL,
+		MasqueradeURL: url,
 	}
 	if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
 		hystConfig.CertPath = r.paths.CertPath(r.settings.Domain)
@@ -162,21 +141,9 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 	// olcRTC transport is a WebRTC channel type (datachannel, vp8channel, …),
 	// never the inbound's L4 transport ("udp"). Leave empty so the renderer
 	// defaults to "datachannel".
-	transport := inbound.OlcrtcTransport
-	if transport == "" {
-		transport = r.settings.OlcrtcTransport
-	}
-	auth := inbound.OlcrtcAuth
-	if auth == "" {
-		auth = r.settings.OlcrtcAuth
-	}
-	if auth == "" {
-		auth = "jitsi"
-	}
-	roomID := inbound.OlcrtcRoomID
-	if roomID == "" {
-		roomID = r.settings.OlcrtcRoomID
-	}
+	auth := olcrtcAuth(r.settings, inbound)
+	roomID := olcrtcRoomID(r.settings, inbound)
+	transport := olcrtcTransport(r.settings, inbound)
 	// net.dns is a DNS *resolver* (host:port), not our server domain. Leave
 	// empty so the renderer defaults to a public resolver (1.1.1.1:53).
 	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
@@ -226,4 +193,146 @@ func panelCaddyRoute(settings Settings) (caddyRoute, bool, error) {
 		return caddyRoute{}, false, fmt.Errorf("panelListen must be host:port")
 	}
 	return caddyRoute{Port: port, WebBasePath: webBasePath}, true, nil
+}
+
+// protocolString reads a string value from a ProtocolFields map, falling back
+// to the supplied default when the map is nil, the key is missing, or the value
+// is not a string. The result is trimmed of surrounding whitespace.
+func protocolString(m map[string]any, key, fallback string) string {
+	if m == nil {
+		return fallback
+	}
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	s, ok := v.(string)
+	if !ok {
+		return fallback
+	}
+	return strings.TrimSpace(s)
+}
+
+func naiveUsername(settings Settings, inbound Inbound) string {
+	username := protocolString(inbound.ProtocolFields, "naiveUsername", "")
+	if username == "" {
+		username = inbound.NaiveUsername
+	}
+	if username == "" {
+		username = protocolString(settings.ProtocolFields, "naiveUsername", "")
+	}
+	if username == "" {
+		username = settings.NaiveUsername
+	}
+	return username
+}
+
+func naivePassword(settings Settings, inbound Inbound) string {
+	password := strings.TrimSpace(inbound.Password)
+	if password == "" {
+		password = protocolString(inbound.ProtocolFields, "naivePassword", "")
+	}
+	if password == "" {
+		password = inbound.NaivePassword
+	}
+	if password == "" {
+		password = protocolString(settings.ProtocolFields, "naivePassword", "")
+	}
+	if password == "" {
+		password = settings.NaivePassword
+	}
+	return password
+}
+
+func fallbackRoot(settings Settings, inbound Inbound) string {
+	root := protocolString(inbound.ProtocolFields, "fallbackRoot", "")
+	if root == "" {
+		root = inbound.FallbackRoot
+	}
+	if root == "" {
+		root = protocolString(settings.ProtocolFields, "fallbackRoot", "")
+	}
+	if root == "" {
+		root = settings.FallbackRoot
+	}
+	return root
+}
+
+func hysteria2Password(settings Settings, inbound Inbound) string {
+	password := strings.TrimSpace(inbound.Password)
+	if password == "" {
+		password = protocolString(inbound.ProtocolFields, "hysteria2Password", "")
+	}
+	if password == "" {
+		password = inbound.Hysteria2Password
+	}
+	if password == "" {
+		password = protocolString(settings.ProtocolFields, "hysteria2Password", "")
+	}
+	if password == "" {
+		password = settings.Hysteria2Password
+	}
+	return password
+}
+
+func masqueradeURL(settings Settings, inbound Inbound) string {
+	url := protocolString(inbound.ProtocolFields, "masqueradeURL", "")
+	if url == "" {
+		url = inbound.MasqueradeURL
+	}
+	if url == "" {
+		url = protocolString(settings.ProtocolFields, "masqueradeURL", "")
+	}
+	if url == "" {
+		url = settings.MasqueradeURL
+	}
+	return url
+}
+
+func olcrtcAuth(settings Settings, inbound Inbound) string {
+	auth := protocolString(inbound.ProtocolFields, "olcrtcAuth", "")
+	if auth == "" {
+		auth = inbound.OlcrtcAuth
+	}
+	if auth == "" {
+		auth = protocolString(settings.ProtocolFields, "olcrtcAuth", "")
+	}
+	if auth == "" {
+		auth = settings.OlcrtcAuth
+	}
+	if auth == "" {
+		auth = "jitsi"
+	}
+	return auth
+}
+
+func olcrtcTransport(settings Settings, inbound Inbound) string {
+	transport := protocolString(inbound.ProtocolFields, "olcrtcTransport", "")
+	if transport == "" {
+		transport = inbound.OlcrtcTransport
+	}
+	if transport == "" {
+		transport = protocolString(settings.ProtocolFields, "olcrtcTransport", "")
+	}
+	if transport == "" {
+		transport = settings.OlcrtcTransport
+	}
+	if transport == "" {
+		transport = "datachannel"
+	}
+	return transport
+}
+
+func olcrtcRoomID(settings Settings, inbound Inbound) string {
+	room := protocolString(inbound.ProtocolFields, "olcrtcRoomID", "")
+	if room == "" {
+		room = inbound.OlcrtcRoomID
+	}
+	if room == "" {
+		room = protocolString(settings.ProtocolFields, "olcrtcRoomID", "")
+	}
+	if room == "" {
+		room = settings.OlcrtcRoomID
+	}
+	return room
 }
