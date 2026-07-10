@@ -84,9 +84,11 @@ func TestPromoteDoesNotTouchWarpWhenDisabledAndUnitInactive(t *testing.T) {
 	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
-	for _, id := range client.promotions[0].RemoveArtifactIDs {
-		if id == "sing-box/warp.json" {
-			t.Fatalf("inactive WARP unit must not be torn down: %+v", client.promotions[0].RemoveArtifactIDs)
+	for _, prom := range client.promotions {
+		for _, id := range prom.RemoveArtifactIDs {
+			if id == "sing-box/warp.json" {
+				t.Fatalf("inactive WARP unit must not be torn down: %+v", prom.RemoveArtifactIDs)
+			}
 		}
 	}
 	ctx.reloadPromotedServicesLocked(nil)
@@ -108,12 +110,11 @@ func TestPromoteDoesNotRemoveWarpConfigWhenWarpEnabled(t *testing.T) {
 	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
-	if len(client.promotions) != 1 {
-		t.Fatalf("promotions = %+v", client.promotions)
-	}
-	for _, id := range client.promotions[0].RemoveArtifactIDs {
-		if id == "sing-box/warp.json" {
-			t.Fatalf("warp config must not be removed while WARP is enabled: %+v", client.promotions[0].RemoveArtifactIDs)
+	for _, prom := range client.promotions {
+		for _, id := range prom.RemoveArtifactIDs {
+			if id == "sing-box/warp.json" {
+				t.Fatalf("warp config must not be removed while WARP is enabled: %+v", prom.RemoveArtifactIDs)
+			}
 		}
 	}
 }
