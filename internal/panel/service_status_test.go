@@ -20,6 +20,26 @@ func TestServiceStatusCardRendersRestartControls(t *testing.T) {
 	}
 }
 
+func TestServiceStatusRefreshesAreSingleFlightAndVisibilityAware(t *testing.T) {
+	actions := ServiceStatusActionsJS()
+	for _, want := range []string{
+		`let serviceStatusLoadInFlight = false;`,
+		`if (automatic && (document.hidden || !dashboard || !dashboard.classList.contains('active'))) return null;`,
+		`if (serviceStatusLoadInFlight) return null;`,
+		`serviceStatusLoadInFlight = true;`,
+		`serviceStatusLoadInFlight = false;`,
+		`setInterval(refreshServiceStatusAutomatically, 10000)`,
+		`document.addEventListener('visibilitychange'`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("service status refresh guard missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `setInterval(loadServiceStatus, 10000)`) {
+		t.Fatal("automatic status refresh must use the visibility-aware wrapper")
+	}
+}
+
 func TestServiceRestartActionsRenderDynamicServiceEndpoints(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{ActionName: "veil", ManualRestart: true}, {ActionName: "caddy", ManualRestart: true}}
 	actions := ServiceRestartActionsJS(runtimes)
