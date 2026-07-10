@@ -447,6 +447,25 @@ func TestAutofillPreservesExistingValues(t *testing.T) {
 	}
 }
 
+func TestAutofillRegeneratesInvalidPassword(t *testing.T) {
+	p := New()
+	inbound := model.Inbound{
+		Name:     "test",
+		Protocol: "olcrtc",
+		Password: "too-short",
+	}
+	out, err := p.Autofill(inbound)
+	if err != nil {
+		t.Fatalf("Autofill error: %v", err)
+	}
+	if out.Password == "too-short" {
+		t.Errorf("invalid password was not regenerated")
+	}
+	if !isOlcrtcKey(out.Password) {
+		t.Errorf("regenerated password %q is not a 64-char hex key", out.Password)
+	}
+}
+
 func TestAutofillReadsFromProtocolFields(t *testing.T) {
 	p := New()
 	inbound := model.Inbound{

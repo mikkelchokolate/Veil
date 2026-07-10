@@ -108,7 +108,7 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields["olcrtcRoomID"] == nil || inbound.ProtocolFields["olcrtcRoomID"] == "" {
 		inbound.ProtocolFields["olcrtcRoomID"] = inbound.OlcrtcRoomID
 	}
-	if inbound.Password == "" && !isOlcrtcKey(inbound.Password) {
+	if inbound.Password == "" || !isOlcrtcKey(inbound.Password) {
 		key, err := generateRandomHex(64)
 		if err != nil {
 			return inbound, err
