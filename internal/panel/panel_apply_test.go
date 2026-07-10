@@ -26,6 +26,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`function setApplyMutationButtonsDisabled(disabled)`,
 		`if (result === null)`,
 		`setApplyMutationButtonsDisabled(true)`,
+		`setApplyMutationButtonsDisabled(!plan || plan.valid !== true)`,
 		`return null`,
 	} {
 		if !strings.Contains(actions, want) {
@@ -39,9 +40,9 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	for _, want := range []string{
 		`<h2>Apply plan</h2>`,
 		`id="build-apply-plan"`,
-		`id="apply-staged-files"`,
-		`id="apply-live-configs"`,
-		`id="reload-services"`,
+		`id="apply-staged-files" type="button" disabled`,
+		`id="apply-live-configs" type="button" disabled`,
+		`id="reload-services" type="button" disabled`,
 		`id="load-apply-history"`,
 		`id="apply-runtime-output"`,
 		`id="apply-safety-warnings"`,
