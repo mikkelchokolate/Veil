@@ -148,7 +148,12 @@ func isReadOnlyDiagnosticRequest(r *http.Request) bool {
 		return false
 	}
 	switch r.URL.Path {
-	case "/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest", "/api/apply/plan":
+	case "/api/tools/dns-lookup",
+		"/api/tools/ping",
+		"/api/tools/speedtest",
+		"/api/apply/plan",
+		"/api/client-links/qr",
+		"/api/profiles/ru-recommended/preview":
 		return true
 	default:
 		return false
