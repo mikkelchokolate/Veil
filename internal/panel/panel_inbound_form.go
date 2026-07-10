@@ -58,24 +58,24 @@ func panelInboundFormHTML() string {
             <div class="form-grid">
               <div>
                 <label for="inbound-name">Name</label>
-                <input id="inbound-name" autocomplete="off" placeholder="naive" aria-invalid="false" aria-describedby="inbound-name-validation">
+                <input id="inbound-name" required pattern="[A-Za-z0-9_-]+" autocomplete="off" placeholder="naive" title="Use letters, digits, underscore, or hyphen." aria-invalid="false" aria-describedby="inbound-name-validation">
                 <p id="inbound-name-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-protocol">Protocol</label>
-                <select id="inbound-protocol" aria-invalid="false" aria-describedby="inbound-protocol-validation">
+                <select id="inbound-protocol" required aria-invalid="false" aria-describedby="inbound-protocol-validation">
 ` + panelInboundProtocolOptionsHTML() + `                </select>
                 <p id="inbound-protocol-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-transport">Transport</label>
-                <select id="inbound-transport" aria-invalid="false" aria-describedby="inbound-transport-validation">
+                <select id="inbound-transport" required aria-invalid="false" aria-describedby="inbound-transport-validation">
 ` + panelInboundTransportOptionsHTML() + `                </select>
                 <p id="inbound-transport-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-port">Port</label>
-                <input id="inbound-port" type="number" min="1" max="65535" placeholder="443" aria-invalid="false" aria-describedby="inbound-port-validation">
+                <input id="inbound-port" type="number" required min="1" max="65535" placeholder="443" aria-invalid="false" aria-describedby="inbound-port-validation">
                 <p id="inbound-port-validation" class="field-validation" hidden></p>
               </div>
               <div>
