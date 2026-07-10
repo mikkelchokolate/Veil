@@ -20,6 +20,7 @@ func newGeneratedConfigRegistryFrom(r *Registry) generatedconfig.ProtocolRegistr
 			MaxEnabled:             meta.MaxEnabled,
 			RequiresRenderSettings: RequiresRenderSettings(p),
 			Render:                 cr.RenderConfig,
+			ArtifactSpec:           cr.ArtifactSpec(),
 		})
 	}
 	return generatedconfig.NewProtocolRegistry(protocolRenderers)

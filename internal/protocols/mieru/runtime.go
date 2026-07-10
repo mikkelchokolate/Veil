@@ -1,6 +1,7 @@
 package mieru
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -18,7 +19,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 		ActionName:       "mieru",
 		Protocol:         p.Protocol(),
 		Unit:             "veil-mieru.service",
-		PromotedSubpath:  "mieru/server_config.json",
+		PromotedSubpath:  generatedconfig.MieruConfigSubpath,
 		PromotedVerb:     "restart",
 		ManualRestart:    true,
 		HealthCheckAfter: true,
