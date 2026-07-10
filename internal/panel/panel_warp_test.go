@@ -22,6 +22,22 @@ func TestPanelWarpActionsModuleRendersLoadAndSaveActions(t *testing.T) {
 	}
 }
 
+func TestPanelWarpActionsKeepValidationCacheCurrent(t *testing.T) {
+	actions := panelWarpActionsJS()
+	if count := strings.Count(actions, `window.cachedWarp =`); count != 2 {
+		t.Fatalf("WARP load and save must both update cached validation context, got %d assignments", count)
+	}
+	for _, want := range []string{
+		`if (!data) return;`,
+		`window.cachedWarp = data;`,
+		`window.cachedWarp = saved;`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("WARP cache synchronization missing %q", want)
+		}
+	}
+}
+
 // TestPanelWarpToggleAppliesImmediately guards that flipping the WARP slider
 // saves and applies the config immediately. Save and apply results remain
 // separate so a failed live apply cannot make the UI lie about persisted state.
