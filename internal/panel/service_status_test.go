@@ -23,9 +23,24 @@ func TestServiceStatusCardRendersRestartControls(t *testing.T) {
 func TestServiceRestartActionsRenderDynamicServiceEndpoints(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{ActionName: "veil", ManualRestart: true}, {ActionName: "caddy", ManualRestart: true}}
 	actions := ServiceRestartActionsJS(runtimes)
-	for _, want := range []string{`renderServiceRestartControls`, `restartable`, `actionName`, `encodeURIComponent(serviceName)`, `/api/services/`, `/restart`, `confirm: true`, `loadServiceStatus();`} {
+	for _, want := range []string{
+		`renderServiceRestartControls`,
+		`restartable`,
+		`actionName`,
+		`encodeURIComponent(serviceName)`,
+		`/api/services/`,
+		`/restart`,
+		`confirm: true`,
+		`if (restarted) await loadServiceStatus()`,
+		`container.textContent = ''`,
+		`document.createElement('button')`,
+		`button.dataset.veilRestartService = actionName`,
+	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("actions missing %q:\n%s", want, actions)
 		}
+	}
+	if strings.Contains(actions, `container.innerHTML`) {
+		t.Fatal("dynamic service names must not be inserted through innerHTML")
 	}
 }
