@@ -17,9 +17,24 @@ func TestPanelBackupsCardRendersRecoveryControls(t *testing.T) {
 		`id="backups-table-body"`,
 		`id="backup-output"`,
 		`veil backup schedule enable`,
+		`Backup access requires the admin role`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("backup card missing %q", want)
+		}
+	}
+	for _, id := range []string{"btn-create-backup", "btn-load-backups", "btn-prune-backups"} {
+		needle := `id="` + id + `"`
+		index := strings.Index(card, needle)
+		if index < 0 {
+			t.Fatalf("backup card missing %s", needle)
+		}
+		end := index + 180
+		if end > len(card) {
+			end = len(card)
+		}
+		if !strings.Contains(card[index:end], `data-admin-only="true"`) {
+			t.Fatalf("backup control %s must be admin-only", id)
 		}
 	}
 }
@@ -37,6 +52,11 @@ func TestPanelBackupsActionsUseServerSideSecretAndQueuedRestore(t *testing.T) {
 		`/restore`,
 		`/api/backup-restore-jobs/`,
 		`confirm: true`,
+		`if (isViewerRole())`,
+		`verify.dataset.adminOnly = 'true'`,
+		`download.dataset.adminOnly = 'true'`,
+		`restore.dataset.adminOnly = 'true'`,
+		`catch (err)`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("backup actions missing %q", want)
