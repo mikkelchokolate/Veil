@@ -68,9 +68,13 @@ func TestPanelRoutingSerializesMutations(t *testing.T) {
 }
 
 func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
-	card := panelRoutingCardHTML()
+	card := panelRoutingHardenedCardHTML()
 	for _, want := range []string{
 		`<h2>Routing rules</h2>`,
+		`id="add-routing-rule-btn"`,
+		`id="load-routing-rules"`,
+		`id="clear-routing-output"`,
+		`id="close-routing-modal"`,
 		`id="routing-rule-form"`,
 		`id="routing-rule-name"`,
 		`id="routing-rule-outbound"`,
@@ -80,6 +84,48 @@ func TestPanelRoutingCardModuleRendersRulesAndPresetControls(t *testing.T) {
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("Routing card missing %q", want)
+		}
+	}
+	if strings.Contains(card, `onclick=`) {
+		t.Fatal("rendered routing card must not use inline event handlers")
+	}
+}
+
+func TestPanelRoutingControlsUseBoundListeners(t *testing.T) {
+	js := panelRoutingControlsJS()
+	for _, want := range []string{
+		`document.getElementById('add-routing-rule-btn').addEventListener('click', () => openRoutingModal(null));`,
+		`document.getElementById('load-routing-rules').addEventListener('click', loadRoutingRules);`,
+		`document.getElementById('clear-routing-output').addEventListener('click'`,
+		`document.getElementById('close-routing-modal').addEventListener('click', closeRoutingModal);`,
+		`document.getElementById('routing-modal').addEventListener('click'`,
+		`event.target === event.currentTarget`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("routing control binding missing %q", want)
+		}
+	}
+}
+
+func TestPanelCatalogMountsHardenedRoutingControls(t *testing.T) {
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	for _, want := range []string{
+		`id="load-routing-rules"`,
+		`id="clear-routing-output"`,
+		`id="close-routing-modal"`,
+		`document.getElementById('routing-modal').addEventListener('click'`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("rendered Panel does not mount hardened routing control %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		`onclick="openRoutingModal(null)"`,
+		`onclick="loadRoutingRules()"`,
+		`onclick="if(event.target === this) closeRoutingModal()"`,
+	} {
+		if strings.Contains(html, forbidden) {
+			t.Fatalf("rendered Panel still contains routing inline handler %q", forbidden)
 		}
 	}
 }
