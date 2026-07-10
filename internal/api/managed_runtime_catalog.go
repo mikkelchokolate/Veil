@@ -122,7 +122,6 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 		runtimes = append(runtimes, ManagedRuntime{
 			Name:             "caddy-panel",
 			ActionName:       "caddy-panel",
-			Protocol:         "naiveproxy",
 			Transport:        "tcp",
 			Unit:             "veil-caddy@panel.service",
 			TemplateUnit:     renderer.UnitCaddy,
