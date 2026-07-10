@@ -191,6 +191,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 					warp.LicenseKey = reg.License
 				}
 			}
+			veilwarp.SetDefaults(&warp)
+			if err := veilwarp.Validate(warp); err != nil {
+				s.logUserAction(r, "update_warp", "warp", false, "invalid WARP configuration")
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
 			candidateWarp := s.warp
 			candidateRules := append([]RoutingRule(nil), s.rules...)
 			candidateMutation := managementstate.NewMutation(managementstate.MutationTarget{
