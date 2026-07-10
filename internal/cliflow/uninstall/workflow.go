@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
 type Options struct {
@@ -97,7 +97,7 @@ func Plan(opts Options) string {
 }
 
 func Services() []string {
-	return renderer.ManagedSystemdUnitNames()
+	return systemdunits.Names()
 }
 
 func (opts Options) WithDefaults() Options {
@@ -129,8 +129,9 @@ func Paths(opts Options) []string {
 
 func SystemdUnitPaths(opts Options) []string {
 	opts = opts.WithDefaults()
-	paths := make([]string, 0, len(renderer.ManagedSystemdUnitNames()))
-	for _, name := range renderer.ManagedSystemdUnitNames() {
+	units := systemdunits.Names()
+	paths := make([]string, 0, len(units))
+	for _, name := range units {
 		paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, name)))
 	}
 	return paths

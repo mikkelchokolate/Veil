@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
 func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
@@ -34,7 +34,7 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 		t.Fatalf("expected repair plan to have changes for missing files, got none")
 	}
 
-	wantActions := 2 + len(renderer.ManagedSystemdUnitNames())
+	wantActions := 2 + len(systemdunits.Names())
 	if len(plan.Actions) != wantActions {
 		t.Fatalf("expected %d repair actions (panel caddy, fallback, managed systemd units), got %d: %+v", wantActions, len(plan.Actions), plan.Actions)
 	}
@@ -52,7 +52,7 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 	if summary == "No repair actions required\n" {
 		t.Fatalf("expected repair summary with actions, got: %q", summary)
 	}
-	for _, name := range renderer.ManagedSystemdUnitNames() {
+	for _, name := range systemdunits.Names() {
 		if !containsRepairAction(plan, filepath.Join(systemdDir, name)) {
 			t.Fatalf("repair plan missing managed unit %q: %+v", name, plan.Actions)
 		}

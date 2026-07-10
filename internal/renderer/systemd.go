@@ -29,13 +29,6 @@ MemoryDenyWriteExecute=true
 UMask=0077
 `
 
-func ManagedSystemdUnitNames() []string {
-	return []string{
-		UnitVeil, UnitHelperService, UnitHelperSocket, UnitCaddy, UnitHysteria2,
-		UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer,
-	}
-}
-
 type SystemdConfig struct {
 	VeilBinary     string
 	CaddyBinary    string

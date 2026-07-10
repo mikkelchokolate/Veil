@@ -35,18 +35,4 @@ func TestRenderSystemdUnitsIncludesHardenedEncryptedBackupTimer(t *testing.T) {
 	}
 }
 
-func TestManagedSystemdUnitNamesIncludesBackupUnits(t *testing.T) {
-	names := ManagedSystemdUnitNames()
-	if !containsString(names, UnitBackupService) || !containsString(names, UnitBackupTimer) {
-		t.Fatalf("managed unit names=%v", names)
-	}
-}
 
-func containsString(items []string, want string) bool {
-	for _, item := range items {
-		if item == want {
-			return true
-		}
-	}
-	return false
-}
