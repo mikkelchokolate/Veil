@@ -24,10 +24,12 @@ func TestServiceStatusRefreshesAreSingleFlightAndVisibilityAware(t *testing.T) {
 	actions := ServiceStatusActionsJS()
 	for _, want := range []string{
 		`let serviceStatusLoadInFlight = false;`,
-		`if (automatic && (document.hidden || !dashboard || !dashboard.classList.contains('active'))) return null;`,
+		`async function loadServiceStatus()`,
 		`if (serviceStatusLoadInFlight) return null;`,
 		`serviceStatusLoadInFlight = true;`,
 		`serviceStatusLoadInFlight = false;`,
+		`if (document.hidden || !dashboard || !dashboard.classList.contains('active')) return null;`,
+		`return loadServiceStatus();`,
 		`setInterval(refreshServiceStatusAutomatically, 10000)`,
 		`document.addEventListener('visibilitychange'`,
 	} {
