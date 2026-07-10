@@ -46,6 +46,7 @@ type managementState struct {
 	keyPath                        string
 	cipher                         *secrets.Cipher
 	authToken                      string
+	allowDevAnonymous              bool
 	setupAllowed                   bool
 	setup                          SetupState
 	settings                       Settings
