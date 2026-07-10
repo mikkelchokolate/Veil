@@ -12,11 +12,11 @@ func panelClientProfileControlsHTML() string {
                 <input id="client-profile-name" autocomplete="off" placeholder="profile name, e.g. alice">
                 <input id="client-profile-username" autocomplete="off" placeholder="username (optional)">
                 <div style="display:flex;gap:8px">
-                  <input id="client-profile-password" type="text" autocomplete="off" placeholder="password" style="flex:1">
-                  <button type="button" class="secondary" onclick="genClientProfilePassword()" style="white-space:nowrap">Generate</button>
+                  <input id="client-profile-password" type="password" autocomplete="new-password" placeholder="password" style="flex:1">
+                  <button id="generate-client-profile-password" type="button" class="secondary" style="white-space:nowrap">Generate</button>
                 </div>
-                <button type="button" class="secondary" onclick="addClientProfile()">Add profile</button>
-                <button type="button" class="secondary" onclick="generateAndAddProfile()" style="grid-column: 1 / -1; width: 100%;">Generate profile</button>
+                <button id="add-client-profile" type="button" class="secondary">Add profile</button>
+                <button id="generate-and-add-profile" type="button" class="secondary" style="grid-column: 1 / -1; width: 100%;">Generate profile</button>
               </div>
               <label for="inbound-profiles">Client profiles (JSON)</label>
               <textarea id="inbound-profiles" rows="4" spellcheck="false" placeholder='[{"name":"alice","username":"alice","password":"optional","enabled":true}]'></textarea>
@@ -108,5 +108,10 @@ func panelClientProfileActionsJS() string {
       document.getElementById('client-profile-name').value = '';
       document.getElementById('client-profile-username').value = '';
       document.getElementById('client-profile-password').value = '';
-    }` + panelInboundReliabilityJS() + panelRequestReliabilityJS() + panelRoleVisibilityJS()
+    }
+
+    document.getElementById('generate-client-profile-password').addEventListener('click', genClientProfilePassword);
+    document.getElementById('add-client-profile').addEventListener('click', addClientProfile);
+    document.getElementById('generate-and-add-profile').addEventListener('click', generateAndAddProfile);
+` + panelInboundReliabilityJS() + panelRequestReliabilityJS() + panelRoleVisibilityJS()
 }
