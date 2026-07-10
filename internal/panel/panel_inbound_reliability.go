@@ -28,6 +28,15 @@ func panelInboundReliabilityJS() string {
       if (saveButton) saveButton.disabled = true;
     }
 
+    const veilBaseEnsureProtocolSchemas = ensureProtocolSchemas;
+    ensureProtocolSchemas = function() {
+      return veilBaseEnsureProtocolSchemas().catch((error) => {
+        // A transient request failure must not poison every later modal open.
+        window.protocolSchemaPromise = null;
+        throw error;
+      });
+    };
+
     const veilBaseOpenAddInboundModal = window.openAddInboundModal;
     window.openAddInboundModal = function() {
       veilEditingInboundName = '';
@@ -88,13 +97,20 @@ func panelInboundReliabilityJS() string {
       loadInboundsIntoOutput();
     };
 
-    const veilBaseRenderDynamicProtocolFields = window.renderDynamicProtocolFields;
     window.renderDynamicProtocolFields = function(inbound) {
-      const result = veilBaseRenderDynamicProtocolFields(inbound);
-      if (result && typeof result.catch === 'function') {
-        result.catch((error) => veilShowInboundLocalError(error && error.message ? error.message : error));
-      }
-      return result;
+      const container = document.getElementById('inbound-protocol-fields');
+      if (!container) return Promise.resolve(false);
+      const protocol = document.getElementById('inbound-protocol').value;
+      const values = inbound && inbound.protocolFields ? inbound.protocolFields : {};
+      return ensureProtocolSchemas().then(() => {
+        veilRenderDynamicProtocolFields(container, protocol, values);
+        scheduleInboundValidation();
+        return true;
+      }).catch((error) => {
+        container.innerHTML = '';
+        veilShowInboundLocalError('Could not load protocol fields: ' + String(error && error.message ? error.message : error), 'protocol');
+        return false;
+      });
     };
 `
 }
