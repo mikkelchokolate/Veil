@@ -20,8 +20,8 @@ func TestDiagnosticsCardsRenderToolControlsAndManagedLogUnits(t *testing.T) {
 
 func TestManagedLogUnitOptionsEscapeRuntimeDerivedHTML(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{
-		Name: `hysteria2-"><img src=x onerror=alert(1)>`,
-		Unit: `veil-hysteria2@"><svg onload=alert(1)>.service`,
+		Name: `hysteria2-\"><img src=x onerror=alert(1)>`,
+		Unit: `veil-hysteria2@\"><svg onload=alert(1)>.service`,
 	}}
 	// Remove the Go/JSON transport escapes so the renderer receives the exact
 	// quote-and-tag payload that would break an option attribute without escaping.
@@ -48,5 +48,43 @@ func TestDiagnosticsActionsRenderToolActions(t *testing.T) {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("actions missing %q", want)
 		}
+	}
+}
+
+func TestDiagnosticsSerializeExpensiveRequestsAndValidateCounts(t *testing.T) {
+	actions := DiagnosticsActionsJS()
+	for _, want := range []string{
+		`async function runDiagnosticAction(buttonID, action)`,
+		`button.dataset.diagnosticInFlight === 'true'`,
+		`button.disabled = true;`,
+		`return await action();`,
+		`delete button.dataset.diagnosticInFlight;`,
+		`function diagnosticIntegerValue(id, fallback)`,
+		`input.checkValidity()`,
+		`Number.isInteger(value)`,
+		`runDiagnosticAction('run-speedtest'`,
+		`runDiagnosticAction('load-logs'`,
+		`runDiagnosticAction('run-dns-lookup'`,
+		`runDiagnosticAction('run-ping'`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("diagnostic request reliability missing %q", want)
+		}
+	}
+}
+
+func TestDiagnosticsUseLoadJSONResultInsteadOfParsingRenderedOutput(t *testing.T) {
+	actions := DiagnosticsActionsJS()
+	for _, want := range []string{
+		`const data = await loadJSON('/api/logs?unit='`,
+		`if (data && data.output)`,
+		`document.getElementById('logs-output').textContent = data.output;`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("diagnostic log rendering missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `JSON.parse(el.textContent)`) {
+		t.Fatal("diagnostic logs must use the request result rather than reparsing UI text")
 	}
 }
