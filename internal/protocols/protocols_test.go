@@ -81,6 +81,7 @@ type mockValidator struct {
 	validateInbound  func(model.Settings, model.Inbound) []model.ValidationIssue
 	needsDomain      func(model.Settings, model.Inbound) bool
 	hasCredential    func(model.Settings, model.Inbound) bool
+	needsEmail       func(model.Settings, model.Inbound) bool
 }
 
 func (m *mockValidator) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
@@ -107,6 +108,13 @@ func (m *mockValidator) NeedsDomain(settings model.Settings, inbound model.Inbou
 func (m *mockValidator) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	if m.hasCredential != nil {
 		return m.hasCredential(settings, inbound)
+	}
+	return false
+}
+
+func (m *mockValidator) NeedsEmail(settings model.Settings, inbound model.Inbound) bool {
+	if m.needsEmail != nil {
+		return m.needsEmail(settings, inbound)
 	}
 	return false
 }

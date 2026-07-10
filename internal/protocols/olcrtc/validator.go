@@ -15,6 +15,9 @@ func (Plugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationI
 // NeedsDomain reports that olcRTC does not require a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return false }
 
+// NeedsEmail reports that olcRTC does not need an email address.
+func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
+
 // HasCredential reports whether the inbound has a usable olcRTC credential.
 func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	return strings.TrimSpace(inbound.Password) != ""

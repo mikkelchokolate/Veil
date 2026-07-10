@@ -61,6 +61,7 @@ type Validator interface {
 	ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue
 	NeedsDomain(settings model.Settings, inbound model.Inbound) bool
 	HasCredential(settings model.Settings, inbound model.Inbound) bool
+	NeedsEmail(settings model.Settings, inbound model.Inbound) bool
 }
 
 // ClientAccessProvider builds client links / artifacts for the protocol.

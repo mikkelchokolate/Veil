@@ -36,11 +36,7 @@ func panelInboundActionsJS() string {
         protocol: 'inbound-protocol',
         transport: 'inbound-transport',
         port: 'inbound-port',
-        password: 'inbound-password',
-        naivePassword: 'inbound-naive-password',
-        hysteria2Password: 'inbound-hysteria2-password',
-        hysteria2Insecure: 'inbound-hysteria2-insecure',
-        olcrtcRoomID: 'inbound-olcrtc-room-id'
+        password: 'inbound-password'
       };
       return document.getElementById(ids[normalized] || '');
     }

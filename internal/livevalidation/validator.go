@@ -225,7 +225,7 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 			"Set the domain that resolves to this host.", "candidate",
 		))
 	}
-	if inbound.Protocol == "naiveproxy" && strings.TrimSpace(settings.Email) == "" {
+	if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
 		issues = append(issues, issue(
 			"email_required", SeverityError, "settings.email", inbound.Name,
 			"NaiveProxy automatic TLS requires an email address",
@@ -264,6 +264,18 @@ func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 		return false
 	}
 	return validator.NeedsDomain(settings, inbound)
+}
+
+func protocolNeedsEmail(settings model.Settings, inbound model.Inbound) bool {
+	p, ok := protocolRegistry().Get(inbound.Protocol)
+	if !ok {
+		return false
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	return validator.NeedsEmail(settings, inbound)
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {
