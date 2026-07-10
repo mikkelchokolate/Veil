@@ -45,6 +45,42 @@ func TestPanelInboundReliabilityValidatesDisabledDraftsAndRetriesSchemas(t *test
 	}
 }
 
+func TestPanelInboundReliabilitySerializesAllMutations(t *testing.T) {
+	js := panelInboundReliabilityJS()
+	for _, want := range []string{
+		`let inboundMutationInFlight = false;`,
+		`async function withInboundMutation(action)`,
+		`if (inboundMutationInFlight) return null;`,
+		`setInboundMutationControlsDisabled(true);`,
+		`saveInbound = async function(event)`,
+		`deleteInbound = async function()`,
+		`window.toggleInboundActive = async function(name, checked, control)`,
+		`window.directDeleteInbound = async function(name)`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("inbound mutation serialization missing %q", want)
+		}
+	}
+}
+
+func TestPanelInboundReliabilityCancelsStaleLoads(t *testing.T) {
+	js := panelInboundReliabilityJS()
+	for _, want := range []string{
+		`let inboundLoadGeneration = 0;`,
+		`let inboundLoadController = null;`,
+		`inboundLoadController.abort();`,
+		`if (inboundMutationInFlight) return null;`,
+		`signal: controller.signal`,
+		`generation !== inboundLoadGeneration || controller.signal.aborted`,
+		`error.name === 'AbortError'`,
+		`await loadInboundsIntoOutput();`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("inbound stale-load protection missing %q", want)
+		}
+	}
+}
+
 func TestPanelClientProfileActionsPreserveInvalidJSONAndRevalidate(t *testing.T) {
 	js := panelClientProfileActionsJS()
 	for _, want := range []string{
