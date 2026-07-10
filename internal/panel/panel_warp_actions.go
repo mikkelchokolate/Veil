@@ -21,6 +21,8 @@ func panelWarpActionsJS() string {
 
     async function loadWarpIntoForm() {
       const data = await loadJSON('/api/warp', 'warp-output');
+      if (!data) return;
+      window.cachedWarp = data;
       fillWarpForm(data);
     }
 
@@ -64,6 +66,7 @@ func panelWarpActionsJS() string {
         if (!saved) {
           return { saved: null, applied: false };
         }
+        window.cachedWarp = saved;
         fillWarpForm(saved);
         // Promote staged configs and reload services so WARP actually turns
         // on/off now, rather than only after a separate manual apply.
