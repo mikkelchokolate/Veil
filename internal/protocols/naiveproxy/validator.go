@@ -45,7 +45,7 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 		if !profile.Enabled || strings.TrimSpace(profile.Password) == "" {
 			continue
 		}
-		if strings.TrimSpace(profile.Username) != "" {
+		if strings.TrimSpace(profile.Username) != "" || strings.TrimSpace(profile.Name) != "" {
 			return true
 		}
 	}
