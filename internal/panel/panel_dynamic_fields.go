@@ -21,7 +21,14 @@ func panelDynamicFieldsJS() string {
             if (item && item.protocol) map[item.protocol] = item;
           });
           window.protocolSchemas = map;
+          window.protocolSchemaPromise = null;
           return map;
+        })
+        .catch((err) => {
+          // A rejected cached promise would permanently poison dynamic forms.
+          // Clear it so the next modal open can retry after a transient outage.
+          window.protocolSchemaPromise = null;
+          throw err;
         });
       return window.protocolSchemaPromise;
     }
