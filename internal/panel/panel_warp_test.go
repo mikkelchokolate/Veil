@@ -95,7 +95,7 @@ func TestPanelWarpToggleHasChangeBinding(t *testing.T) {
 }
 
 func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
-	card := panelWarpCardHTML()
+	card := panelWarpHardenedCardHTML()
 	for _, want := range []string{
 		`<h2>WARP</h2>`,
 		`id="warp-form"`,
@@ -104,9 +104,36 @@ func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
 		`[REDACTED]`,
 		`id="save-warp-config"`,
 		`id="warp-output"`,
+		`id="clear-warp-output"`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("WARP card missing %q", want)
 		}
+	}
+	if strings.Contains(card, `onclick=`) {
+		t.Fatal("rendered WARP card must not use inline event handlers")
+	}
+}
+
+func TestPanelWarpConsoleControlUsesBoundListener(t *testing.T) {
+	js := panelWarpControlsJS()
+	for _, want := range []string{
+		`document.getElementById('clear-warp-output').addEventListener('click'`,
+		`const output = document.getElementById('warp-output');`,
+		`if (output) output.textContent = 'Console cleared.';`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("WARP console binding missing %q", want)
+		}
+	}
+}
+
+func TestPanelCatalogMountsHardenedWarpControl(t *testing.T) {
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	if !strings.Contains(html, `id="clear-warp-output"`) {
+		t.Fatal("rendered Panel does not contain hardened WARP console control")
+	}
+	if strings.Contains(html, `onclick="document.getElementById('warp-output')`) {
+		t.Fatal("rendered Panel still contains WARP inline console handler")
 	}
 }
