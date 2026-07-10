@@ -211,6 +211,10 @@ const loginHTMLTemplate = `<!doctype html>
     button:active {
       transform: scale(0.98);
     }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
 
     .pulse-static {
       display: inline-block;
@@ -267,7 +271,7 @@ const loginHTMLTemplate = `<!doctype html>
         <label for="password">Password</label>
         <input type="password" id="password" autocomplete="current-password" required placeholder="Enter password">
       </div>
-      <button type="submit">Log In</button>
+      <button id="login-submit" type="submit">Log In</button>
     </form>
   </main>
 
@@ -275,24 +279,43 @@ const loginHTMLTemplate = `<!doctype html>
     window.veilLocale = "__VEIL_LOCALE__";
     window.veil_csrf_token = "";
 __VEIL_LOCALIZATION_RUNTIME__
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
+    let loginInFlight = false;
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (loginInFlight) return;
+      loginInFlight = true;
+      let authenticated = false;
+      const submitButton = document.getElementById('login-submit');
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
       const errorDiv = document.getElementById('error');
+      submitButton.disabled = true;
       errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
       try {
-        const resp = await fetch("/api/auth/login", {
+        const response = await fetch("/api/auth/login", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password }),
         });
-        const data = await resp.json();
-        if (!resp.ok) {
-          errorDiv.textContent = data.message || veilT('auth.failed');
+        const text = await response.text();
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (_) {
+            data = {};
+          }
+        }
+        if (!response.ok) {
+          errorDiv.textContent = data.message || (data.error && data.error.message) || text || ('HTTP ' + response.status);
           errorDiv.style.display = 'block';
           return;
         }
+        if (!data.csrfToken || !data.username) {
+          throw new Error('Login response is missing required session data.');
+        }
+        authenticated = true;
         localStorage.setItem('veil_csrf_token', data.csrfToken);
         localStorage.setItem('veil_username', data.username);
         localStorage.setItem('veil_user_role', data.role || '');
@@ -301,9 +324,14 @@ __VEIL_LOCALIZATION_RUNTIME__
           document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=/; Max-Age=31536000; SameSite=Lax';
         }
         window.location.reload();
-      } catch (err) {
-        errorDiv.textContent = String(err);
+      } catch (error) {
+        errorDiv.textContent = String(error && error.message ? error.message : error);
         errorDiv.style.display = 'block';
+      } finally {
+        if (!authenticated) {
+          loginInFlight = false;
+          submitButton.disabled = false;
+        }
       }
     });
   </script>
