@@ -38,86 +38,106 @@ func panelDynamicFieldsJS() string {
     }
 
     function protocolFieldElementId(key) {
-      return 'protocol-field-' + key;
+      return 'protocol-field-' + String(key || '');
     }
 
     function protocolOptionAttributeName(name) {
       const normalized = String(name || '').trim().toLowerCase();
       if (!normalized) return '';
-      return normalized.indexOf('data-') === 0 ? normalized : 'data-' + normalized;
+      const candidate = normalized.indexOf('data-') === 0 ? normalized : 'data-' + normalized;
+      return /^data-[a-z0-9_.:-]+$/.test(candidate) ? candidate : '';
     }
 
-    function renderProtocolFieldInput(field) {
+    function createProtocolFieldInput(field) {
       const id = protocolFieldElementId(field.key);
-      const required = field.required ? ' required' : '';
+      let input;
       if (field.type === 'select') {
-        const options = (field.options || []).map((opt) => {
-          const attrs = [];
-          if (opt.attributes) {
-            Object.entries(opt.attributes).forEach(([k, v]) => {
-              const attributeName = protocolOptionAttributeName(k);
-              if (attributeName) attrs.push(' ' + attributeName + '="' + String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"');
+        input = document.createElement('select');
+        (Array.isArray(field.options) ? field.options : []).forEach((optionInfo) => {
+          const option = document.createElement('option');
+          option.value = String(optionInfo && optionInfo.value !== undefined ? optionInfo.value : '');
+          option.textContent = String(optionInfo && optionInfo.label !== undefined ? optionInfo.label : option.value);
+          if (optionInfo && optionInfo.attributes && typeof optionInfo.attributes === 'object') {
+            Object.entries(optionInfo.attributes).forEach(([name, value]) => {
+              const attributeName = protocolOptionAttributeName(name);
+              if (attributeName) option.setAttribute(attributeName, String(value));
             });
           }
-          return '<option value="' + String(opt.value).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' + attrs.join('') + '>' + String(opt.label).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
-        }).join('');
-        return '<select id="' + id + '" autocomplete="off"' + required + '>' + options + '</select>';
+          input.appendChild(option);
+        });
+      } else {
+        input = document.createElement('input');
+        if (field.type === 'checkbox') {
+          input.type = 'checkbox';
+          input.style.width = 'auto';
+        } else if (field.type === 'number') {
+          input.type = 'number';
+          input.autocomplete = 'off';
+        } else if (field.type === 'password') {
+          input.type = 'password';
+          input.autocomplete = 'new-password';
+        } else {
+          input.type = 'text';
+          input.autocomplete = 'off';
+        }
       }
-      if (field.type === 'checkbox') {
-        return '<label for="' + id + '" style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
-          '<input id="' + id + '" type="checkbox" style="width:auto"' + required + '>' +
-          String(field.label).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
-      }
-      if (field.type === 'number') {
-        return '<input id="' + id + '" type="number" autocomplete="off"' + required + '>';
-      }
-      const inputType = field.type === 'password' ? 'password' : 'text';
-      const placeholder = field.placeholder ? ' placeholder="' + String(field.placeholder).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' : '';
-      return '<input id="' + id + '" type="' + inputType + '" autocomplete="off"' + placeholder + required + '>';
+      input.id = id;
+      input.required = Boolean(field.required);
+      if (field.placeholder) input.placeholder = String(field.placeholder);
+      return input;
     }
 
     window.veilRenderDynamicProtocolFields = function(container, protocol, values) {
       const info = schemaForProtocol(protocol);
-      container.innerHTML = '';
+      container.textContent = '';
       if (!info || !Array.isArray(info.inboundFieldSchema) || info.inboundFieldSchema.length === 0) {
         return;
       }
       const grid = document.createElement('div');
       grid.className = 'form-grid';
-      grid.style = 'margin:0;padding:0';
+      grid.style.margin = '0';
+      grid.style.padding = '0';
 
       info.inboundFieldSchema.forEach((field) => {
+        if (!field || !field.key) return;
         const wrapper = document.createElement('div');
-        const id = protocolFieldElementId(field.key);
-        if (field.type !== 'checkbox') {
+        const inputEl = createProtocolFieldInput(field);
+        if (field.type === 'checkbox') {
           const label = document.createElement('label');
-          label.htmlFor = id;
-          label.textContent = field.label;
+          label.htmlFor = inputEl.id;
+          label.style.display = 'flex';
+          label.style.alignItems = 'center';
+          label.style.gap = '8px';
+          label.style.cursor = 'pointer';
+          label.appendChild(inputEl);
+          label.appendChild(document.createTextNode(String(field.label || field.key)));
           wrapper.appendChild(label);
-        }
-
-        const inputHtml = renderProtocolFieldInput(field);
-        if (field.generateAction) {
-          const row = document.createElement('div');
-          row.style = 'display:flex;gap:8px';
-          const tmp = document.createElement('div');
-          tmp.innerHTML = inputHtml;
-          const inputEl = tmp.firstElementChild;
-          inputEl.style.flex = '1';
-          row.appendChild(inputEl);
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'secondary';
-          btn.id = protocolFieldElementId(field.key) + '-generate';
-          btn.style = 'white-space:nowrap;padding:12px 14px';
-          btn.textContent = 'Generate';
-          btn.onclick = function() { window.veilGenerateProtocolField(protocol, field.key, field.generateAction, field.generateActionField); };
-          row.appendChild(btn);
-          wrapper.appendChild(row);
         } else {
-          const tmp = document.createElement('div');
-          tmp.innerHTML = inputHtml;
-          wrapper.appendChild(tmp.firstElementChild);
+          const label = document.createElement('label');
+          label.htmlFor = inputEl.id;
+          label.textContent = String(field.label || field.key);
+          wrapper.appendChild(label);
+          if (field.generateAction) {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.gap = '8px';
+            inputEl.style.flex = '1';
+            row.appendChild(inputEl);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'secondary';
+            btn.id = protocolFieldElementId(field.key) + '-generate';
+            btn.style.whiteSpace = 'nowrap';
+            btn.style.padding = '12px 14px';
+            btn.textContent = 'Generate';
+            btn.addEventListener('click', () => {
+              window.veilGenerateProtocolField(protocol, field.key, field.generateAction, field.generateActionField);
+            });
+            row.appendChild(btn);
+            wrapper.appendChild(row);
+          } else {
+            wrapper.appendChild(inputEl);
+          }
         }
         grid.appendChild(wrapper);
       });
@@ -126,6 +146,7 @@ func panelDynamicFieldsJS() string {
 
       const src = values && typeof values === 'object' ? values : {};
       info.inboundFieldSchema.forEach((field) => {
+        if (!field || !field.key) return;
         const el = document.getElementById(protocolFieldElementId(field.key));
         if (!el) return;
         const val = src[field.key] !== undefined ? src[field.key] : (field.default !== undefined ? field.default : '');
@@ -138,7 +159,7 @@ func panelDynamicFieldsJS() string {
 
       // Wire provider-aware generate buttons (e.g. olcRTC room generation).
       info.inboundFieldSchema.forEach((field) => {
-        if (field.generateAction !== 'room' || !field.generateActionField) return;
+        if (!field || field.generateAction !== 'room' || !field.generateActionField) return;
         const authEl = document.getElementById(protocolFieldElementId(field.generateActionField));
         const btn = document.getElementById(protocolFieldElementId(field.key) + '-generate');
         if (!authEl || !btn) return;
