@@ -21,5 +21,24 @@ func (s *managementState) handleEffectiveAuthStatus(w http.ResponseWriter, r *ht
 		})
 		return
 	}
+	if cookie, err := r.Cookie("veil_session"); err == nil {
+		if _, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			s.handleAuthStatus(w, r)
+			return
+		}
+	}
+	s.mu.Lock()
+	devAnonymous := s.allowDevAnonymous && s.authToken == "" && len(s.users) == 0
+	s.mu.Unlock()
+	if devAnonymous {
+		writeJSON(w, map[string]any{
+			"authenticated": true,
+			"username":      "dev-anonymous",
+			"role":          "admin",
+			"locale":        "en",
+			"authMethod":    "dev-anonymous",
+		})
+		return
+	}
 	s.handleAuthStatus(w, r)
 }
