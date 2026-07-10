@@ -23,12 +23,12 @@ type ProtocolPlugin interface {
 
 // Metadata collects the primitive metadata methods into a struct.
 type Metadata struct {
-	Protocol        string
-	DisplayName     string
-	Transports      []string
-	RequiresCaddy   bool
-	FirewallService string
-	MaxEnabled      int
+	Protocol        string   `json:"protocol"`
+	DisplayName     string   `json:"displayName"`
+	Transports      []string `json:"transports"`
+	RequiresCaddy   bool     `json:"requiresCaddy"`
+	FirewallService string   `json:"firewallService"`
+	MaxEnabled      int      `json:"maxEnabled"`
 }
 
 // MetadataOf returns a Metadata struct for a plugin.
