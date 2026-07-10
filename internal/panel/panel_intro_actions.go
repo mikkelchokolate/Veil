@@ -6,7 +6,12 @@ func panelIntroActionsJS() string {
 	return `    const tokenInput = document.getElementById('api-token');
     tokenInput.value = localStorage.getItem('veil_api_token') || '';
     tokenInput.addEventListener('input', () => {
-      localStorage.setItem('veil_api_token', tokenInput.value);
+      if (tokenInput.value) {
+        localStorage.setItem('veil_api_token', tokenInput.value);
+      } else {
+        localStorage.removeItem('veil_api_token');
+      }
+      scheduleCurrentUserRoleRefresh();
     });
 
     // Toggle API Token Visibility
@@ -163,27 +168,65 @@ func panelIntroActionsJS() string {
       }
     }
 
+    let currentUserRoleRefreshGeneration = 0;
+    let currentUserRoleRefreshController = null;
+    let currentUserRoleRefreshTimer = null;
+
+    function invalidateCurrentUserRoleRefresh() {
+      currentUserRoleRefreshGeneration += 1;
+      if (currentUserRoleRefreshController) {
+        currentUserRoleRefreshController.abort();
+        currentUserRoleRefreshController = null;
+      }
+      if (currentUserRoleRefreshTimer) {
+        clearTimeout(currentUserRoleRefreshTimer);
+        currentUserRoleRefreshTimer = null;
+      }
+      setCurrentUserRole('');
+      applyViewerRoleGuard();
+    }
+
+    function scheduleCurrentUserRoleRefresh() {
+      invalidateCurrentUserRoleRefresh();
+      currentUserRoleRefreshTimer = setTimeout(() => {
+        currentUserRoleRefreshTimer = null;
+        refreshCurrentUserRole();
+      }, 250);
+    }
+
     async function refreshCurrentUserRole() {
+      const generation = ++currentUserRoleRefreshGeneration;
+      if (currentUserRoleRefreshController) currentUserRoleRefreshController.abort();
+      const controller = new AbortController();
+      currentUserRoleRefreshController = controller;
+      const tokenSnapshot = localStorage.getItem('veil_api_token') || '';
+
       // Clear cached authority before checking it. This prevents a role from a
       // revoked session or replaced API token from enabling controls briefly.
       setCurrentUserRole('');
       applyViewerRoleGuard();
       try {
-        const response = await fetch('/api/auth/status', { headers: authHeaders() });
-        if (!response.ok) {
-          applyViewerRoleGuard();
-          return;
-        }
+        const response = await fetch('/api/auth/status', { headers: authHeaders(), signal: controller.signal });
+        if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
+        if (!response.ok) return;
         const data = await response.json();
+        if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
         if (data && data.authenticated) {
           setCurrentUserRole(data.role || '');
         } else if (await staticTokenHasAdminAccess()) {
+          if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
           setCurrentUserRole('admin');
         }
-      } catch (_) {
-        setCurrentUserRole('');
+      } catch (error) {
+        if (!error || error.name !== 'AbortError') {
+          if (generation === currentUserRoleRefreshGeneration) setCurrentUserRole('');
+        }
+      } finally {
+        if (currentUserRoleRefreshController === controller) {
+          currentUserRoleRefreshController = null;
+          if (generation === currentUserRoleRefreshGeneration) applyViewerRoleGuard();
+        }
       }
-      applyViewerRoleGuard();
     }
 
     const viewerGuardObserver = new MutationObserver(() => applyViewerRoleGuard());
@@ -300,9 +343,12 @@ func panelIntroActionsJS() string {
             headers: requestHeaders()
           });
         } catch (_) {}
+        invalidateCurrentUserRoleRefresh();
+        localStorage.removeItem('veil_api_token');
         localStorage.removeItem('veil_csrf_token');
         localStorage.removeItem('veil_username');
         localStorage.removeItem('veil_user_role');
+        tokenInput.value = '';
         window.location.reload();
       });
     }`
