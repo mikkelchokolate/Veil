@@ -118,8 +118,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// A small exact-path allowlist covers diagnostics that use POST only to
-		// carry structured input. All actual state mutations still require admin.
+		// A small exact-path allowlist covers read-only operations that use POST
+		// only to carry structured input or trigger an in-memory preview. All
+		// actual state mutations still require admin.
 		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
@@ -147,7 +148,7 @@ func isReadOnlyDiagnosticRequest(r *http.Request) bool {
 		return false
 	}
 	switch r.URL.Path {
-	case "/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest":
+	case "/api/tools/dns-lookup", "/api/tools/ping", "/api/tools/speedtest", "/api/apply/plan":
 		return true
 	default:
 		return false
