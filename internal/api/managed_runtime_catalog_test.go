@@ -184,6 +184,34 @@ func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	}
 }
 
+func TestManagedRuntimeCatalogPanelCaddyHasEmptyProtocolInFallback(t *testing.T) {
+	for _, settings := range []Settings{{}, {PanelAccess: "caddy"}} {
+		catalog := NewManagedRuntimeCatalogFor(settings, nil, WarpConfig{})
+		for _, rt := range catalog.Runtimes() {
+			if rt.Unit == "veil-caddy@panel.service" && rt.Protocol != "" {
+				t.Fatalf("panel caddy runtime should have empty Protocol in fallback catalog, got %q", rt.Protocol)
+			}
+		}
+	}
+}
+
+func TestManagedRuntimeCatalogPanelCaddyReplacesNaiveProxyFallback(t *testing.T) {
+	catalog := NewManagedRuntimeCatalogFor(Settings{PanelAccess: "caddy"}, nil, WarpConfig{})
+	found := false
+	for _, rt := range catalog.Runtimes() {
+		if rt.Unit != "veil-caddy@panel.service" {
+			continue
+		}
+		found = true
+		if rt.Name != "caddy-panel" || rt.ActionName != "caddy-panel" || rt.Protocol != "" {
+			t.Fatalf("panel caddy runtime has unexpected fields in fallback catalog: %+v", rt)
+		}
+	}
+	if !found {
+		t.Fatal("panel caddy runtime missing from fallback catalog")
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
