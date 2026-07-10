@@ -27,7 +27,12 @@ func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing
 	for _, want := range []string{
 		`<h2>Inbounds</h2>`,
 		`id="inbound-form"`,
-		`id="inbound-password"`,
+		`id="inbound-password" type="password" autocomplete="new-password"`,
+		`id="add-inbound-btn"`,
+		`id="toggle-inbounds-raw"`,
+		`id="close-inbound-modal"`,
+		`id="cancel-inbound-modal"`,
+		`id="generate-inbound-password"`,
 		panelClientProfileControlsPlaceholder,
 		`id="save-inbound"`,
 		`id="delete-inbound"`,
@@ -35,6 +40,31 @@ func TestPanelInboundFormModuleRendersInboundAndClientProfileControls(t *testing
 		if !strings.Contains(form, want) {
 			t.Fatalf("Inbound form missing %q", want)
 		}
+	}
+	if strings.Contains(form, `onclick=`) {
+		t.Fatal("Inbound form must not use inline event handlers")
+	}
+}
+
+func TestPanelInboundControlsUseBoundListeners(t *testing.T) {
+	js := panelInboundControlsJS()
+	for _, want := range []string{
+		`document.getElementById('add-inbound-btn').addEventListener('click', openAddInboundModal);`,
+		`document.getElementById('toggle-inbounds-raw').addEventListener('click', () => toggleRawView('inbounds-output'));`,
+		`document.getElementById('close-inbound-modal').addEventListener('click', closeInboundModal);`,
+		`document.getElementById('cancel-inbound-modal').addEventListener('click', closeInboundModal);`,
+		`document.getElementById('generate-inbound-password').addEventListener('click', genInboundPassword);`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("Inbound control binding missing %q", want)
+		}
+	}
+}
+
+func TestPanelCatalogMountsBoundInboundControls(t *testing.T) {
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	if !strings.Contains(html, `document.getElementById('add-inbound-btn').addEventListener('click', openAddInboundModal);`) {
+		t.Fatal("rendered Panel does not mount bound inbound controls")
 	}
 }
 
