@@ -26,7 +26,10 @@ func (InboundValidation) ValidateCreate(inbound Inbound) error {
 }
 
 func (InboundValidation) ValidateUpdate(inbound Inbound) error {
-	if inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
+	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
+		return ErrInboundInvalid
+	}
+	if !IsSafeName(inbound.Name) {
 		return ErrInboundInvalid
 	}
 	if !NewInboundProtocolCatalog().SupportsTransport(inbound.Protocol, inbound.Transport) {
