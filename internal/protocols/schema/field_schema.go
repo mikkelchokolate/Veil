@@ -20,14 +20,14 @@ type FieldOption struct {
 
 // FieldSchema describes one dynamic protocol field in the Panel.
 type FieldSchema struct {
-	Key               string        `json:"key"`
-	Label             string        `json:"label"`
-	Type              FieldType     `json:"type"`
-	Default           any           `json:"default,omitempty"`
-	Options           []FieldOption `json:"options,omitempty"`
-	Placeholder       string        `json:"placeholder,omitempty"`
-	GenerateAction    string        `json:"generateAction,omitempty"`
-	GenerateActionField string      `json:"generateActionField,omitempty"`
-	Required          bool          `json:"required,omitempty"`
-	Scope             string        `json:"scope,omitempty"` // "inbound" | "settings"
+	Key                 string        `json:"key"`
+	Label               string        `json:"label"`
+	Type                FieldType     `json:"type"`
+	Default             any           `json:"default,omitempty"`
+	Options             []FieldOption `json:"options,omitempty"`
+	Placeholder         string        `json:"placeholder,omitempty"`
+	GenerateAction      string        `json:"generateAction,omitempty"`
+	GenerateActionField string        `json:"generateActionField,omitempty"`
+	Required            bool          `json:"required,omitempty"`
+	Scope               string        `json:"scope,omitempty"` // "inbound" | "settings"
 }
