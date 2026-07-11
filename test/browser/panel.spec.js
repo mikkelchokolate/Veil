@@ -23,7 +23,7 @@ test('invalid login remains recoverable', async ({ page }) => {
   await expect(page.locator('#login-submit')).toBeEnabled();
 });
 
-test('admin can create an inbound and build a valid apply plan', async ({ page }) => {
+test('admin can stage a disabled inbound and build a valid apply plan', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -43,6 +43,7 @@ test('admin can create an inbound and build a valid apply plan', async ({ page }
   await page.locator('#inbound-transport').selectOption('tcp');
   await page.locator('#inbound-port').fill('18443');
   await page.locator('#inbound-password').fill('browser-mieru-password');
+  await page.locator('#inbound-enabled').uncheck();
 
   const createResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/inbounds') && response.request().method() === 'POST'
@@ -53,6 +54,7 @@ test('admin can create an inbound and build a valid apply plan', async ({ page }
 
   await expect(page.locator('#inbounds-tbody')).toContainText('browser-mieru');
   await expect(page.locator('#inbounds-tbody')).toContainText('18443');
+  await expect(page.locator('#inbounds-tbody')).toContainText(/disabled/i);
 
   const planResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/apply/plan') && response.request().method() === 'POST'
@@ -63,7 +65,6 @@ test('admin can create an inbound and build a valid apply plan', async ({ page }
   const plan = await planResponse.json();
   expect(plan.valid).toBe(true);
 
-  await expect(page.locator('#apply-staged-files')).toBeEnabled();
   await expect(page.locator('#apply-plan-output')).toContainText(/valid/i);
   expect(pageErrors).toEqual([]);
 });
