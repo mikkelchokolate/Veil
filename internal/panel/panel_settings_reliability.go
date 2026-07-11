@@ -105,6 +105,7 @@ func panelSettingsReliabilityJS() string {
           throw new Error('Invalid settings response.');
         }
         if (output) output.textContent = JSON.stringify(saved, null, 2);
+        notifyPanelConfigurationChanged('/api/settings');
         await applySettingsData(saved, generation);
         return saved;
       } catch (error) {
