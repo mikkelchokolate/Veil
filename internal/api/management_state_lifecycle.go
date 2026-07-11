@@ -113,8 +113,10 @@ func newManagementState(info ServerInfo) *managementState {
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)
-		state.startupStateLoadFailed = true
-		state.allowDevAnonymous = false
+		if info.StatePath != "" {
+			state.startupStateLoadFailed = true
+			state.allowDevAnonymous = false
+		}
 	} else if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
 		state.startupStateLoadFailed = true

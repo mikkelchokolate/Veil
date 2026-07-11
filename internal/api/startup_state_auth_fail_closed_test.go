@@ -72,6 +72,25 @@ func TestStartupKeyFailureSkipsStateLoadAndDisablesManagementAPI(t *testing.T) {
 	}
 }
 
+func TestEphemeralRouterDoesNotFailClosedWhenDefaultKeyIsUnavailable(t *testing.T) {
+	root := t.TempDir()
+	blockedParent := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(blockedParent, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	state := newManagementState(ServerInfo{
+		KeyPath:   filepath.Join(blockedParent, "state.key"),
+		ApplyRoot: filepath.Join(root, "apply"),
+	})
+	if state.startupStateLoadFailed {
+		t.Fatal("ephemeral router was marked unavailable without a state path")
+	}
+	if !state.allowDevAnonymous {
+		t.Fatal("ephemeral router unexpectedly disabled anonymous development mode")
+	}
+}
+
 func TestMissingStartupStateKeepsFirstRunAnonymousMode(t *testing.T) {
 	root := t.TempDir()
 	state := newManagementState(ServerInfo{
