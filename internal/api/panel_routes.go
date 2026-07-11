@@ -149,8 +149,15 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writePrivilegedHelperUnavailable(w)
 		return
 	}
-	routes.State.updateMu.Lock()
-	defer routes.State.updateMu.Unlock()
+	if !routes.State.beginPanelUpdate(w) {
+		return
+	}
+	releaseLocks := true
+	defer func() {
+		if releaseLocks {
+			routes.State.endPanelUpdate()
+		}
+	}()
 	if routes.State.updateStager == nil {
 		writeError(w, "panel update staging is unavailable", http.StatusServiceUnavailable)
 		return
@@ -175,9 +182,13 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	state := routes.State
+	privilegedClient := routes.State.privileged
+	releaseLocks = false
 	go func() {
+		defer state.endPanelUpdate()
 		time.Sleep(100 * time.Millisecond)
-		_ = routes.State.privileged.RestartPanel(context.Background())
+		_ = privilegedClient.RestartPanel(context.Background())
 	}()
 
 	writeJSON(w, map[string]any{
