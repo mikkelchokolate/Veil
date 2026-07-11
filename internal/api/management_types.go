@@ -68,6 +68,7 @@ type managementState struct {
 	backupJobs                     map[string]BackupRestoreJob
 	backupRestoreAudit             func(audit.Record) error
 	backupRestoreOwnerSessionGrace time.Duration
+	serviceActionMu                sync.Mutex
 	updateMu                       sync.Mutex
 	updateStager                   func(context.Context) (string, error)
 	configurationValidator         ConfigurationValidator
