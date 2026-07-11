@@ -53,5 +53,55 @@ func panelIntroReliableActionsJS() string {
                 setTimeout(() => window.location.reload(), 100);
                 return;
               }`, 1)
+	actions = strings.Replace(actions, `    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: requestHeaders()
+          });
+        } catch (_) {}
+        invalidateCurrentUserRoleRefresh();
+        localStorage.removeItem('veil_api_token');
+        localStorage.removeItem('veil_csrf_token');
+        localStorage.removeItem('veil_username');
+        localStorage.removeItem('veil_user_role');
+        tokenInput.value = '';
+        window.location.reload();
+      });
+    }`, `    let logoutInFlight = false;
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        if (logoutInFlight) return;
+        logoutInFlight = true;
+        logoutBtn.disabled = true;
+        try {
+          const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: requestHeaders()
+          });
+          const text = await response.text();
+          if (!response.ok) {
+            throw new Error(formatAPIError(text, response.status));
+          }
+          invalidateCurrentUserRoleRefresh();
+          localStorage.removeItem('veil_api_token');
+          localStorage.removeItem('veil_csrf_token');
+          localStorage.removeItem('veil_username');
+          localStorage.removeItem('veil_user_role');
+          tokenInput.value = '';
+          window.location.reload();
+        } catch (error) {
+          logoutInFlight = false;
+          logoutBtn.disabled = false;
+          alert(veilT('status.requestFailed', {
+            error: String(error && error.message ? error.message : error)
+          }));
+        }
+      });
+    }`, 1)
 	return actions
 }
