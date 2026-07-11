@@ -11,10 +11,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// handleAtomicUserUpdate keeps password preservation and role/locale changes in
-// the same management-state critical section. A role-only request must preserve
-// whichever password hash is current when the mutation is applied, rather than
-// writing a stale hash captured before another concurrent update.
+// handleAtomicUserUpdate keeps password preservation, role/locale changes, and
+// session revocation in the same management-state critical section. A role-only
+// request must preserve whichever password hash is current when the mutation is
+// applied, and no login may create a session between the update and revocation.
 func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.Request) {
 	if !requestHasAdminRole(s, r) {
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
@@ -73,7 +73,11 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 		}
 		var updateErr error
 		updated, updateErr = mutation.UpdateUser(username, update)
-		return updateErr
+		if updateErr != nil {
+			return updateErr
+		}
+		_, _ = s.sessionRegistry().DeleteByUsername(username)
+		return nil
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
@@ -98,7 +102,6 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 		"role":     updated.Role,
 		"locale":   panel.NormalizeLocale(updated.Locale),
 	})
-	_, _ = s.sessionRegistry().DeleteByUsername(username)
 	s.recordRequestAudit(r, audit.Record{
 		Action:  "user.update",
 		Target:  username,
