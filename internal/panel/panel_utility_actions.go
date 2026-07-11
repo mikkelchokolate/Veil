@@ -96,5 +96,5 @@ func panelUtilityActionsJS() string {
         throw new Error('Numeric value for ' + id + ' must be a whole number.');
       }
       return value;
-    }`
+    }` + panelDataLoadRequestReliabilityJS()
 }
