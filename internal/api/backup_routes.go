@@ -57,6 +57,16 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 		if !decodeJSONRequest(w, r, &request) {
 			return
 		}
+		if request.Prune {
+			if err := validateBackupRetention(request.Daily, request.Weekly, request.Monthly); err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		if !s.beginBackupMutation(w) {
+			return
+		}
+		defer s.backupMutationMu.Unlock()
 		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionCreate})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.create", Target: "state", Success: false, Error: err.Error()})
@@ -109,6 +119,14 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 	if !decodeJSONRequest(w, r, &request) {
 		return
 	}
+	if err := validateBackupRetention(request.Daily, request.Weekly, request.Monthly); err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !s.beginBackupMutation(w) {
+		return
+	}
+	defer s.backupMutationMu.Unlock()
 	result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 		Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
 	})
@@ -193,6 +211,15 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 		writeError(w, "restore requires confirm=true", http.StatusBadRequest)
 		return
 	}
+	if !s.beginBackupMutation(w) {
+		return
+	}
+	releaseMutation := true
+	defer func() {
+		if releaseMutation {
+			s.backupMutationMu.Unlock()
+		}
+	}()
 	if _, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 		Action: privileged.BackupActionVerify, ArchiveName: archiveName,
 	}); err != nil {
@@ -219,11 +246,13 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 	actor, role := s.auditActor(r)
 	ip := clientIP(r)
 	userAgent := r.UserAgent()
+	releaseMutation = false
 	go s.runPanelBackupRestore(id, archiveName, ownerSessionToken, actor, role, ip, userAgent)
 	writeJSONStatus(w, http.StatusAccepted, job)
 }
 
 func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, actor, role, ip, userAgent string) {
+	defer s.backupMutationMu.Unlock()
 	s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 		job.Status = "running"
 		job.StartedAt = time.Now().UTC()
@@ -259,6 +288,9 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		}
 		job.Status = "succeeded"
 	})
+	if err == nil {
+		s.scheduleBackupRestoreOwnerSessionRevocation(id, ownerSessionToken)
+	}
 }
 
 func (s *managementState) appendBackupRestoreAudit(record audit.Record) error {
@@ -289,7 +321,7 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 	}
 	writeJSON(w, job)
 	if job.Status == "succeeded" && job.ownerSessionToken != "" {
-		s.sessionRegistry().Delete(job.ownerSessionToken)
+		s.revokeBackupRestoreOwnerSession(id, job.ownerSessionToken)
 	}
 }
 
