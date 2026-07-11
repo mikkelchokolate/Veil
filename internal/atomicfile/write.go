@@ -3,40 +3,63 @@ package atomicfile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // test hooks; replaced by tests to inject errors without changing logic.
 var (
 	createTemp = os.CreateTemp
 	chmod      = os.Chmod
+	syncFile   = func(f *os.File) error { return f.Sync() }
 	closeFile  = func(f *os.File) error { return f.Close() }
 )
 
 func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return err
 	}
-	tmp, err := createTemp(filepath.Dir(path), ".tmp-*")
+	tmp, err := createTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
 	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := closeFile(tmp); err != nil {
-		os.Remove(tmpPath)
 		return err
 	}
 	if err := chmod(tmpPath, mode); err != nil {
-		os.Remove(tmpPath)
+		return err
+	}
+	if err := syncFile(tmp); err != nil {
+		return err
+	}
+	if err := closeFile(tmp); err != nil {
 		return err
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
 		return err
 	}
+	committed = true
+	bestEffortSyncDirectory(dir)
 	return nil
+}
+
+func bestEffortSyncDirectory(path string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	dir, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer dir.Close()
+	_ = dir.Sync()
 }
