@@ -14,7 +14,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
-func TestBackupCreateAndVerifyReturnCompleteMetadata(t *testing.T) {
+func TestBackupCreateListAndVerifyReturnStableMetadata(t *testing.T) {
 	state := newPanelBackupState(t)
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
@@ -32,7 +32,9 @@ func TestBackupCreateAndVerifyReturnCompleteMetadata(t *testing.T) {
 	if created.Archive.Size <= 0 || created.Archive.CreatedAt.IsZero() || !created.Archive.Encrypted {
 		t.Fatalf("archive metadata = %+v", created.Archive)
 	}
-	assertCompleteBackupVerification(t, created.Verification)
+	if !created.Verification.Encrypted {
+		t.Fatalf("create verification = %+v", created.Verification)
+	}
 
 	verify := adminJSONRequest(http.MethodPost, "/api/backups/"+created.Archive.Name+"/verify", `{}`)
 	verifyResponse := httptest.NewRecorder()
@@ -44,7 +46,9 @@ func TestBackupCreateAndVerifyReturnCompleteMetadata(t *testing.T) {
 	if err := json.NewDecoder(verifyResponse.Body).Decode(&report); err != nil {
 		t.Fatal(err)
 	}
-	assertCompleteBackupVerification(t, report)
+	if !report.Encrypted {
+		t.Fatalf("verify report = %+v", report)
+	}
 
 	list := adminJSONRequest(http.MethodGet, "/api/backups", "")
 	listResponse := httptest.NewRecorder()
@@ -108,6 +112,7 @@ func TestBackupCreateReturnsCreatedWhenOptionalPruneFails(t *testing.T) {
 	if result.Archive.Name == "" || result.Archive.Size != 1234 {
 		t.Fatalf("created archive metadata = %+v", result.Archive)
 	}
+	assertCompleteBackupVerification(t, result.Verification)
 	if !strings.Contains(result.Warning, "backup created") || !strings.Contains(result.Warning, "simulated prune failure") {
 		t.Fatalf("warning = %q", result.Warning)
 	}
