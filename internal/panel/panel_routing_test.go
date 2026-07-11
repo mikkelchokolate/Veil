@@ -16,21 +16,19 @@ func TestPanelRoutingActionsModuleRendersRuleAndPresetActions(t *testing.T) {
 		`routing-rule-name`,
 		`routing-preset-profile`,
 		`fetch('/api/warp', { headers: authHeaders() })`,
-		`const saved = await loadJSON`,
-		`if (!saved) return null`,
-		`const deleted = await loadJSON`,
-		`if (!deleted) return null`,
+		`const saved = await withRoutingMutation`,
+		`if (!saved) return`,
+		`const deleted = await withRoutingMutation`,
+		`if (!deleted) return`,
 		`await loadRoutingRules();`,
-		`rules === null`,
-		`if (updated === null)`,
 		`inputSwitch.checked = !requestedState;`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Routing actions missing %q", want)
 		}
 	}
-	if strings.Contains(actions, `setTimeout(loadRoutingRules, 800)`) {
-		t.Fatal("routing preset refresh must wait for the completed request instead of an arbitrary timer")
+	if strings.Contains(actions, `setTimeout(loadRoutingRules`) {
+		t.Fatal("routing rules must load from tab activation or explicit refresh, not a mount-time timer")
 	}
 }
 
@@ -42,7 +40,11 @@ func TestPanelRoutingGuardsStaleModalAndLoadResponses(t *testing.T) {
 		`if (generation !== routingModalGeneration) return;`,
 		`routingModalGeneration += 1;`,
 		`let routingRulesLoadGeneration = 0;`,
-		`if (generation !== routingRulesLoadGeneration || rules === null) return;`,
+		`let routingRulesLoadController = null;`,
+		`routingRulesLoadController.abort();`,
+		`signal: controller.signal`,
+		`generation !== routingRulesLoadGeneration || controller.signal.aborted`,
+		`error.name === 'AbortError'`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("routing stale-response guard missing %q", want)
@@ -50,19 +52,38 @@ func TestPanelRoutingGuardsStaleModalAndLoadResponses(t *testing.T) {
 	}
 }
 
-func TestPanelRoutingSerializesMutations(t *testing.T) {
+func TestPanelRoutingSerializesAllMutations(t *testing.T) {
 	actions := panelRoutingActionsJS()
 	for _, want := range []string{
 		`let routingMutationInFlight = false;`,
 		`async function withRoutingMutation(action)`,
 		`if (routingMutationInFlight) return null;`,
+		`cancelRoutingRulesLoad();`,
 		`routingMutationInFlight = true;`,
 		`return await action();`,
 		`routingMutationInFlight = false;`,
 		`setRoutingMutationControlsDisabled(false);`,
+		`inputSwitch.dataset.routingMutation = 'true';`,
+		`btnEdit.dataset.routingMutation = 'true';`,
+		`const updated = await withRoutingMutation`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("routing mutation lock missing %q", want)
+		}
+	}
+}
+
+func TestPanelRoutingLoadsDoNotOverwriteOutputAfterMutation(t *testing.T) {
+	actions := panelRoutingActionsJS()
+	for _, want := range []string{
+		`if (routingMutationInFlight) return null;`,
+		`const response = await fetch('/api/routing/rules'`,
+		`if (generation !== routingRulesLoadGeneration || controller.signal.aborted) return null;`,
+		`if (!Array.isArray(rules)) throw new Error('Invalid routing rules response.');`,
+		`if (output) output.textContent = JSON.stringify(rules, null, 2);`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("routing load reliability missing %q", want)
 		}
 	}
 }
@@ -114,6 +135,7 @@ func TestPanelCatalogMountsHardenedRoutingControls(t *testing.T) {
 		`id="clear-routing-output"`,
 		`id="close-routing-modal"`,
 		`document.getElementById('routing-modal').addEventListener('click'`,
+		`let routingRulesLoadController = null;`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("rendered Panel does not mount hardened routing control %q", want)
@@ -123,9 +145,10 @@ func TestPanelCatalogMountsHardenedRoutingControls(t *testing.T) {
 		`onclick="openRoutingModal(null)"`,
 		`onclick="loadRoutingRules()"`,
 		`onclick="if(event.target === this) closeRoutingModal()"`,
+		`setTimeout(loadRoutingRules`,
 	} {
 		if strings.Contains(html, forbidden) {
-			t.Fatalf("rendered Panel still contains routing inline handler %q", forbidden)
+			t.Fatalf("rendered Panel still contains routing legacy behavior %q", forbidden)
 		}
 	}
 }
