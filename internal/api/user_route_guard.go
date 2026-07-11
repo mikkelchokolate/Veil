@@ -54,6 +54,10 @@ func (w *bufferedResponseWriter) flushTo(dst http.ResponseWriter) {
 }
 
 func validateUserCreateUsername(w http.ResponseWriter, r *http.Request) bool {
+	if contentType := r.Header.Get("Content-Type"); contentType != "" && !isJSONMediaType(contentType) {
+		// Preserve canonical 415 handling in decodeJSONRequest.
+		return true
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxJSONBodyBytes+1))
 	if err != nil {
 		writeError(w, "failed to read request body", http.StatusBadRequest)
