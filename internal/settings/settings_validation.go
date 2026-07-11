@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
 type SettingsValidation struct {
@@ -36,10 +38,18 @@ func (v SettingsValidation) NormalizeAndValidate(settings *Settings, current Set
 			return errors.New("panel access must be direct, local, or caddy")
 		}
 	}
-	if settings.WebBasePath == "" {
-		settings.WebBasePath = current.WebBasePath
+	webBasePath := settings.WebBasePath
+	if webBasePath == "" {
+		webBasePath = current.WebBasePath
+	}
+	if webBasePath != "" {
+		normalized, err := webbasepath.NormalizeOptional(webBasePath)
+		if err != nil {
+			return fmt.Errorf("webBasePath: %w", err)
+		}
+		settings.WebBasePath = normalized
 	} else {
-		settings.WebBasePath = NormalizeWebBasePath(settings.WebBasePath)
+		settings.WebBasePath = ""
 	}
 	if settings.PanelAccess == "caddy" && settings.WebBasePath == "" {
 		return errors.New("webBasePath is required for caddy Panel access")
@@ -194,9 +204,9 @@ func normalizeFallbackRoot(root *string) error {
 }
 
 func NormalizeWebBasePath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" || path == "/" {
-		return ""
+	normalized, err := webbasepath.NormalizeOptional(path)
+	if err != nil {
+		return strings.TrimSpace(path)
 	}
-	return "/" + strings.Trim(path, "/") + "/"
+	return normalized
 }
