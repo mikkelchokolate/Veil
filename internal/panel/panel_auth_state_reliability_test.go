@@ -23,6 +23,28 @@ func TestPanelAPITokenChangesRefreshRoleGenerationSafely(t *testing.T) {
 	}
 }
 
+func TestPanelAuthStatusRefreshesSessionIdentityTokens(t *testing.T) {
+	js := panelIntroReliableActionsJS()
+	for _, want := range []string{
+		`const refreshedCSRFToken = String(data.csrfToken || '');`,
+		`window.veil_csrf_token = refreshedCSRFToken;`,
+		`localStorage.setItem('veil_csrf_token', refreshedCSRFToken);`,
+		`localStorage.removeItem('veil_csrf_token');`,
+		`const refreshedUsername = String(data.username || '');`,
+		`localStorage.setItem('veil_username', refreshedUsername);`,
+		`localStorage.removeItem('veil_username');`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("authenticated status refresh missing %q", want)
+		}
+	}
+
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	if !strings.Contains(html, `window.veil_csrf_token = refreshedCSRFToken;`) {
+		t.Fatal("rendered Panel does not synchronize refreshed CSRF tokens")
+	}
+}
+
 func TestPanelLogoutAndSelfIdentityResetClearStaticToken(t *testing.T) {
 	intro := panelIntroActionsJS()
 	if count := strings.Count(intro, `localStorage.removeItem('veil_api_token');`); count < 2 {
