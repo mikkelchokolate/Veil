@@ -68,7 +68,10 @@ func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (Backu
 		return BackupResult{}, newError(ErrorOperationFailed, "backup executor is unavailable")
 	}
 	result, err := a.executor.Backup(ctx, resolved)
-	return result, wrapOperationError(err)
+	if err != nil {
+		return result, wrapOperationError(err)
+	}
+	return enrichBackupResult(resolved, result), nil
 }
 
 func (a *LocalAdapter) RotateKey(ctx context.Context, request RotateKeyRequest) error {
