@@ -42,55 +42,132 @@ repo="$(pwd)"
 
 run_deb_smoke() {
   docker run --rm \
+    -e EXPECTED_BINARY_VERSION="${binary_version}" \
     -v "${repo}/${root}:/packages:ro" \
     debian:bookworm-slim sh -euxc '
       apt-get update
       apt-get install -y ca-certificates
       dpkg -i /packages/old/*.deb
       test -x /usr/local/bin/veil
-      test -f /lib/systemd/system/veil.service
+      for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy@.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
+        test -f "/lib/systemd/system/$unit"
+      done
       id veil
-      mkdir -p /var/lib/veil /etc/veil
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
       printf state-before-upgrade > /var/lib/veil/state.json
+      printf sessions-before-upgrade > /var/lib/veil/sessions.json
       printf key-before-upgrade > /etc/veil/state.key
+      printf env-before-upgrade > /etc/veil/veil.env
+      chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
+
       dpkg -i /packages/new/*.deb
       test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /var/lib/veil/sessions.json)" = sessions-before-upgrade
       test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      find /var/lib/veil/migration-backups -type f -name state.json -print -quit | grep .
-      find /var/lib/veil/migration-backups -type f -name state.key -print -quit | grep .
-      /usr/local/bin/veil version
+      test "$(cat /etc/veil/veil.env)" = env-before-upgrade
+      test "$(stat -c "%U:%G %a" /etc/veil)" = "root:veil 750"
+      test "$(stat -c "%U:%G %a" /var/lib/veil)" = "veil:veil 750"
+      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
+      test "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600"
+      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
+      test "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640"
+      for file in state.json sessions.json state.key veil.env; do
+        find /var/lib/veil/migration-backups -type f -name "$file" -print -quit | grep .
+      done
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
       dpkg -r veil
+      test ! -e /usr/local/bin/veil
+      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /etc/veil/state.key)" = key-before-upgrade
+      dpkg -i /packages/new/*.deb
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
     '
 }
 
 run_rpm_smoke() {
   docker run --rm \
-    -v "${repo}/${root}/new:/packages:ro" \
+    -e EXPECTED_BINARY_VERSION="${binary_version}" \
+    -v "${repo}/${root}:/packages:ro" \
     rockylinux:9 sh -euxc '
-      dnf install -y /packages/*.rpm
+      dnf install -y /packages/old/*.rpm
       test -x /usr/local/bin/veil
       test -f /lib/systemd/system/veil.service
       id veil
-      /usr/local/bin/veil version
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
+      printf state-before-upgrade > /var/lib/veil/state.json
+      printf key-before-upgrade > /etc/veil/state.key
+      chmod 0644 /var/lib/veil/state.json /etc/veil/state.key
+      dnf upgrade -y /packages/new/*.rpm
+      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /etc/veil/state.key)" = key-before-upgrade
+      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
+      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
       dnf remove -y veil
+      test ! -e /usr/local/bin/veil
+      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /etc/veil/state.key)" = key-before-upgrade
+      dnf install -y /packages/new/*.rpm
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
     '
 }
 
 run_apk_smoke() {
   docker run --rm \
-    -v "${repo}/${root}/new:/packages:ro" \
+    -e EXPECTED_BINARY_VERSION="${binary_version}" \
+    -v "${repo}/${root}:/packages:ro" \
     alpine:3.23 sh -euxc '
-      apk add --allow-untrusted /packages/*.apk
+      apk add --allow-untrusted /packages/old/*.apk
       test -x /usr/local/bin/veil
       test -f /lib/systemd/system/veil.service
       id veil
-      /usr/local/bin/veil version
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
+      printf state-before-upgrade > /var/lib/veil/state.json
+      printf key-before-upgrade > /etc/veil/state.key
+      chmod 0644 /var/lib/veil/state.json /etc/veil/state.key
+      apk add --allow-untrusted --upgrade /packages/new/*.apk
+      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /etc/veil/state.key)" = key-before-upgrade
+      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
+      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+
       apk del veil
+      test ! -e /usr/local/bin/veil
+      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
+      test "$(cat /etc/veil/state.key)" = key-before-upgrade
+      apk add --allow-untrusted /packages/new/*.apk
+      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+    '
+}
+
+run_symlink_refusal_smoke() {
+  docker run --rm \
+    -v "${repo}/${root}:/packages:ro" \
+    debian:bookworm-slim sh -euxc '
+      apt-get update
+      apt-get install -y ca-certificates
+      dpkg -i /packages/old/*.deb
+      printf untouched > /tmp/state-target
+      rm -f /var/lib/veil/state.json
+      ln -s /tmp/state-target /var/lib/veil/state.json
+      if dpkg -i /packages/new/*.deb; then
+        echo "upgrade unexpectedly accepted a symlinked managed state file" >&2
+        exit 1
+      fi
+      test -L /var/lib/veil/state.json
+      test "$(cat /tmp/state-target)" = untouched
     '
 }
 
 run_deb_smoke
 run_rpm_smoke
 run_apk_smoke
+run_symlink_refusal_smoke
 
-echo 'Native package install and upgrade smoke tests passed.'
+echo 'Native package install, upgrade, reinstall, permissions, and migration safety smoke tests passed.'
