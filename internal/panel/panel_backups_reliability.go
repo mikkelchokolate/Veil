@@ -15,9 +15,12 @@ func panelBackupsReliabilityJS() string {
 
     pollBackupRestore = async function(id, generation) {
       let lastError = '';
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      let attempt = 0;
+      while (generation === backupRestorePollGeneration) {
+        const delay = attempt < 120 ? 1000 : 5000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
         if (generation !== backupRestorePollGeneration) return null;
+        attempt += 1;
         try {
           const response = await fetch('/api/backup-restore-jobs/' + encodeURIComponent(id), { headers: authHeaders() });
           const text = await response.text();
@@ -29,7 +32,7 @@ func panelBackupsReliabilityJS() string {
               return null;
             }
             lastError = message;
-            setBackupOutput('Restore status check failed; retrying (' + (attempt + 1) + '/120): ' + message);
+            setBackupOutput('Restore status check failed; continuing to retry (attempt ' + attempt + '): ' + message);
             continue;
           }
           const job = text ? JSON.parse(text) : null;
@@ -46,11 +49,9 @@ func panelBackupsReliabilityJS() string {
         } catch (error) {
           if (generation !== backupRestorePollGeneration) return null;
           lastError = String(error && error.message ? error.message : error);
-          setBackupOutput('Restore status check failed; retrying (' + (attempt + 1) + '/120): ' + lastError);
+          setBackupOutput('Restore status check failed; continuing to retry (attempt ' + attempt + '): ' + lastError);
         }
       }
-      const timeoutMessage = veilT('status.restoreTimedOut');
-      setBackupOutput(lastError ? timeoutMessage + '\n\nLast polling error: ' + lastError : timeoutMessage);
       return null;
     };
 `
