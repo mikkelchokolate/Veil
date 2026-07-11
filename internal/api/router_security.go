@@ -49,6 +49,13 @@ type authMiddlewareOptions struct {
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		state.mu.Lock()
+		startupStateLoadFailed := state.startupStateLoadFailed
+		state.mu.Unlock()
+		if startupStateLoadFailed && strings.HasPrefix(path, "/api/") {
+			writeError(w, "management state unavailable", http.StatusServiceUnavailable)
+			return
+		}
 
 		requiresAuth := strings.HasPrefix(path, "/api/")
 		if path == "/api/auth/login" ||
