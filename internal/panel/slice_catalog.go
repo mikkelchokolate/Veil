@@ -109,7 +109,7 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "warp",
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelWarpCardPlaceholder, Render: panelWarpHardenedCardHTML},
-				{Placeholder: panelWarpActionsPlaceholder, Render: func() string { return panelWarpActionsJS() + panelWarpControlsJS() }},
+				{Placeholder: panelWarpActionsPlaceholder, Render: func() string { return panelWarpReliableActionsJS() + panelWarpControlsJS() }},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "warp-enabled", Handler: "applyWarpToggle", Event: "change"},
