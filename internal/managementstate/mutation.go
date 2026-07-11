@@ -331,6 +331,9 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 		return model.User{}, errors.New("invalid user locale")
 	}
 	update.Username = username
+	if update.PasswordHash == "" {
+		update.PasswordHash = (*m.target.Users)[idx].PasswordHash
+	}
 	if update.Locale == "" {
 		update.Locale = (*m.target.Users)[idx].Locale
 	}
