@@ -9,14 +9,16 @@ func TestPanelUserCredentialValidationMatchesServerContract(t *testing.T) {
 	js := panelUserNameReliabilityJS()
 	for _, want := range []string{
 		`const byteLength = new TextEncoder().encode(value).length;`,
-		`byteLength >= 3`,
+		`Array.from(value).length >= 3`,
 		`byteLength <= 64`,
 		`/^[\p{L}\p{N}._-]+$/u.test(value);`,
 		`userNameInput.minLength = 3;`,
 		`userNameInput.maxLength = 64;`,
 		`function validPanelUserPassword(password) {`,
-		`length >= 12;`,
+		`Array.from(value).length >= 12`,
+		`new TextEncoder().encode(value).length <= 72`,
 		`userPasswordInput.minLength = 12;`,
+		`userPasswordInput.maxLength = 72;`,
 		`const isEdit = document.getElementById('user-is-edit').value === 'true';`,
 		`if ((!isEdit || password) && !validPanelUserPassword(password)) {`,
 		`passwordInput.setCustomValidity(message);`,
