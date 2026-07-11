@@ -47,7 +47,13 @@ function watchBrowserFailures(page) {
   const serverErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('response', (response) => {
-    if (response.status() >= 500) {
+    if (response.status() < 500) return;
+    const url = new URL(response.url());
+    const expectedRuntimeUnavailable =
+      response.status() === 503 &&
+      response.request().method() === 'GET' &&
+      url.pathname.endsWith('/api/status');
+    if (!expectedRuntimeUnavailable) {
       serverErrors.push(`${response.status()} ${response.request().method()} ${response.url()}`);
     }
   });
@@ -79,6 +85,12 @@ async function openInboundAction(page, row, name, action) {
   ).last();
   await expect(actionButton).toBeVisible();
   await actionButton.click();
+}
+
+async function expectRestrictedNavigation(link) {
+  await expect(link).toHaveAttribute('hidden', '');
+  await expect(link).toHaveAttribute('aria-hidden', 'true');
+  await expect(link).toHaveAttribute('tabindex', '-1');
 }
 
 test('invalid login remains recoverable', async ({ page }) => {
@@ -183,15 +195,15 @@ test('viewer is read-only, may preview a plan, and can log out', async ({ page }
 
   await login(page, viewerUsername, viewerPassword, 'viewer');
 
-  await expect(page.locator('a[href="#users"]')).toBeHidden();
-  await expect(page.locator('a[href="#backups"]')).toBeHidden();
-  await expect(page.locator('#users')).toBeHidden();
-  await expect(page.locator('#backups')).toBeHidden();
+  await expectRestrictedNavigation(page.locator('a[href="#users"]'));
+  await expectRestrictedNavigation(page.locator('a[href="#backups"]'));
+  await expect(page.locator('#users')).toHaveAttribute('hidden', '');
+  await expect(page.locator('#backups')).toHaveAttribute('hidden', '');
   await expect(page.locator('#add-inbound-btn')).toBeDisabled();
 
   await page.goto('/#users');
   await expect(page).toHaveURL(/#dashboard$/);
-  await expect(page.locator('#users')).toBeHidden();
+  await expect(page.locator('#users')).toHaveAttribute('hidden', '');
 
   await buildApplyPlan(page);
   await expect(page.locator('#apply-staged-files')).toBeDisabled();
