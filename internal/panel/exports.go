@@ -52,5 +52,5 @@ func UsersCardHTML() string                   { return panelUsersCardHTML() }
 func UsersActionsJS() string {
 	return panelUsersActionsJS() + panelUsersReliabilityJS() + panelUserNameReliabilityJS()
 }
-func BackupsCardHTML() string    { return panelBackupsCardHTML() }
-func BackupsActionsJS() string   { return panelBackupsActionsJS() + panelBackupsReliabilityJS() }
+func BackupsCardHTML() string  { return panelBackupsCardHTML() }
+func BackupsActionsJS() string { return panelBackupsActionsJS() + panelBackupsReliabilityJS() }
