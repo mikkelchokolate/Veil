@@ -1,6 +1,10 @@
 package serve
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
+)
 
 type SecurityOptions struct {
 	Listen                string
@@ -95,6 +99,10 @@ func (s Security) Resolve() (Config, error) {
 		return Config{}, err
 	}
 	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
+	webBasePath, err = webbasepath.Normalize(webBasePath)
+	if err != nil {
+		return Config{}, fmt.Errorf("web base path: %w", err)
+	}
 	tlsEnabled, tlsSource, tlsCert, tlsKey := env.TLSFiles(opts.TLSCert, opts.TLSKey)
 	autoTLSConfig := AutoTLSConfig{}
 	if opts.AutoTLS && !tlsEnabled {
