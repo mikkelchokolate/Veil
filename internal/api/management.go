@@ -50,7 +50,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/auth/logout", s.handleLogoutWithSettingsSnapshot)
 	mux.HandleFunc("/api/auth/status", s.handleEffectiveAuthStatus)
 	mux.HandleFunc("/api/auth/locale", s.handleAuthLocale)
-	mux.HandleFunc("/api/auth/sessions", s.handleAuthSessions)
+	mux.HandleFunc("/api/auth/sessions", s.handlePersistentAuthSessions)
 	mux.HandleFunc("/api/admin/rotate-key", s.handleRotateKey)
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/backups", s.handleBackups)
