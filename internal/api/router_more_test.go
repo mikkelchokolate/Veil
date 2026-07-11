@@ -29,6 +29,8 @@ func TestStripBasePathMiddleware(t *testing.T) {
 		{"/secret", http.StatusOK, "/"},
 		{"/secret/", http.StatusOK, "/"},
 		{"/other/api/version", http.StatusNotFound, ""},
+		{"/secretary/api/version", http.StatusNotFound, ""},
+		{"/secret-other", http.StatusNotFound, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
