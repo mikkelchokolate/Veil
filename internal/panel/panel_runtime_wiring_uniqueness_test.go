@@ -10,7 +10,7 @@ func TestPanelReliabilityRuntimesAreMountedExactlyOnce(t *testing.T) {
 	for _, marker := range []string{
 		`let veilEditingInboundName = '';`,
 		`const veilBaseEnsureProtocolSchemas = ensureProtocolSchemas;`,
-		`loadJSON = async function(path, outputId, options)`,
+		`const baseLoadJSONForRuntimeStats = loadJSON;`,
 	} {
 		if count := strings.Count(html, marker); count != 1 {
 			t.Fatalf("rendered Panel contains %d copies of reliability runtime %q, want exactly one", count, marker)
