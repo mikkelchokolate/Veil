@@ -10,7 +10,10 @@ import (
 	"runtime"
 )
 
-var syncKeyFile = func(file *os.File) error { return file.Sync() }
+var (
+	syncKeyFile  = func(file *os.File) error { return file.Sync() }
+	chmodKeyFile = os.Chmod
+)
 
 type KeyFileStore struct {
 	Path string
@@ -22,8 +25,8 @@ func NewKeyFileStore(path string) KeyFileStore { return KeyFileStore{Path: path}
 // a new random key is written to a private temporary file, synced, and then
 // published without replacement. Concurrent creators therefore all return the
 // single key that won the exclusive publish. Modes 0600 (owner-only) and 0640
-// (owner plus group-read) are accepted as secure; any other mode is tightened
-// to 0600 on a best-effort basis.
+// (owner plus group-read) are accepted as secure. Broader POSIX permissions
+// must be tightened to 0600 before the key is accepted.
 func (s KeyFileStore) LoadOrCreate() (*[KeySize]byte, error) {
 	key, err := s.load()
 	if err == nil {
@@ -36,14 +39,19 @@ func (s KeyFileStore) LoadOrCreate() (*[KeySize]byte, error) {
 }
 
 func (s KeyFileStore) load() (*[KeySize]byte, error) {
+	info, err := os.Stat(s.Path)
+	if err != nil {
+		return nil, fmt.Errorf("secrets: stat key file %s: %w", s.Path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("secrets: key file %s is not a regular file", s.Path)
+	}
+	if err := enforceKeyFilePermissions(s.Path, info.Mode().Perm()); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(s.Path)
 	if err != nil {
 		return nil, fmt.Errorf("secrets: read key file %s: %w", s.Path, err)
-	}
-	if info, err := os.Stat(s.Path); err == nil {
-		if perm := info.Mode().Perm(); perm != 0o600 && perm != 0o640 {
-			_ = os.Chmod(s.Path, 0o600)
-		}
 	}
 	if len(data) != KeySize {
 		return nil, fmt.Errorf("secrets: key file %s has wrong length: %d bytes (expected %d)", s.Path, len(data), KeySize)
@@ -51,6 +59,23 @@ func (s KeyFileStore) load() (*[KeySize]byte, error) {
 	var key [KeySize]byte
 	copy(key[:], data)
 	return &key, nil
+}
+
+func enforceKeyFilePermissions(path string, mode os.FileMode) error {
+	if runtime.GOOS == "windows" || mode == 0o600 || mode == 0o640 {
+		return nil
+	}
+	if err := chmodKeyFile(path, 0o600); err != nil {
+		return fmt.Errorf("secrets: tighten permissions on key file %s from %04o: %w", path, mode, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("secrets: verify permissions on key file %s: %w", path, err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		return fmt.Errorf("secrets: key file %s remains insecure after chmod: %04o", path, got)
+	}
+	return nil
 }
 
 func (s KeyFileStore) create() (*[KeySize]byte, error) {
