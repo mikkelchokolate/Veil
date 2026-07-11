@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -51,9 +53,59 @@ func (w *bufferedResponseWriter) flushTo(dst http.ResponseWriter) {
 	_, _ = dst.Write(w.body.Bytes())
 }
 
+func validateUserCreateUsername(w http.ResponseWriter, r *http.Request) bool {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxJSONBodyBytes+1))
+	if err != nil {
+		writeError(w, "failed to read request body", http.StatusBadRequest)
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if int64(len(body)) > maxJSONBodyBytes {
+		// Leave canonical oversized-body handling to decodeJSONRequest.
+		return true
+	}
+	var request struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil || request.Username == "" {
+		// Preserve the canonical invalid JSON / required-field response.
+		return true
+	}
+	if !validSetupUsername(request.Username) {
+		writeError(w, "username must be 3-64 characters using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func exactUserNamePath(path string) bool {
+	name := strings.TrimPrefix(path, "/api/users/")
+	return name != "" && name != path && !strings.Contains(name, "/")
+}
+
 func (s *managementState) handleUsersRouteWithAdminInvariant(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/users" {
+		switch r.Method {
+		case http.MethodGet:
+			s.handleUsersRoute(w, r)
+			return
+		case http.MethodPost:
+			if validateUserCreateUsername(w, r) {
+				s.handleUsersRoute(w, r)
+			}
+			return
+		default:
+			methodNotAllowed(w, http.MethodGet, http.MethodPost)
+			return
+		}
+	}
+
+	if !exactUserNamePath(r.URL.Path) {
+		writeNotFound(w)
+		return
+	}
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
-		s.handleUsersRoute(w, r)
+		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 		return
 	}
 
