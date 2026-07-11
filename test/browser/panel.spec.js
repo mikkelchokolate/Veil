@@ -43,7 +43,8 @@ test('admin can stage a disabled inbound and build a valid apply plan', async ({
   await page.locator('#inbound-transport').selectOption('tcp');
   await page.locator('#inbound-port').fill('18443');
   await page.locator('#inbound-password').fill('browser-mieru-password');
-  await page.locator('#inbound-enabled').uncheck();
+  await page.locator('#inbound-enabled + .slider').click();
+  await expect(page.locator('#inbound-enabled')).not.toBeChecked();
 
   const createResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/inbounds') && response.request().method() === 'POST'
