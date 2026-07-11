@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/audit"
@@ -62,9 +63,11 @@ type managementState struct {
 	version                        string
 	backupDir                      string
 	backupPassphrasePath           string
+	backupMutationMu               sync.Mutex
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
 	backupRestoreAudit             func(audit.Record) error
+	backupRestoreOwnerSessionGrace time.Duration
 	updateMu                       sync.Mutex
 	updateStager                   func(context.Context) (string, error)
 	configurationValidator         ConfigurationValidator
