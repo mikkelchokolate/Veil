@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func loginHash(t *testing.T, password string) string {
+func loginReliabilityPasswordHash(t *testing.T, password string) string {
 	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
@@ -36,7 +36,7 @@ func loginReliabilityState(t *testing.T, user User) *managementState {
 func TestLoginSnapshotRejectsPasswordChangedAfterVerification(t *testing.T) {
 	state := loginReliabilityState(t, User{
 		Username:     "alice",
-		PasswordHash: loginHash(t, "old-password-123"),
+		PasswordHash: loginReliabilityPasswordHash(t, "old-password-123"),
 		Role:         "admin",
 		Locale:       "en",
 	})
@@ -46,7 +46,7 @@ func TestLoginSnapshotRejectsPasswordChangedAfterVerification(t *testing.T) {
 	}
 
 	state.mu.Lock()
-	state.users[0].PasswordHash = loginHash(t, "new-password-123")
+	state.users[0].PasswordHash = loginReliabilityPasswordHash(t, "new-password-123")
 	state.mu.Unlock()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
@@ -62,7 +62,7 @@ func TestLoginSnapshotRejectsPasswordChangedAfterVerification(t *testing.T) {
 func TestLoginSnapshotUsesCurrentRoleAndLocale(t *testing.T) {
 	state := loginReliabilityState(t, User{
 		Username:     "alice",
-		PasswordHash: loginHash(t, "secure-password-123"),
+		PasswordHash: loginReliabilityPasswordHash(t, "secure-password-123"),
 		Role:         "admin",
 		Locale:       "en",
 	})
@@ -115,10 +115,10 @@ func TestFallbackLoginSnapshotRejectsChangedSettings(t *testing.T) {
 	}
 }
 
-func TestRegisteredLoginRejectsStaleSnapshotThroughHelperContract(t *testing.T) {
+func TestRegisteredLoginUsesRevalidationRoute(t *testing.T) {
 	state := loginReliabilityState(t, User{
 		Username:     "alice",
-		PasswordHash: loginHash(t, "secure-password-123"),
+		PasswordHash: loginReliabilityPasswordHash(t, "secure-password-123"),
 		Role:         "admin",
 		Locale:       "en",
 	})
