@@ -22,11 +22,15 @@ func TestReliableLoginHTMLTreatsStorageAsBestEffort(t *testing.T) {
 	}
 
 	authenticated := strings.Index(html, `authenticated = true;`)
-	storageGuard := strings.Index(html, `try {
+	if authenticated < 0 {
+		t.Fatal("login success marker is missing")
+	}
+	loginSuccess := html[authenticated:]
+	storageGuard := strings.Index(loginSuccess, `try {
           localStorage.setItem('veil_csrf_token'`)
-	reload := strings.Index(html, `window.location.reload();`)
-	if authenticated < 0 || storageGuard < authenticated || reload < storageGuard {
-		t.Fatalf("login success ordering is unsafe: authenticated=%d storage=%d reload=%d", authenticated, storageGuard, reload)
+	reload := strings.Index(loginSuccess, `window.location.reload();`)
+	if storageGuard < 0 || reload < storageGuard {
+		t.Fatalf("login success ordering is unsafe: storage=%d reload=%d", storageGuard, reload)
 	}
 }
 
