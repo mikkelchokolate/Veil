@@ -9,3 +9,7 @@ func (s *managementState) beginServiceAction(w http.ResponseWriter) bool {
 	writeError(w, "another service action is already in progress", http.StatusConflict)
 	return false
 }
+
+func applyRequiresServiceActionLock(req ApplyRequest) bool {
+	return req.ApplyLive || req.ApplyServices
+}
