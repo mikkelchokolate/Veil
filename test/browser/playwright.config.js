@@ -6,6 +6,7 @@ module.exports = defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   workers: 1,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {
