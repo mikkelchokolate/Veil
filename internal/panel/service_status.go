@@ -27,18 +27,33 @@ func ServiceStatusCardHTML(runtimes []service.ManagedRuntime) string {
 
 func ServiceStatusActionsJS() string {
 	return `    let serviceStatusLoadInFlight = false;
-    async function loadServiceStatus() {
-      if (serviceStatusLoadInFlight) return null;
-      serviceStatusLoadInFlight = true;
+    let serviceRestartInFlight = false;
+
+    function setServiceStatusControlsDisabled(disabled) {
+      const busy = Boolean(disabled);
       const loadButton = document.getElementById('load-service-status');
-      if (loadButton) loadButton.disabled = true;
+      if (loadButton) loadButton.disabled = busy;
+      document.querySelectorAll('[data-veil-restart-service]').forEach((button) => {
+        button.disabled = busy || isViewerRole();
+      });
+    }
+
+    async function fetchAndRenderServiceStatus() {
+      const status = await loadJSON('/api/status', 'service-status-output');
+      if (status) renderServiceRestartControls(status);
+      return status;
+    }
+
+    async function loadServiceStatus() {
+      if (serviceStatusLoadInFlight || serviceRestartInFlight) return null;
+      serviceStatusLoadInFlight = true;
+      setServiceStatusControlsDisabled(true);
       try {
-        const status = await loadJSON('/api/status', 'service-status-output');
-        if (status) renderServiceRestartControls(status);
-        return status;
+        return await fetchAndRenderServiceStatus();
       } finally {
         serviceStatusLoadInFlight = false;
-        if (loadButton) loadButton.disabled = false;
+        setServiceStatusControlsDisabled(serviceRestartInFlight);
+        applyViewerRoleGuard();
       }
     }
 
@@ -99,16 +114,20 @@ func ServiceRestartActionsJS(runtimes []service.ManagedRuntime) string {
       button.dataset.veilRestartBound = 'true';
       button.textContent = veilT('service.restart', { service: button.dataset.veilRestartService });
       button.addEventListener('click', async () => {
+        if (serviceRestartInFlight || serviceStatusLoadInFlight) return;
         const serviceName = button.dataset.veilRestartService;
-        button.disabled = true;
+        serviceRestartInFlight = true;
+        setServiceStatusControlsDisabled(true);
         try {
           const restarted = await loadJSON('/api/services/' + encodeURIComponent(serviceName) + '/restart', 'service-status-output', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ confirm: true })
           });
-          if (restarted) await loadServiceStatus();
+          if (restarted) await fetchAndRenderServiceStatus();
         } finally {
-          if (!isViewerRole()) button.disabled = false;
+          serviceRestartInFlight = false;
+          setServiceStatusControlsDisabled(false);
+          applyViewerRoleGuard();
         }
       });
     }
@@ -129,6 +148,7 @@ func ServiceRestartActionsJS(runtimes []service.ManagedRuntime) string {
         container.appendChild(button);
         bindServiceRestartButton(button);
       });
+      setServiceStatusControlsDisabled(serviceStatusLoadInFlight || serviceRestartInFlight);
       if (typeof applyViewerRoleGuard === 'function') applyViewerRoleGuard();
     }
 
