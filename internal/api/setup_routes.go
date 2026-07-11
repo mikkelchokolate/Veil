@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/panel"
@@ -55,11 +56,11 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if !validSetupUsername(req.Username) {
-		writeError(w, "username must be 3-64 characters using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
+		writeError(w, "username must be 3-64 characters and at most 64 UTF-8 bytes, using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
 		return
 	}
-	if len(req.Password) < 12 {
-		writeError(w, "password must be at least 12 characters", http.StatusBadRequest)
+	if err := validatePanelPassword(req.Password); err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if !req.BackupAcknowledged {
@@ -124,7 +125,7 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 }
 
 func validSetupUsername(username string) bool {
-	if len(username) < 3 || len(username) > 64 {
+	if utf8.RuneCountInString(username) < 3 || len(username) > 64 {
 		return false
 	}
 	for _, r := range username {
