@@ -57,6 +57,8 @@ test('admin can stage a disabled inbound and build a valid apply plan', async ({
   await expect(page.locator('#inbounds-tbody')).toContainText('18443');
   await expect(page.locator('#inbounds-tbody')).toContainText(/disabled/i);
 
+  await page.locator('a[href="#dashboard"]').click();
+  await expect(page.locator('#build-apply-plan')).toBeVisible();
   const planResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/apply/plan') && response.request().method() === 'POST'
   );
