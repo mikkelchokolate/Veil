@@ -60,7 +60,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
 	mux.HandleFunc("/api/users", s.handleUsersRouteWithAdminInvariant)
-	mux.HandleFunc("/api/users/", s.handleUsersRouteWithAdminInvariant)
+	mux.HandleFunc("/api/users/", s.handleReliableUserItemRoute)
 }
 
 // registerProtocolRoomRoutes registers per-protocol room generation routes for
