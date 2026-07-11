@@ -203,10 +203,13 @@ func normalizeFallbackRoot(root *string) error {
 	return nil
 }
 
+// NormalizeWebBasePath is retained for generated-config callers that cannot
+// return a validation error. Invalid input fails closed to the empty/root
+// representation instead of being returned raw into a Caddyfile template.
 func NormalizeWebBasePath(path string) string {
 	normalized, err := webbasepath.NormalizeOptional(path)
 	if err != nil {
-		return strings.TrimSpace(path)
+		return ""
 	}
 	return normalized
 }
