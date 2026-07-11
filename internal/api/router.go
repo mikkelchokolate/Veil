@@ -49,23 +49,25 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 
 // stripBasePathMiddleware removes the base path prefix from request URL before routing.
 func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
+	mountPath := strings.TrimSuffix(prefix, "/")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, prefix[:len(prefix)-1]) {
-			// Strip prefix: /secret/foo → /foo
-			stripped := strings.TrimPrefix(r.URL.Path, prefix[:len(prefix)-1])
-			if stripped == "" {
-				stripped = "/"
-			}
-			r2 := new(http.Request)
-			*r2 = *r
-			r2.URL = new(url.URL)
-			*r2.URL = *r.URL
-			r2.URL.Path = stripped
-			next.ServeHTTP(w, r2)
+		// Match either the mount itself or a child path. A raw HasPrefix check would
+		// incorrectly accept /secretary when the configured mount is /secret.
+		if r.URL.Path != mountPath && !strings.HasPrefix(r.URL.Path, mountPath+"/") {
+			writeNotFound(w)
 			return
 		}
-		// Path doesn't match base path — reject with 404.
-		writeNotFound(w)
+
+		stripped := strings.TrimPrefix(r.URL.Path, mountPath)
+		if stripped == "" {
+			stripped = "/"
+		}
+		r2 := new(http.Request)
+		*r2 = *r
+		r2.URL = new(url.URL)
+		*r2.URL = *r.URL
+		r2.URL.Path = stripped
+		next.ServeHTTP(w, r2)
 	})
 }
 
@@ -218,16 +220,15 @@ func validateEmptyJSONBody(r *http.Request) error {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxJSONBodyBytes))
 	if err != nil {
-		return fmt.Errorf("request body too large")
+		return err
 	}
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed != "" && trimmed != "{}" {
-		return fmt.Errorf("unexpected request body")
+	body = []byte(strings.TrimSpace(string(body)))
+	if len(body) == 0 || string(body) == "{}" {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("request body must be empty or {}")
 }
 
-// validLogUnit checks that a systemd unit name contains only safe characters.
 func runtimeInfo() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }
