@@ -27,7 +27,7 @@ func (c SliceCatalog) Slices() []Slice {
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
 				{Placeholder: panelIntroActionsPlaceholder, Render: func() string {
-					return panelIntroActionsJS() + panelRequestReliabilityJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
+					return panelIntroReliableActionsJS() + panelRequestReliabilityJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
 				}},
 			},
 			EventBindings: []EventBinding{
