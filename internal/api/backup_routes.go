@@ -262,7 +262,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		err = s.Reload()
 	}
 	if err == nil {
-		_, err = s.sessionRegistry().DeleteAllExcept(ownerSessionToken)
+		_, err = s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
 	}
 	_ = s.appendBackupRestoreAudit(audit.Record{
 		Actor:     actor,
