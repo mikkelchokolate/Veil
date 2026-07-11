@@ -51,4 +51,4 @@ func WarpActionsJS() string                   { return panelWarpActionsJS() }
 func UsersCardHTML() string                   { return panelUsersCardHTML() }
 func UsersActionsJS() string                  { return panelUsersActionsJS() + panelUsersReliabilityJS() }
 func BackupsCardHTML() string                 { return panelBackupsCardHTML() }
-func BackupsActionsJS() string                { return panelBackupsActionsJS() }
+func BackupsActionsJS() string                { return panelBackupsActionsJS() + panelBackupsReliabilityJS() }
