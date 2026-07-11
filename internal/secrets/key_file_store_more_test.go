@@ -3,6 +3,7 @@ package secrets
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -32,8 +33,12 @@ func TestKeyFileStoreCreateRandReadError(t *testing.T) {
 }
 
 func TestKeyFileStoreCreateWriteError(t *testing.T) {
-	// Parent directory does not exist, so os.WriteFile must fail.
-	store := NewKeyFileStore(filepath.Join(t.TempDir(), "missing", "state.key"))
+	root := t.TempDir()
+	blockedParent := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(blockedParent, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewKeyFileStore(filepath.Join(blockedParent, "state.key"))
 	_, err := store.LoadOrCreate()
 	if err == nil {
 		t.Fatal("expected error when key file cannot be written")
