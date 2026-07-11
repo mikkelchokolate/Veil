@@ -79,6 +79,25 @@ func TestAtomicUserUpdateAppliesExplicitPassword(t *testing.T) {
 	t.Fatal("updated user not found")
 }
 
+func TestAtomicUserUpdateRevokesExistingSessions(t *testing.T) {
+	state := atomicUserUpdateState(t)
+	session, err := state.sessionRegistry().Create(SessionCreateInput{Username: "viewer", Role: "viewer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := atomicUserUpdateRequest("/api/users/viewer", `{"role":"viewer","locale":"ru"}`)
+	rec := httptest.NewRecorder()
+
+	state.handleUsersRouteWithAdminInvariant(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if _, ok := state.sessionRegistry().Get(session.Token); ok {
+		t.Fatal("updated user session was not revoked")
+	}
+}
+
 func TestAtomicUserUpdateReturnsNotFoundInsideMutation(t *testing.T) {
 	state := atomicUserUpdateState(t)
 	req := atomicUserUpdateRequest("/api/users/missing", `{"role":"viewer","locale":"en"}`)
