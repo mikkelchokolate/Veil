@@ -15,6 +15,25 @@ func panelClientLinksHardenedCardHTML() string {
 
 func panelClientLinksControlsJS() string {
 	return `
+    // Non-aggregate protocols encode the inbound name in every link name. Do
+    // not fall back to all links from the same protocol, or a modal opened for
+    // one inbound will expose links belonging to sibling inbounds. Mieru is the
+    // exception: its client configs are intentionally aggregated by profile and
+    // therefore use names such as "mieru/profile" instead of an inbound prefix.
+    filteredClientLinks = function(body, inboundName, inboundProtocol) {
+      const links = body && Array.isArray(body.links) ? body.links : [];
+      if (!inboundName) return links;
+      const exact = links.filter((link) => {
+        const name = String(link && link.name || '');
+        return name === inboundName || name.indexOf(inboundName + '/') === 0;
+      });
+      if (exact.length > 0 || inboundProtocol !== 'mieru') return exact;
+      return links.filter((link) => {
+        const name = String(link && link.name || '');
+        return String(link && link.protocol || '') === 'mieru' && name.indexOf('mieru/') === 0;
+      });
+    };
+
     const clientLinksModalOverlay = document.getElementById('client-links-modal-overlay');
     const closeClientLinksModalButton = document.getElementById('close-client-links-modal');
     const closeClientLinksModalFooterButton = document.getElementById('close-client-links-modal-footer');
