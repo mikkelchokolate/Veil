@@ -17,6 +17,7 @@ type BackupCreateResponse struct {
 	Archive      backup.ArchiveEntry       `json:"archive"`
 	Verification backup.VerificationReport `json:"verification"`
 	Prune        *backup.PruneResult       `json:"prune,omitempty"`
+	Warning      string                    `json:"warning,omitempty"`
 }
 
 type BackupRestoreJob struct {
@@ -51,7 +52,7 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 			writePrivilegedError(w, err)
 			return
 		}
-		writeJSON(w, backupEntriesFromPrivileged(result.Archives))
+		writeJSON(w, backupEntriesFromPrivileged(s.backupDir, result.Archives))
 	case http.MethodPost:
 		var request backupCreateRequest
 		if !decodeJSONRequest(w, r, &request) {
@@ -74,27 +75,24 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		name := result.ArchiveName
-		response := BackupCreateResponse{
-			Archive: backup.ArchiveEntry{Name: name, CreatedAt: time.Now().UTC(), Encrypted: true},
-			Verification: backup.VerificationReport{
-				Encrypted: result.Verified,
-			},
-		}
+		response := backupCreateResponseFromPrivileged(s.backupDir, result)
+		details := map[string]any{"prune": request.Prune}
 		if request.Prune {
-			pruned, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+			pruned, pruneErr := s.backupOperation(r.Context(), privileged.BackupRequest{
 				Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
 			})
-			if err != nil {
-				writePrivilegedError(w, err)
-				return
+			if pruneErr != nil {
+				response.Warning = appendBackupResponseWarning(response.Warning, "backup created, but retention prune failed: "+pruneErr.Error())
+				details["pruneError"] = pruneErr.Error()
+			} else {
+				response.Prune = &backup.PruneResult{Deleted: pruned.Pruned, Kept: pruned.Kept}
 			}
-			response.Prune = &backup.PruneResult{Deleted: pruned.Pruned, Kept: pruned.Kept}
 		}
 		s.recordRequestAudit(r, audit.Record{
 			Action:  "backup.create",
 			Target:  name,
 			Success: true,
-			Details: map[string]any{"prune": request.Prune},
+			Details: details,
 		})
 		writeJSONStatus(w, http.StatusCreated, response)
 	default:
@@ -188,7 +186,7 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		s.recordRequestAudit(r, audit.Record{Action: "backup.verify", Target: name, Success: true})
-		writeJSON(w, backup.VerificationReport{Encrypted: result.Verified})
+		writeJSON(w, backupVerificationFromPrivileged(result))
 	case "restore":
 		s.queuePanelBackupRestore(w, r, name)
 	default:
@@ -370,12 +368,12 @@ func (s *managementState) backupOperation(ctx context.Context, request privilege
 	return s.privileged.Backup(ctx, request)
 }
 
-func backupEntriesFromPrivileged(entries []privileged.BackupArchive) []backup.ArchiveEntry {
+func backupEntriesFromPrivileged(backupDir string, entries []privileged.BackupArchive) []backup.ArchiveEntry {
 	result := make([]backup.ArchiveEntry, 0, len(entries))
 	for _, entry := range entries {
 		createdAt, _ := time.Parse(time.RFC3339, entry.CreatedAt)
 		result = append(result, backup.ArchiveEntry{
-			Name: entry.Name, Size: entry.Size, CreatedAt: createdAt, Encrypted: entry.Encrypted,
+			Name: entry.Name, Path: filepath.Join(backupDir, entry.Name), Size: entry.Size, CreatedAt: createdAt, Encrypted: entry.Encrypted,
 		})
 	}
 	return result
