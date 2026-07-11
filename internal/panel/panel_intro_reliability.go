@@ -12,6 +12,24 @@ func panelIntroReliableActionsJS() string {
       'apply-staged-files',`, `      'save-warp-config',
       'warp-enabled',
       'apply-staged-files',`, 1)
+	actions = strings.Replace(actions, `        if (data && data.authenticated) {
+          setCurrentUserRole(data.role || '');
+        } else if (await staticTokenHasAdminAccess()) {`, `        if (data && data.authenticated) {
+          const refreshedCSRFToken = String(data.csrfToken || '');
+          window.veil_csrf_token = refreshedCSRFToken;
+          if (refreshedCSRFToken) {
+            localStorage.setItem('veil_csrf_token', refreshedCSRFToken);
+          } else {
+            localStorage.removeItem('veil_csrf_token');
+          }
+          const refreshedUsername = String(data.username || '');
+          if (refreshedUsername) {
+            localStorage.setItem('veil_username', refreshedUsername);
+          } else {
+            localStorage.removeItem('veil_username');
+          }
+          setCurrentUserRole(data.role || '');
+        } else if (await staticTokenHasAdminAccess()) {`, 1)
 	actions = strings.Replace(actions, `              const checkResp = await fetch('/api/version', { headers: authHeaders() });
               if (checkResp.ok) {
                 const checkData = await checkResp.json();
