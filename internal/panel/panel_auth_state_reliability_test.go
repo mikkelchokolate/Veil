@@ -23,6 +23,24 @@ func TestPanelAPITokenChangesRefreshRoleGenerationSafely(t *testing.T) {
 	}
 }
 
+func TestPanelDetectsLocalAnonymousAdminAccess(t *testing.T) {
+	js := panelIntroReliableActionsJS()
+	for _, want := range []string{
+		`backend grants dev-anonymous administrator access without a static token`,
+		`const response = await fetch('/api/version', {`,
+		`credentials: 'same-origin',`,
+		`cache: 'no-store'`,
+		`return response.ok;`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("effective admin access probe missing %q", want)
+		}
+	}
+	if strings.Contains(js, `if (!localStorage.getItem('veil_api_token')) return false;`) {
+		t.Fatal("local development admin detection is still blocked by the absence of a static token")
+	}
+}
+
 func TestPanelAuthStatusRefreshesSessionIdentityTokens(t *testing.T) {
 	js := panelIntroReliableActionsJS()
 	for _, want := range []string{
