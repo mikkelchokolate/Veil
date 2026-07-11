@@ -87,7 +87,9 @@ func (s *managementState) revokeBackupRestoreOwnerSession(jobID, token string) {
 	if token == "" || s.sessions == nil {
 		return
 	}
-	s.sessionRegistry().Delete(token)
+	if _, err := s.sessionRegistry().DeleteTokenPersisted(token); err != nil {
+		return
+	}
 	s.backupJobsMu.Lock()
 	defer s.backupJobsMu.Unlock()
 	job, ok := s.backupJobs[jobID]

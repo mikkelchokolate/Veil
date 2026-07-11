@@ -1,5 +1,9 @@
 package api
 
+import "errors"
+
+var errSessionRevocationPersistence = errors.New("failed to persist session revocation")
+
 func cloneStoredSessionMap(source map[string]storedSession) map[string]storedSession {
 	clone := make(map[string]storedSession, len(source))
 	for key, value := range source {
@@ -60,4 +64,35 @@ func (r *SessionRegistry) DeleteByIDPersisted(id string) (bool, error) {
 		return 0
 	})
 	return changed > 0, err
+}
+
+func (r *SessionRegistry) DeleteUsernamePersisted(username string) (int, error) {
+	return r.mutateAndPersistSessions(func() int {
+		deleted := 0
+		for tokenHash, session := range r.sessions {
+			if session.Username != username {
+				continue
+			}
+			delete(r.sessions, tokenHash)
+			delete(r.rawCSRF, tokenHash)
+			deleted++
+		}
+		return deleted
+	})
+}
+
+func (r *SessionRegistry) DeleteAllExceptPersisted(currentToken string) (int, error) {
+	currentHash := hashSessionSecret(currentToken)
+	return r.mutateAndPersistSessions(func() int {
+		deleted := 0
+		for tokenHash := range r.sessions {
+			if tokenHash == currentHash {
+				continue
+			}
+			delete(r.sessions, tokenHash)
+			delete(r.rawCSRF, tokenHash)
+			deleted++
+		}
+		return deleted
+	})
 }
