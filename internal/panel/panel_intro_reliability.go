@@ -12,6 +12,28 @@ func panelIntroReliableActionsJS() string {
       'apply-staged-files',`, `      'save-warp-config',
       'warp-enabled',
       'apply-staged-files',`, 1)
+	actions = strings.Replace(actions, `    async function staticTokenHasAdminAccess() {
+      if (!localStorage.getItem('veil_api_token')) return false;
+      try {
+        const response = await fetch('/api/version', { headers: authHeaders() });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }`, `    async function staticTokenHasAdminAccess() {
+      // This probe also detects the local no-user development mode, where the
+      // backend grants dev-anonymous administrator access without a static token.
+      try {
+        const response = await fetch('/api/version', {
+          headers: authHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }`, 1)
 	actions = strings.Replace(actions, `        if (data && data.authenticated) {
           setCurrentUserRole(data.role || '');
         } else if (await staticTokenHasAdminAccess()) {`, `        if (data && data.authenticated) {
