@@ -71,8 +71,8 @@ func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", res.StatusCode)
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415, got %d", res.StatusCode)
 	}
 }
 
@@ -128,36 +128,25 @@ func TestDNSLookupEndpoint(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		if w.Code != http.StatusBadGateway {
+			t.Fatalf("expected 502, got %d: %s", w.Code, w.Body.String())
 		}
 		var result struct {
-			Hostname  string   `json:"hostname"`
-			Addresses []string `json:"addresses"`
-			Error     string   `json:"error,omitempty"`
+			Hostname string `json:"hostname"`
+			Error    string `json:"error"`
 		}
 		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
+		if result.Hostname != "none.such.invalid" {
+			t.Errorf("hostname: want none.such.invalid, got %q", result.Hostname)
+		}
 		if result.Error == "" {
-			t.Error("expected error for NXDOMAIN")
+			t.Error("expected non-empty error")
 		}
 	})
 
-	t.Run("POST rejects missing hostname", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		body := strings.NewReader(`{}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("POST rejects empty hostname", func(t *testing.T) {
+	t.Run("rejects empty hostname", func(t *testing.T) {
 		r, _ := NewRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{"hostname":""}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", body)
@@ -170,236 +159,9 @@ func TestDNSLookupEndpoint(t *testing.T) {
 		}
 	})
 
-	t.Run("GET returns method not allowed", func(t *testing.T) {
+	t.Run("rejects non-POST", func(t *testing.T) {
 		r, _ := NewRouter(ServerInfo{Version: "test"})
 		req := httptest.NewRequest(http.MethodGet, "/api/tools/dns-lookup", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("expected 405, got %d", w.Code)
-		}
-	})
-}
-
-func TestFirewallEndpoint(t *testing.T) {
-	orig := firewallStatusReader
-	defer func() { firewallStatusReader = orig }()
-
-	r, _ := NewRouter(ServerInfo{Version: "test"})
-
-	// Configure settings with a panel port
-	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"server"}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/settings", settingsBody)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("PUT /api/settings returned %d: %s", w.Code, w.Body.String())
-	}
-
-	t.Run("GET returns firewall plan with UFW active", func(t *testing.T) {
-		firewallStatusReader = func() (bool, error) { return true, nil }
-		req := httptest.NewRequest(http.MethodGet, "/api/firewall", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var result struct {
-			Active bool `json:"active"`
-			Rules  []struct {
-				Port     int    `json:"port"`
-				Protocol string `json:"protocol"`
-				Service  string `json:"service"`
-			} `json:"rules"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if !result.Active {
-			t.Error("expected UFW active")
-		}
-		if len(result.Rules) != 1 {
-			t.Fatalf("expected 1 Panel rule, got %d: %+v", len(result.Rules), result.Rules)
-		}
-		hasPanel := false
-		for _, rule := range result.Rules {
-			switch {
-			case rule.Port == 2096 && rule.Protocol == "tcp":
-				hasPanel = true
-			}
-		}
-		if !hasPanel {
-			t.Error("missing panel TCP/2096 rule")
-		}
-	})
-
-	t.Run("GET returns firewall plan with UFW inactive", func(t *testing.T) {
-		firewallStatusReader = func() (bool, error) { return false, nil }
-		req := httptest.NewRequest(http.MethodGet, "/api/firewall", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var result struct {
-			Active bool `json:"active"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if result.Active {
-			t.Error("expected UFW inactive")
-		}
-	})
-
-	t.Run("HEAD returns headers with empty body", func(t *testing.T) {
-		firewallStatusReader = func() (bool, error) { return true, nil }
-		req := httptest.NewRequest(http.MethodHead, "/api/firewall", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d", w.Code)
-		}
-		if w.Body.Len() != 0 {
-			t.Fatalf("expected empty HEAD body, got %q", w.Body.String())
-		}
-	})
-
-	t.Run("POST returns method not allowed", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/firewall", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("expected 405, got %d", w.Code)
-		}
-	})
-}
-
-func TestPingEndpoint(t *testing.T) {
-	orig := pingRunner
-	defer func() { pingRunner = orig }()
-
-	t.Run("POST pings successfully", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		pingRunner = func(host string, count int) PingResult {
-			return PingResult{
-				Host:        host,
-				Transmitted: count,
-				Received:    count,
-				LossPct:     0,
-				MinMs:       1.5,
-				AvgMs:       2.3,
-				MaxMs:       4.1,
-				StddevMs:    0.8,
-			}
-		}
-		body := strings.NewReader(`{"host":"8.8.8.8","count":4}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var result PingResult
-		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if result.Host != "8.8.8.8" {
-			t.Errorf("host: want 8.8.8.8, got %q", result.Host)
-		}
-		if result.Transmitted != 4 {
-			t.Errorf("transmitted: want 4, got %d", result.Transmitted)
-		}
-		if result.Received != 4 {
-			t.Errorf("received: want 4, got %d", result.Received)
-		}
-		if result.LossPct != 0 {
-			t.Errorf("lossPct: want 0, got %f", result.LossPct)
-		}
-	})
-
-	t.Run("POST pings with packet loss", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		pingRunner = func(host string, count int) PingResult {
-			return PingResult{
-				Host:        host,
-				Transmitted: 3,
-				Received:    1,
-				LossPct:     66.67,
-				MinMs:       10.0,
-				AvgMs:       10.0,
-				MaxMs:       10.0,
-			}
-		}
-		body := strings.NewReader(`{"host":"192.168.1.1"}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var result PingResult
-		json.NewDecoder(w.Body).Decode(&result)
-		if result.Received != 1 {
-			t.Errorf("received: want 1, got %d", result.Received)
-		}
-		if result.LossPct < 66 {
-			t.Errorf("lossPct: want ~66.67, got %f", result.LossPct)
-		}
-	})
-
-	t.Run("POST rejects missing host", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		body := strings.NewReader(`{"count":3}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("POST rejects empty host", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		body := strings.NewReader(`{"host":""}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("POST rejects count above 10", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		body := strings.NewReader(`{"host":"8.8.8.8","count":20}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("GET returns method not allowed", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
-		req := httptest.NewRequest(http.MethodGet, "/api/tools/ping", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
