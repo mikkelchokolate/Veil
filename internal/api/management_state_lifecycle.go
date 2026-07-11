@@ -25,6 +25,9 @@ func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycl
 
 func newManagementState(info ServerInfo) *managementState {
 	keyPath := info.KeyPath
+	if keyPath == "" && info.StatePath != "" {
+		keyPath = filepath.Join(filepath.Dir(info.StatePath), "state.key")
+	}
 	if keyPath == "" {
 		if runtime.GOOS == "windows" {
 			pd := os.Getenv("ProgramData")
