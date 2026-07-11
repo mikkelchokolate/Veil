@@ -125,5 +125,5 @@ func panelIntroReliableActionsJS() string {
         }
       });
     }`, 1)
-	return actions
+	return actions + panelLocalePersistenceReliabilityJS()
 }
