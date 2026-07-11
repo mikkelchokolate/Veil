@@ -24,8 +24,9 @@ func TestServiceStatusRefreshesAreSingleFlightAndVisibilityAware(t *testing.T) {
 	actions := ServiceStatusActionsJS()
 	for _, want := range []string{
 		`let serviceStatusLoadInFlight = false;`,
+		`let serviceRestartInFlight = false;`,
 		`async function loadServiceStatus()`,
-		`if (serviceStatusLoadInFlight) return null;`,
+		`if (serviceStatusLoadInFlight || serviceRestartInFlight) return null;`,
 		`serviceStatusLoadInFlight = true;`,
 		`serviceStatusLoadInFlight = false;`,
 		`if (document.hidden || !dashboard || !dashboard.classList.contains('active')) return null;`,
@@ -53,7 +54,7 @@ func TestServiceRestartActionsRenderDynamicServiceEndpoints(t *testing.T) {
 		`/api/services/`,
 		`/restart`,
 		`confirm: true`,
-		`if (restarted) await loadServiceStatus()`,
+		`if (restarted) await fetchAndRenderServiceStatus()`,
 		`container.textContent = ''`,
 		`document.createElement('button')`,
 		`button.dataset.veilRestartService = actionName`,
