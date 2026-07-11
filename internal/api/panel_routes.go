@@ -76,7 +76,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
 				if setupRequired {
-					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath, locale)))
+					_, _ = w.Write([]byte(panel.ReliableSetupHTML(routes.BasePath, locale)))
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
