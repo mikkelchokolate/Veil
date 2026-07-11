@@ -112,6 +112,7 @@ func panelSettingsActionsJS() string {
           button.textContent = 'Generate';
           button.addEventListener('click', () => {
             input.value = randomPassword();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
           });
           row.appendChild(button);
           wrapper.appendChild(row);
