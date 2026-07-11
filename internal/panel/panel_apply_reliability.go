@@ -7,6 +7,8 @@ package panel
 func panelApplyReliabilityJS() string {
 	return `    let applyWorkflowInFlight = false;
     let applyMutationButtonsDisabled = true;
+    let applyConfigurationGeneration = 0;
+    let applyPlanCurrent = false;
 
     setApplyMutationButtonsDisabled = function(disabled) {
       applyMutationButtonsDisabled = Boolean(disabled);
@@ -33,8 +35,36 @@ func panelApplyReliabilityJS() string {
       setApplyMutationButtonsDisabled(applyMutationButtonsDisabled);
     }
 
+    function renderApplyPlanUnavailable(message) {
+      const warnings = document.getElementById('apply-safety-warnings');
+      if (warnings) warnings.textContent = message || veilT('apply.warningInvalid');
+      const body = document.getElementById('apply-file-diff-preview-body');
+      if (body) {
+        body.textContent = '';
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.textContent = veilT('apply.noOperations');
+        row.appendChild(cell);
+        body.appendChild(row);
+      }
+      renderApplyRuntimes(null);
+    }
+
+    function invalidateApplyPlan(message) {
+      applyPlanCurrent = false;
+      setApplyMutationButtonsDisabled(true);
+      renderApplyPlanUnavailable(message);
+    }
+
+    document.addEventListener('veil:configuration-changed', () => {
+      applyConfigurationGeneration += 1;
+      invalidateApplyPlan(veilT('apply.warningInvalid'));
+    });
+
     runApplyWorkflowCommand = async function(command) {
       if (applyWorkflowInFlight) return null;
+      const configurationGeneration = applyConfigurationGeneration;
       setApplyWorkflowBusy(true);
       try {
         const options = { method: 'POST' };
@@ -43,25 +73,19 @@ func panelApplyReliabilityJS() string {
           options.body = JSON.stringify(command.request);
         }
         const result = await loadJSON(command.path, 'apply-plan-output', options);
+        if (configurationGeneration !== applyConfigurationGeneration) {
+          invalidateApplyPlan(veilT('apply.warningInvalid'));
+          return result;
+        }
         if (result === null) {
-          setApplyMutationButtonsDisabled(true);
-          const warnings = document.getElementById('apply-safety-warnings');
-          if (warnings) warnings.textContent = veilT('apply.warningInvalid');
-          const body = document.getElementById('apply-file-diff-preview-body');
-          if (body) {
-            body.textContent = '';
-            const row = document.createElement('tr');
-            const cell = document.createElement('td');
-            cell.colSpan = 5;
-            cell.textContent = veilT('apply.noOperations');
-            row.appendChild(cell);
-            body.appendChild(row);
-          }
-          renderApplyRuntimes(null);
+          invalidateApplyPlan(veilT('apply.warningInvalid'));
           return null;
         }
         renderApplyRuntimes(result);
         renderApplySafePreview(result);
+        const plan = applyPlanFromResponse(result);
+        applyPlanCurrent = Boolean(plan && plan.valid === true);
+        if (!applyPlanCurrent) setApplyMutationButtonsDisabled(true);
         return result;
       } finally {
         setApplyWorkflowBusy(false);
@@ -83,6 +107,7 @@ func panelApplyReliabilityJS() string {
         limitInput.setCustomValidity('');
         return null;
       }
+      invalidateApplyPlan(veilT('apply.warningInvalid'));
       setApplyWorkflowBusy(true);
       try {
         return await loadJSON(applyHistoryPath(), 'apply-plan-output');
