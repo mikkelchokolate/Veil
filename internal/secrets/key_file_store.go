@@ -24,9 +24,9 @@ func NewKeyFileStore(path string) KeyFileStore { return KeyFileStore{Path: path}
 // LoadOrCreate reads a 32-byte key from path. If the file does not exist,
 // a new random key is written to a private temporary file, synced, and then
 // published without replacement. Concurrent creators therefore all return the
-// single key that won the exclusive publish. Modes 0600 (owner-only) and 0640
-// (owner plus group-read) are accepted as secure. Broader POSIX permissions
-// must be tightened to 0600 before the key is accepted.
+// single key that won the exclusive publish. Owner read is required; owner
+// write and group read are optional. Group write/execute and all other-user
+// permissions must be tightened to 0600 before the key is accepted.
 func (s KeyFileStore) LoadOrCreate() (*[KeySize]byte, error) {
 	key, err := s.load()
 	if err == nil {
@@ -62,7 +62,7 @@ func (s KeyFileStore) load() (*[KeySize]byte, error) {
 }
 
 func enforceKeyFilePermissions(path string, mode os.FileMode) error {
-	if runtime.GOOS == "windows" || mode == 0o600 || mode == 0o640 {
+	if runtime.GOOS == "windows" || secureKeyFilePermissions(mode) {
 		return nil
 	}
 	if err := chmodKeyFile(path, 0o600); err != nil {
@@ -76,6 +76,12 @@ func enforceKeyFilePermissions(path string, mode os.FileMode) error {
 		return fmt.Errorf("secrets: key file %s remains insecure after chmod: %04o", path, got)
 	}
 	return nil
+}
+
+func secureKeyFilePermissions(mode os.FileMode) bool {
+	// Allow 0400, 0440, 0600, and 0640. These all require owner read,
+	// optionally allow owner write and group read, and expose nothing else.
+	return mode&0o400 != 0 && mode&^os.FileMode(0o640) == 0
 }
 
 func (s KeyFileStore) create() (*[KeySize]byte, error) {
