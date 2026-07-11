@@ -72,6 +72,28 @@ func TestStartupKeyFailureSkipsStateLoadAndDisablesManagementAPI(t *testing.T) {
 	}
 }
 
+func TestCustomStatePathDefaultsKeyBesideState(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "custom", "state.json")
+	state := newManagementState(ServerInfo{
+		StatePath: statePath,
+		ApplyRoot: filepath.Join(root, "apply"),
+	})
+	if state.startupStateLoadFailed {
+		t.Fatal("custom state path failed to initialize its adjacent key")
+	}
+	wantKeyPath := filepath.Join(filepath.Dir(statePath), "state.key")
+	if state.keyPath != wantKeyPath {
+		t.Fatalf("key path=%q want %q", state.keyPath, wantKeyPath)
+	}
+	if state.cipher == nil {
+		t.Fatal("custom state path did not initialize an encryption cipher")
+	}
+	if _, err := os.Stat(wantKeyPath); err != nil {
+		t.Fatalf("stat adjacent key: %v", err)
+	}
+}
+
 func TestEphemeralRouterDoesNotFailClosedWhenDefaultKeyIsUnavailable(t *testing.T) {
 	root := t.TempDir()
 	blockedParent := filepath.Join(root, "not-a-directory")
