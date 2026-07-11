@@ -33,7 +33,9 @@ test('admin can create an inbound and build a valid apply plan', async ({ page }
   await expect(page.locator('#apply-live-configs')).toBeDisabled();
   await expect(page.locator('#reload-services')).toBeDisabled();
 
-  await page.locator('#add-inbound-btn').click({ force: true });
+  await page.locator('a[href="#inbounds"]').click();
+  await expect(page.locator('#add-inbound-btn')).toBeVisible();
+  await page.locator('#add-inbound-btn').click();
   await expect(page.locator('#inbound-modal-overlay')).toHaveAttribute('aria-hidden', 'false');
 
   await page.locator('#inbound-name').fill('browser-mieru');
@@ -55,7 +57,7 @@ test('admin can create an inbound and build a valid apply plan', async ({ page }
   const planResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/apply/plan') && response.request().method() === 'POST'
   );
-  await page.locator('#build-apply-plan').click({ force: true });
+  await page.locator('#build-apply-plan').click();
   const planResponse = await planResponsePromise;
   expect(planResponse.status()).toBe(200);
   const plan = await planResponse.json();
