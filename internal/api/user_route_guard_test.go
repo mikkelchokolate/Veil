@@ -125,6 +125,46 @@ func TestUserRouteGuardRejectsUnsafeCreateUsername(t *testing.T) {
 	}
 }
 
+func TestUserRouteGuardRejectsShortPasswords(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{
+			name:   "create",
+			method: http.MethodPost,
+			path:   "/api/users",
+			body:   `{"username":"bob","password":"short","role":"viewer","locale":"en"}`,
+		},
+		{
+			name:   "update",
+			method: http.MethodPut,
+			path:   "/api/users/alice",
+			body:   `{"password":"short","role":"admin","locale":"en"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := userRouteTestState(t)
+			req := adminUserRouteRequest(tc.method, tc.path, tc.body)
+			rec := httptest.NewRecorder()
+
+			state.handleUsersRouteWithAdminInvariant(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "password must be at least 12 characters") {
+				t.Fatalf("unexpected body: %s", rec.Body.String())
+			}
+			if len(state.users) != 1 || state.users[0].PasswordHash != "hash" {
+				t.Fatalf("short password mutated users: %+v", state.users)
+			}
+		})
+	}
+}
+
 func TestUserRouteGuardPreservesUnsupportedMediaTypeResponse(t *testing.T) {
 	state := userRouteTestState(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(`{"username":"bad/name"}`))
