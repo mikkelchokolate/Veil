@@ -84,7 +84,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath, locale)))
+					_, _ = w.Write([]byte(panel.ReliableLoginHTML(routes.BasePath, locale)))
 					return
 				}
 			}
