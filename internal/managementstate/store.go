@@ -65,18 +65,7 @@ func (s Store) Save(snapshot model.ManagementSnapshot) error {
 		prev = &fileInfo{uid: fileOwnerUID(fi), gid: fileOwnerGID(fi), mode: fi.Mode().Perm()}
 	}
 
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		return err
-	}
-	if prev != nil {
-		_ = os.Chmod(s.path, prev.mode)
-		_ = os.Chown(s.path, prev.uid, prev.gid)
-	}
-	return nil
+	return writeStoreFileAtomic(s.path, body, prev)
 }
 
 type fileInfo struct {
