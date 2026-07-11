@@ -23,7 +23,7 @@ func (s *managementState) handleEffectiveAuthStatus(w http.ResponseWriter, r *ht
 	}
 	if cookie, err := r.Cookie("veil_session"); err == nil {
 		if _, ok := s.sessionRegistry().Get(cookie.Value); ok {
-			s.handleAuthStatus(w, r)
+			s.handlePersistentAuthStatus(w, r)
 			return
 		}
 	}
@@ -40,5 +40,5 @@ func (s *managementState) handleEffectiveAuthStatus(w http.ResponseWriter, r *ht
 		})
 		return
 	}
-	s.handleAuthStatus(w, r)
+	s.handlePersistentAuthStatus(w, r)
 }
