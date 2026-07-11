@@ -21,7 +21,18 @@ func (s *managementState) handleLogoutWithSettingsSnapshot(w http.ResponseWriter
 		if session, ok := s.sessionRegistry().Get(cookie.Value); ok {
 			actor, role = session.Username, session.Role
 		}
-		s.sessionRegistry().Delete(cookie.Value)
+		if _, deleteErr := s.sessionRegistry().DeleteTokenPersisted(cookie.Value); deleteErr != nil {
+			s.recordRequestAudit(r, audit.Record{
+				Actor:   actor,
+				Role:    role,
+				Action:  "auth.logout",
+				Target:  "panel",
+				Success: false,
+				Error:   deleteErr.Error(),
+			})
+			writeError(w, "failed to persist logout", http.StatusInternalServerError)
+			return
+		}
 		s.recordRequestAudit(r, audit.Record{
 			Actor:   actor,
 			Role:    role,
