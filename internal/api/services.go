@@ -50,6 +50,10 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		writeError(w, "confirm=true is required", http.StatusBadRequest)
 		return
 	}
+	if !s.beginServiceAction(w) {
+		return
+	}
+	defer s.serviceActionMu.Unlock()
 
 	resp := ServiceActionResponse{Service: name, Action: action}
 	if s.privileged == nil {
