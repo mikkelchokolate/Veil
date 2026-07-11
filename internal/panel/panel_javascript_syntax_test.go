@@ -15,10 +15,11 @@ func TestRenderedPanelJavaScriptParsesWithNode(t *testing.T) {
 		t.Skip("node is unavailable; skipping rendered JavaScript syntax gate")
 	}
 
+	panelHTML := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
 	pages := map[string]string{
-		"panel": NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML(),
-		"login": LoginHTML("/", LocaleEnglish),
-		"setup": SetupHTML("/", LocaleEnglish),
+		"panel": AuthenticationExpiryReliableHTML(StorageReliableHTML(panelHTML)),
+		"login": ReliableLoginHTML("/", LocaleEnglish),
+		"setup": ReliableSetupHTML("/", LocaleEnglish),
 	}
 
 	for name, html := range pages {
