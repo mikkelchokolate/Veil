@@ -52,7 +52,9 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "runtime-stats",
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML},
-				{Placeholder: panelRuntimeStatsActionsPlaceholder, Render: func() string { return panelRuntimeStatsActionsJS() + panelRuntimeStatsVisibilityJS() }},
+				{Placeholder: panelRuntimeStatsActionsPlaceholder, Render: func() string {
+					return panelRuntimeStatsActionsJS() + panelRuntimeStatsVisibilityJS() + panelRuntimeStatsRequestReliabilityJS()
+				}},
 			},
 		},
 		{
@@ -154,7 +156,7 @@ func (c SliceCatalog) Slices() []Slice {
 		},
 		{
 			Name:        "utility",
-			RenderSlots: []RenderSlot{{Placeholder: panelUtilityActionsPlaceholder, Render: panelUtilityActionsJS}, {Placeholder: EventBindingsPlaceholder, Render: func() string { return EventBindingsJS(c.EventBindings()) }}},
+			RenderSlots: []RenderSlot{{Placeholder: panelUtilityActionsPlaceholder, Render: panelUtilityActionsJS}, {Placeholder: EventBindingsPlaceholder, Render: func() string { return EventBindingsJS(c.EventBindings()) }},
 		},
 	}
 }
