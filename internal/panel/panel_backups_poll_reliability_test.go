@@ -7,8 +7,14 @@ import (
 
 func TestPanelBackupRestorePollingRetriesUntilTerminalState(t *testing.T) {
 	actions := BackupsActionsJS()
+	marker := `const baseSetBackupControlsDisabled = setBackupControlsDisabled;`
+	start := strings.Index(actions, marker)
+	if start < 0 {
+		t.Fatalf("backup restore polling reliability missing %q", marker)
+	}
+	reliability := actions[start:]
 	for _, want := range []string{
-		`const baseSetBackupControlsDisabled = setBackupControlsDisabled;`,
+		marker,
 		`refreshButton.disabled = Boolean(disabled) || isViewerRole();`,
 		`pollBackupRestore = async function(id, generation)`,
 		`while (generation === backupRestorePollGeneration)`,
@@ -19,12 +25,12 @@ func TestPanelBackupRestorePollingRetriesUntilTerminalState(t *testing.T) {
 		`Invalid backup restore status response.`,
 		`clearStoredPanelIdentity();`,
 	} {
-		if !strings.Contains(actions, want) {
+		if !strings.Contains(reliability, want) {
 			t.Fatalf("backup restore polling reliability missing %q", want)
 		}
 	}
-	if strings.Contains(actions, `for (let attempt = 0; attempt < 120; attempt += 1)`) {
-		t.Fatal("backup restore polling still releases the UI lock after a fixed timeout")
+	if strings.Contains(reliability, `for (let attempt = 0; attempt < 120; attempt += 1)`) {
+		t.Fatal("backup restore polling override still releases the UI lock after a fixed timeout")
 	}
 }
 
