@@ -92,7 +92,7 @@ func newManagementState(info ServerInfo) *managementState {
 	sessionRegistry, err := NewSessionRegistry(sessionPath)
 	if err != nil {
 		log.Printf("error loading Panel sessions from %s: %v", sessionPath, err)
-		sessionRegistry = mustNewSessionRegistry("")
+		sessionRegistry = newSessionRegistryWithoutLoad(sessionPath)
 	}
 	state.sessions = sessionRegistry
 	if info.StatePath != "" {
