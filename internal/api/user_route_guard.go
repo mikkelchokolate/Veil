@@ -121,7 +121,11 @@ func (s *managementState) handleUsersRouteWithAdminInvariant(w http.ResponseWrit
 		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 		return
 	}
-	if r.Method == http.MethodPut && !validateUserMutationBody(w, r, false) {
+	if r.Method == http.MethodPut {
+		if !validateUserMutationBody(w, r, false) {
+			return
+		}
+		s.handleAtomicUserUpdate(w, r)
 		return
 	}
 
