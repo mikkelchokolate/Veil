@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 )
 
 type KeyFileStore struct {
@@ -47,6 +48,9 @@ func (s KeyFileStore) create() (*[KeySize]byte, error) {
 	var key [KeySize]byte
 	if _, err := randRead(key[:]); err != nil {
 		return nil, fmt.Errorf("secrets: generate key: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
+		return nil, fmt.Errorf("secrets: create key directory %s: %w", filepath.Dir(s.Path), err)
 	}
 	if err := os.WriteFile(s.Path, key[:], 0o600); err != nil {
 		return nil, fmt.Errorf("secrets: write key file %s: %w", s.Path, err)
