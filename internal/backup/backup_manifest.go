@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 // manifestMarshal is overridable in tests to inject marshal failures.
@@ -28,7 +30,7 @@ func (s ManifestStore) Save(manifest Manifest) error {
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
-	if err := os.WriteFile(s.Path, manifestData, 0o600); err != nil {
+	if err := atomicfile.Write(s.Path, manifestData, 0o600, 0o700); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 	return nil
