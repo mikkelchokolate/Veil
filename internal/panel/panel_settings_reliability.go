@@ -47,7 +47,7 @@ func panelSettingsReliabilityJS() string {
     }
 
     loadSettingsIntoForm = async function() {
-      if (!document.getElementById('settings-form')) return null;
+      if (!document.getElementById('settings-form') || settingsSaveInFlight) return null;
       invalidateSettingsLoad();
       const generation = ++settingsLoadGeneration;
       const controller = new AbortController();
@@ -79,7 +79,7 @@ func panelSettingsReliabilityJS() string {
         return null;
       } finally {
         if (settingsLoadController === controller) settingsLoadController = null;
-        if (loadButton && generation === settingsLoadGeneration && !settingsSaveInFlight) loadButton.disabled = false;
+        if (loadButton && generation === settingsLoadGeneration) loadButton.disabled = false;
       }
     };
 
