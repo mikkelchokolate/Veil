@@ -53,9 +53,9 @@ test('admin can stage a disabled inbound and build a valid apply plan', async ({
   const createResponse = await createResponsePromise;
   expect(createResponse.status()).toBe(201);
 
-  await expect(page.locator('#inbounds-tbody')).toContainText('browser-mieru');
-  await expect(page.locator('#inbounds-tbody')).toContainText('18443');
-  await expect(page.locator('#inbounds-tbody')).toContainText(/disabled/i);
+  const inboundRow = page.locator('#inbounds-tbody tr').filter({ hasText: 'browser-mieru' });
+  await expect(inboundRow).toContainText('18443');
+  await expect(inboundRow.locator('input[type="checkbox"]')).not.toBeChecked();
 
   await page.locator('a[href="#dashboard"]').click();
   await expect(page.locator('#build-apply-plan')).toBeVisible();
