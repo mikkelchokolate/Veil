@@ -116,6 +116,12 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if applyRequiresServiceActionLock(req) {
+		if !s.beginServiceAction(w) {
+			return
+		}
+		defer s.serviceActionMu.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
