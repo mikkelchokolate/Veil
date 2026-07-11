@@ -57,6 +57,9 @@ func (a *LocalAdapter) Journal(ctx context.Context, request JournalRequest) (Jou
 }
 
 func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (BackupResult, error) {
+	if err := validateBackupRequest(request); err != nil {
+		return BackupResult{}, err
+	}
 	resolved, err := a.policy.ResolveBackup(request)
 	if err != nil {
 		return BackupResult{}, err
