@@ -52,7 +52,7 @@ func TestBackupAdapterAllowsRetentionBoundaries(t *testing.T) {
 	})
 	_, err := adapter.Backup(context.Background(), BackupRequest{
 		Action: BackupActionPrune,
-		Daily: 365, Weekly: 104, Monthly: 120,
+		Daily:  365, Weekly: 104, Monthly: 120,
 	})
 	if err != nil {
 		t.Fatalf("Backup: %v", err)
