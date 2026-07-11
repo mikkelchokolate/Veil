@@ -45,6 +45,34 @@ func TestPanelAuthStatusRefreshesSessionIdentityTokens(t *testing.T) {
 	}
 }
 
+func TestPanelLogoutPreservesLocalSessionWhenServerLogoutFails(t *testing.T) {
+	js := panelIntroReliableActionsJS()
+	for _, want := range []string{
+		`let logoutInFlight = false;`,
+		`if (logoutInFlight) return;`,
+		`credentials: 'same-origin',`,
+		`const text = await response.text();`,
+		`if (!response.ok) {`,
+		`throw new Error(formatAPIError(text, response.status));`,
+		`logoutInFlight = false;`,
+		`logoutBtn.disabled = false;`,
+		`alert(veilT('status.requestFailed', {`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("logout reliability missing %q", want)
+		}
+	}
+	if strings.Contains(js, `        } catch (_) {}
+        invalidateCurrentUserRoleRefresh();`) {
+		t.Fatal("logout still discards server failures before clearing local identity")
+	}
+
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	if strings.Count(html, `let logoutInFlight = false;`) != 1 {
+		t.Fatal("rendered Panel does not mount the reliable logout handler exactly once")
+	}
+}
+
 func TestPanelLogoutAndSelfIdentityResetClearStaticToken(t *testing.T) {
 	intro := panelIntroActionsJS()
 	if count := strings.Count(intro, `localStorage.removeItem('veil_api_token');`); count < 2 {
