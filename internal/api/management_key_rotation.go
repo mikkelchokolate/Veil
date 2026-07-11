@@ -40,7 +40,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		writeError(w, "state key rotated but Panel reload failed", http.StatusInternalServerError)
 		return
 	}
-	revoked, err := s.sessionRegistry().DeleteAllExcept(currentSessionToken(r))
+	revoked, err := s.sessionRegistry().DeleteAllExceptPersisted(currentSessionToken(r))
 	if err != nil {
 		writeError(w, "state key rotated but sessions could not be revoked", http.StatusInternalServerError)
 		return

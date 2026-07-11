@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -61,23 +63,31 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 	}
 	var updated model.User
 	err := s.withMutation(func(mutation managementstate.Mutation) error {
+		users := mutation.Users()
 		found := false
-		for _, user := range mutation.Users() {
+		currentRole := ""
+		adminCount := 0
+		for _, user := range users {
+			if user.Role == "admin" {
+				adminCount++
+			}
 			if user.Username == username {
 				found = true
-				break
+				currentRole = user.Role
 			}
 		}
 		if !found {
 			return errUserNotFound
 		}
+		if currentRole == "admin" && req.Role != "admin" && adminCount <= 1 {
+			return managementstate.ErrLastAdministrator
+		}
+		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
+			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
+		}
 		var updateErr error
 		updated, updateErr = mutation.UpdateUser(username, update)
-		if updateErr != nil {
-			return updateErr
-		}
-		_, _ = s.sessionRegistry().DeleteByUsername(username)
-		return nil
+		return updateErr
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
@@ -86,6 +96,10 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 			Success: false,
 			Error:   err.Error(),
 		})
+		if errors.Is(err, errSessionRevocationPersistence) {
+			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
+			return
+		}
 		switch err {
 		case errUserNotFound:
 			writeNotFound(w)
