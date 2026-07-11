@@ -53,7 +53,12 @@ func (w *bufferedResponseWriter) flushTo(dst http.ResponseWriter) {
 	_, _ = dst.Write(w.body.Bytes())
 }
 
-func validateUserCreateUsername(w http.ResponseWriter, r *http.Request) bool {
+type userMutationPreview struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func validateUserMutationBody(w http.ResponseWriter, r *http.Request, requireUsername bool) bool {
 	if contentType := r.Header.Get("Content-Type"); contentType != "" && !isJSONMediaType(contentType) {
 		// Preserve canonical 415 handling in decodeJSONRequest.
 		return true
@@ -68,15 +73,17 @@ func validateUserCreateUsername(w http.ResponseWriter, r *http.Request) bool {
 		// Leave canonical oversized-body handling to decodeJSONRequest.
 		return true
 	}
-	var request struct {
-		Username string `json:"username"`
-	}
-	if err := json.Unmarshal(body, &request); err != nil || request.Username == "" {
-		// Preserve the canonical invalid JSON / required-field response.
+	var request userMutationPreview
+	if err := json.Unmarshal(body, &request); err != nil {
+		// Preserve the canonical invalid JSON response.
 		return true
 	}
-	if !validSetupUsername(request.Username) {
+	if requireUsername && request.Username != "" && !validSetupUsername(request.Username) {
 		writeError(w, "username must be 3-64 characters using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
+		return false
+	}
+	if request.Password != "" && len(request.Password) < 12 {
+		writeError(w, "password must be at least 12 characters", http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -94,7 +101,7 @@ func (s *managementState) handleUsersRouteWithAdminInvariant(w http.ResponseWrit
 			s.handleUsersRoute(w, r)
 			return
 		case http.MethodPost:
-			if validateUserCreateUsername(w, r) {
+			if validateUserMutationBody(w, r, true) {
 				s.handleUsersRoute(w, r)
 			}
 			return
@@ -110,6 +117,9 @@ func (s *managementState) handleUsersRouteWithAdminInvariant(w http.ResponseWrit
 	}
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
 		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
+		return
+	}
+	if r.Method == http.MethodPut && !validateUserMutationBody(w, r, false) {
 		return
 	}
 
