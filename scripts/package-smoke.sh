@@ -3,13 +3,22 @@ set -euo pipefail
 
 version_old="${VEIL_SMOKE_OLD_VERSION:-0.0.1}"
 version_new="${VEIL_SMOKE_NEW_VERSION:-0.0.2}"
+binary_version="${VEIL_SMOKE_BINARY_VERSION:-package-smoke}"
+goarch="${VEIL_GOARCH:-amd64}"
 arch="${VEIL_ARCH:-amd64}"
 maintainer="${VEIL_MAINTAINER:-Veil CI <veil@users.noreply.github.com>}"
 root="${VEIL_SMOKE_ROOT:-dist/package-smoke}"
 
 command -v docker >/dev/null 2>&1 || { echo 'docker is required' >&2; exit 1; }
 command -v nfpm >/dev/null 2>&1 || { echo 'nfpm is required' >&2; exit 1; }
-test -x dist/veil || { echo 'dist/veil must be built first' >&2; exit 1; }
+command -v go >/dev/null 2>&1 || { echo 'go is required' >&2; exit 1; }
+
+# Native packages must carry one portable Linux binary. Rebuild it here so the
+# package gate cannot accidentally validate a host-linked glibc executable that
+# fails at runtime in Alpine despite packaging successfully.
+mkdir -p dist
+CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" \
+  go build -trimpath -ldflags "-s -w -X main.version=${binary_version}" -o dist/veil ./cmd/veil
 
 rm -rf "${root}"
 mkdir -p "${root}/old" "${root}/new"
