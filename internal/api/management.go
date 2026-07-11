@@ -59,7 +59,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backups/", s.handleBackupByName)
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
-	mux.HandleFunc("/api/users", s.handleUsersRoute)
+	mux.HandleFunc("/api/users", s.handleUsersRouteWithAdminInvariant)
 	mux.HandleFunc("/api/users/", s.handleUsersRouteWithAdminInvariant)
 }
 
@@ -116,49 +116,5 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 		Inbounds:  s.inbounds,
 		Rules:     s.rules,
 		Warp:      s.warp,
-	})
-}
-
-func (s *managementState) snapshotLocked() managementSnapshot {
-	return NewManagementStateLifecycle(s).SnapshotLocked()
-}
-
-func (s *managementState) encryptSnapshot(snapshot *managementSnapshot) error {
-	return managementstate.EncryptSnapshot(snapshot, s.cipher)
-}
-
-func (s *managementState) decryptSnapshot(snapshot *managementSnapshot) error {
-	return managementstate.DecryptSnapshot(snapshot, s.cipher)
-}
-
-func (s *managementState) load() error {
-	return NewManagementStateLifecycle(s).Load()
-}
-
-// Reload re-reads the management state and encryption key from disk.
-// It locks the state mutex during the reload. Returns an error if the
-// state file or key file cannot be read, but leaves the previous state
-// intact on failure.
-func (s *managementState) Reload() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return NewManagementStateLifecycle(s).ReloadLocked()
-}
-
-func (s *managementState) saveLocked() error {
-	return NewManagementStateLifecycle(s).SaveLocked()
-}
-
-func (s *managementState) logUserAction(r *http.Request, action string, target string, success bool, details string) {
-	eventDetails := map[string]any(nil)
-	if details != "" {
-		eventDetails = map[string]any{"message": details}
-	}
-	s.recordRequestAudit(r, audit.Record{
-		Action:  action,
-		Target:  target,
-		Success: success,
-		Details: eventDetails,
 	})
 }
