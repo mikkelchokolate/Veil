@@ -117,7 +117,7 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func panelHTMLForCatalog(basePath string, csrfToken string, locale string, catalog ManagedRuntimeCatalog) string {
-	return panel.StorageReliableHTML(panel.NewRenderer(panel.NewSliceCatalog(catalog.Runtimes()).RenderSlots()).HTML(basePath, panel.EscapeJavaScriptString(csrfToken), locale))
+	return panel.AuthenticationExpiryReliableHTML(panel.StorageReliableHTML(panel.NewRenderer(panel.NewSliceCatalog(catalog.Runtimes()).RenderSlots()).HTML(basePath, panel.EscapeJavaScriptString(csrfToken), locale)))
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
