@@ -23,8 +23,9 @@ test('invalid login remains recoverable', async ({ page }) => {
   await expect(page.locator('#login-submit')).toBeEnabled();
 });
 
-test('admin can stage a disabled inbound and build a valid apply plan', async ({ page }) => {
+test('admin can stage a disabled inbound and build a valid apply plan', async ({ page }, testInfo) => {
   const pageErrors = [];
+  const inboundName = `browser-mieru-${testInfo.retry}`;
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await login(page);
@@ -38,10 +39,10 @@ test('admin can stage a disabled inbound and build a valid apply plan', async ({
   await page.locator('#add-inbound-btn').click();
   await expect(page.locator('#inbound-modal-overlay')).toHaveAttribute('aria-hidden', 'false');
 
-  await page.locator('#inbound-name').fill('browser-mieru');
+  await page.locator('#inbound-name').fill(inboundName);
   await page.locator('#inbound-protocol').selectOption('mieru');
   await page.locator('#inbound-transport').selectOption('tcp');
-  await page.locator('#inbound-port').fill('18443');
+  await page.locator('#inbound-port').fill(String(18443 + testInfo.retry));
   await page.locator('#inbound-password').fill('browser-mieru-password');
   await page.locator('#inbound-enabled + .slider').click();
   await expect(page.locator('#inbound-enabled')).not.toBeChecked();
@@ -53,11 +54,11 @@ test('admin can stage a disabled inbound and build a valid apply plan', async ({
   const createResponse = await createResponsePromise;
   expect(createResponse.status()).toBe(201);
 
-  const inboundRow = page.locator('#inbounds-tbody tr').filter({ hasText: 'browser-mieru' });
-  await expect(inboundRow).toContainText('18443');
+  const inboundRow = page.locator('#inbounds-tbody tr').filter({ hasText: inboundName });
+  await expect(inboundRow).toContainText(String(18443 + testInfo.retry));
   await expect(inboundRow.locator('input[type="checkbox"]')).not.toBeChecked();
 
-  await page.locator('a[href="#dashboard"]').click();
+  await page.locator('a[href="#diagnostics"]').click();
   await expect(page.locator('#build-apply-plan')).toBeVisible();
   const planResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/apply/plan') && response.request().method() === 'POST'
