@@ -3,6 +3,7 @@ package panel
 func panelSettingsReliabilityJS() string {
 	return `
     let settingsLoadGeneration = 0;
+    let settingsLoadController = null;
     let settingsSaveInFlight = false;
 
     function setSettingsControlsDisabled(disabled) {
@@ -10,6 +11,16 @@ func panelSettingsReliabilityJS() string {
       if (saveButton) saveButton.disabled = Boolean(disabled) || isViewerRole();
       const loadButton = document.getElementById('load-settings');
       if (loadButton) loadButton.disabled = Boolean(disabled);
+    }
+
+    function invalidateSettingsLoad() {
+      settingsLoadGeneration += 1;
+      if (settingsLoadController) {
+        settingsLoadController.abort();
+        settingsLoadController = null;
+      }
+      const loadButton = document.getElementById('load-settings');
+      if (loadButton && !settingsSaveInFlight) loadButton.disabled = false;
     }
 
     async function applySettingsData(data, generation) {
@@ -37,13 +48,16 @@ func panelSettingsReliabilityJS() string {
 
     loadSettingsIntoForm = async function() {
       if (!document.getElementById('settings-form')) return null;
+      invalidateSettingsLoad();
       const generation = ++settingsLoadGeneration;
+      const controller = new AbortController();
+      settingsLoadController = controller;
       const output = document.getElementById('settings-output');
       const loadButton = document.getElementById('load-settings');
       if (loadButton) loadButton.disabled = true;
       if (output) output.textContent = veilT('status.loadingPath', { path: '/api/settings' });
       try {
-        const response = await fetch('/api/settings', { headers: authHeaders() });
+        const response = await fetch('/api/settings', { headers: authHeaders(), signal: controller.signal });
         const text = await response.text();
         if (generation !== settingsLoadGeneration) return null;
         if (!response.ok) {
@@ -58,12 +72,14 @@ func panelSettingsReliabilityJS() string {
         await applySettingsData(data, generation);
         return data;
       } catch (error) {
+        if (error && error.name === 'AbortError') return null;
         if (generation === settingsLoadGeneration && output) {
           output.textContent = veilT('status.requestFailed', { error: String(error && error.message ? error.message : error) });
         }
         return null;
       } finally {
-        if (loadButton && generation === settingsLoadGeneration) loadButton.disabled = false;
+        if (settingsLoadController === controller) settingsLoadController = null;
+        if (loadButton && generation === settingsLoadGeneration && !settingsSaveInFlight) loadButton.disabled = false;
       }
     };
 
@@ -75,6 +91,7 @@ func panelSettingsReliabilityJS() string {
         form.reportValidity();
         return null;
       }
+      invalidateSettingsLoad();
       settingsSaveInFlight = true;
       const generation = ++settingsLoadGeneration;
       setSettingsControlsDisabled(true);
@@ -104,6 +121,7 @@ func panelSettingsReliabilityJS() string {
         if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
           throw new Error('Invalid settings response.');
         }
+        window.cachedSettings = saved;
         if (output) output.textContent = JSON.stringify(saved, null, 2);
         notifyPanelConfigurationChanged('/api/settings');
         await applySettingsData(saved, generation);
@@ -117,5 +135,10 @@ func panelSettingsReliabilityJS() string {
         applyViewerRoleGuard();
       }
     };
+
+    const settingsFormForReliability = document.getElementById('settings-form');
+    if (settingsFormForReliability) {
+      settingsFormForReliability.addEventListener('input', invalidateSettingsLoad);
+    }
 `
 }
