@@ -99,7 +99,9 @@ func TestPanelInboundActionsDebounceAndCancelLiveValidation(t *testing.T) {
 		`veilValidationIssueText(issue)`,
 		`saveButton.disabled`,
 		`form.addEventListener('input', scheduleInboundValidation)`,
-		`form.addEventListener('change', scheduleInboundValidation)`,
+		`function scheduleInboundValidationForChange(event)`,
+		`target.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')`,
+		`form.addEventListener('change', scheduleInboundValidationForChange)`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Inbound validation actions missing %q", want)
