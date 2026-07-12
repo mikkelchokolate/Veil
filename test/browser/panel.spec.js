@@ -107,9 +107,10 @@ test('invalid login remains recoverable', async ({ page }) => {
 
 test('admin inbound lifecycle invalidates stale apply plans', async ({ page }, testInfo) => {
   const assertNoBrowserFailures = watchBrowserFailures(page);
-  const inboundName = `browser-mieru-${testInfo.retry}`;
-  const initialPort = 18443 + testInfo.retry;
-  const updatedPort = 19443 + testInfo.retry;
+  const runIndex = (testInfo.repeatEachIndex * 2) + testInfo.retry;
+  const inboundName = `browser-mieru-${testInfo.repeatEachIndex}-${testInfo.retry}`;
+  const initialPort = 18443 + runIndex;
+  const updatedPort = 19443 + runIndex;
 
   await login(page, adminUsername, adminPassword, 'admin');
 
@@ -126,8 +127,9 @@ test('admin inbound lifecycle invalidates stale apply plans', async ({ page }, t
   await page.locator('#inbound-transport').selectOption('tcp');
   await page.locator('#inbound-port').fill(String(initialPort));
   await page.locator('#inbound-password').fill('browser-mieru-password');
-  await page.locator('#inbound-enabled + .slider').click();
-  await expect(page.locator('#inbound-enabled')).not.toBeChecked();
+  const enabled = page.locator('#inbound-enabled');
+  await enabled.locator('..').click();
+  await expect(enabled).not.toBeChecked();
   await expect(page.locator('#save-inbound')).toBeEnabled();
 
   const createResponsePromise = page.waitForResponse((response) =>

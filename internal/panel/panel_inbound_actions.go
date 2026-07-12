@@ -193,6 +193,14 @@ func panelInboundActionsJS() string {
       inboundValidationTimer = setTimeout(validateInboundCandidate, inboundValidationDebounceMs);
     }
 
+    function scheduleInboundValidationForChange(event) {
+      const target = event && event.target;
+      if (target && target.matches && target.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) {
+        return;
+      }
+      scheduleInboundValidation();
+    }
+
     window.openAddInboundModal = function() {
       window.inboundEditorMode = 'add';
       window.inboundEditorOriginalName = '';
@@ -585,7 +593,7 @@ func panelInboundActionsJS() string {
       const form = document.getElementById('inbound-form');
       if (form) {
         form.addEventListener('input', scheduleInboundValidation);
-        form.addEventListener('change', scheduleInboundValidation);
+        form.addEventListener('change', scheduleInboundValidationForChange);
       }
       setTimeout(loadInboundsIntoOutput, 500);
     });`
