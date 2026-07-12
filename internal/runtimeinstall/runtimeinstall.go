@@ -320,13 +320,20 @@ func installFromSource(ctx context.Context, opts Options, runtime Runtime) (stri
 	if err := opts.GoInstall(ctx, opts.BinDir, runtime.SourcePackage); err != nil {
 		return "", err
 	}
-	return filepath.Join(opts.BinDir, runtime.Binary), nil
+	path := filepath.Join(opts.BinDir, runtime.Binary)
+	if err := os.Chmod(path, 0o755); err != nil {
+		return "", fmt.Errorf("set executable permissions on %s: %w", runtime.Binary, err)
+	}
+	return path, nil
 }
 
 func installCaddyNaive(ctx context.Context, opts Options, runtime Runtime) (string, error) {
 	path := filepath.Join(opts.BinDir, runtime.Binary)
 	if err := opts.BuildCaddy(ctx, path); err != nil {
 		return "", err
+	}
+	if err := os.Chmod(path, 0o755); err != nil {
+		return "", fmt.Errorf("set executable permissions on %s: %w", runtime.Binary, err)
 	}
 	return path, nil
 }

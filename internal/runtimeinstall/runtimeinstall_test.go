@@ -77,7 +77,10 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 		Arch:   "amd64",
 		BuildCaddy: func(ctx context.Context, outPath string) error {
 			gotOutPath = outPath
-			return os.WriteFile(outPath, []byte("caddy-with-forwardproxy"), 0o755)
+			// Source builds inherit the caller's umask. Simulate a hardened root
+			// environment so Install must make the runtime executable by the
+			// non-root veil service account.
+			return os.WriteFile(outPath, []byte("caddy-with-forwardproxy"), 0o700)
 		},
 	}
 
@@ -92,6 +95,13 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 	body, _ := os.ReadFile(wantPath)
 	if string(body) != "caddy-with-forwardproxy" {
 		t.Fatalf("installed binary = %q", string(body))
+	}
+	info, err := os.Stat(wantPath)
+	if err != nil {
+		t.Fatalf("stat installed binary: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Fatalf("installed Caddy mode = %o, want 755", got)
 	}
 }
 
@@ -334,7 +344,7 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 		GoInstall: func(ctx context.Context, binDirArg, sourcePackage string) error {
 			gotBinDir = binDirArg
 			gotPackage = sourcePackage
-			return os.WriteFile(filepath.Join(binDirArg, "olcrtc"), []byte("built"), 0o755)
+			return os.WriteFile(filepath.Join(binDirArg, "olcrtc"), []byte("built"), 0o700)
 		},
 	}
 
@@ -347,6 +357,13 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 	}
 	if gotPackage != "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest" {
 		t.Fatalf("go install package = %q", gotPackage)
+	}
+	info, err := os.Stat(filepath.Join(binDir, "olcrtc"))
+	if err != nil {
+		t.Fatalf("stat installed binary: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Fatalf("installed olcrtc mode = %o, want 755", got)
 	}
 }
 
