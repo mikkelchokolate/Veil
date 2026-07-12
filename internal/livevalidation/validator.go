@@ -130,7 +130,9 @@ func (v Validator) validateInbound(
 			))
 		}
 
-		if v.Ports != nil && !ownedBinding(inbound, request.CurrentInbounds) {
+		if v.Ports != nil &&
+			!ownedBinding(inbound, request.CurrentInbounds) &&
+			!ownedPanelCaddyBinding(request.Settings, inbound) {
 			available, err := v.Ports.Available(ctx, inbound.Transport, inbound.Port)
 			if err != nil {
 				issues = append(issues, issue(
@@ -304,6 +306,13 @@ func ownedBinding(candidate model.Inbound, current []model.Inbound) bool {
 		}
 	}
 	return false
+}
+
+func ownedPanelCaddyBinding(settings model.Settings, candidate model.Inbound) bool {
+	return settings.PanelAccess == "caddy" &&
+		candidate.Protocol == "naiveproxy" &&
+		candidate.Transport == "tcp" &&
+		candidate.Port == 443
 }
 
 func bindingKey(transport string, port int) string {
