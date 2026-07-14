@@ -197,6 +197,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
@@ -216,6 +218,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.OlcrtcBinary + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
@@ -235,6 +239,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
 ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
 Restart=on-failure
@@ -267,6 +273,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
