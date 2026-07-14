@@ -112,6 +112,7 @@ func (s *managementState) renderManagementConfigsLocked() (map[string]string, er
 func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
 	return NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: s.applyRoot,
+		LiveRoot:  s.liveRoot,
 		Settings:  s.settings,
 		Inbounds:  s.inbounds,
 		Rules:     s.rules,

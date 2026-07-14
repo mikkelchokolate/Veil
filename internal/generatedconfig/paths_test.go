@@ -34,3 +34,26 @@ func TestGeneratedConfigPathsBuildsCertPaths(t *testing.T) {
 		t.Fatalf("PanelKeyPath = %q, want %q", got, want)
 	}
 }
+
+func TestGeneratedConfigPathsUseLiveRootForRuntimeFiles(t *testing.T) {
+	paths := NewPathsWithLiveRoot("/staging", "/etc/veil/generated")
+	// Generated config artifacts are staged under ApplyRoot.
+	if got, want := paths.Generated("hysteria2/server.yaml"), filepath.Join("/staging", "generated", "hysteria2", "server.yaml"); got != want {
+		t.Fatalf("Generated = %q, want %q", got, want)
+	}
+	// Certificate and panel cert paths reference the persistent etc root
+	// (parent of the live root) so promoted runtime configs read from the
+	// production filesystem, not staging.
+	if got, want := paths.CertPath("example.com"), filepath.Join("/etc/veil", "certs", "example.com.crt"); got != want {
+		t.Fatalf("CertPath = %q, want %q", got, want)
+	}
+	if got, want := paths.KeyPath("example.com"), filepath.Join("/etc/veil", "certs", "example.com.key"); got != want {
+		t.Fatalf("KeyPath = %q, want %q", got, want)
+	}
+	if got, want := paths.PanelCertPath(), filepath.Join("/etc/veil", "panel", "tls.crt"); got != want {
+		t.Fatalf("PanelCertPath = %q, want %q", got, want)
+	}
+	if got, want := paths.PanelKeyPath(), filepath.Join("/etc/veil", "panel", "tls.key"); got != want {
+		t.Fatalf("PanelKeyPath = %q, want %q", got, want)
+	}
+}

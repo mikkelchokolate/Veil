@@ -4,6 +4,7 @@ type ArtifactRenderer func(Paths) (GeneratedConfigArtifact, bool, error)
 
 type SetInput struct {
 	ApplyRoot   string
+	LiveRoot    string
 	Settings    Settings
 	Inbounds    []Inbound
 	WarpConfig  WarpConfig
@@ -24,6 +25,7 @@ func (b SetBuilder) Build() (map[string]string, error) {
 	input := b.input
 	configs, err := input.Registry.Render(ConfigInput{
 		ApplyRoot: input.ApplyRoot,
+		LiveRoot:  input.LiveRoot,
 		Settings:  input.Settings,
 		Inbounds:  input.Inbounds,
 		Warp:      input.WarpConfig,
@@ -31,7 +33,7 @@ func (b SetBuilder) Build() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	paths := NewPaths(input.ApplyRoot)
+	paths := NewPathsWithLiveRoot(input.ApplyRoot, input.LiveRoot)
 	if _, exists := configs[paths.Caddyfile()]; !exists && input.PanelAccess != nil {
 		artifact, ok, err := input.PanelAccess(paths)
 		if err != nil {

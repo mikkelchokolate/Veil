@@ -9,6 +9,7 @@ import (
 
 type ManagementConfigInput struct {
 	ApplyRoot string
+	LiveRoot  string
 	Settings  Settings
 	Inbounds  []Inbound
 	Rules     []RoutingRule
@@ -26,6 +27,7 @@ func NewManagementConfigRenderer(input ManagementConfigInput) ManagementConfigRe
 func (r ManagementConfigRenderer) Render() (map[string]string, error) {
 	return BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: r.input.ApplyRoot,
+		LiveRoot:  r.input.LiveRoot,
 		Settings:  r.input.Settings,
 		Inbounds:  r.input.Inbounds,
 		Rules:     r.input.Rules,
@@ -39,7 +41,7 @@ func (r ManagementConfigRenderer) HasRenderSettings() bool {
 }
 
 func (r ManagementConfigRenderer) RenderInbound(inbound Inbound) (string, error) {
-	artifact, _, err := protocols.NewGeneratedConfigRegistry().RenderInbound(r.input.Settings, generatedconfig.NewPaths(r.input.ApplyRoot), inbound, r.input.Warp)
+	artifact, _, err := protocols.NewGeneratedConfigRegistry().RenderInbound(r.input.Settings, generatedconfig.NewPathsWithLiveRoot(r.input.ApplyRoot, r.input.LiveRoot), inbound, r.input.Warp)
 	return artifact.Body, err
 }
 
