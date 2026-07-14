@@ -166,7 +166,8 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 		t.Fatalf("read hysteria2 config: %v", err)
 	}
 	// Self-signed TLS now (no ACME/domain in the server config); the cert path
-	// is Veil's managed panel cert under the configured apply root.
+	// is Veil's managed panel cert under the configured etc root (parent of the
+	// live root, where persistent panel TLS files live).
 	panelCert := filepath.Join(applyRoot, "panel", "tls.crt")
 	if !strings.Contains(string(hy2Body), "listen: :443") || !strings.Contains(string(hy2Body), "password: hy2-secret") || !strings.Contains(string(hy2Body), panelCert) {
 		t.Fatalf("unexpected hysteria2 config: %s", string(hy2Body))

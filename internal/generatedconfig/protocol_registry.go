@@ -4,6 +4,7 @@ import "fmt"
 
 type ConfigInput struct {
 	ApplyRoot string
+	LiveRoot  string
 	Settings  Settings
 	Inbounds  []Inbound
 	Warp      WarpConfig
@@ -70,7 +71,7 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 	if err := r.Validate(input.Settings, input.Inbounds); err != nil {
 		return nil, err
 	}
-	paths := NewPaths(input.ApplyRoot)
+	paths := NewPathsWithLiveRoot(input.ApplyRoot, input.LiveRoot)
 	configs := map[string]string{}
 	for _, protocol := range r.protocols {
 		selected := r.enabledInbounds(input.Settings, input.Inbounds, protocol.Protocol)
