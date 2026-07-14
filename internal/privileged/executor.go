@@ -106,7 +106,17 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			return promoteResolvedArtifacts(config.PromotionBackupRoot, config.Now, request)
 		},
 		ServiceAction: func(ctx context.Context, request ServiceActionRequest) error {
-			_, err := config.RunCommand(ctx, []string{"systemctl", string(request.Action), request.Unit}, 30*time.Second)
+			action := string(request.Action)
+			if request.Action == ServiceActionReload {
+				// Reload on an inactive unit fails with "cannot reload because it is
+				// inactive". Fall back to start so first-time applies and recovery
+				// paths work without dropping connections on already-active units.
+				status, _ := config.RunCommand(ctx, []string{"systemctl", "is-active", request.Unit}, 5*time.Second)
+				if strings.TrimSpace(status) != "active" {
+					action = "start"
+				}
+			}
+			_, err := config.RunCommand(ctx, []string{"systemctl", action, request.Unit}, 30*time.Second)
 			return err
 		},
 		ServiceStatus: func(ctx context.Context, request ServiceStatusRequest) (ServiceStatusResult, error) {

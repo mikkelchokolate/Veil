@@ -327,12 +327,13 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	expectedNaive := []string{"systemctl", "reload", "veil-caddy@naive.service"}
+	expectedNaiveProbe := []string{"systemctl", "is-active", "veil-caddy@naive.service"}
+	expectedNaiveReload := []string{"systemctl", "reload", "veil-caddy@naive.service"}
 	expectedHy2 := []string{"systemctl", "restart", "veil-hysteria2@hysteria2.service"}
-	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 2 {
-		t.Fatalf("expected two service actions: response=%+v calls=%+v", response, serviceCalls)
+	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 3 {
+		t.Fatalf("expected two service actions and three calls (is-active probe + reload + restart): response=%+v calls=%+v", response, serviceCalls)
 	}
-	if !stringSlicesEqual(serviceCalls[0], expectedNaive) || !stringSlicesEqual(serviceCalls[1], expectedHy2) {
+	if !stringSlicesEqual(serviceCalls[0], expectedNaiveProbe) || !stringSlicesEqual(serviceCalls[1], expectedNaiveReload) || !stringSlicesEqual(serviceCalls[2], expectedHy2) {
 		t.Fatalf("unexpected service calls: %+v", serviceCalls)
 	}
 	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success {
@@ -363,6 +364,9 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	serviceCalls := [][]string{}
 	serviceActionRunner = func(command []string) ServiceActionResult {
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
+		if len(command) >= 2 && command[0] == "systemctl" && command[1] == "is-active" {
+			return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true, Output: "active"}
+		}
 		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: false, Error: "reload failed"}
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
@@ -377,7 +381,9 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 2 {
+	// With the inactive-unit fallback, reload first probes is-active (success), then fails.
+	// Rollback repeats the same probe + reload sequence.
+	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 4 {
 		t.Fatalf("expected failed service action followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
 	}
 }
@@ -477,9 +483,19 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	if string(body) != "old caddy\n" {
 		t.Fatalf("expected rollback to restore old live config, got %q", string(body))
 	}
-	expected := [][]string{{"systemctl", "reload", "veil-caddy@naive.service"}, {"systemctl", "reload", "veil-caddy@naive.service"}}
-	if len(serviceCalls) != len(expected) || !stringSlicesEqual(serviceCalls[0], expected[0]) || !stringSlicesEqual(serviceCalls[1], expected[1]) {
-		t.Fatalf("expected reload before and after rollback: %+v", serviceCalls)
+	expected := [][]string{
+		{"systemctl", "is-active", "veil-caddy@naive.service"},
+		{"systemctl", "reload", "veil-caddy@naive.service"},
+		{"systemctl", "is-active", "veil-caddy@naive.service"},
+		{"systemctl", "reload", "veil-caddy@naive.service"},
+	}
+	if len(serviceCalls) != len(expected) {
+		t.Fatalf("expected %d calls, got %d: %+v", len(expected), len(serviceCalls), serviceCalls)
+	}
+	for i := range expected {
+		if !stringSlicesEqual(serviceCalls[i], expected[i]) {
+			t.Fatalf("expected reload before and after rollback: %+v", serviceCalls)
+		}
 	}
 }
 

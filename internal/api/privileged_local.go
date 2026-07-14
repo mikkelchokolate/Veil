@@ -51,7 +51,17 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		VeilVersion:          state.version,
 	})
 	production.ServiceAction = func(_ context.Context, request privileged.ServiceActionRequest) error {
-		response := serviceActionRunner([]string{"systemctl", string(request.Action), request.Unit})
+		action := string(request.Action)
+		if request.Action == privileged.ServiceActionReload {
+			// Reload on an inactive unit fails with "cannot reload because it is
+			// inactive". Fall back to start so first-time applies and recovery
+			// paths work without dropping connections on already-active units.
+			status := serviceActionRunner([]string{"systemctl", "is-active", request.Unit})
+			if !status.Success {
+				action = "start"
+			}
+		}
+		response := serviceActionRunner([]string{"systemctl", action, request.Unit})
 		if !response.Success {
 			if response.Error == "" {
 				response.Error = "service action failed"

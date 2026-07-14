@@ -147,6 +147,38 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	}
 }
 
+func TestProductionExecutorReloadFallsBackToStartWhenInactive(t *testing.T) {
+	var commands [][]string
+	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
+		commands = append(commands, append([]string(nil), command...))
+		if len(command) >= 3 && command[0] == "systemctl" && command[1] == "is-active" {
+			if command[len(command)-1] == "inactive-unit.service" {
+				return "inactive\n", fmt.Errorf("exit status 3")
+			}
+			return "active\n", nil
+		}
+		return "", nil
+	}
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run})
+
+	if err := executor.ServiceAction(context.Background(), ServiceActionRequest{Unit: "active-unit.service", Action: ServiceActionReload}); err != nil {
+		t.Fatalf("reload active unit: %v", err)
+	}
+	if err := executor.ServiceAction(context.Background(), ServiceActionRequest{Unit: "inactive-unit.service", Action: ServiceActionReload}); err != nil {
+		t.Fatalf("reload inactive unit: %v", err)
+	}
+
+	want := [][]string{
+		{"systemctl", "is-active", "active-unit.service"},
+		{"systemctl", "reload", "active-unit.service"},
+		{"systemctl", "is-active", "inactive-unit.service"},
+		{"systemctl", "start", "inactive-unit.service"},
+	}
+	if !reflect.DeepEqual(commands, want) {
+		t.Fatalf("commands:\nwant=%v\ngot=%v", want, commands)
+	}
+}
+
 func TestProductionExecutorServiceStatusSkipsTemplatesAndToleratesFailures(t *testing.T) {
 	var shown []string
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
