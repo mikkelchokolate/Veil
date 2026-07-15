@@ -183,8 +183,7 @@ runbook.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
-  only an allowlisted protocol over `AF_UNIX`, and runs with
-  `PrivateNetwork=true`. It has no TCP or UDP listener.
+  only an allowlisted protocol over `AF_UNIX`. It has no TCP or UDP listener.
 - **Root operation allowlist.** The helper may promote or restore generated
   configuration, control allowlisted Managed systemd units, read bounded
   journald output, create/verify/restore encrypted backups, rotate the state
@@ -217,7 +216,7 @@ Check the boundary after installation:
 ```bash
 systemctl status veil.service veil-helper.socket veil-helper.service
 systemctl show veil.service -p User -p Group -p CapabilityBoundingSet
-systemctl show veil-helper.service -p PrivateNetwork -p RestrictAddressFamilies
+systemctl show veil-helper.service -p RestrictAddressFamilies
 stat -c '%U:%G %a %n' /run/veil/helper.sock
 ```
 

@@ -140,7 +140,37 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--no-page"},
 		{"journalctl", "-u", "veil.service", "--no-pager", "-n", "25", "-o", "short-iso"},
 		{"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
+		{"ufw", "reload"},
 		{"systemctl", "restart", "veil.service"},
+	}
+	if !reflect.DeepEqual(commands, want) {
+		t.Fatalf("commands:\nwant=%v\ngot=%v", want, commands)
+	}
+}
+
+func TestProductionExecutorFirewallReloadsAfterApplyingRules(t *testing.T) {
+	var commands [][]string
+	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
+		commands = append(commands, append([]string(nil), command...))
+		if len(command) >= 2 && command[0] == "ufw" && command[1] == "status" {
+			return "Status: active", nil
+		}
+		return "Rules updated", nil
+	}
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run})
+
+	firewall, err := executor.Firewall(context.Background(), ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "23456/udp", "comment", "Veil Hysteria2"}}}})
+	if err != nil {
+		t.Fatalf("firewall: %v", err)
+	}
+	if !reflect.DeepEqual(firewall.AppliedRuleIDs, []string{"23456/udp"}) {
+		t.Fatalf("unexpected applied ids: %+v", firewall)
+	}
+
+	want := [][]string{
+		{"ufw", "status"},
+		{"ufw", "allow", "23456/udp", "comment", "Veil Hysteria2"},
+		{"ufw", "reload"},
 	}
 	if !reflect.DeepEqual(commands, want) {
 		t.Fatalf("commands:\nwant=%v\ngot=%v", want, commands)
