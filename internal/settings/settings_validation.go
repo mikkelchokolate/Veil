@@ -257,14 +257,29 @@ func StructFieldName(key string) string {
 }
 
 func normalizeFallbackRoot(root *string) error {
-	*root = filepath.Clean(*root)
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
-		*root = filepath.Clean("/var/lib/veil/" + *root)
+	const base = "/var/lib/veil"
+
+	raw := strings.TrimSpace(*root)
+	if raw == "" {
+		*root = ""
+		return nil
 	}
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
+	for _, part := range strings.FieldsFunc(filepath.ToSlash(raw), func(r rune) bool { return r == '/' }) {
+		if part == ".." {
+			return errors.New("fallbackRoot must not contain parent-directory traversal")
+		}
+	}
+
+	candidate := raw
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(base, candidate)
+	}
+	candidate = filepath.Clean(candidate)
+	relative, err := filepath.Rel(base, candidate)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
 		return errors.New("fallbackRoot must be within /var/lib/veil")
 	}
-	*root = filepath.ToSlash(*root)
+	*root = filepath.ToSlash(candidate)
 	return nil
 }
 
