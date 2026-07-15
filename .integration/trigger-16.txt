@@ -1,0 +1,1 @@
+Retry materialization after legacy normalization, bind-aware planning, and Warp upstream fixes.
