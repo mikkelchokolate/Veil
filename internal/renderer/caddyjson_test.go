@@ -13,6 +13,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
@@ -406,6 +407,121 @@ func TestRenderCaddyJSONAdminEndpoint(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONHttp01ChallengeServer(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "proxy.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+				NaiveUsers:  []caddyassembly.CaddyNaiveUser{{Username: "u", Password: "p"}},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"proxy.example.com": {Domain: "proxy.example.com", Email: "admin@example.com"},
+		},
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	apps := cfg["apps"].(map[string]any)
+	httpApp := apps["http"].(map[string]any)
+	servers := httpApp["servers"].(map[string]any)
+	challengeServer, ok := servers["tcp-0.0.0.0-80-acme"]
+	if !ok {
+		t.Fatalf("expected HTTP-01 challenge server tcp-0.0.0.0-80-acme, got servers: %v", servers)
+	}
+	challengeServerMap := challengeServer.(map[string]any)
+	listen := challengeServerMap["listen"].([]any)
+	if len(listen) != 1 || listen[0] != ":80" {
+		t.Fatalf("expected challenge server to listen on :80, got %v", listen)
+	}
+	routes := challengeServerMap["routes"].([]any)
+	if len(routes) != 0 {
+		// Caddy handles ACME HTTP-01 challenges at the server level (before route matching),
+		// so the challenge server intentionally has no routes.
+		t.Fatalf("expected HTTP-01 challenge server to have empty routes (Caddy handles challenges at server level), got %v", routes)
+	}
+
+	tlsApp := apps["tls"].(map[string]any)
+	policies := tlsApp["automation"].(map[string]any)["policies"].([]any)
+	if len(policies) != 1 {
+		t.Fatalf("expected 1 automation policy, got %d", len(policies))
+	}
+	issuer := policies[0].(map[string]any)["issuers"].([]any)[0].(map[string]any)
+	challenges := issuer["challenges"].(map[string]any)
+	if challenges["http"].(map[string]any)["disabled"] != false {
+		t.Error("expected http challenge to be enabled for http-01 mode")
+	}
+	if challenges["tls-alpn"].(map[string]any)["disabled"] != true {
+		t.Error("expected tls-alpn challenge to be disabled for http-01 mode")
+	}
+}
+
+func TestRenderCaddyJSONHttp01ChallengeHandlerEndToEnd(t *testing.T) {
+	settings := model.Settings{
+		PanelAccess:       "direct",
+		AcmeChallengeMode: "http-01",
+		DefaultAcmeEmail:  "admin@example.com",
+	}
+	inbounds := []model.Inbound{
+		{
+			Name:     "naive-1",
+			Protocol: "naiveproxy",
+			Enabled:  true,
+			ProtocolFields: map[string]any{
+				"domain":     "proxy.example.com",
+				"transport":  "tcp",
+				"publicPort": 443,
+			},
+			Profiles: []model.ClientProfile{
+				{Name: "p1", Username: "u", Password: "p", Enabled: true},
+			},
+		},
+	}
+	plan, _, issues, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) > 0 {
+		t.Fatalf("unexpected validation issues: %v", issues)
+	}
+
+	challengeKey := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	if _, ok := plan.ACMEChallenges[challengeKey]; !ok {
+		t.Fatalf("expected TCP :80 ACME challenge bind in plan, got %v", plan.ACMEChallenges)
+	}
+
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	apps := cfg["apps"].(map[string]any)
+	servers := apps["http"].(map[string]any)["servers"].(map[string]any)
+	challengeServer := servers["tcp-0.0.0.0-80-acme"].(map[string]any)
+	routes := challengeServer["routes"].([]any)
+	if len(routes) != 0 {
+		t.Fatalf("expected HTTP-01 challenge server to have empty routes (Caddy handles challenges at server level), got %v", routes)
+	}
+}
+
 func TestRenderCaddyJSONValidatesWithCaddy(t *testing.T) {
 	if _, err := exec.LookPath("caddy"); err != nil {
 		t.Skip("caddy binary not available in PATH:", err)
@@ -437,6 +553,52 @@ func TestRenderCaddyJSONValidatesWithCaddy(t *testing.T) {
 	out, err := exec.Command("caddy", "validate", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("caddy validate failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Valid configuration") {
+		t.Errorf("caddy validate did not report valid configuration:\n%s", out)
+	}
+}
+
+func TestRenderCaddyJSONHttp01ValidatesWithCaddy(t *testing.T) {
+	if _, err := exec.LookPath("caddy"); err != nil {
+		t.Skip("caddy binary not available in PATH:", err)
+	}
+
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "proxy.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+				NaiveUsers:  []caddyassembly.CaddyNaiveUser{{Username: "u", Password: "p"}},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"proxy.example.com": {Domain: "proxy.example.com", Email: "admin@example.com"},
+		},
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := exec.Command("caddy", "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("caddy validate failed for http-01 config: %v\n%s", err, out)
 	}
 	if !strings.Contains(string(out), "Valid configuration") {
 		t.Errorf("caddy validate did not report valid configuration:\n%s", out)

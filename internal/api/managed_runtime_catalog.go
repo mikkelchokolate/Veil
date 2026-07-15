@@ -50,6 +50,15 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 		}
 	}
 
+	// A hysteria2 inbound with a domain needs the consolidated Caddy process
+	// to obtain and manage the ACME certificate, even when no naiveproxy
+	// inbound exists. The naiveproxy RuntimeDescriptors already adds the Caddy
+	// runtime when a naive inbound is present, so only add it here if it is
+	// missing and a hysteria2 domain requires it.
+	if !hasCaddyRuntime(runtimes) && hasHysteria2Domain(inbounds) {
+		runtimes = append(runtimes, caddyManagedRuntime())
+	}
+
 	// sing-box / warp
 	if warp.Enabled || len(inbounds) == 0 {
 		runtimes = append(runtimes, ManagedRuntime{
@@ -87,6 +96,40 @@ func enabledInboundsForProtocol(inbounds []Inbound, protocol string) []Inbound {
 		}
 	}
 	return selected
+}
+
+func hasCaddyRuntime(runtimes []ManagedRuntime) bool {
+	for _, rt := range runtimes {
+		if rt.Unit == renderer.UnitCaddy {
+			return true
+		}
+	}
+	return false
+}
+
+func hasHysteria2Domain(inbounds []Inbound) bool {
+	for _, inb := range inbounds {
+		if !inb.Enabled || inb.Protocol != "hysteria2" {
+			continue
+		}
+		if inboundDomain(inb) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func caddyManagedRuntime() ManagedRuntime {
+	return ManagedRuntime{
+		Name:             "veil-caddy.service",
+		ActionName:       "caddy",
+		Unit:             renderer.UnitCaddy,
+		TemplateUnit:     renderer.UnitCaddy,
+		PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
+		PromotedVerb:     "reload",
+		ManualRestart:    true,
+		HealthCheckAfter: true,
+	}
 }
 
 func loadSnapshotFromState() ([]Inbound, WarpConfig) {

@@ -348,11 +348,21 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	if !stringSlicesEqual(serviceCalls[0], expectedHy2) {
 		t.Fatalf("unexpected service calls: %+v", serviceCalls)
 	}
-	if response.ServiceActions[0].Name != "veil-hysteria2@hysteria2.service" || !response.ServiceActions[0].Success {
-		t.Fatalf("expected successful Hysteria2 result: %+v", response.ServiceActions)
+	caddyOK := false
+	hy2OK := false
+	for _, action := range response.ServiceActions {
+		switch action.Name {
+		case "veil-caddy.service":
+			caddyOK = action.Success
+		case "veil-hysteria2@hysteria2.service":
+			hy2OK = action.Success
+		}
 	}
-	if response.ServiceActions[1].Name != "veil-caddy.service" || !response.ServiceActions[1].Success {
+	if !caddyOK {
 		t.Fatalf("expected successful Caddy Admin API result: %+v", response.ServiceActions)
+	}
+	if !hy2OK {
+		t.Fatalf("expected successful Hysteria2 result: %+v", response.ServiceActions)
 	}
 }
 
@@ -904,5 +914,130 @@ func TestManagementApplyServicesRollsBackUsesCaddyAdminLoaderWithRestoredConfig(
 	}
 	if len(serviceCalls) != 0 {
 		t.Fatalf("expected no systemctl calls when Admin API succeeds, got %+v", serviceCalls)
+	}
+}
+
+// TestManagementApplyRollbackRestoresSettingsState verifies that a rollback
+// after a failed Panel mode switch restores both the live Caddy config and the
+// in-memory/on-disk management state. Before the fix the live files were
+// rolled back but settings.PanelAccess stayed on "caddy", so the next apply
+// would still use the broken mode.
+func TestManagementApplyRollbackRestoresSettingsState(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{
+		"settings":{
+			"panelListen":"127.0.0.1:2096",
+			"mode":"dev",
+			"panelAccess":"direct",
+			"webBasePath":"/panel/",
+			"domain":"vpn.example.com",
+			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
+			"naiveUsername":"veil",
+			"naivePassword":"naive-secret",
+			"fallbackRoot":"/var/lib/veil/www",
+			"firewallManagement":false
+		},
+		"inbounds":[
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}}
+		],
+		"routingRules":[],
+		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
+	}`), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	applyRoot := t.TempDir()
+	keyPath := filepath.Join(t.TempDir(), "state.key")
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
+	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
+		t.Fatalf("write existing live caddy: %v", err)
+	}
+
+	oldValidator := stagedConfigValidator
+	oldRunner := serviceActionRunner
+	oldHealth := serviceHealthChecker
+	oldLoader := caddyAdminLoader
+	defer func() {
+		stagedConfigValidator = oldValidator
+		serviceActionRunner = oldRunner
+		serviceHealthChecker = oldHealth
+		caddyAdminLoader = oldLoader
+	}()
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true}
+	}
+	caddyAdminLoader = func(configJSON []byte) error { return nil }
+	serviceHealthChecker = func(service string) ServiceHealthResult {
+		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "panel unreachable"}
+	}
+
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot, KeyPath: keyPath})
+
+	// Simulate the user switching Panel mode from direct to caddy.
+	// panelPublicPort is chosen so it does not collide with the naive inbound.
+	settingsBody := `{
+		"panelListen":"127.0.0.1:2096",
+		"mode":"dev",
+		"panelAccess":"caddy",
+		"panelDomain":"panel.example.com",
+		"panelEmail":"admin@example.com",
+		"panelPublicPort":8443,
+		"webBasePath":"/panel/",
+		"domain":"vpn.example.com",
+		"email":"admin@example.com",
+		"defaultAcmeEmail":"admin@example.com",
+		"naiveUsername":"veil",
+		"naivePassword":"naive-secret",
+		"fallbackRoot":"/var/lib/veil/www",
+		"firewallManagement":false
+	}`
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(settingsBody)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("settings update failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// Apply the mode switch; the health check fails and triggers rollback.
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 after rollback, got %d: %s", w.Code, w.Body.String())
+	}
+	var response ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.RolledBack || len(response.RollbackFiles) == 0 {
+		t.Fatalf("expected rollback response: %+v", response)
+	}
+
+	// The live Caddy config must be restored to the previous version.
+	caddyBody, err := os.ReadFile(liveCaddy)
+	if err != nil {
+		t.Fatalf("read live caddy: %v", err)
+	}
+	if string(caddyBody) != "old caddy\n" {
+		t.Fatalf("live caddy config was not restored: %q", string(caddyBody))
+	}
+
+	// The management state must also be restored to the previous mode.
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("get settings failed: %d %s", w.Code, w.Body.String())
+	}
+	var settings Settings
+	if err := json.NewDecoder(w.Body).Decode(&settings); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if settings.PanelAccess != "direct" {
+		t.Fatalf("settings.PanelAccess was not rolled back: got %q want direct; settings=%+v", settings.PanelAccess, settings)
 	}
 }

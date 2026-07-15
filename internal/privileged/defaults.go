@@ -22,6 +22,7 @@ func DefaultPolicy() Policy {
 		},
 		ManagedUnitPrefixes: []string{
 			"veil-caddy.service",
+			"veil-caddy@",
 			"veil-hysteria2@",
 			"veil-olcrtc@",
 		},

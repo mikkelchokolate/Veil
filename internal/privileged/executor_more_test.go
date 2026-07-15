@@ -98,7 +98,9 @@ func TestRunSyncCaddyCertReturnsNotFound(t *testing.T) {
 		return caddycert.Pair{}, caddycert.ErrCertificateNotFound
 	}
 
-	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: t.TempDir()}, ProductionConfig{})
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	result, err := runSyncCaddyCert(ctx, SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: t.TempDir()}, ProductionConfig{})
 	if err != nil {
 		t.Fatalf("expected no error for missing cert, got %v", err)
 	}
@@ -241,15 +243,18 @@ func TestFindCaddyCertWithRetryRespectsContextCancellation(t *testing.T) {
 func TestFindCaddyCertWithRetryTimesOutWithoutDeadline(t *testing.T) {
 	originalFinder := findCaddyCertPair
 	originalInterval := caddyRetryInterval
+	originalTimeout := defaultCaddyCertTimeout
 	defer func() {
 		findCaddyCertPair = originalFinder
 		caddyRetryInterval = originalInterval
+		defaultCaddyCertTimeout = originalTimeout
 	}()
 
 	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
 		return caddycert.Pair{}, caddycert.ErrCertificateNotFound
 	}
 	caddyRetryInterval = 10 * time.Millisecond
+	defaultCaddyCertTimeout = 200 * time.Millisecond
 
 	_, err := findCaddyCertWithRetry(context.Background(), "timeout.example.com")
 	if !errors.Is(err, caddycert.ErrCertificateNotFound) {

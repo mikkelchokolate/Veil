@@ -110,6 +110,39 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 	}
 }
 
+func TestManagedRuntimeCatalogIncludesCaddyForHysteria2Domain(t *testing.T) {
+	catalog := NewManagedRuntimeCatalogFor([]Inbound{
+		{Name: "hy-only", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, ProtocolFields: map[string]any{"domain": "hy.example.com"}},
+	}, WarpConfig{})
+
+	foundCaddy := false
+	for _, rt := range catalog.Runtimes() {
+		if rt.Unit == "veil-caddy.service" {
+			foundCaddy = true
+			break
+		}
+	}
+	if !foundCaddy {
+		t.Fatalf("expected veil-caddy.service runtime for hysteria2-only domain, got %+v", catalog.Runtimes())
+	}
+
+	if !catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-caddy.service"}) {
+		t.Fatal("expected reload allowed for veil-caddy.service when hysteria2 domain requires it")
+	}
+}
+
+func TestManagedRuntimeCatalogOmitsCaddyForHysteria2WithoutDomain(t *testing.T) {
+	catalog := NewManagedRuntimeCatalogFor([]Inbound{
+		{Name: "hy-no-domain", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},
+	}, WarpConfig{})
+
+	for _, rt := range catalog.Runtimes() {
+		if rt.Unit == "veil-caddy.service" {
+			t.Fatalf("unexpected veil-caddy.service runtime for hysteria2 without domain: %+v", catalog.Runtimes())
+		}
+	}
+}
+
 func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	inbounds := []Inbound{
 		{Name: "vip", Protocol: "hysteria2", Enabled: true},

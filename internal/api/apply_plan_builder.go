@@ -2,7 +2,9 @@ package api
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
@@ -112,6 +114,9 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		}
 	}
 
+	for _, conflict := range addPanelDirectBindOwner(settings, owners) {
+		material.Errors = append(material.Errors, conflict.Message)
+	}
 	for _, conflict := range addInboundBindOwners(inbounds, owners, runtimeCatalog) {
 		material.Errors = append(material.Errors, conflict.Message)
 	}
@@ -134,6 +139,31 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 	material.Actions = append(material.Actions, "reload veil-caddy.service")
 	material.Runtimes = append(material.Runtimes, "veil-caddy.service")
 	return material
+}
+
+func addPanelDirectBindOwner(settings Settings, owners map[bindregistry.BindKey]bindregistry.BindOwner) []bindregistry.Conflict {
+	if settings.PanelAccess != "direct" {
+		return nil
+	}
+	host, portText, err := net.SplitHostPort(settings.PanelListen)
+	if err != nil {
+		return nil
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port <= 0 || port > 65535 {
+		return nil
+	}
+	key := bindregistry.BindKey{Address: host, Port: port, Network: bindregistry.ListenTCP}
+	owner := bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelDirect, ServiceName: "veil.service"}
+	if existing, ok := owners[key]; ok && existing != owner {
+		return []bindregistry.Conflict{{
+			Key:     key,
+			Owners:  []bindregistry.BindOwner{existing, owner},
+			Message: fmt.Sprintf("TCP %s:%d is claimed by Panel direct listener and another service", key.Address, key.Port),
+		}}
+	}
+	owners[key] = owner
+	return nil
 }
 
 func addInboundBindOwners(inbounds []Inbound, owners map[bindregistry.BindKey]bindregistry.BindOwner, runtimeCatalog ManagedRuntimeCatalog) []bindregistry.Conflict {
@@ -263,6 +293,12 @@ func naiveHasCredential(inb Inbound, settings Settings) bool {
 		if p, ok := inb.ProtocolFields["naivePassword"].(string); ok {
 			password = strings.TrimSpace(p)
 		}
+	}
+	if username == "" {
+		username = strings.TrimSpace(inb.NaiveUsername)
+	}
+	if password == "" {
+		password = strings.TrimSpace(inb.NaivePassword)
 	}
 	if username == "" && settings.ProtocolFields != nil {
 		if u, ok := settings.ProtocolFields["naiveUsername"].(string); ok {

@@ -126,6 +126,35 @@ func containsApplyPlanString(values []string, want string) bool {
 	return false
 }
 
+func TestAddPanelDirectBindOwnerDetectsConflict(t *testing.T) {
+	owners := make(map[bindregistry.BindKey]bindregistry.BindOwner)
+	owners[bindregistry.BindKey{Address: "0.0.0.0", Port: 8080, Network: bindregistry.ListenTCP}] = bindregistry.BindOwner{
+		Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: "naive-1",
+	}
+	settings := Settings{PanelAccess: "direct", PanelListen: "0.0.0.0:8080"}
+	conflicts := addPanelDirectBindOwner(settings, owners)
+	if len(conflicts) == 0 {
+		t.Fatal("expected conflict between Panel direct listener and naive inbound on TCP :8080")
+	}
+}
+
+func TestAddPanelDirectBindOwnerRegistersListener(t *testing.T) {
+	owners := make(map[bindregistry.BindKey]bindregistry.BindOwner)
+	settings := Settings{PanelAccess: "direct", PanelListen: "0.0.0.0:8080"}
+	conflicts := addPanelDirectBindOwner(settings, owners)
+	if len(conflicts) != 0 {
+		t.Fatalf("unexpected conflicts: %+v", conflicts)
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 8080, Network: bindregistry.ListenTCP}
+	owner, ok := owners[key]
+	if !ok {
+		t.Fatal("expected Panel direct owner on TCP :8080")
+	}
+	if owner.Kind != bindregistry.BindOwnerPanelDirect {
+		t.Errorf("owner.Kind = %q, want %q", owner.Kind, bindregistry.BindOwnerPanelDirect)
+	}
+}
+
 func TestAddInboundBindOwnersRespectsTransportAndRuntimeUnit(t *testing.T) {
 	catalog := service.NewManagedRuntimeCatalog([]service.ManagedRuntime{
 		{Name: "mieru", Protocol: "mieru", Unit: "veil-mieru.service"},

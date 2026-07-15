@@ -377,6 +377,20 @@ func TestPolicyAllowsUnitPrefixesAndRejectsDangerousNames(t *testing.T) {
 	}
 }
 
+func TestDefaultPolicyAllowsLegacyCaddyTemplateUnits(t *testing.T) {
+	policy := DefaultPolicy()
+	for _, unit := range []string{"veil-caddy@legacy.service", "veil-caddy@panel.service"} {
+		if !policy.allowsUnit(unit) {
+			t.Fatalf("expected legacy caddy unit %q to be allowed", unit)
+		}
+	}
+	for _, unit := range []string{"veil-caddy@../escape.service", "veil-caddy@legacy.service; reboot"} {
+		if policy.allowsUnit(unit) {
+			t.Fatalf("expected dangerous unit %q to be rejected", unit)
+		}
+	}
+}
+
 func TestPolicyResolveBelowRejectsBadInputs(t *testing.T) {
 	root := t.TempDir()
 	for _, tc := range []struct{ root, relative string }{

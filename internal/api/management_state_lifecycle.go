@@ -158,7 +158,16 @@ func (l ManagementStateLifecycle) Load() error {
 		return nil
 	}
 	ApplyManagementSnapshot(l.state, snapshot)
+	// Keep a committed snapshot that represents the state currently backing the
+	// live generated configs. It is updated after each successful apply and is
+	// used to restore settings/inbounds during rollback.
+	_ = l.commitCurrentSnapshotLocked()
 	return nil
+}
+
+func (l ManagementStateLifecycle) commitCurrentSnapshotLocked() error {
+	committedPath := filepath.Join(l.state.applyRoot, "generated", "veil", "committed-management-state.json")
+	return managementstate.NewStore(committedPath, l.state.cipher).Save(l.SnapshotLocked())
 }
 
 func (l ManagementStateLifecycle) ReloadLocked() error {

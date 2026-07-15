@@ -19,14 +19,14 @@ const (
 )
 
 type CaddyBindOwner struct {
-	Kind        CaddyBindOwnerKind
-	Domain      string
-	InboundName string
-	Transport   string           // Inbound transport; used only for Naive owner
-	BackendPort int              // Panel backend port parsed from PanelListen; used only for Panel owner
-	WebBasePath string           // Normalized panel web base path; used only for Panel owner
-	NaiveUsers  []CaddyNaiveUser // Only for naive owner
-	FallbackRoot string          // Only for naive owner
+	Kind         CaddyBindOwnerKind
+	Domain       string
+	InboundName  string
+	Transport    string           // Inbound transport; used only for Naive owner
+	BackendPort  int              // Panel backend port parsed from PanelListen; used only for Panel owner
+	WebBasePath  string           // Normalized panel web base path; used only for Panel owner
+	NaiveUsers   []CaddyNaiveUser // Only for naive owner
+	FallbackRoot string           // Only for naive owner
 }
 
 // CaddyNaiveUser is a minimal credential pair for the forward_proxy handler.
@@ -57,12 +57,16 @@ func BuildRenderPlan(
 		}
 		if panelDomain != "" {
 			key := bindregistry.BindKey{Address: "0.0.0.0", Port: settings.PanelPublicPort, Network: bindregistry.ListenTCP}
-			owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelCaddy, ServiceName: "veil-caddy.service"}
-			servers[key] = CaddyBindOwner{
+			if err := setOwner(owners, key, bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelCaddy, ServiceName: "veil-caddy.service"}); err != nil {
+				return CaddyRenderPlan{}, nil, err
+			}
+			if err := setServer(servers, key, CaddyBindOwner{
 				Kind:        CaddyOwnerPanel,
 				Domain:      panelDomain,
 				BackendPort: panelBackendPort(settings.PanelListen),
 				WebBasePath: veilsettings.NormalizeWebBasePath(settings.WebBasePath),
+			}); err != nil {
+				return CaddyRenderPlan{}, nil, err
 			}
 		}
 	}
@@ -79,7 +83,9 @@ func BuildRenderPlan(
 		domain := naiveDomain(inb, settings)
 		users := naiveUsers(inb, settings)
 		fallbackRoot := naiveFallbackRoot(inb, settings)
-		addNaiveBinds(transport, port, domain, inb.Name, users, fallbackRoot, owners, servers)
+		if err := addNaiveBinds(transport, port, domain, inb.Name, users, fallbackRoot, owners, servers); err != nil {
+			return CaddyRenderPlan{}, nil, err
+		}
 	}
 
 	domains, err := ResolveDomainCertSpecs(settings, inbounds)
@@ -117,17 +123,26 @@ func BuildFinalRenderPlan(
 	return plan, owners, issues, nil
 }
 
-func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, fallbackRoot string, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) {
+func addNaiveBinds(transport string, port int, domain, name string, users []CaddyNaiveUser, fallbackRoot string, owners map[bindregistry.BindKey]bindregistry.BindOwner, servers map[bindregistry.BindKey]CaddyBindOwner) error {
 	if transport == "tcp" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenTCP}
-		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}
+		if err := setOwner(owners, key, bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}); err != nil {
+			return err
+		}
+		if err := setServer(servers, key, CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}); err != nil {
+			return err
+		}
 	}
 	if transport == "quic" || transport == "dual" {
 		key := bindregistry.BindKey{Address: "0.0.0.0", Port: port, Network: bindregistry.ListenUDP}
-		owners[key] = bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}
-		servers[key] = CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}
+		if err := setOwner(owners, key, bindregistry.BindOwner{Kind: bindregistry.BindOwnerNaive, ServiceName: "veil-caddy.service", InboundName: name}); err != nil {
+			return err
+		}
+		if err := setServer(servers, key, CaddyBindOwner{Kind: CaddyOwnerNaive, Domain: domain, InboundName: name, Transport: transport, NaiveUsers: users, FallbackRoot: fallbackRoot}); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // naiveTransport mirrors the behavior of the naiveproxy plugin helper so that
@@ -198,12 +213,21 @@ func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser
 	}
 	username := stringField(inbound.ProtocolFields, "naiveUsername")
 	if username == "" {
+		username = strings.TrimSpace(inbound.NaiveUsername)
+	}
+	if username == "" {
 		username = stringField(settings.ProtocolFields, "naiveUsername")
 	}
 	if username == "" {
 		username = settings.NaiveUsername
 	}
-	password := stringField(inbound.ProtocolFields, "naivePassword")
+	password := strings.TrimSpace(inbound.Password)
+	if password == "" {
+		password = stringField(inbound.ProtocolFields, "naivePassword")
+	}
+	if password == "" {
+		password = strings.TrimSpace(inbound.NaivePassword)
+	}
 	if password == "" {
 		password = stringField(settings.ProtocolFields, "naivePassword")
 	}
@@ -213,6 +237,24 @@ func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser
 	if username != "" && password != "" {
 		return []CaddyNaiveUser{{Username: username, Password: password}}
 	}
+	return nil
+}
+
+func setOwner(owners map[bindregistry.BindKey]bindregistry.BindOwner, key bindregistry.BindKey, owner bindregistry.BindOwner) error {
+	if existing, ok := owners[key]; ok && existing != owner {
+		return fmt.Errorf("%s %s:%d is already owned by %s %s", key.Network, key.Address, key.Port, existing.Kind, existing.InboundName)
+	}
+	owners[key] = owner
+	return nil
+}
+
+func setServer(servers map[bindregistry.BindKey]CaddyBindOwner, key bindregistry.BindKey, server CaddyBindOwner) error {
+	if existing, ok := servers[key]; ok {
+		if existing.Kind != server.Kind || existing.InboundName != server.InboundName {
+			return fmt.Errorf("%s %s:%d already has a %s server", key.Network, key.Address, key.Port, existing.Kind)
+		}
+	}
+	servers[key] = server
 	return nil
 }
 

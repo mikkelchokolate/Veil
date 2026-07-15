@@ -107,6 +107,9 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 	}{
 		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
+		// Legacy per-inbound Caddy Caddyfiles from the pre-redesign model.
+		// The redesign uses caddy/config.json, so any .Caddyfile here is old.
+		{subpath: "caddy", ext: ".Caddyfile", exclude: ""},
 	}
 
 	for _, d := range dirs {
@@ -150,6 +153,16 @@ func UnitForLiveConfig(livePath string) (string, bool) {
 }
 
 func unitForPath(slashPath string) (string, bool) {
+	// Legacy per-inbound Caddy Caddyfiles from the pre-redesign model.
+	// The redesign uses caddy/config.json; any .Caddyfile is old and maps back
+	// to the per-inbound template unit that used to serve it.
+	if strings.HasSuffix(slashPath, ".Caddyfile") {
+		base := strings.TrimSuffix(filepath.Base(slashPath), ".Caddyfile")
+		if base != "" && !strings.Contains(base, "/") {
+			return "veil-caddy@" + base + ".service", true
+		}
+	}
+
 	registry := protocols.NewRegistry()
 
 	// Exact match covers aggregated units (mieru) and any artifact whose path

@@ -106,6 +106,75 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 	}
 }
 
+// TestLiveConfigPromotionLegacyCaddyArtifactCleaned verifies that legacy
+// per-inbound Caddy Caddyfiles (live/caddy/<name>.Caddyfile) from the
+// pre-redesign model are detected as orphans, backed up, removed, and mapped
+// back to the old per-inbound systemd unit for stop/disable.
+func TestLiveConfigPromotionLegacyCaddyArtifactCleaned(t *testing.T) {
+	root := t.TempDir()
+	staged := filepath.Join(root, "generated", "caddy", "config.json")
+	legacy := filepath.Join(root, "live", "caddy", "legacy.Caddyfile")
+	if err := atomicfile.Write(staged, []byte("new json"), 0o600, 0o700); err != nil {
+		t.Fatalf("write staged: %v", err)
+	}
+	if err := atomicfile.Write(legacy, []byte("legacy caddyfile"), 0o600, 0o700); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+
+	promotion := NewLiveConfigPromotion(root, nil)
+	liveFiles, backupFiles, records, err := promotion.Promote([]string{staged})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(liveFiles) != 1 {
+		t.Fatalf("expected 1 promoted file, got %+v", liveFiles)
+	}
+	if len(backupFiles) != 1 {
+		t.Fatalf("expected 1 backup file (legacy Caddyfile), got %+v", backupFiles)
+	}
+
+	// Legacy per-inbound Caddyfile is removed.
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy caddyfile should be removed, stat err: %v", err)
+	}
+
+	// The artifact maps back to the old per-inbound template unit.
+	unit, ok := UnitForArtifactID("caddy/legacy.Caddyfile")
+	if !ok {
+		t.Fatal("expected unit for legacy caddy artifact")
+	}
+	if unit != "veil-caddy@legacy.service" {
+		t.Fatalf("unit = %q, want veil-caddy@legacy.service", unit)
+	}
+
+	// Rollback restores the legacy artifact.
+	rollbackFiles, _ := promotion.Rollback(records, liveFiles)
+	if len(rollbackFiles) != 2 {
+		t.Fatalf("expected 2 rollback files, got %+v", rollbackFiles)
+	}
+	assertFileBody(t, legacy, "legacy caddyfile")
+}
+
+func TestUnitForArtifactIDLegacyCaddyCaddyfile(t *testing.T) {
+	cases := []struct {
+		id   string
+		want string
+	}{
+		{"caddy/legacy.Caddyfile", "veil-caddy@legacy.service"},
+		{"caddy/panel.Caddyfile", "veil-caddy@panel.service"},
+		{"generated/caddy/client.Caddyfile", "veil-caddy@client.service"},
+	}
+	for _, c := range cases {
+		unit, ok := UnitForArtifactID(c.id)
+		if !ok {
+			t.Fatalf("UnitForArtifactID(%q) = false, want true", c.id)
+		}
+		if unit != c.want {
+			t.Fatalf("UnitForArtifactID(%q) = %q, want %q", c.id, unit, c.want)
+		}
+	}
+}
+
 func assertFileBody(t *testing.T, path string, want string) {
 	t.Helper()
 	body, err := os.ReadFile(path)

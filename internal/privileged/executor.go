@@ -29,11 +29,12 @@ const (
 // Test hooks for functions that touch global runtime state or external
 // systems. They are swapped in tests to keep unit tests hermetic.
 var (
-	caddyDataDir           = caddycert.DefaultCaddyDataDir
-	findCaddyCertPair      = caddycert.FindPair
-	osExecutable           = os.Executable
-	caddyRetryInterval     = 2 * time.Second
-	defaultCaddyCertOutDir = "/etc/veil/certs"
+	caddyDataDir            = caddycert.DefaultCaddyDataDir
+	findCaddyCertPair       = caddycert.FindPair
+	osExecutable            = os.Executable
+	caddyRetryInterval      = 2 * time.Second
+	defaultCaddyCertTimeout = 120 * time.Second
+	defaultCaddyCertOutDir  = "/etc/veil/certs"
 )
 
 type Executor struct {
@@ -568,7 +569,7 @@ func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair,
 	deadline, hasDeadline := ctx.Deadline()
 	if !hasDeadline {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, defaultCaddyCertTimeout)
 		defer cancel()
 		deadline, _ = ctx.Deadline()
 	}

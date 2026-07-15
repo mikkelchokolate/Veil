@@ -151,6 +151,55 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
+
+	// Phase 1: Load Caddy config first. This must happen before hysteria2
+	// certificate synchronization so that Caddy can begin (or complete) ACME
+	// issuance for newly referenced hysteria2 domains.
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp).Runtimes() {
+		if runtime.Unit != renderer.UnitCaddy {
+			continue
+		}
+		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
+			continue
+		}
+		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
+		if !containsCleanPath(liveFiles, want) {
+			continue
+		}
+		// For the consolidated Caddy unit, prefer loading the runtime config
+		// through Caddy's Admin API and only fall back to systemctl reload when
+		// the Admin API is unavailable.
+		caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
+		if containsCleanPath(liveFiles, caddyLivePath) {
+			// Use a synthetic command for the Admin API load. There is no systemctl
+			// invocation here; the REST response contract still expects a Command
+			// array, so we report the Caddy admin endpoint that was used.
+			adminResult := ServiceActionResult{
+				Name:    renderer.UnitCaddy,
+				Command: []string{"caddy", "admin", "load"},
+			}
+			configBytes, err := os.ReadFile(caddyLivePath)
+			if err == nil {
+				err = caddyAdminLoader(configBytes)
+			}
+			if err == nil {
+				adminResult.Success = true
+				results = append(results, adminResult)
+				continue
+			}
+			adminResult.Error = err.Error()
+			results = append(results, adminResult)
+			// Fall through to the systemctl reload below.
+		}
+		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
+		results = append(results, result)
+		if !result.Success {
+			return results
+		}
+	}
+
+	// Phase 2: Synchronize hysteria2 certificates after Caddy has reloaded so
+	// new domains have a chance to obtain a certificate before hysteria2 starts.
 	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {
 		for _, domain := range ctx.hysteria2DomainsLocked() {
 			results = append(results, ctx.syncCaddyCertForHysteria2(domain))
@@ -159,7 +208,12 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			}
 		}
 	}
+
+	// Phase 3: Reload remaining services (including hysteria2).
 	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.inbounds, ctx.state.warp).Runtimes() {
+		if runtime.Unit == renderer.UnitCaddy {
+			continue
+		}
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
 		}
@@ -174,33 +228,6 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			results = append(results, enable)
 			if !enable.Success {
 				return results
-			}
-		}
-		// For the consolidated Caddy unit, prefer loading the runtime config
-		// through Caddy's Admin API and only fall back to systemctl reload when
-		// the Admin API is unavailable.
-		if runtime.Unit == renderer.UnitCaddy {
-			caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
-			if containsCleanPath(liveFiles, caddyLivePath) {
-				// Use a synthetic command for the Admin API load. There is no systemctl
-				// invocation here; the REST response contract still expects a Command
-				// array, so we report the Caddy admin endpoint that was used.
-				adminResult := ServiceActionResult{
-					Name:    renderer.UnitCaddy,
-					Command: []string{"caddy", "admin", "load"},
-				}
-				configBytes, err := os.ReadFile(caddyLivePath)
-				if err == nil {
-					err = caddyAdminLoader(configBytes)
-				}
-				if err == nil {
-					adminResult.Success = true
-					results = append(results, adminResult)
-					continue
-				}
-				adminResult.Error = err.Error()
-				results = append(results, adminResult)
-				// Fall through to the systemctl reload below.
 			}
 		}
 		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
@@ -246,6 +273,18 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}}
 	}
 	rollbackFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
+
+	// The committed snapshot represents the management state that was last known
+	// to back the live generated configs. Restore it to both memory and disk so
+	// that settings (e.g. PanelAccess) are rolled back along with the files.
+	if err := ctx.restoreCommittedManagementStateLocked(); err != nil {
+		rollbackActions := []ServiceActionResult{{
+			Name: "management-state-restore", Command: []string{"restore", "management-state"},
+			Success: false, Error: err.Error(),
+		}}
+		return rollbackFiles, rollbackActions
+	}
+
 	rollbackActions := ctx.reloadPromotedServicesLocked(liveFiles)
 
 	liveFilesMap := make(map[string]bool)
@@ -269,6 +308,23 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}
 	}
 	return rollbackFiles, rollbackActions
+}
+
+func (ctx ManagementApplyContext) restoreCommittedManagementStateLocked() error {
+	committedPath := filepath.Join(ctx.state.applyRoot, "generated", "veil", "committed-management-state.json")
+	snapshot, ok, err := managementstate.NewStore(committedPath, ctx.state.cipher).Load()
+	if err != nil || !ok {
+		return nil
+	}
+	ctx.state.settings = snapshot.Settings
+	ctx.state.inbounds = snapshot.Inbounds
+	ctx.state.rules = snapshot.Rules
+	ctx.state.routingPreset = snapshot.RoutingPreset
+	ctx.state.routingSource = snapshot.RoutingSource
+	ctx.state.warp = snapshot.Warp
+	ctx.state.users = snapshot.Users
+	ctx.state.setup = snapshot.Setup
+	return ctx.state.saveLocked()
 }
 
 func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
@@ -430,6 +486,9 @@ func containsCleanPath(paths []string, want string) bool {
 }
 
 func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
+	if success && (stage == "live" || stage == "services") {
+		_ = NewManagementStateLifecycle(ctx.state).commitCurrentSnapshotLocked()
+	}
 	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }
 
