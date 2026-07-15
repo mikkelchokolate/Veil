@@ -139,3 +139,28 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, response)
 }
+
+// autoApplyLocked runs a full live + services apply while already holding s.mu.
+// It best-effort acquires the service action lock via TryLock so it cannot
+// deadlock with concurrent explicit apply requests. Returns the apply response
+// and whether it succeeded. Caller must hold s.mu.
+func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool) {
+	if !autoApplyAfterInboundMutation {
+		return ApplyResponse{}, false
+	}
+	if !s.serviceActionMu.TryLock() {
+		s.logUserAction(r, "auto_apply_configuration", "system", false, "service action lock busy")
+		return ApplyResponse{}, false
+	}
+	defer s.serviceActionMu.Unlock()
+	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	success := err == nil && status == http.StatusOK
+	details := ""
+	if err != nil {
+		details = err.Error()
+	} else if status != http.StatusOK {
+		details = http.StatusText(status)
+	}
+	s.logUserAction(r, "auto_apply_configuration", "system", success, details)
+	return response, success
+}

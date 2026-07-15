@@ -77,6 +77,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 				writeInboundManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSONStatus(w, http.StatusCreated, created)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
@@ -178,6 +179,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeInboundManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSON(w, updated)
 		case http.MethodDelete:
 			err := mutation.DeleteInbound(name)
@@ -186,6 +188,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeInboundManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
