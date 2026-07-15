@@ -25,7 +25,11 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 
 func NaiveClientURI(domain string, port int, username string, password string) string {
 	userinfo := url.UserPassword(username, password).String()
-	return fmt.Sprintf("naive+https://%s@%s:%d", userinfo, domain, port)
+	host := domain
+	if port > 0 && port != 443 {
+		host = fmt.Sprintf("%s:%d", domain, port)
+	}
+	return fmt.Sprintf("https://%s@%s", userinfo, host)
 }
 
 func Hysteria2ClientURI(domain string, port int, password string, name string, insecure bool) string {
