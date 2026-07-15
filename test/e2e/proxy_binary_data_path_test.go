@@ -323,9 +323,17 @@ func TestHysteria2DataPath(t *testing.T) {
 		t.Fatalf("generate self signed cert: %v", err)
 	}
 
-	// Remove acme: section and replace with tls:
-	re := regexp.MustCompile(`(?s)acme:\s+domains:\s+-\s+\S+`)
-	modifiedYAML := re.ReplaceAllString(string(yamlContent), fmt.Sprintf("tls:\n  cert: %s\n  key: %s", filepath.ToSlash(certPath), filepath.ToSlash(keyPath)))
+	// Replace the generated TLS section with our self-signed certificate.
+	// The renderer currently emits a tls: block referencing the panel cert;
+	// older versions emitted an acme: block.
+	var modifiedYAML string
+	if strings.Contains(string(yamlContent), "\ntls:") {
+		re := regexp.MustCompile(`(?s)\ntls:\n\s+cert:.*?\n\s+key:.*?\n`)
+		modifiedYAML = re.ReplaceAllString(string(yamlContent), fmt.Sprintf("\ntls:\n  cert: %s\n  key: %s\n", filepath.ToSlash(certPath), filepath.ToSlash(keyPath)))
+	} else {
+		re := regexp.MustCompile(`(?s)acme:\s+domains:\s+-\s+\S+`)
+		modifiedYAML = re.ReplaceAllString(string(yamlContent), fmt.Sprintf("tls:\n  cert: %s\n  key: %s", filepath.ToSlash(certPath), filepath.ToSlash(keyPath)))
+	}
 
 	tempServerYAML := filepath.Join(tempDir, "server.yaml")
 	if err := os.WriteFile(tempServerYAML, []byte(modifiedYAML), 0o600); err != nil {
@@ -333,7 +341,15 @@ func TestHysteria2DataPath(t *testing.T) {
 	}
 
 	// 4. Start Hysteria2 server
+	serverLog := filepath.Join(tempDir, "server.log")
+	serverLogFile, err := os.Create(serverLog)
+	if err != nil {
+		t.Fatalf("create server log: %v", err)
+	}
+	defer serverLogFile.Close()
 	cmdServer := exec.Command(hysteriaPath, "server", "--config", tempServerYAML)
+	cmdServer.Stdout = serverLogFile
+	cmdServer.Stderr = serverLogFile
 	if err := cmdServer.Start(); err != nil {
 		t.Fatalf("start hysteria server: %v", err)
 	}
@@ -393,7 +409,15 @@ socks5:
 	}
 
 	// 7. Start Hysteria2 client
+	clientLog := filepath.Join(tempDir, "client.log")
+	clientLogFile, err := os.Create(clientLog)
+	if err != nil {
+		t.Fatalf("create client log: %v", err)
+	}
+	defer clientLogFile.Close()
 	cmdClient := exec.Command(hysteriaPath, "client", "-c", tempClientYAML)
+	cmdClient.Stdout = clientLogFile
+	cmdClient.Stderr = clientLogFile
 	if err := cmdClient.Start(); err != nil {
 		t.Fatalf("start hysteria client: %v", err)
 	}
@@ -406,7 +430,10 @@ socks5:
 	// Wait for client SOCKS5 to start listening
 	socksAddr := fmt.Sprintf("127.0.0.1:%d", socksPort)
 	if err := waitListen(socksAddr, 5*time.Second); err != nil {
-		t.Fatalf("hysteria client SOCKS5 did not listen: %v", err)
+		cb, _ := os.ReadFile(clientLog)
+		sb, _ := os.ReadFile(serverLog)
+		yb, _ := os.ReadFile(tempServerYAML)
+		t.Fatalf("hysteria client SOCKS5 did not listen: %v\nserver yaml:\n%s\nserver log:\n%s\nclient log:\n%s", err, string(yb), string(sb), string(cb))
 	}
 
 	// 8. Test proxying through client SOCKS5
