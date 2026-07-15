@@ -6,21 +6,22 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
-	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 func newLocalPrivilegedClient(state *managementState) privileged.Client {
+	// The broad management catalog already includes singleton runtimes (veil,
+	// warp, and any protocol plugin runtimes such as mieru) so that apply,
+	// repair, and privileged policy checks can manage them even when the
+	// feature is currently disabled. No per-protocol hardcoding is needed here.
 	catalog := NewManagedRuntimeCatalog()
 	units := make(map[string]struct{})
 	for _, runtime := range catalog.Runtimes() {
 		units[runtime.Unit] = struct{}{}
 	}
-	// These singleton units stay managed even when disabled so apply can first
-	// enable them, query status, or stop/disable them after the operator turns
-	// the corresponding feature off. Instance units are covered by prefixes below.
-	units[renderer.UnitWarp] = struct{}{}
-	units[renderer.UnitMieru] = struct{}{}
+
+	allowedArtifactNames := allowedArtifactNamesFromState(state)
+
 	stateRoot := filepath.Dir(state.statePath)
 	if state.statePath == "" {
 		stateRoot = filepath.Join(state.applyRoot, "state")
@@ -35,10 +36,11 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		BackupRoot:           state.backupDir,
 		UpdateRoot:           filepath.Join(stateRoot, "updates"),
 		ManagedUnits:         units,
-		ManagedUnitPrefixes:  []string{"veil-caddy@", "veil-hysteria2@", "veil-olcrtc@"},
+		ManagedUnitPrefixes:  catalog.LifecycleUnitPrefixes(),
 		UpdateArtifacts:      map[string]string{"veil-update": "veil-update.tar.gz"},
 		Artifacts:            map[string]privileged.ArtifactPath{},
 		FirewallRules:        map[string]struct{}{},
+		AllowedArtifactNames: allowedArtifactNames,
 	}
 	production := privileged.NewProductionExecutor(privileged.ProductionConfig{
 		PromotionBackupRoot:  filepath.Join(state.applyRoot, "backups"),
@@ -49,7 +51,17 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		VeilVersion:          state.version,
 	})
 	production.ServiceAction = func(_ context.Context, request privileged.ServiceActionRequest) error {
-		response := serviceActionRunner([]string{"systemctl", string(request.Action), request.Unit})
+		action := string(request.Action)
+		if request.Action == privileged.ServiceActionReload {
+			// Reload on an inactive unit fails with "cannot reload because it is
+			// inactive". Fall back to start so first-time applies and recovery
+			// paths work without dropping connections on already-active units.
+			status := serviceActionRunner([]string{"systemctl", "is-active", request.Unit})
+			if !status.Success {
+				action = "start"
+			}
+		}
+		response := serviceActionRunner([]string{"systemctl", action, request.Unit})
 		if !response.Success {
 			if response.Error == "" {
 				response.Error = "service action failed"
@@ -88,11 +100,32 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	return privileged.NewLocalAdapter(policy, production)
 }
 
-func managedRuntimeByActionName(name string) (ManagedRuntime, bool) {
-	for _, runtime := range NewManagedRuntimeCatalog().Runtimes() {
+func managedRuntimeByActionName(state *managementState, name string) (ManagedRuntime, bool) {
+	for _, runtime := range NewVisibleManagedRuntimeCatalogForState(state).Runtimes() {
 		if runtime.ActionName == name {
 			return runtime, true
 		}
 	}
 	return ManagedRuntime{}, false
+}
+
+func allowedArtifactNamesFromState(state *managementState) map[string]struct{} {
+	names := map[string]struct{}{}
+	if state == nil {
+		return names
+	}
+	state.mu.Lock()
+	settings := state.settings
+	inbounds := append([]Inbound(nil), state.inbounds...)
+	state.mu.Unlock()
+
+	for _, inbound := range inbounds {
+		if inbound.Name != "" {
+			names[inbound.Name] = struct{}{}
+		}
+	}
+	if settings.PanelAccess == "caddy" {
+		names["panel"] = struct{}{}
+	}
+	return names
 }

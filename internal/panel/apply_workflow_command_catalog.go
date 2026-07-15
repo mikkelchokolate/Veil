@@ -39,6 +39,15 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 	b.Write(encoded)
 	b.WriteString(`;
 
+    function setApplyMutationButtonsDisabled(disabled) {
+      ['apply-staged-files', 'apply-live-configs', 'reload-services'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.disabled = Boolean(disabled) || isViewerRole();
+        }
+      });
+    }
+
     function applyRuntimesFromResponse(data) {
       if (!data) {
         return [];
@@ -65,7 +74,7 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 
     function applyPlanFromResponse(data) {
       if (!data) {
-        return {};
+        return null;
       }
       if (data.plan) {
         return data.plan;
@@ -87,6 +96,9 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
 
     function applyFilesFromResponse(data) {
       const plan = applyPlanFromResponse(data);
+      if (!plan) {
+        return [];
+      }
       if (Array.isArray(plan.operations)) {
         return plan.operations.map((operation) => ({
           operation: String(operation.type || 'operation').replace(/_/g, ' '),
@@ -131,9 +143,11 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         chunks.push(String(value));
       };
       const plan = applyPlanFromResponse(data);
-      add(plan.configs);
-      add(plan.actions);
-      add(plan.runtimes);
+      if (plan) {
+        add(plan.configs);
+        add(plan.actions);
+        add(plan.runtimes);
+      }
       if (data) {
         add(data.writtenFiles);
         add(data.liveFiles);
@@ -147,6 +161,10 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
     function applyWarningsFromResponse(data) {
       const plan = applyPlanFromResponse(data);
       const warnings = [];
+      if (!plan) {
+        warnings.push(veilT('apply.warningInvalid'));
+        return warnings;
+      }
       const metadata = applyPreviewMetadata(data);
       if (plan.valid === false) {
         warnings.push(veilT('apply.warningInvalid'));
@@ -189,19 +207,14 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
           warnings: applyWarningsFromResponse(data).join(' ')
         });
       }
+      const plan = applyPlanFromResponse(data);
+      setApplyMutationButtonsDisabled(!plan || plan.valid !== true);
       const body = document.getElementById('apply-file-diff-preview-body');
       if (!body) {
         return;
       }
       const rows = applyFilesFromResponse(data);
       body.textContent = '';
-      const plan = applyPlanFromResponse(data);
-      ['apply-staged-files', 'apply-live-configs', 'reload-services'].forEach((id) => {
-        const button = document.getElementById(id);
-        if (button) {
-          button.disabled = plan.valid === false || isViewerRole();
-        }
-      });
       if (rows.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
@@ -229,9 +242,18 @@ func (c ApplyWorkflowCommandCatalog) PanelActionsJS() string {
         options.body = JSON.stringify(command.request);
       }
       const result = await loadJSON(command.path, 'apply-plan-output', options);
+      if (result === null) {
+        renderApplyRuntimes(null);
+        renderApplySafePreview(null);
+        setApplyMutationButtonsDisabled(true);
+        return null;
+      }
       renderApplyRuntimes(result);
       renderApplySafePreview(result);
+      return result;
     }
+
+    setApplyMutationButtonsDisabled(true);
 
 `)
 	b.WriteString("    applyWorkflowCommands.forEach((command) => {\n")

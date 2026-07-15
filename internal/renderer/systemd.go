@@ -29,13 +29,6 @@ MemoryDenyWriteExecute=true
 UMask=0077
 `
 
-func ManagedSystemdUnitNames() []string {
-	return []string{
-		UnitVeil, UnitHelperService, UnitHelperSocket, UnitCaddy, UnitHysteria2,
-		UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer,
-	}
-}
-
 type SystemdConfig struct {
 	VeilBinary     string
 	CaddyBinary    string
@@ -131,7 +124,6 @@ User=root
 Group=root
 ExecStart=` + cfg.VeilBinary + ` helper serve --systemd-socket-activation
 NoNewPrivileges=true
-PrivateNetwork=true
 PrivateDevices=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -204,6 +196,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
@@ -223,6 +217,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.OlcrtcBinary + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
@@ -242,6 +238,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
 ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
 Restart=on-failure
@@ -250,7 +248,18 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `RestrictAddressFamilies=AF_NETLINK
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
 ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
@@ -263,6 +272,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1

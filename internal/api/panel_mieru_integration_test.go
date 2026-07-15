@@ -10,15 +10,15 @@ import (
 	"testing"
 )
 
-func TestPanelHTMLExposesCompleteMieruOperations(t *testing.T) {
-	html := panelHTML("/", "", "en")
+func TestPanelMieruHTML(t *testing.T) {
+	html := panelHTMLForCatalog("/", "", "en", NewManagedRuntimeCatalog())
 	for _, want := range []string{
-		`<option value="mieru">mieru</option>`,
+		`<option value="mieru">Mieru</option>`,
 		`"mieru":["tcp","udp"]`,
-		`download-mieru-configs`,
-		`mieru-client-configs.json`,
+		`download-client-configs`,
+		`downloadClientConfigArtifacts`,
 		`restart-mieru`,
-		`/api/services/mieru/restart`,
+		`/api/services/' + encodeURIComponent(serviceName) + '/restart`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("Panel HTML missing Mieru integration %q", want)

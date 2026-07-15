@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestRenderWarpRoutingRulesMapsProxyToDirect(t *testing.T) {
+func TestRenderWarpRoutingRulesMapsProxyToWarp(t *testing.T) {
 	rules := RenderWarpRoutingRules([]RoutingRule{
 		{Match: "all", Outbound: "proxy", Enabled: true},
 	})
-	if len(rules) != 1 || rules[0].Outbound != "direct" {
+	if len(rules) != 1 || rules[0].Outbound != "warp" {
 		t.Fatalf("rules = %+v", rules)
 	}
 }

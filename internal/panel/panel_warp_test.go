@@ -22,24 +22,56 @@ func TestPanelWarpActionsModuleRendersLoadAndSaveActions(t *testing.T) {
 	}
 }
 
-// TestPanelWarpToggleAppliesImmediately guards the fix for the WARP slider
-// behaving like an inert checkbox: flipping it must save AND apply so WARP
-// actually turns on/off (and the routing rule is added/removed) without the
-// user hunting for a separate save button. Both the toggle change and the
-// form submit route through a single commit that PUTs /api/warp then POSTs
-// /api/apply to make the change live.
+func TestPanelWarpActionsKeepValidationCacheCurrent(t *testing.T) {
+	actions := panelWarpActionsJS()
+	if count := strings.Count(actions, `window.cachedWarp =`); count != 2 {
+		t.Fatalf("WARP load and save must both update cached validation context, got %d assignments", count)
+	}
+	for _, want := range []string{
+		`if (!data) return;`,
+		`window.cachedWarp = data;`,
+		`window.cachedWarp = saved;`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("WARP cache synchronization missing %q", want)
+		}
+	}
+}
+
+// TestPanelWarpToggleAppliesImmediately guards that flipping the WARP slider
+// saves and applies the config immediately. Save and apply results remain
+// separate so a failed live apply cannot make the UI lie about persisted state.
 func TestPanelWarpToggleAppliesImmediately(t *testing.T) {
 	actions := panelWarpActionsJS()
 	for _, want := range []string{
 		`async function applyWarpToggle()`,
 		`async function commitWarp(`,
-		`/api/apply`,
+		`const applied = await loadJSON('/api/apply'`,
 		`applyServices: true`,
 		`applyLive: true`,
 		`confirm: true`,
+		`return { saved, applied: applied !== null };`,
+		`return { saved: null, applied: false };`,
+		`toggle.checked = Boolean(result.saved.enabled);`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("WARP actions missing %q", want)
+		}
+	}
+}
+
+func TestPanelWarpToggleOnlyRevertsWhenSaveFails(t *testing.T) {
+	actions := panelWarpActionsJS()
+	for _, want := range []string{
+		`if (!result || !result.saved) {`,
+		`toggle.checked = !enabled;`,
+		`toggle.checked = Boolean(result.saved.enabled);`,
+		`if (output) output.textContent = veilT('status.requestFailed'`,
+		`if (toggle) { toggle.disabled = isViewerRole(); }`,
+		`if (saveBtn) { saveBtn.disabled = isViewerRole(); }`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("WARP failure-state handling missing %q", want)
 		}
 	}
 }
@@ -63,7 +95,7 @@ func TestPanelWarpToggleHasChangeBinding(t *testing.T) {
 }
 
 func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
-	card := panelWarpCardHTML()
+	card := panelWarpHardenedCardHTML()
 	for _, want := range []string{
 		`<h2>WARP</h2>`,
 		`id="warp-form"`,
@@ -72,9 +104,36 @@ func TestPanelWarpCardModuleRendersRedactedWarpControls(t *testing.T) {
 		`[REDACTED]`,
 		`id="save-warp-config"`,
 		`id="warp-output"`,
+		`id="clear-warp-output"`,
 	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("WARP card missing %q", want)
 		}
+	}
+	if strings.Contains(card, `onclick=`) {
+		t.Fatal("rendered WARP card must not use inline event handlers")
+	}
+}
+
+func TestPanelWarpConsoleControlUsesBoundListener(t *testing.T) {
+	js := panelWarpControlsJS()
+	for _, want := range []string{
+		`document.getElementById('clear-warp-output').addEventListener('click'`,
+		`const output = document.getElementById('warp-output');`,
+		`if (output) output.textContent = 'Console cleared.';`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("WARP console binding missing %q", want)
+		}
+	}
+}
+
+func TestPanelCatalogMountsHardenedWarpControl(t *testing.T) {
+	html := NewRenderer(NewSliceCatalog(nil).RenderSlots()).BaseHTML()
+	if !strings.Contains(html, `id="clear-warp-output"`) {
+		t.Fatal("rendered Panel does not contain hardened WARP console control")
+	}
+	if strings.Contains(html, `onclick="document.getElementById('warp-output')`) {
+		t.Fatal("rendered Panel still contains WARP inline console handler")
 	}
 }

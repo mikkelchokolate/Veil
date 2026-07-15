@@ -6,7 +6,7 @@ import (
 )
 
 func TestArtifactCatalogOwnsGeneratedAndLivePaths(t *testing.T) {
-	catalog := NewArtifactCatalog()
+	catalog := NewDefaultArtifactCatalog()
 	path, ok := catalog.LivePathForStagedConfig(filepath.FromSlash("/etc/veil"), filepath.FromSlash("/etc/veil/generated/mieru/server_config.json"))
 	if !ok || path != filepath.FromSlash("/etc/veil/live/mieru/server_config.json") {
 		t.Fatalf("live path = %q ok=%v", path, ok)
@@ -34,7 +34,7 @@ func TestArtifactSpecDerivesStablePlanGeneratedAndLivePaths(t *testing.T) {
 }
 
 func TestArtifactCatalogMatchesValidationAndPromotionSpecs(t *testing.T) {
-	catalog := NewArtifactCatalog()
+	catalog := NewDefaultArtifactCatalog()
 	// caddy has a working standalone validator.
 	validation, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/Caddyfile"))
 	if !ok {

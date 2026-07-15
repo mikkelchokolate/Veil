@@ -27,14 +27,20 @@ type SnapshotTarget struct {
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 	return model.ManagementSnapshot{
 		Setup:         input.Setup,
-		Settings:      input.Settings,
+		Settings:      cloneSettings(input.Settings),
 		Inbounds:      cloneInbounds(input.Inbounds),
 		Rules:         append([]model.RoutingRule(nil), input.Rules...),
 		RoutingPreset: input.RoutingPreset,
-		RoutingSource: input.RoutingSource,
-		Warp:          input.Warp,
+		RoutingSource: cloneRoutingSource(input.RoutingSource),
+		Warp:          cloneWarp(input.Warp),
 		Users:         cloneUsers(input.Users),
 	}
+}
+
+func cloneSettings(settings model.Settings) model.Settings {
+	cloned := settings
+	cloned.ProtocolFields = cloneProtocolFields(settings.ProtocolFields)
+	return cloned
 }
 
 func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
@@ -54,10 +60,10 @@ func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
 		*target.RoutingPreset = snapshot.RoutingPreset
 	}
 	if target.RoutingSource != nil && (snapshot.RoutingSource.Repository != "" || len(snapshot.RoutingSource.Files) > 0) {
-		*target.RoutingSource = snapshot.RoutingSource
+		*target.RoutingSource = cloneRoutingSource(snapshot.RoutingSource)
 	}
 	if target.Warp != nil && (snapshot.Warp.Endpoint != "" || snapshot.Warp.Enabled || snapshot.Warp.LicenseKey != "") {
-		*target.Warp = snapshot.Warp
+		*target.Warp = cloneWarp(snapshot.Warp)
 	}
 	if target.Users != nil && snapshot.Users != nil {
 		*target.Users = cloneUsers(snapshot.Users)
@@ -66,6 +72,7 @@ func ApplySnapshot(target SnapshotTarget, snapshot model.ManagementSnapshot) {
 
 func MergeSettingsDefaults(settings model.Settings, defaults model.Settings) model.Settings {
 	merged := settings
+	merged.ProtocolFields = cloneProtocolFields(settings.ProtocolFields)
 	if merged.PanelListen == "" {
 		merged.PanelListen = defaults.PanelListen
 	}
@@ -92,6 +99,18 @@ func cloneInbounds(inbounds []model.Inbound) []model.Inbound {
 	for i, inbound := range inbounds {
 		out[i] = inbound
 		out[i].Profiles = append([]model.ClientProfile(nil), inbound.Profiles...)
+		out[i].ProtocolFields = cloneProtocolFields(inbound.ProtocolFields)
+	}
+	return out
+}
+
+func cloneProtocolFields(pf map[string]any) map[string]any {
+	if pf == nil {
+		return nil
+	}
+	out := make(map[string]any, len(pf))
+	for k, v := range pf {
+		out[k] = v
 	}
 	return out
 }
@@ -103,4 +122,22 @@ func cloneUsers(users []model.User) []model.User {
 	out := make([]model.User, len(users))
 	copy(out, users)
 	return out
+}
+
+func cloneRoutingSource(source model.RoutingSource) model.RoutingSource {
+	if source.Files == nil {
+		return source
+	}
+	cloned := source
+	cloned.Files = append([]model.RoutingSourceFile(nil), source.Files...)
+	return cloned
+}
+
+func cloneWarp(warp model.WarpConfig) model.WarpConfig {
+	if warp.Reserved == nil {
+		return warp
+	}
+	cloned := warp
+	cloned.Reserved = append([]int(nil), warp.Reserved...)
+	return cloned
 }

@@ -17,23 +17,15 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
-		w.Header()["Server"] = nil // hide Go version from Server header
+		w.Header()["Server"] = nil
 		if r.TLS != nil {
 			host, _, _ := net.SplitHostPort(r.Host)
 			if host == "" {
 				host = r.Host
 			}
 			if net.ParseIP(host) == nil {
-				// Real domain name behind a trusted TLS certificate.
 				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 			}
-			// Bare IP (common in direct Panel access): do NOT send any
-			// Strict-Transport-Security header. HSTS is ignored for IP
-			// addresses by spec, but Chrome/Firefox still treat a self-signed
-			// certificate + any HSTS header (even max-age=0) as a hard error
-			// and can enter a redirect/reject loop instead of showing the
-			// certificate warning page. Omitting the header keeps curl and
-			// browsers on the same path: a one-time certificate exception.
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -57,6 +49,13 @@ type authMiddlewareOptions struct {
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		state.mu.Lock()
+		startupStateLoadFailed := state.startupStateLoadFailed
+		state.mu.Unlock()
+		if startupStateLoadFailed && strings.HasPrefix(path, "/api/") {
+			writeError(w, "management state unavailable", http.StatusServiceUnavailable)
+			return
+		}
 
 		requiresAuth := strings.HasPrefix(path, "/api/")
 		if path == "/api/auth/login" ||
@@ -82,7 +81,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var role string
 		var isCookieSession bool
 
-		// 1. Check static token authentication (X-Veil-Token / Authorization Bearer)
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
 			username = "api-token"
@@ -90,7 +88,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			hasStaticToken = true
 		}
 
-		// 2. If no static token, check cookie session
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
@@ -102,7 +99,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// 3. Fallback check: if there are no registered users in state, and token is empty, we allow access
 		if username == "" {
 			state.mu.Lock()
 			noUsers := len(state.users) == 0
@@ -119,8 +115,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			return
 		}
 
-		// 4. CSRF check for mutating cookie sessions
-		if isCookieSession && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+		// Cookie-session POST/PUT/DELETE requests always remain CSRF-protected,
+		// including read-only diagnostic POST actions available to viewers.
+		if isCookieSession && isMutatingRequest(r) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
 			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
 				writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
@@ -128,8 +125,10 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			}
 		}
 
-		// 5. RBAC check for mutating operations
-		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) {
+		// A small exact-path allowlist covers read-only operations that use POST
+		// only to carry structured input or trigger an in-memory preview. All
+		// actual state mutations still require admin.
+		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
 			writeError(w, "forbidden: admin role required", http.StatusForbidden)
 			return
 		}
@@ -149,6 +148,23 @@ func isMutatingRequest(r *http.Request) bool {
 
 func isSelfServiceMutation(r *http.Request) bool {
 	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
+}
+
+func isReadOnlyDiagnosticRequest(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/tools/dns-lookup",
+		"/api/tools/ping",
+		"/api/tools/speedtest",
+		"/api/apply/plan",
+		"/api/client-links/qr",
+		"/api/profiles/ru-recommended/preview":
+		return true
+	default:
+		return false
+	}
 }
 
 type contextKey string

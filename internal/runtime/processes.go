@@ -21,8 +21,8 @@ type ProcessesStats struct {
 }
 
 // readProcessesStats finds managed service processes via /proc.
-func readProcessesStats() (ProcessesStats, error) {
-	return NewProcessDiscovery(procProcessSource{}).Read()
+func readProcessesStats(policy ManagedProcessPolicy) (ProcessesStats, error) {
+	return NewProcessDiscovery(procProcessSource{}, policy).Read()
 }
 
 type procProcessSource struct{}

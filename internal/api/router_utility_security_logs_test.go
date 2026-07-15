@@ -104,9 +104,14 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "restart naive",
-			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			name:    "reload caddy panel",
+			command: []string{"systemctl", "reload", "veil-caddy@panel.service"},
 			want:    true,
+		},
+		{
+			name:    "restart caddy panel disallowed",
+			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			want:    false,
 		},
 		{
 			name:    "restart hysteria2 template",
@@ -161,6 +166,26 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 				t.Errorf("isAllowedServiceCommand(%v) = %v, want %v", tt.command, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLogRoutesResolvePerInboundRuntimeUnits(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	routes := LogRoutes{State: state}
+
+	if unit, ok := routes.resolveLogUnit("hysteria2-edge"); !ok || unit != "veil-hysteria2@edge.service" {
+		t.Fatalf("resolve action name = %q %v", unit, ok)
+	}
+	if unit, ok := routes.resolveLogUnit("veil-hysteria2@edge.service"); !ok || unit != "veil-hysteria2@edge.service" {
+		t.Fatalf("resolve unit = %q %v", unit, ok)
+	}
+}
+
+func TestLogRoutesRejectUnknownRuntimeUnits(t *testing.T) {
+	routes := LogRoutes{State: newManagementState(ServerInfo{Version: "test", Mode: "dev"})}
+	if unit, ok := routes.resolveLogUnit("caddy.service"); ok || unit != "" {
+		t.Fatalf("unexpected unit resolution: %q %v", unit, ok)
 	}
 }
 

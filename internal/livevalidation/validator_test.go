@@ -111,6 +111,42 @@ func TestValidatorRejectsNewTCPAndUDPBindingsInUse(t *testing.T) {
 	}
 }
 
+func TestValidatorAllowsNaiveProxyToReplacePanelCaddyBindingOn443(t *testing.T) {
+	validator := testValidator()
+	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:443": false}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{
+			PanelAccess:   "caddy",
+			Domain:        "vpn.example.com",
+			Email:         "admin@example.com",
+			NaiveUsername: "veil",
+			NaivePassword: "secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+		}},
+	})
+
+	if hasIssueCode(response, "port_in_use") {
+		t.Fatalf("Veil-owned Panel Caddy binding should be replaceable by NaiveProxy: %+v", response)
+	}
+}
+
+func TestValidatorDoesNotTreatPanelCaddyBindingAsOwnedByOtherProtocols(t *testing.T) {
+	validator := testValidator()
+	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:443": false}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{PanelAccess: "caddy"},
+		Inbounds: []model.Inbound{{
+			Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret",
+		}},
+	})
+
+	assertIssueCode(t, response, "port_in_use")
+}
+
 func TestValidatorReportsMissingDomainEmailCredentialBinaryAndUnit(t *testing.T) {
 	validator := testValidator()
 	validator.Binaries = fakeBinaryLookup{found: map[string]bool{}}

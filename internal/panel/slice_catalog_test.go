@@ -28,7 +28,7 @@ func TestSliceCatalogContainsApplyDiagnosticsAndServiceSlots(t *testing.T) {
 		"routing-rule-form":            "saveRoutingRule",
 		"warp-form":                    "saveWarpConfig",
 		"load-warp-config":             "loadWarpIntoForm",
-		"download-mieru-configs":       "downloadMieruConfigs",
+		"download-client-configs":      "downloadClientConfigArtifacts",
 		"load-service-status":          "loadServiceStatus",
 		"inbound-protocol":             "syncInboundTransportOptions",
 		"btn-load-sessions":            "loadSessions",

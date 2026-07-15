@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -49,23 +49,25 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 
 // stripBasePathMiddleware removes the base path prefix from request URL before routing.
 func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
+	mountPath := strings.TrimSuffix(prefix, "/")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, prefix[:len(prefix)-1]) {
-			// Strip prefix: /secret/foo → /foo
-			stripped := strings.TrimPrefix(r.URL.Path, prefix[:len(prefix)-1])
-			if stripped == "" {
-				stripped = "/"
-			}
-			r2 := new(http.Request)
-			*r2 = *r
-			r2.URL = new(url.URL)
-			*r2.URL = *r.URL
-			r2.URL.Path = stripped
-			next.ServeHTTP(w, r2)
+		// Match either the mount itself or a child path. A raw HasPrefix check would
+		// incorrectly accept /secretary when the configured mount is /secret.
+		if r.URL.Path != mountPath && !strings.HasPrefix(r.URL.Path, mountPath+"/") {
+			writeNotFound(w)
 			return
 		}
-		// Path doesn't match base path — reject with 404.
-		writeNotFound(w)
+
+		stripped := strings.TrimPrefix(r.URL.Path, mountPath)
+		if stripped == "" {
+			stripped = "/"
+		}
+		r2 := new(http.Request)
+		*r2 = *r
+		r2.URL = new(url.URL)
+		*r2.URL = *r.URL
+		r2.URL.Path = stripped
+		next.ServeHTTP(w, r2)
 	})
 }
 
@@ -77,9 +79,19 @@ func rateLimitMiddleware(metrics *observability.MetricsCollector, next http.Hand
 
 const maxJSONBodyBytes int64 = 1024 * 1024
 
+var (
+	errUnsupportedJSONMediaType = errors.New("Content-Type must be application/json")
+	errJSONBodyTooLarge         = errors.New("request body too large")
+)
+
+func isJSONMediaType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	return err == nil && strings.EqualFold(mediaType, "application/json")
+}
+
 func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 	ct := r.Header.Get("Content-Type")
-	if ct != "" && ct != "application/json" {
+	if ct != "" && !isJSONMediaType(ct) {
 		writeError(w, "Unsupported Media Type: Content-Type must be application/json", http.StatusUnsupportedMediaType)
 		return false
 	}
@@ -88,7 +100,7 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := decoder.Decode(v); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
+			writeError(w, errJSONBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
 			return false
 		}
 		if strings.HasPrefix(err.Error(), "json: unknown field ") {
@@ -105,7 +117,7 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 		}
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
+			writeError(w, errJSONBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
 			return false
 		}
 		writeError(w, "invalid JSON", http.StatusBadRequest)
@@ -137,6 +149,7 @@ func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, msg string, code int) {
+	code = canonicalRequestErrorStatus(msg, code)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
@@ -144,6 +157,20 @@ func writeError(w http.ResponseWriter, msg string, code int) {
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(map[string]string{"message": msg}); err != nil {
 		log.Printf("writeError: encode error: %v", err)
+	}
+}
+
+func canonicalRequestErrorStatus(message string, status int) int {
+	if status != http.StatusBadRequest {
+		return status
+	}
+	switch message {
+	case errUnsupportedJSONMediaType.Error():
+		return http.StatusUnsupportedMediaType
+	case errJSONBodyTooLarge.Error():
+		return http.StatusRequestEntityTooLarge
+	default:
+		return status
 	}
 }
 
@@ -211,23 +238,24 @@ func methodNotAllowed(w http.ResponseWriter, methods ...string) {
 // that expect no meaningful body (like speedtest). If Content-Type is set, it must
 // be application/json; if a body is present, it must be empty or "{}".
 func validateEmptyJSONBody(r *http.Request) error {
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		if ct != "application/json" {
-			return fmt.Errorf("Content-Type must be application/json")
-		}
+	if ct := r.Header.Get("Content-Type"); ct != "" && !isJSONMediaType(ct) {
+		return errUnsupportedJSONMediaType
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxJSONBodyBytes))
 	if err != nil {
-		return fmt.Errorf("request body too large")
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return errJSONBodyTooLarge
+		}
+		return err
 	}
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed != "" && trimmed != "{}" {
-		return fmt.Errorf("unexpected request body")
+	body = []byte(strings.TrimSpace(string(body)))
+	if len(body) == 0 || string(body) == "{}" {
+		return nil
 	}
-	return nil
+	return errors.New("request body must be empty or {}")
 }
 
-// validLogUnit checks that a systemd unit name contains only safe characters.
 func runtimeInfo() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }

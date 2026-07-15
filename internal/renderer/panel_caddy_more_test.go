@@ -31,6 +31,16 @@ func TestRenderPanelCaddyfileValidation(t *testing.T) {
 			cfg:       PanelCaddyConfig{Domain: "example.com", PanelPort: 2096, WebBasePath: "/"},
 			wantError: "web base path is required",
 		},
+		{
+			name:      "directive injection in web base path",
+			cfg:       PanelCaddyConfig{Domain: "example.com", PanelPort: 2096, WebBasePath: "panel\nrespond hacked"},
+			wantError: "web base path:",
+		},
+		{
+			name:      "query in web base path",
+			cfg:       PanelCaddyConfig{Domain: "example.com", PanelPort: 2096, WebBasePath: "panel?debug"},
+			wantError: "web base path:",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

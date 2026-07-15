@@ -2,7 +2,7 @@
 # Veil - management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru
 #
 # Build:
-#   docker build -t veil .
+#   docker build --build-arg VERSION=dev -t veil .
 #
 # Run (local-only panel, first-run session auth generated in mounted state):
 #   docker run -d --name veil --network host \
@@ -30,7 +30,7 @@
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.5-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
@@ -39,7 +39,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o /veil ./cmd/veil
+ARG VERSION=dev
+RUN test -n "${VERSION}" \
+    && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /veil ./cmd/veil
 
 FROM alpine:3.23
 

@@ -62,13 +62,15 @@ func (c InboundCatalog) Update(name string, update Inbound) (Inbound, InboundCat
 	if idx < 0 {
 		return Inbound{}, c, ErrInboundNotFound
 	}
+	// The URL/catalog key is canonical: validate it before using the inbound name
+	// in generated paths, systemd template instances, or Panel runtime metadata.
+	update.Name = name
 	if err := validateInboundForUpdate(update); err != nil {
 		return Inbound{}, c, err
 	}
 	if c.hasTransportPort(update.Transport, update.Port, idx) {
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
-	update.Name = name
 	NewInboundCredentialPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx])
 	nextInbounds := c.List()
 	nextInbounds[idx] = update

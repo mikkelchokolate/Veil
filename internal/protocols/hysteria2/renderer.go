@@ -16,7 +16,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	}
 	var artifacts []generatedconfig.GeneratedConfigArtifact
 	for _, inbound := range input.Inbounds {
-		body, err := renderHysteria2(input.Settings, inbound, input.Warp)
+		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Paths)
 		if err != nil {
 			return nil, false, err
 		}
@@ -34,13 +34,10 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 	return generatedconfig.ArtifactSpec{
 		Subpath:        generatedconfig.Hysteria2ConfigSubpath,
 		ValidationName: "hysteria2",
-		ValidationCommand: func(path string) []string {
-			return []string{"hysteria", "server", "--config", path, "--check"}
-		},
 	}
 }
 
-func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.WarpConfig) (string, error) {
+func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.WarpConfig, paths generatedconfig.Paths) (string, error) {
 	password := hysteria2Password(settings, inbound)
 	access, err := clientaccess.BuildClientAccess(settings, inbound)
 	if err != nil {
@@ -55,8 +52,11 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		MasqueradeURL: url,
 	}
 	if settings.PanelAccess == "caddy" && settings.Domain != "" {
-		hystConfig.CertPath = "/etc/veil/certs/" + settings.Domain + ".crt"
-		hystConfig.KeyPath = "/etc/veil/certs/" + settings.Domain + ".key"
+		hystConfig.CertPath = paths.CertPath(settings.Domain)
+		hystConfig.KeyPath = paths.KeyPath(settings.Domain)
+	} else {
+		hystConfig.CertPath = paths.PanelCertPath()
+		hystConfig.KeyPath = paths.PanelKeyPath()
 	}
 	if warp.Enabled {
 		socksPort := warp.SocksPort

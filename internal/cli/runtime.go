@@ -15,7 +15,7 @@ import (
 
 // runtimeInstallFunc is injectable so tests can exercise the command without
 // reaching the network.
-var runtimeInstallFunc = protocols.InstallAllRuntimes
+var runtimeInstallFunc = protocols.InstallSelectedRuntimes
 
 // installRuntimesFunc provisions protocol runtimes during `veil install`. It is
 // intentionally non-fatal: a fresh Panel install must still succeed even if a
@@ -36,10 +36,95 @@ func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedI
 	}
 }
 
+// runtimeNames returns the sorted list of protocol runtime names from the
+// registry and the runtimeinstall catalog. It is used to build dynamic help
+// text so the CLI never lists stale or missing protocol names.
+func runtimeNames() []string {
+	names := make(map[string]struct{})
+
+	// Collect from protocol plugins that provide runtimes.
+	for _, p := range protocols.NewRegistry().All() {
+		if rp, ok := protocols.AsRuntimeProvider(p); ok {
+			rt := rp.RuntimeInstall("")
+			if rt.Name != "" {
+				names[rt.Name] = struct{}{}
+			}
+		}
+	}
+
+	// Collect from the runtimeinstall catalog (covers WARP and any
+	// non-plugin-managed runtimes).
+	for _, rt := range runtimeinstall.Catalog("") {
+		if rt.Name != "" {
+			names[rt.Name] = struct{}{}
+		}
+	}
+
+	out := make([]string, 0, len(names))
+	for name := range names {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// runtimeDescription returns the human-readable acquisition description for a
+// registered runtime, if one is provided by the plugin or catalog.
+func runtimeDescription(name string) string {
+	for _, p := range protocols.NewRegistry().All() {
+		if rp, ok := protocols.AsRuntimeProvider(p); ok {
+			rt := rp.RuntimeInstall("")
+			if rt.Name == name {
+				return rt.Description
+			}
+		}
+	}
+	for _, rt := range runtimeinstall.Catalog("") {
+		if rt.Name == name {
+			return rt.Description
+		}
+	}
+	return ""
+}
+
+// binaryNames returns the sorted list of binary filenames managed by the
+// runtime install system. Used for the Short help text.
+func binaryNames() []string {
+	names := make(map[string]struct{})
+
+	for _, p := range protocols.NewRegistry().All() {
+		if rp, ok := protocols.AsRuntimeProvider(p); ok {
+			rt := rp.RuntimeInstall("")
+			if rt.Binary != "" {
+				names[rt.Binary] = struct{}{}
+			}
+		}
+	}
+
+	for _, rt := range runtimeinstall.Catalog("") {
+		if rt.Binary != "" {
+			names[rt.Binary] = struct{}{}
+		}
+	}
+
+	out := make([]string, 0, len(names))
+	for name := range names {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func newRuntimeCommand() *cobra.Command {
+	binaries := binaryNames()
+	short := "Manage protocol runtime binaries"
+	if len(binaries) > 0 {
+		short = fmt.Sprintf("Manage protocol runtime binaries (%s)", strings.Join(binaries, ", "))
+	}
+
 	cmd := &cobra.Command{
 		Use:   "runtime",
-		Short: "Manage protocol runtime binaries (caddy, hysteria, mita, sing-box, olcrtc)",
+		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -52,18 +137,33 @@ func newRuntimeInstallCommand() *cobra.Command {
 	var binDir string
 	var only []string
 
+	names := runtimeNames()
+	onlyDesc := "install only these runtimes (by protocol name)"
+	if len(names) > 0 {
+		onlyDesc = fmt.Sprintf("install only these runtimes (by protocol name: %s)", strings.Join(names, ", "))
+	}
+
+	// Build the Long description dynamically so it always matches the
+	// current set of registered runtimes.
+	var longParts []string
+	for _, name := range names {
+		desc := runtimeDescription(name)
+		if desc == "" {
+			desc = fmt.Sprintf("%s runtime", name)
+		}
+		longParts = append(longParts, desc)
+	}
+
+	longBody := "Install acquires the external runtime binaries that Veil's managed systemd\nunits invoke and places them in the bin directory (default /usr/local/bin).\n\nWithout these binaries every protocol fails to start with systemd status\n203/EXEC."
+	if len(longParts) > 0 {
+		longBody += "\n\n" + strings.Join(longParts, "; ") + "."
+	}
+	longBody += "\n\nUse --only to install a subset, e.g. --only mieru,hysteria2."
+
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Download and install protocol runtime binaries into the bin directory",
-		Long: `Install acquires the external runtime binaries that Veil's managed systemd
-units invoke and places them in the bin directory (default /usr/local/bin).
-
-Without these binaries every protocol fails to start with systemd status
-203/EXEC. caddy, hysteria, mita, and sing-box are downloaded from their upstream
-GitHub releases (with checksum verification where published); olcrtc is built
-from source with "go install".
-
-Use --only to install a subset, e.g. --only mieru,hysteria2.`,
+		Long:  longBody,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 			if err != nil {
@@ -77,7 +177,7 @@ Use --only to install a subset, e.g. --only mieru,hysteria2.`,
 		},
 	}
 	cmd.Flags().StringVar(&binDir, "bin-dir", runtimeinstall.DefaultBinDir(), "directory to install runtime binaries into")
-	cmd.Flags().StringSliceVar(&only, "only", nil, "install only these runtimes (by protocol name: naiveproxy, hysteria2, mieru, warp, olcrtc)")
+	cmd.Flags().StringSliceVar(&only, "only", nil, onlyDesc)
 	return cmd
 }
 
@@ -91,10 +191,12 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch})
-	results = filterRuntimeResults(results, opts.Only)
+	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch}, opts.Only)
 	if len(results) == 0 {
-		return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
+		if len(opts.Only) > 0 {
+			return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
+		}
+		return fmt.Errorf("no protocol runtimes are available for this platform")
 	}
 
 	fmt.Fprintln(out, "Installing protocol runtimes")
@@ -120,22 +222,4 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	}
 	fmt.Fprintln(out, "All requested protocol runtimes are installed.")
 	return nil
-}
-
-func filterRuntimeResults(results []runtimeinstall.Result, only []string) []runtimeinstall.Result {
-	if len(only) == 0 {
-		return results
-	}
-	want := make(map[string]struct{}, len(only))
-	for _, name := range only {
-		want[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
-	}
-	filtered := make([]runtimeinstall.Result, 0, len(results))
-	for _, result := range results {
-		if _, ok := want[strings.ToLower(result.Name)]; ok {
-			filtered = append(filtered, result)
-		}
-	}
-	sort.Slice(filtered, func(i, j int) bool { return filtered[i].Name < filtered[j].Name })
-	return filtered
 }

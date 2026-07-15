@@ -7,22 +7,9 @@ import (
 	"testing"
 )
 
-func TestManagedSystemdUnitNamesMatchRenderer(t *testing.T) {
-	units := RenderSystemdUnits(SystemdConfig{})
-	names := ManagedSystemdUnitNames()
-	if len(names) != len(units) {
-		t.Fatalf("managed unit names = %d, rendered units = %d", len(names), len(units))
-	}
-	for _, name := range names {
-		if units[name] == "" {
-			t.Fatalf("managed unit %s missing from renderer", name)
-		}
-	}
-}
-
 func TestPackagingSystemdUnitsMatchDefaultRenderer(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{})
-	for _, name := range ManagedSystemdUnitNames() {
+	for name := range units {
 		body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "systemd", name))
 		if err != nil {
 			t.Fatalf("read packaging unit %s: %v", name, err)
@@ -35,6 +22,48 @@ func TestPackagingSystemdUnitsMatchDefaultRenderer(t *testing.T) {
 	}
 }
 
+func TestRenderedSystemdUnitsAvoidDuplicateSingletonDirectives(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{})
+	singletonDirectives := []string{
+		"NoNewPrivileges",
+		"ProtectSystem",
+		"ProtectHome",
+		"PrivateTmp",
+		"CapabilityBoundingSet",
+		"AmbientCapabilities",
+		"RestrictAddressFamilies",
+		"SystemCallArchitectures",
+		"ProtectKernelTunables",
+		"ProtectKernelModules",
+		"ProtectControlGroups",
+		"RestrictSUIDSGID",
+		"LockPersonality",
+		"RestrictRealtime",
+		"MemoryDenyWriteExecute",
+		"UMask",
+	}
+	for name, body := range units {
+		for _, directive := range singletonDirectives {
+			count := countSystemdDirective(body, directive)
+			if count > 1 {
+				t.Fatalf("%s repeats singleton directive %s %d times:\n%s", name, directive, count, body)
+			}
+		}
+	}
+}
+
+func countSystemdDirective(body, directive string) int {
+	prefix := directive + "="
+	count := 0
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, prefix) {
+			count++
+		}
+	}
+	return count
+}
+
 func TestRenderSystemdUnits(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{
 		VeilBinary:     "/usr/local/bin/veil",
@@ -43,10 +72,7 @@ func TestRenderSystemdUnits(t *testing.T) {
 		SingBoxBinary:  "/usr/local/bin/sing-box",
 		EtcDir:         "/etc/veil",
 	})
-	if len(units) != len(ManagedSystemdUnitNames()) {
-		t.Fatalf("expected %d units, got %d", len(ManagedSystemdUnitNames()), len(units))
-	}
-	for _, name := range ManagedSystemdUnitNames() {
+	for _, name := range []string{UnitVeil, UnitHelperService, UnitHelperSocket, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer} {
 		if units[name] == "" {
 			t.Fatalf("missing unit %s", name)
 		}
@@ -74,11 +100,7 @@ func TestRenderSystemdUnits(t *testing.T) {
 func TestRenderSystemdUnitsDefaults(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{})
 
-	if len(units) != len(ManagedSystemdUnitNames()) {
-		t.Fatalf("expected %d units, got %d", len(ManagedSystemdUnitNames()), len(units))
-	}
-
-	for _, name := range ManagedSystemdUnitNames() {
+	for _, name := range []string{UnitVeil, UnitHelperService, UnitHelperSocket, UnitCaddy, UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitBackupService, UnitBackupTimer} {
 		if units[name] == "" {
 			t.Fatalf("missing unit %s", name)
 		}
@@ -147,7 +169,6 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 	for _, want := range []string{
 		"User=root",
 		"ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation",
-		"PrivateNetwork=true",
 		"RestrictAddressFamilies=AF_UNIX AF_NETLINK",
 		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n",
 		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW",
@@ -156,6 +177,15 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 	} {
 		if !strings.Contains(helper, want) {
 			t.Fatalf("veil-helper.service missing %q:\n%s", want, helper)
+		}
+	}
+	for _, forbid := range []string{
+		"PrivateNetwork",
+		"NetworkNamespacePath",
+		"JoinsNamespaceOf",
+	} {
+		if strings.Contains(helper, forbid) {
+			t.Fatalf("veil-helper.service must not contain network-isolation directive %q:\n%s", forbid, helper)
 		}
 	}
 	socket := units[UnitHelperSocket]

@@ -97,7 +97,11 @@ func renderNaive(settings model.Settings, inbound model.Inbound, warp model.Warp
 		naiveConfig.Upstream = fmt.Sprintf("socks5://127.0.0.1:%d", socksPort)
 	}
 	if includePanel && settings.PanelAccess == "caddy" {
-		if route, ok, err := panelCaddyRoute(settings); err == nil && ok {
+		route, ok, err := panelCaddyRoute(settings)
+		if err != nil {
+			return "", err
+		}
+		if ok {
 			naiveConfig.PanelPort = route.Port
 			naiveConfig.WebBasePath = route.WebBasePath
 		}

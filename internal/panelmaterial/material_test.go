@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
 func TestManagedMaterialBuildsEnvContent(t *testing.T) {
@@ -50,7 +50,7 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 		t.Fatalf("Files: %v", err)
 	}
 	wants := []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env"}
-	for _, name := range renderer.ManagedSystemdUnitNames() {
+	for _, name := range systemdunits.Names() {
 		wants = append(wants, "/etc/systemd/system/"+name)
 	}
 	for _, want := range wants {

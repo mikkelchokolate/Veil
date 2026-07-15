@@ -15,19 +15,31 @@ type runtimeCommandRunner interface {
 var runtimeCommandExecutor runtimeCommandRunner = NewRuntimeCommandExecutor()
 
 type StagedConfigValidator struct {
-	run ConfigValidationRunner
+	run     ConfigValidationRunner
+	catalog ArtifactCatalog
 }
 
+// NewStagedConfigValidator creates a validator using the legacy fixed artifact
+// catalog. Callers that can reach the protocol registry should use
+// NewStagedConfigValidatorWithCatalog with NewArtifactCatalogFromRegistry so
+// validation follows registered protocol plugins.
 func NewStagedConfigValidator(run ConfigValidationRunner) StagedConfigValidator {
+	return NewStagedConfigValidatorWithCatalog(run, NewDefaultArtifactCatalog())
+}
+
+// NewStagedConfigValidatorWithCatalog creates a validator backed by the given
+// artifact catalog. Passing a registry-built catalog keeps validation in sync
+// with the installed set of protocol plugins.
+func NewStagedConfigValidatorWithCatalog(run ConfigValidationRunner, catalog ArtifactCatalog) StagedConfigValidator {
 	if run == nil {
 		run = RunFixedConfigValidation
 	}
-	return StagedConfigValidator{run: run}
+	return StagedConfigValidator{run: run, catalog: catalog}
 }
 
 func (v StagedConfigValidator) Validate(paths []string) []ConfigValidationResult {
 	results := []ConfigValidationResult{}
-	catalog := NewConfigValidationCatalog()
+	catalog := NewConfigValidationCatalog(v.catalog)
 	for _, path := range paths {
 		validation, ok := catalog.Match(path)
 		if ok {

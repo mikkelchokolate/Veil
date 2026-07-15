@@ -2,6 +2,7 @@ package api
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyplan"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -32,20 +33,22 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		capabilities = append(capabilities, applyplan.ProtocolCapability{
 			Protocol:               capability.Protocol,
 			Config:                 capability.Config,
+			ConfigForInbound:       configForInboundRuntime,
 			Action:                 capability.Action,
+			ActionForInbound:       actionForInboundRuntime,
 			ValidateSettings:       capability.ValidateSettings,
 			ValidateInboundRender:  capability.ValidateInboundRender,
 			RequiresRenderSettings: capability.RequiresRenderSettings,
 		})
 	}
-	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Inbounds, input.Warp)
+	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Settings, input.Inbounds, input.Warp)
 	runtimeUnits := service.NewProtocolRuntimeProvisioning(runtimeCatalog).Plan(input.Inbounds, input.Warp).SystemdUnits()
 	validateInboundRender := input.ValidateInboundRender
 	warpAction := ""
 	if action, ok := runtimeCatalog.ApplyAction("sing-box"); ok {
 		warpAction = action
 	}
-	return applyplan.Build(applyplan.Input{
+	plan := applyplan.Build(applyplan.Input{
 		Settings:                input.Settings,
 		Inbounds:                input.Inbounds,
 		Rules:                   input.Rules,
@@ -69,4 +72,95 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
 		LiveRoot:              filepath.Join(applyRoot, "live"),
 	})
+	appendProtocolInboundValidation(&plan, catalog, input.Settings, input.Inbounds)
+	return plan
+}
+
+func appendProtocolInboundValidation(plan *ApplyPlanResponse, catalog ApplyProtocolCapabilityCatalog, settings Settings, inbounds []Inbound) {
+	if plan == nil {
+		return
+	}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled || !protocolInboundValidationReady(settings, inbound) {
+			continue
+		}
+		capability, ok := catalog.ForProtocol(inbound.Protocol)
+		if !ok {
+			continue
+		}
+		for _, issue := range capability.ValidateInbound(settings, inbound) {
+			plan.Issues = append(plan.Issues, issue)
+			if issue.Severity != "error" {
+				continue
+			}
+			plan.Valid = false
+			message := issue.Message
+			if message == "" {
+				message = issue.Code
+			}
+			plan.Errors = appendUniqueApplyPlanError(plan.Errors, message)
+		}
+	}
+}
+
+func protocolInboundValidationReady(settings Settings, inbound Inbound) bool {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
+		return false
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	if validator.NeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
+		return false
+	}
+	if validator.NeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
+		return false
+	}
+	return true
+}
+
+func appendUniqueApplyPlanError(errors []string, message string) []string {
+	if message == "" {
+		return errors
+	}
+	for _, existing := range errors {
+		if existing == message {
+			return errors
+		}
+	}
+	return append(errors, message)
+}
+
+func configForInboundRuntime(inbound Inbound) string {
+	for _, descriptor := range runtimeDescriptorsForInbound(inbound) {
+		if descriptor.PromotedSubpath == "" {
+			continue
+		}
+		return filepath.ToSlash(filepath.Join("/etc/veil", "generated", filepath.FromSlash(descriptor.PromotedSubpath)))
+	}
+	return ""
+}
+
+func actionForInboundRuntime(inbound Inbound) string {
+	for _, descriptor := range runtimeDescriptorsForInbound(inbound) {
+		if descriptor.Unit == "" || descriptor.PromotedVerb == "" {
+			continue
+		}
+		return descriptor.PromotedVerb + " " + descriptor.Unit
+	}
+	return ""
+}
+
+func runtimeDescriptorsForInbound(inbound Inbound) []ManagedRuntime {
+	p, ok := protocols.NewRegistry().Get(inbound.Protocol)
+	if !ok {
+		return nil
+	}
+	rp, ok := protocols.AsRuntimeProvider(p)
+	if !ok {
+		return nil
+	}
+	return rp.RuntimeDescriptors([]Inbound{inbound})
 }

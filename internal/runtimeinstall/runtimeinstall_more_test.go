@@ -180,45 +180,63 @@ func TestInstallUnsupportedMethod(t *testing.T) {
 
 func hysteriaRuntime(t *testing.T) Runtime {
 	t.Helper()
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "hysteria" {
-			return r
-		}
+	return Runtime{
+		Name:   "hysteria2",
+		Binary: "hysteria",
+		Method: MethodRawBinary,
+		Repo:   "apernet/hysteria",
+		AssetMatch: func(name string) bool {
+			return name == "hysteria-linux-amd64"
+		},
+		ChecksumMatch: func(name string) bool {
+			return name == "hashes.txt"
+		},
 	}
-	t.Fatal("hysteria runtime not found in catalog")
-	return Runtime{}
 }
 
 func mieruRuntime(t *testing.T) Runtime {
 	t.Helper()
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "mita" {
-			return r
-		}
+	return Runtime{
+		Name:   "mieru",
+		Binary: "mita",
+		Method: MethodArchive,
+		Repo:   "enfein/mieru",
+		AssetMatch: func(name string) bool {
+			return strings.HasPrefix(name, "mita_") && strings.HasSuffix(name, "_linux_amd64.tar.gz")
+		},
+		ChecksumMatch: func(name string) bool {
+			return strings.HasPrefix(name, "mita_") && strings.HasSuffix(name, "_linux_amd64.tar.gz.sha256.txt")
+		},
 	}
-	t.Fatal("mieru runtime not found in catalog")
-	return Runtime{}
 }
 
 func caddyRuntime(t *testing.T) Runtime {
 	t.Helper()
-	for _, r := range Catalog("amd64") {
-		if r.Binary == "caddy" {
-			return r
-		}
+	return Runtime{
+		Name:   "naiveproxy",
+		Binary: "caddy",
+		Method: MethodCaddyNaive,
 	}
-	t.Fatal("caddy runtime not found in catalog")
-	return Runtime{}
 }
 
 func olcrtcRuntime(t *testing.T) Runtime {
 	t.Helper()
+	return Runtime{
+		Name:          "olcrtc",
+		Binary:        "olcrtc",
+		Method:        MethodGoInstall,
+		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+	}
+}
+
+func warpRuntime(t *testing.T) Runtime {
+	t.Helper()
 	for _, r := range Catalog("amd64") {
-		if r.Binary == "olcrtc" {
+		if r.Binary == "sing-box" {
 			return r
 		}
 	}
-	t.Fatal("olcrtc runtime not found in catalog")
+	t.Fatal("warp runtime not found in catalog")
 	return Runtime{}
 }
 
@@ -848,11 +866,8 @@ exit 0
 func TestCatalogArm64(t *testing.T) {
 	runtimes := Catalog("arm64")
 	for _, r := range runtimes {
-		if r.Name == "hysteria2" && !r.AssetMatch("hysteria-linux-arm64") {
-			t.Error("hysteria arm64 matcher failed")
-		}
-		if r.Name == "mieru" && !r.AssetMatch("mita_3.0.0_linux_arm64.tar.gz") {
-			t.Error("mieru arm64 matcher failed")
+		if r.Name == "warp" && !r.AssetMatch("sing-box-1.13.13-linux-arm64.tar.gz") {
+			t.Error("warp arm64 matcher failed")
 		}
 	}
 }

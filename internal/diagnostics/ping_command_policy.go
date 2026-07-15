@@ -14,5 +14,5 @@ func (PingCommandPolicy) Timeout(count int) time.Duration {
 }
 
 func (PingCommandPolicy) Args(host string, count int) []string {
-	return []string{"-c", strconv.Itoa(count), "-W", "2", host}
+	return []string{"-c", strconv.Itoa(count), "-W", "2", "--", host}
 }

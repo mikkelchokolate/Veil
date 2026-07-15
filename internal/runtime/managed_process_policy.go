@@ -1,11 +1,18 @@
 package runtime
 
+// ManagedProcessPolicy filters process names for managed service discovery.
 type ManagedProcessPolicy struct {
 	names []string
 }
 
-func NewManagedProcessPolicy() ManagedProcessPolicy {
-	return ManagedProcessPolicy{names: []string{"caddy", "hysteria2", "sing-box", "veil", "mieru"}}
+// NewManagedProcessPolicyFor creates a policy from the supplied process names.
+// Callers that have access to the protocol registry should derive the names
+// from RuntimeProvider.RuntimeInstall so the list stays in sync with the
+// installed protocol plugins.
+func NewManagedProcessPolicyFor(names []string) ManagedProcessPolicy {
+	out := make([]string, len(names))
+	copy(out, names)
+	return ManagedProcessPolicy{names: out}
 }
 
 func (p ManagedProcessPolicy) IsManaged(name string) bool {
@@ -15,8 +22,4 @@ func (p ManagedProcessPolicy) IsManaged(name string) bool {
 		}
 	}
 	return false
-}
-
-func isManagedProcess(name string) bool {
-	return NewManagedProcessPolicy().IsManaged(name)
 }

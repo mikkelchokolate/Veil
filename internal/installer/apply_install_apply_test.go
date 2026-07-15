@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
 func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
@@ -32,7 +32,7 @@ func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_TLS_CERT=")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	for _, name := range renderer.ManagedSystemdUnitNames() {
+	for _, name := range systemdunits.Names() {
 		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")
 	}
 }
@@ -66,7 +66,7 @@ func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-caddy@.service"), "caddy")
 	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"))
-	for _, name := range renderer.ManagedSystemdUnitNames() {
+	for _, name := range systemdunits.Names() {
 		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")
 	}
 }

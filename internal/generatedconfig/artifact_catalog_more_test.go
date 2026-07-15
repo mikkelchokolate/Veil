@@ -29,7 +29,7 @@ func TestArtifactSpecValidationSuffix(t *testing.T) {
 }
 
 func TestGeneratedConfigArtifactCatalogAlias(t *testing.T) {
-	catalog := NewGeneratedConfigArtifactCatalog()
+	catalog := NewGeneratedConfigArtifactCatalog([]ArtifactSpec{{Subpath: CaddyfileSubpath}})
 	all := catalog.All()
 	if len(all) == 0 {
 		t.Fatal("expected non-empty artifact catalog")
@@ -46,7 +46,7 @@ func TestGeneratedConfigArtifactCatalogAlias(t *testing.T) {
 }
 
 func TestArtifactCatalogLivePathForStagedConfigRejectsUnknownPaths(t *testing.T) {
-	catalog := NewArtifactCatalog()
+	catalog := NewDefaultArtifactCatalog()
 	root := filepath.FromSlash("/etc/veil")
 
 	// Path not under /generated/ prefix.

@@ -25,6 +25,9 @@ func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycl
 
 func newManagementState(info ServerInfo) *managementState {
 	keyPath := info.KeyPath
+	if keyPath == "" && info.StatePath != "" {
+		keyPath = filepath.Join(filepath.Dir(info.StatePath), "state.key")
+	}
 	if keyPath == "" {
 		if runtime.GOOS == "windows" {
 			pd := os.Getenv("ProgramData")
@@ -60,6 +63,8 @@ func newManagementState(info ServerInfo) *managementState {
 		applyRoot:                      defaultApplyRoot(info.ApplyRoot),
 		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,
+		authToken:                      info.AuthToken,
+		allowDevAnonymous:              !info.PublicListen,
 		setupAllowed:                   info.SetupAllowed,
 		settings:                       model.Settings,
 		inbounds:                       model.Inbounds,
@@ -90,7 +95,7 @@ func newManagementState(info ServerInfo) *managementState {
 	sessionRegistry, err := NewSessionRegistry(sessionPath)
 	if err != nil {
 		log.Printf("error loading Panel sessions from %s: %v", sessionPath, err)
-		sessionRegistry = mustNewSessionRegistry("")
+		sessionRegistry = newSessionRegistryWithoutLoad(sessionPath)
 	}
 	state.sessions = sessionRegistry
 	if info.StatePath != "" {
@@ -111,9 +116,14 @@ func newManagementState(info ServerInfo) *managementState {
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)
-	}
-	if err := lifecycle.Load(); err != nil {
+		if info.StatePath != "" {
+			state.startupStateLoadFailed = true
+			state.allowDevAnonymous = false
+		}
+	} else if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
+		state.startupStateLoadFailed = true
+		state.allowDevAnonymous = false
 	}
 
 	return state

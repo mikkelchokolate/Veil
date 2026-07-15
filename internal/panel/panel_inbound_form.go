@@ -12,7 +12,7 @@ func panelInboundFormHTML() string {
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <h2>Inbounds</h2>
-          <button id="add-inbound-btn" type="button" data-admin-only="true" onclick="openAddInboundModal()" style="display: flex; align-items: center; gap: 8px;">
+          <button id="add-inbound-btn" type="button" data-admin-only="true" style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 1.2rem; font-weight: bold;">+</span> Add Inbound
           </button>
         </div>
@@ -41,7 +41,7 @@ func panelInboundFormHTML() string {
         
         <div style="margin-top: 16px; display: flex; gap: 8px; align-items: center;">
           <button class="secondary" id="load-inbounds" type="button">Refresh List</button>
-          <button class="secondary" onclick="toggleRawView('inbounds-output')" type="button">Raw JSON</button>
+          <button class="secondary" id="toggle-inbounds-raw" type="button">Raw JSON</button>
         </div>
       <pre id="inbounds-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
       </div>
@@ -51,38 +51,38 @@ func panelInboundFormHTML() string {
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="inbound-modal-title" tabindex="-1">
           <div class="modal-header">
             <h2 id="inbound-modal-title">Add Inbound</h2>
-            <button type="button" class="modal-close" aria-label="Close dialog" onclick="closeInboundModal()">&times;</button>
+            <button id="close-inbound-modal" type="button" class="modal-close" aria-label="Close dialog">&times;</button>
           </div>
           
           <form id="inbound-form">
             <div class="form-grid">
               <div>
                 <label for="inbound-name">Name</label>
-                <input id="inbound-name" autocomplete="off" placeholder="naive" aria-invalid="false" aria-describedby="inbound-name-validation">
+                <input id="inbound-name" required pattern="[A-Za-z0-9_-]+" autocomplete="off" placeholder="naive" title="Use letters, digits, underscore, or hyphen." aria-invalid="false" aria-describedby="inbound-name-validation">
                 <p id="inbound-name-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-protocol">Protocol</label>
-                <select id="inbound-protocol" aria-invalid="false" aria-describedby="inbound-protocol-validation">
+                <select id="inbound-protocol" required aria-invalid="false" aria-describedby="inbound-protocol-validation">
 ` + panelInboundProtocolOptionsHTML() + `                </select>
                 <p id="inbound-protocol-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-transport">Transport</label>
-                <select id="inbound-transport" aria-invalid="false" aria-describedby="inbound-transport-validation">
+                <select id="inbound-transport" required aria-invalid="false" aria-describedby="inbound-transport-validation">
 ` + panelInboundTransportOptionsHTML() + `                </select>
                 <p id="inbound-transport-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-port">Port</label>
-                <input id="inbound-port" type="number" min="1" max="65535" placeholder="443" aria-invalid="false" aria-describedby="inbound-port-validation">
+                <input id="inbound-port" type="number" required min="1" max="65535" placeholder="443" aria-invalid="false" aria-describedby="inbound-port-validation">
                 <p id="inbound-port-validation" class="field-validation" hidden></p>
               </div>
               <div>
                 <label for="inbound-password">Password</label>
                 <div style="display:flex;gap:8px">
-                  <input id="inbound-password" type="text" autocomplete="off" placeholder="password" style="flex:1" aria-invalid="false" aria-describedby="inbound-password-validation">
-                  <button type="button" class="secondary" onclick="genInboundPassword()" style="white-space:nowrap; padding: 12px 14px;">Generate</button>
+                  <input id="inbound-password" type="password" autocomplete="new-password" placeholder="password" style="flex:1" aria-invalid="false" aria-describedby="inbound-password-validation">
+                  <button id="generate-inbound-password" type="button" class="secondary" style="white-space:nowrap; padding: 12px 14px;">Generate</button>
                 </div>
                 <p id="inbound-password-validation" class="field-validation" hidden></p>
               </div>
@@ -107,7 +107,7 @@ func panelInboundFormHTML() string {
             
             <div class="actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;">
               <button id="delete-inbound" class="danger" type="button" style="margin-right: auto; display: none;">Delete</button>
-              <button class="secondary" type="button" onclick="closeInboundModal()">Cancel</button>
+              <button id="cancel-inbound-modal" class="secondary" type="button">Cancel</button>
               <button id="save-inbound" type="submit">Save</button>
             </div>
           </form>

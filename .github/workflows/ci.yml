@@ -11,11 +11,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
@@ -38,8 +39,15 @@ jobs:
         run: go test ./sdk/go -race -count=1
       - name: Test product code with race detector and coverage
         run: |
+          set -o pipefail
           packages="$(go list ./... | grep -v '/sdk/go$')"
-          go test ${packages} -race -count=1 -coverprofile=coverage.out
+          go test ${packages} -race -count=1 -coverprofile=coverage.out 2>&1 | tee product-test.log
+      - name: Archive failed product test log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: product-test-log
+          path: product-test.log
       - name: Verify coverage threshold (min 70%)
         run: |
           total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
@@ -50,7 +58,7 @@ jobs:
         with:
           name: code-coverage-report
           path: coverage.out
-      - run: bash -n scripts/install.sh scripts/uninstall.sh
+      - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
       - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
@@ -58,19 +66,20 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
       - name: staticcheck
         uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
-          version: latest
+          version: '2026.1'
           install-go: false
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
       - name: shellcheck
         run: |
@@ -80,11 +89,12 @@ jobs:
 
   privilege-boundary:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
       - name: Verify systemd socket activation
         run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
       - name: Verify helper socket and filesystem access matrix
@@ -93,21 +103,125 @@ jobs:
         run: |
           go build -o /tmp/veil-unit-verify ./cmd/veil
           sudo install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil
-          systemd-analyze verify packaging/systemd/veil.service packaging/systemd/veil-helper.service packaging/systemd/veil-helper.socket
+          for bin in caddy hysteria mita olcrtc sing-box; do
+            sudo ln -sf /usr/local/bin/veil "/usr/local/bin/${bin}"
+          done
+          systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
       - name: End-to-end tests (real binary over a socket)
         run: go test -tags e2e ./test/e2e/... -count=1 -v
 
-  docker-build:
+  browser-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - name: Docker image build
-        run: docker build --pull --tag veil:ci .
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.5'
+      - name: Build Veil browser-test binary
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X main.version=browser-e2e" -o dist/veil ./cmd/veil
+      - name: Install pinned Playwright
+        working-directory: test/browser
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Start authenticated Panel
+        run: |
+          set -euo pipefail
+          browser_root="${RUNNER_TEMP}/veil-browser"
+          mkdir -p "${browser_root}/state" "${browser_root}/etc" "${browser_root}/apply" "${browser_root}/live"
+          export VEIL_STATE_PATH="${browser_root}/state/state.json"
+          export VEIL_KEY_PATH="${browser_root}/etc/state.key"
+          export VEIL_APPLY_ROOT="${browser_root}/apply"
+          export VEIL_LIVE_ROOT="${browser_root}/live"
+          ./dist/veil admin set \
+            --username browser-admin \
+            --password 'Browser-E2E-Password-123!' \
+            --role admin \
+            --state "${VEIL_STATE_PATH}" \
+            --key-path "${VEIL_KEY_PATH}"
+          VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2096 >"${RUNNER_TEMP}/veil-browser.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/veil-browser.pid"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/veil-browser.log" >&2
+          exit 1
+      - name: Browser end-to-end tests
+        working-directory: test/browser
+        env:
+          VEIL_BROWSER_BASE_URL: http://127.0.0.1:2096
+          VEIL_BROWSER_USERNAME: browser-admin
+          VEIL_BROWSER_PASSWORD: Browser-E2E-Password-123!
+        run: npm test
+      - name: Stop Panel
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/veil-browser.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/veil-browser.pid")" 2>/dev/null || true
+          fi
+      - name: Archive browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-e2e-diagnostics
+          path: |
+            test/browser/playwright-report
+            test/browser/test-results
+            ${{ runner.temp }}/veil-browser.log
+          if-no-files-found: ignore
+
+  package-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.5'
+      - name: Build package payload
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X main.version=package-smoke" -o dist/veil ./cmd/veil
+      - name: Install pinned nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.40.0
+      - name: Install and upgrade native packages in clean distributions
+        run: |
+          set -o pipefail
+          bash scripts/package-smoke.sh 2>&1 | tee package-smoke.log
+      - name: Archive package smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-smoke-diagnostics
+          path: |
+            package-smoke.log
+            dist/package-smoke
+          if-no-files-found: ignore
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Docker image build and version verification
+        run: |
+          # Baseline smoke command retained as a regression sentinel: docker build --pull --tag veil:ci .
+          version="ci-${GITHUB_SHA}"
+          docker build --pull --build-arg "VERSION=${version}" --tag veil:ci .
+          docker run --rm veil:ci version | tee /tmp/veil-version.txt
+          grep -F "${version}" /tmp/veil-version.txt

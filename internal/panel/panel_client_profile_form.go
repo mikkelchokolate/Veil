@@ -12,11 +12,11 @@ func panelClientProfileControlsHTML() string {
                 <input id="client-profile-name" autocomplete="off" placeholder="profile name, e.g. alice">
                 <input id="client-profile-username" autocomplete="off" placeholder="username (optional)">
                 <div style="display:flex;gap:8px">
-                  <input id="client-profile-password" type="text" autocomplete="off" placeholder="password" style="flex:1">
-                  <button type="button" class="secondary" onclick="genClientProfilePassword()" style="white-space:nowrap">Generate</button>
+                  <input id="client-profile-password" type="password" autocomplete="new-password" placeholder="password" style="flex:1">
+                  <button id="generate-client-profile-password" type="button" class="secondary" style="white-space:nowrap">Generate</button>
                 </div>
-                <button type="button" class="secondary" onclick="addClientProfile()">Add profile</button>
-                <button type="button" class="secondary" onclick="generateAndAddProfile()" style="grid-column: 1 / -1; width: 100%;">Generate profile</button>
+                <button id="add-client-profile" type="button" class="secondary">Add profile</button>
+                <button id="generate-and-add-profile" type="button" class="secondary" style="grid-column: 1 / -1; width: 100%;">Generate profile</button>
               </div>
               <label for="inbound-profiles">Client profiles (JSON)</label>
               <textarea id="inbound-profiles" rows="4" spellcheck="false" placeholder='[{"name":"alice","username":"alice","password":"optional","enabled":true}]'></textarea>
@@ -30,59 +30,88 @@ func panelClientProfileActionsJS() string {
       document.getElementById('client-profile-password').value = randomPassword();
     }
 
-    function generateAndAddProfile() {
-      const randomId = Math.random().toString(36).substring(2, 7);
-      const name = 'client_' + randomId;
-      const pass = randomPassword();
-      let profiles = [];
-      const raw = document.getElementById('inbound-profiles').value.trim();
-      if (raw) {
-        try {
-          profiles = JSON.parse(raw);
-        } catch (err) {
-          // ignore
-        }
+    function showClientProfileError(message) {
+      if (typeof veilShowInboundLocalError === 'function') {
+        veilShowInboundLocalError(message);
+        return;
       }
+      const summary = document.getElementById('inbound-validation-summary');
+      if (summary) {
+        summary.className = 'validation-summary validation-error';
+        summary.textContent = String(message);
+      }
+    }
+
+    function readClientProfiles() {
+      const raw = document.getElementById('inbound-profiles').value.trim();
+      if (!raw) return [];
+      const profiles = JSON.parse(raw);
+      if (!Array.isArray(profiles)) {
+        throw new Error('Client profiles JSON must be an array.');
+      }
+      return profiles;
+    }
+
+    function writeClientProfiles(profiles) {
+      document.getElementById('inbound-profiles').value = JSON.stringify(profiles, null, 2);
+      scheduleInboundValidation();
+    }
+
+    function generateAndAddProfile() {
+      let profiles;
+      try {
+        profiles = readClientProfiles();
+      } catch (err) {
+        showClientProfileError(veilT('inbounds.profilesInvalid', { error: String(err) }));
+        return;
+      }
+      let name;
+      do {
+        name = 'client_' + randomPassword().slice(0, 7).replace(/[^a-z0-9]/gi, '').toLowerCase();
+      } while (profiles.some((profile) => profile && profile.name === name));
       profiles.push({
         name: name,
         username: name,
-        password: pass,
+        password: randomPassword(),
         enabled: true
       });
-      document.getElementById('inbound-profiles').value = JSON.stringify(profiles, null, 2);
+      writeClientProfiles(profiles);
     }
 
     function addClientProfile() {
-      const out = document.getElementById('inbounds-output');
       const name = document.getElementById('client-profile-name').value.trim();
       if (!name) {
-        out.textContent = veilT('inbounds.profileNameRequired');
+        showClientProfileError(veilT('inbounds.profileNameRequired'));
         return;
       }
-      let profiles = [];
-      const raw = document.getElementById('inbound-profiles').value.trim();
-      if (raw) {
-        try {
-          profiles = JSON.parse(raw);
-        } catch (err) {
-          out.textContent = veilT('inbounds.profilesInvalid', { error: String(err) });
-          return;
-        }
+      let profiles;
+      try {
+        profiles = readClientProfiles();
+      } catch (err) {
+        showClientProfileError(veilT('inbounds.profilesInvalid', { error: String(err) }));
+        return;
+      }
+      if (profiles.some((profile) => profile && profile.name === name)) {
+        showClientProfileError('A client profile with this name already exists.');
+        return;
       }
       const username = document.getElementById('client-profile-username').value.trim();
       let password = document.getElementById('client-profile-password').value.trim();
-      if (!password) {
-        password = randomPassword();
-      }
+      if (!password) password = randomPassword();
       profiles.push({
         name: name,
         username: username || undefined,
         password: password,
         enabled: true
       });
-      document.getElementById('inbound-profiles').value = JSON.stringify(profiles, null, 2);
+      writeClientProfiles(profiles);
       document.getElementById('client-profile-name').value = '';
       document.getElementById('client-profile-username').value = '';
       document.getElementById('client-profile-password').value = '';
-    }`
+    }
+
+    document.getElementById('generate-client-profile-password').addEventListener('click', genClientProfilePassword);
+    document.getElementById('add-client-profile').addEventListener('click', addClientProfile);
+    document.getElementById('generate-and-add-profile').addEventListener('click', generateAndAddProfile);
+`
 }

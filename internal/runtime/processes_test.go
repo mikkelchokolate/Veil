@@ -2,13 +2,14 @@ package runtime
 
 import "testing"
 
-func TestIsManagedProcessRecognizesManagedNames(t *testing.T) {
+func TestManagedProcessPolicyForRecognizesSuppliedProcessNames(t *testing.T) {
+	policy := NewManagedProcessPolicyFor([]string{"caddy", "hysteria2", "sing-box", "veil", "mieru"})
 	for _, name := range []string{"caddy", "hysteria2", "sing-box", "veil", "mieru"} {
-		if !isManagedProcess(name) {
+		if !policy.IsManaged(name) {
 			t.Fatalf("%s should be managed", name)
 		}
 	}
-	if isManagedProcess("nginx") {
+	if policy.IsManaged("nginx") {
 		t.Fatal("nginx should not be managed")
 	}
 }

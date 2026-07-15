@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 type ErrorCode string
@@ -50,6 +52,10 @@ type Policy struct {
 	Artifacts            map[string]ArtifactPath
 	UpdateArtifacts      map[string]string
 	FirewallRules        map[string]struct{}
+	// AllowedArtifactNames restricts dynamically promoted artifact names to a
+	// known set. Static per-protocol artifacts and update artifacts are not
+	// constrained by this set. A nil or empty map means no extra restriction.
+	AllowedArtifactNames map[string]struct{}
 }
 
 type ResolvedArtifact struct {
@@ -167,7 +173,7 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 		seen[id] = struct{}{}
 		spec, ok := p.Artifacts[id]
 		if !ok {
-			spec, ok = managedArtifactPath(id)
+			spec, ok = p.managedArtifactPath(id)
 		}
 		if !ok {
 			return nil, newError(ErrorNotFound, "unknown artifact id")
@@ -191,38 +197,78 @@ var (
 	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
 )
 
-func managedArtifactPath(id string) (ArtifactPath, bool) {
+func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {
 	clean := filepath.ToSlash(filepath.Clean(id))
 	if clean != id || strings.Contains(clean, `\`) {
 		return ArtifactPath{}, false
 	}
-	switch clean {
-	case "mieru/server_config.json", "sing-box/warp.json":
+	if clean == "sing-box/warp.json" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
-	parts := strings.Split(clean, "/")
-	if len(parts) != 2 {
-		return ArtifactPath{}, false
-	}
-	name := ""
-	switch parts[0] {
-	case "caddy":
-		name = strings.TrimSuffix(parts[1], ".Caddyfile")
-		if name == parts[1] {
-			return ArtifactPath{}, false
+	return managedProtocolArtifactID(clean, p.AllowedArtifactNames)
+}
+
+func managedProtocolArtifactID(clean string, allowedNames map[string]struct{}) (ArtifactPath, bool) {
+	registry := protocols.NewRegistry()
+	for _, plugin := range registry.All() {
+		cr, ok := protocols.AsConfigRenderer(plugin)
+		if !ok {
+			continue
 		}
-	case "hysteria2", "olcrtc":
-		name = strings.TrimSuffix(parts[1], ".yaml")
-		if name == parts[1] {
-			return ArtifactPath{}, false
+		sub := filepath.ToSlash(cr.ArtifactSpec().Subpath)
+		if sub == "" {
+			continue
 		}
-	default:
-		return ArtifactPath{}, false
+		if clean == sub {
+			return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+		}
+		if ok, name := protocolAllowsDynamicArtifact(plugin, sub, clean, allowedNames); ok {
+			_ = name
+			return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+		}
 	}
+	return ArtifactPath{}, false
+}
+
+func protocolAllowsDynamicArtifact(plugin protocols.ProtocolPlugin, sub string, clean string, allowedNames map[string]struct{}) (bool, string) {
+	if !protocolHasTemplateRuntime(plugin) {
+		return false, ""
+	}
+	dir := filepath.ToSlash(filepath.Dir(sub))
+	if dir == "." || !strings.HasPrefix(clean, dir+"/") {
+		return false, ""
+	}
+	rest := strings.TrimPrefix(clean, dir+"/")
+	if strings.Contains(rest, "/") {
+		return false, ""
+	}
+	ext := filepath.Ext(filepath.Base(sub))
+	if ext == "" || !strings.HasSuffix(rest, ext) {
+		return false, ""
+	}
+	name := strings.TrimSuffix(rest, ext)
 	if !artifactNamePattern.MatchString(name) {
-		return ArtifactPath{}, false
+		return false, ""
 	}
-	return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+	if len(allowedNames) > 0 {
+		if _, ok := allowedNames[name]; !ok {
+			return false, ""
+		}
+	}
+	return true, name
+}
+
+func protocolHasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
+	rp, ok := protocols.AsRuntimeProvider(plugin)
+	if !ok {
+		return false
+	}
+	for _, descriptor := range rp.RuntimeDescriptors(nil) {
+		if descriptor.TemplateUnit != "" || strings.Contains(descriptor.Unit, "@") {
+			return true
+		}
+	}
+	return false
 }
 
 func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
@@ -274,7 +320,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	return resolved, nil
 }
 
-var ufwAllowRulePattern = regexp.MustCompile(`^(\d{1,5})/(tcp|udp)$`)
+var ufwAllowRulePattern = regexp.MustCompile(`^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])/(tcp|udp)$`)
 
 func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, error) {
 	if len(request.Rules) > 0 {
@@ -298,6 +344,22 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 	return ResolvedFirewall{RuleIDs: rules}, nil
 }
 
+func isUFWCommentClause(args []string, idx int) bool {
+	if idx >= len(args) {
+		return false
+	}
+	if args[idx] != "comment" {
+		return false
+	}
+	if idx != len(args)-2 {
+		return false
+	}
+	if len(args[idx+1]) == 0 {
+		return false
+	}
+	return true
+}
+
 func validateUFWRule(rule FirewallRule) error {
 	if rule.Command != "ufw" {
 		return fmt.Errorf("unsupported firewall command %q", rule.Command)
@@ -311,17 +373,16 @@ func validateUFWRule(rule FirewallRule) error {
 	if !ufwAllowRulePattern.MatchString(rule.Args[1]) {
 		return fmt.Errorf("invalid ufw allow target %q", rule.Args[1])
 	}
-	// Only allow an optional trailing "comment <free text>" clause.
-	for i, arg := range rule.Args[2:] {
+	if len(rule.Args) > 2 {
+		arg := rule.Args[2]
 		if strings.ContainsAny(arg, ";|&$`\"'\\") {
 			return fmt.Errorf("disallowed character in firewall rule argument")
 		}
-		if arg == "comment" {
-			// comment must be followed by exactly one argument and be the penultimate token.
-			if i != len(rule.Args[2:])-2 {
-				return fmt.Errorf("comment must be the final clause")
-			}
-			break
+		if arg != "comment" {
+			return fmt.Errorf("unsupported firewall argument %q", arg)
+		}
+		if !isUFWCommentClause(rule.Args[2:], 0) {
+			return fmt.Errorf("comment must be the final clause")
 		}
 	}
 	return nil

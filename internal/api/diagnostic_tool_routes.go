@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -23,6 +24,19 @@ func (routes DiagnosticToolRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tools/speedtest", routes.handleSpeedtest)
 }
 
+func validateDiagnosticTarget(target string) error {
+	if len(target) > 255 {
+		return errors.New("target must be at most 255 characters")
+	}
+	if strings.HasPrefix(target, "-") {
+		return errors.New("target must not begin with '-'")
+	}
+	if strings.ContainsAny(target, " \t\r\n\x00") {
+		return errors.New("target must not contain whitespace or NUL characters")
+	}
+	return nil
+}
+
 func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -34,8 +48,13 @@ func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Reque
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
-	if strings.TrimSpace(req.Hostname) == "" {
+	req.Hostname = strings.TrimSpace(req.Hostname)
+	if req.Hostname == "" {
 		writeError(w, "hostname is required", http.StatusBadRequest)
+		return
+	}
+	if err := validateDiagnosticTarget(req.Hostname); err != nil {
+		writeError(w, "hostname: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	addrs, cname, err := dnsLookuper(req.Hostname)
@@ -54,14 +73,19 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
-	if strings.TrimSpace(req.Host) == "" {
+	req.Host = strings.TrimSpace(req.Host)
+	if req.Host == "" {
 		writeError(w, "host is required", http.StatusBadRequest)
 		return
 	}
-	if req.Count <= 0 {
+	if err := validateDiagnosticTarget(req.Host); err != nil {
+		writeError(w, "host: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Count == 0 {
 		req.Count = 3
 	}
-	if req.Count > 10 {
+	if req.Count < 1 || req.Count > 10 {
 		writeError(w, "count must be 1-10", http.StatusBadRequest)
 		return
 	}

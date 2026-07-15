@@ -172,8 +172,12 @@ const setupHTMLTemplate = `<!doctype html>
     window.veilLocale = "__VEIL_LOCALE__";
     window.veil_csrf_token = "";
 __VEIL_LOCALIZATION_RUNTIME__
+    let setupInFlight = false;
     document.getElementById('setup-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (setupInFlight) return;
+      setupInFlight = true;
+      let completed = false;
       const button = document.getElementById('setup-submit');
       const result = document.getElementById('setup-result');
       button.disabled = true;
@@ -196,13 +200,17 @@ __VEIL_LOCALIZATION_RUNTIME__
           result.textContent = text || ('HTTP ' + response.status);
           return;
         }
+        completed = true;
         result.textContent = veilT('setup.done');
         window.setTimeout(() => window.location.reload(), 500);
       } catch (error) {
         result.className = 'error';
         result.textContent = veilT('setup.failed', { error: String(error) });
       } finally {
-        button.disabled = false;
+        if (!completed) {
+          setupInFlight = false;
+          button.disabled = false;
+        }
       }
     });
   </script>

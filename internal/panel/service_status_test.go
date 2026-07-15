@@ -20,12 +20,50 @@ func TestServiceStatusCardRendersRestartControls(t *testing.T) {
 	}
 }
 
+func TestServiceStatusRefreshesAreSingleFlightAndVisibilityAware(t *testing.T) {
+	actions := ServiceStatusActionsJS()
+	for _, want := range []string{
+		`let serviceStatusLoadInFlight = false;`,
+		`let serviceRestartInFlight = false;`,
+		`async function loadServiceStatus()`,
+		`if (serviceStatusLoadInFlight || serviceRestartInFlight) return null;`,
+		`serviceStatusLoadInFlight = true;`,
+		`serviceStatusLoadInFlight = false;`,
+		`if (document.hidden || !dashboard || !dashboard.classList.contains('active')) return null;`,
+		`return loadServiceStatus();`,
+		`setInterval(refreshServiceStatusAutomatically, 10000)`,
+		`document.addEventListener('visibilitychange'`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("service status refresh guard missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `setInterval(loadServiceStatus, 10000)`) {
+		t.Fatal("automatic status refresh must use the visibility-aware wrapper")
+	}
+}
+
 func TestServiceRestartActionsRenderDynamicServiceEndpoints(t *testing.T) {
 	runtimes := []service.ManagedRuntime{{ActionName: "veil", ManualRestart: true}, {ActionName: "caddy", ManualRestart: true}}
 	actions := ServiceRestartActionsJS(runtimes)
-	for _, want := range []string{`renderServiceRestartControls`, `restartable`, `actionName`, `encodeURIComponent(serviceName)`, `/api/services/`, `/restart`, `confirm: true`, `loadServiceStatus();`} {
+	for _, want := range []string{
+		`renderServiceRestartControls`,
+		`restartable`,
+		`actionName`,
+		`encodeURIComponent(serviceName)`,
+		`/api/services/`,
+		`/restart`,
+		`confirm: true`,
+		`if (restarted) await fetchAndRenderServiceStatus()`,
+		`container.textContent = ''`,
+		`document.createElement('button')`,
+		`button.dataset.veilRestartService = actionName`,
+	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("actions missing %q:\n%s", want, actions)
 		}
+	}
+	if strings.Contains(actions, `container.innerHTML`) {
+		t.Fatal("dynamic service names must not be inserted through innerHTML")
 	}
 }

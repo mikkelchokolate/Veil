@@ -281,6 +281,7 @@ func TestRuntimeInstall(t *testing.T) {
 		Binary:        "olcrtc",
 		Method:        runtimeinstall.MethodGoInstall,
 		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+		Description:   "olcrtc is built from source with \"go install\"",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("RuntimeInstall mismatch:\ngot  %+v\nwant %+v", got, want)
@@ -292,7 +293,7 @@ func TestValidator(t *testing.T) {
 	settings := model.Settings{}
 	inbound := model.Inbound{}
 
-	if err := p.ValidateSettings(settings); err != nil {
+	if err := p.ValidateSettings(settings, inbound); err != nil {
 		t.Errorf("ValidateSettings returned error: %v", err)
 	}
 	if issues := p.ValidateInbound(settings, inbound); len(issues) != 0 {
@@ -339,6 +340,9 @@ func TestInboundFieldSchema(t *testing.T) {
 	if fields[2].GenerateAction != "room" {
 		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[2].GenerateAction)
 	}
+	if fields[2].GenerateActionField != "olcrtcAuth" {
+		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[2].GenerateActionField)
+	}
 }
 
 func TestSettingsFieldSchema(t *testing.T) {
@@ -347,13 +351,35 @@ func TestSettingsFieldSchema(t *testing.T) {
 	if len(fields) != 3 {
 		t.Fatalf("expected 3 settings fields, got %d", len(fields))
 	}
-	for _, f := range fields {
-		if f.Type != schema.FieldText {
-			t.Errorf("field %q type = %q, want text", f.Key, f.Type)
+	wantKeys := []string{"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
+	for i, key := range wantKeys {
+		if fields[i].Key != key {
+			t.Errorf("field[%d].Key = %q, want %q", i, fields[i].Key, key)
 		}
-		if f.Scope != "settings" {
-			t.Errorf("field %q scope = %q, want settings", f.Key, f.Scope)
+		if fields[i].Scope != "settings" {
+			t.Errorf("field[%d].Scope = %q, want settings", i, fields[i].Scope)
 		}
+	}
+	if fields[0].Type != schema.FieldSelect {
+		t.Errorf("olcrtcAuth type = %q, want select", fields[0].Type)
+	}
+	if fields[0].Default != "jitsi" {
+		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[0].Default)
+	}
+	if len(fields[0].Options) != 3 {
+		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[0].Options))
+	}
+	if fields[1].Type != schema.FieldSelect {
+		t.Errorf("olcrtcTransport type = %q, want select", fields[1].Type)
+	}
+	if fields[1].Default != "datachannel" {
+		t.Errorf("olcrtcTransport default = %v, want datachannel", fields[1].Default)
+	}
+	if len(fields[1].Options) != 4 {
+		t.Errorf("olcrtcTransport options = %d, want 4", len(fields[1].Options))
+	}
+	if fields[2].Type != schema.FieldText {
+		t.Errorf("olcrtcRoomID type = %q, want text", fields[2].Type)
 	}
 }
 
@@ -418,6 +444,25 @@ func TestAutofillPreservesExistingValues(t *testing.T) {
 	}
 	if out.OlcrtcRoomID != "manual-room" {
 		t.Errorf("OlcrtcRoomID = %q, want manual-room", out.OlcrtcRoomID)
+	}
+}
+
+func TestAutofillRegeneratesInvalidPassword(t *testing.T) {
+	p := New()
+	inbound := model.Inbound{
+		Name:     "test",
+		Protocol: "olcrtc",
+		Password: "too-short",
+	}
+	out, err := p.Autofill(inbound)
+	if err != nil {
+		t.Fatalf("Autofill error: %v", err)
+	}
+	if out.Password == "too-short" {
+		t.Errorf("invalid password was not regenerated")
+	}
+	if !isOlcrtcKey(out.Password) {
+		t.Errorf("regenerated password %q is not a 64-char hex key", out.Password)
 	}
 }
 

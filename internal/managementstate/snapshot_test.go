@@ -161,3 +161,54 @@ func TestCloneInboundsNil(t *testing.T) {
 		t.Fatal("cloneInbounds(nil) should return nil")
 	}
 }
+
+func TestBuildSnapshotClonesWarpReserved(t *testing.T) {
+	reserved := []int{1, 2, 3}
+	snapshot := BuildSnapshot(SnapshotInput{Warp: model.WarpConfig{Endpoint: "e", Reserved: reserved}})
+	reserved[0] = 999
+	if snapshot.Warp.Reserved[0] != 1 {
+		t.Fatalf("BuildSnapshot did not clone Warp.Reserved: got %v", snapshot.Warp.Reserved)
+	}
+}
+
+func TestBuildSnapshotClonesRoutingSourceFiles(t *testing.T) {
+	files := []model.RoutingSourceFile{{Name: "f", URL: "u"}}
+	snapshot := BuildSnapshot(SnapshotInput{RoutingSource: model.RoutingSource{Repository: "repo", Files: files}})
+	files[0].Name = "mutated"
+	if snapshot.RoutingSource.Files[0].Name != "f" {
+		t.Fatalf("BuildSnapshot did not clone RoutingSource.Files: got %+v", snapshot.RoutingSource.Files[0])
+	}
+}
+
+func TestApplySnapshotClonesSettingsProtocolFields(t *testing.T) {
+	pf := map[string]any{"key": "value"}
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", ProtocolFields: pf}}
+	var settings model.Settings
+	ApplySnapshot(SnapshotTarget{Settings: &settings}, snapshot)
+	settings.ProtocolFields["key"] = "mutated"
+	if snapshot.Settings.ProtocolFields["key"] != "value" {
+		t.Fatalf("ApplySnapshot did not clone ProtocolFields: got %+v", snapshot.Settings.ProtocolFields)
+	}
+}
+
+func TestApplySnapshotClonesWarpReserved(t *testing.T) {
+	reserved := []int{1, 2, 3}
+	snapshot := model.ManagementSnapshot{Warp: model.WarpConfig{Endpoint: "e", Reserved: reserved}}
+	var warp model.WarpConfig
+	ApplySnapshot(SnapshotTarget{Warp: &warp}, snapshot)
+	warp.Reserved[0] = 999
+	if snapshot.Warp.Reserved[0] != 1 {
+		t.Fatalf("ApplySnapshot did not clone Warp.Reserved: got %v", snapshot.Warp.Reserved)
+	}
+}
+
+func TestApplySnapshotClonesRoutingSourceFiles(t *testing.T) {
+	files := []model.RoutingSourceFile{{Name: "f", URL: "u"}}
+	snapshot := model.ManagementSnapshot{RoutingSource: model.RoutingSource{Repository: "repo", Files: files}}
+	var source model.RoutingSource
+	ApplySnapshot(SnapshotTarget{RoutingSource: &source}, snapshot)
+	source.Files[0].Name = "mutated"
+	if snapshot.RoutingSource.Files[0].Name != "f" {
+		t.Fatalf("ApplySnapshot did not clone RoutingSource.Files: got %+v", snapshot.RoutingSource.Files[0])
+	}
+}

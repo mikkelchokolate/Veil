@@ -111,3 +111,25 @@ func TestProtocolRegistryRenderInboundReturnsArtifact(t *testing.T) {
 		t.Fatalf("artifact=%+v ok=%v err=%v", artifact, ok, err)
 	}
 }
+
+func TestProtocolRegistryRenderUsesProtocolFieldsForRenderSettings(t *testing.T) {
+	called := false
+	registry := NewProtocolRegistry([]Protocol{
+		{Protocol: "hysteria2", RequiresRenderSettings: true, Render: func(input ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error) {
+			called = true
+			return []GeneratedConfigArtifact{{Path: input.Paths.Generated("hysteria2/server.yaml"), Body: "hy2"}}, true, nil
+		}},
+	})
+	settings := Settings{ProtocolFields: map[string]any{"hysteria2Password": "secret"}}
+	inbounds := []Inbound{{Name: "hy2", Protocol: "hysteria2", Enabled: true}}
+	configs, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Settings: settings, Inbounds: inbounds})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !called {
+		t.Fatal("render should be called when protocolFields provide render settings")
+	}
+	if configs[NewPaths("/etc/veil").Generated("hysteria2/server.yaml")] != "hy2" {
+		t.Fatalf("configs = %+v", configs)
+	}
+}

@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=veil
+Group=veil
 ExecStart=/usr/local/bin/hysteria server --config /etc/veil/generated/hysteria2/%i.yaml
 Restart=on-failure
 RestartSec=3

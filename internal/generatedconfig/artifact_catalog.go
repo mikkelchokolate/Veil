@@ -79,8 +79,18 @@ type ArtifactCatalog struct {
 
 type GeneratedConfigArtifactCatalog = ArtifactCatalog
 
-func NewArtifactCatalog() ArtifactCatalog {
-	return ArtifactCatalog{artifacts: []ArtifactSpec{
+func NewArtifactCatalog(artifacts []ArtifactSpec) ArtifactCatalog {
+	out := make([]ArtifactSpec, len(artifacts))
+	copy(out, artifacts)
+	return ArtifactCatalog{artifacts: out}
+}
+
+// NewDefaultArtifactCatalog returns the legacy fixed artifact catalog used by
+// tests and generated-config-internal helpers. Production code should build the
+// catalog from the protocol registry so new protocol plugins are picked up
+// automatically.
+func NewDefaultArtifactCatalog() ArtifactCatalog {
+	return NewArtifactCatalog([]ArtifactSpec{
 		{Subpath: CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
 		// Hysteria2 (hysteria), Mieru (mita) and olcRTC have no standalone config
 		// check command, so they get no pre-stage syntax validation; a bad config
@@ -89,10 +99,27 @@ func NewArtifactCatalog() ArtifactCatalog {
 		{Subpath: MieruConfigSubpath, ValidationName: "mieru"},
 		{Subpath: WarpConfigSubpath, ValidationName: "warp", ValidationCommand: func(path string) []string { return []string{"sing-box", "check", "-c", path} }},
 		{Subpath: OlcrtcConfigSubpath, ValidationName: "olcrtc"},
-	}}
+	})
 }
 
-func NewGeneratedConfigArtifactCatalog() GeneratedConfigArtifactCatalog { return NewArtifactCatalog() }
+// NewArtifactCatalogFromRegistry builds an artifact catalog from the protocol
+// registry. Protocol plugins contribute their own ArtifactSpec, and WARP is
+// added explicitly because it is a generated config artifact but not a protocol.
+func NewArtifactCatalogFromRegistry(registry ProtocolRegistry) ArtifactCatalog {
+	artifacts := append([]ArtifactSpec(nil), registry.ArtifactSpecs()...)
+	artifacts = append(artifacts, ArtifactSpec{
+		Subpath:        WarpConfigSubpath,
+		ValidationName: "warp",
+		ValidationCommand: func(path string) []string {
+			return []string{"sing-box", "check", "-c", path}
+		},
+	})
+	return NewArtifactCatalog(artifacts)
+}
+
+func NewGeneratedConfigArtifactCatalog(artifacts []ArtifactSpec) GeneratedConfigArtifactCatalog {
+	return NewArtifactCatalog(artifacts)
+}
 
 func (c ArtifactCatalog) All() []ArtifactSpec {
 	out := make([]ArtifactSpec, len(c.artifacts))

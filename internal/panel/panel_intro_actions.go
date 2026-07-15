@@ -6,7 +6,12 @@ func panelIntroActionsJS() string {
 	return `    const tokenInput = document.getElementById('api-token');
     tokenInput.value = localStorage.getItem('veil_api_token') || '';
     tokenInput.addEventListener('input', () => {
-      localStorage.setItem('veil_api_token', tokenInput.value);
+      if (tokenInput.value) {
+        localStorage.setItem('veil_api_token', tokenInput.value);
+      } else {
+        localStorage.removeItem('veil_api_token');
+      }
+      scheduleCurrentUserRoleRefresh();
     });
 
     // Toggle API Token Visibility
@@ -66,7 +71,9 @@ func panelIntroActionsJS() string {
     }
 
     function isViewerRole() {
-      return currentUserRole() === 'viewer';
+      // Unknown, stale, or failed role resolution must remain read-only. Only an
+      // explicitly authenticated administrator may use mutating controls.
+      return currentUserRole() !== 'admin';
     }
 
     const adminOnlyControlIds = [
@@ -151,24 +158,75 @@ func panelIntroActionsJS() string {
       document.body.dataset.veilRole = currentUserRole();
     }
 
-    async function refreshCurrentUserRole() {
+    async function staticTokenHasAdminAccess() {
+      if (!localStorage.getItem('veil_api_token')) return false;
       try {
-        const response = await fetch('/api/auth/status', { headers: authHeaders() });
-        if (!response.ok) {
-          applyViewerRoleGuard();
-          return;
-        }
+        const response = await fetch('/api/version', { headers: authHeaders() });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    let currentUserRoleRefreshGeneration = 0;
+    let currentUserRoleRefreshController = null;
+    let currentUserRoleRefreshTimer = null;
+
+    function invalidateCurrentUserRoleRefresh() {
+      currentUserRoleRefreshGeneration += 1;
+      if (currentUserRoleRefreshController) {
+        currentUserRoleRefreshController.abort();
+        currentUserRoleRefreshController = null;
+      }
+      if (currentUserRoleRefreshTimer) {
+        clearTimeout(currentUserRoleRefreshTimer);
+        currentUserRoleRefreshTimer = null;
+      }
+      setCurrentUserRole('');
+      applyViewerRoleGuard();
+    }
+
+    function scheduleCurrentUserRoleRefresh() {
+      invalidateCurrentUserRoleRefresh();
+      currentUserRoleRefreshTimer = setTimeout(() => {
+        currentUserRoleRefreshTimer = null;
+        refreshCurrentUserRole();
+      }, 250);
+    }
+
+    async function refreshCurrentUserRole() {
+      const generation = ++currentUserRoleRefreshGeneration;
+      if (currentUserRoleRefreshController) currentUserRoleRefreshController.abort();
+      const controller = new AbortController();
+      currentUserRoleRefreshController = controller;
+      const tokenSnapshot = localStorage.getItem('veil_api_token') || '';
+
+      // Clear cached authority before checking it. This prevents a role from a
+      // revoked session or replaced API token from enabling controls briefly.
+      setCurrentUserRole('');
+      applyViewerRoleGuard();
+      try {
+        const response = await fetch('/api/auth/status', { headers: authHeaders(), signal: controller.signal });
+        if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
+        if (!response.ok) return;
         const data = await response.json();
+        if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
         if (data && data.authenticated) {
           setCurrentUserRole(data.role || '');
-        } else if (localStorage.getItem('veil_api_token')) {
+        } else if (await staticTokenHasAdminAccess()) {
+          if (generation !== currentUserRoleRefreshGeneration || tokenSnapshot !== (localStorage.getItem('veil_api_token') || '')) return;
           setCurrentUserRole('admin');
-        } else {
-          setCurrentUserRole('');
         }
-      } catch (_) {
+      } catch (error) {
+        if (!error || error.name !== 'AbortError') {
+          if (generation === currentUserRoleRefreshGeneration) setCurrentUserRole('');
+        }
+      } finally {
+        if (currentUserRoleRefreshController === controller) {
+          currentUserRoleRefreshController = null;
+          if (generation === currentUserRoleRefreshGeneration) applyViewerRoleGuard();
+        }
       }
-      applyViewerRoleGuard();
     }
 
     const viewerGuardObserver = new MutationObserver(() => applyViewerRoleGuard());
@@ -179,7 +237,7 @@ func panelIntroActionsJS() string {
     async function loadJSON(path, outputId, options) {
       const output = document.getElementById(outputId);
       output.textContent = veilT('status.loadingPath', { path });
-      const requestOptions = options || {};
+      const requestOptions = Object.assign({}, options || {});
       requestOptions.headers = requestHeaders(requestOptions.headers || {});
       try {
         const response = await fetch(path, requestOptions);
@@ -188,8 +246,12 @@ func panelIntroActionsJS() string {
           output.textContent = formatAPIError(text, response.status);
           return null;
         }
-        const parsed = text ? JSON.parse(text) : null;
-        output.textContent = parsed === null ? veilT('common.ok') : JSON.stringify(parsed, null, 2);
+        if (!text) {
+          output.textContent = veilT('common.ok');
+          return { success: true };
+        }
+        const parsed = JSON.parse(text);
+        output.textContent = JSON.stringify(parsed, null, 2);
         return parsed;
       } catch (err) {
         output.textContent = String(err);
@@ -244,28 +306,26 @@ func panelIntroActionsJS() string {
         
         output.textContent = (data && data.log ? data.log + "\n\n" : "") + veilT('version.updateStaged');
         
-        setTimeout(() => {
-          let attempts = 0;
+        setTimeout(async () => {
           const maxAttempts = 20;
-          const pollInterval = setInterval(async () => {
-            attempts++;
-            output.textContent = veilT('version.waitingRestart', { attempt: attempts, max: maxAttempts });
+          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            output.textContent = veilT('version.waitingRestart', { attempt, max: maxAttempts });
             try {
               const checkResp = await fetch('/api/version', { headers: authHeaders() });
               if (checkResp.ok) {
                 const checkData = await checkResp.json();
-                clearInterval(pollInterval);
                 btn.disabled = false;
                 output.textContent = veilT('version.backOnline', { details: JSON.stringify(checkData, null, 2) });
+                return;
               }
             } catch (_) {
             }
-            if (attempts >= maxAttempts) {
-              clearInterval(pollInterval);
-              btn.disabled = false;
-              output.textContent = veilT('version.restartSlow');
+            if (attempt < maxAttempts) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
             }
-          }, 2000);
+          }
+          btn.disabled = false;
+          output.textContent = veilT('version.restartSlow');
         }, 3000);
         
       } catch (err) {
@@ -283,9 +343,12 @@ func panelIntroActionsJS() string {
             headers: requestHeaders()
           });
         } catch (_) {}
+        invalidateCurrentUserRoleRefresh();
+        localStorage.removeItem('veil_api_token');
         localStorage.removeItem('veil_csrf_token');
         localStorage.removeItem('veil_username');
         localStorage.removeItem('veil_user_role');
+        tokenInput.value = '';
         window.location.reload();
       });
     }`

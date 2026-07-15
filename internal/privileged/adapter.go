@@ -57,6 +57,9 @@ func (a *LocalAdapter) Journal(ctx context.Context, request JournalRequest) (Jou
 }
 
 func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (BackupResult, error) {
+	if err := validateBackupRequest(request); err != nil {
+		return BackupResult{}, err
+	}
 	resolved, err := a.policy.ResolveBackup(request)
 	if err != nil {
 		return BackupResult{}, err
@@ -65,7 +68,10 @@ func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (Backu
 		return BackupResult{}, newError(ErrorOperationFailed, "backup executor is unavailable")
 	}
 	result, err := a.executor.Backup(ctx, resolved)
-	return result, wrapOperationError(err)
+	if err != nil {
+		return result, wrapOperationError(err)
+	}
+	return enrichBackupResult(resolved, result), nil
 }
 
 func (a *LocalAdapter) RotateKey(ctx context.Context, request RotateKeyRequest) error {

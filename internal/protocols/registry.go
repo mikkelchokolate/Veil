@@ -1,6 +1,10 @@
 package protocols
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+)
 
 // Registry holds all registered protocol plugins.
 type Registry struct {
@@ -123,8 +127,61 @@ func AsClientAccessProvider(p ProtocolPlugin) (ClientAccessProvider, bool) {
 	return c, ok
 }
 
+// AsClientAccessAggregator returns the ClientAccessAggregator capability or nil.
+func AsClientAccessAggregator(p ProtocolPlugin) (ClientAccessAggregator, bool) {
+	c, ok := p.(ClientAccessAggregator)
+	return c, ok
+}
+
 // AsUIProvider returns the UIProvider capability or nil.
 func AsUIProvider(p ProtocolPlugin) (UIProvider, bool) {
 	c, ok := p.(UIProvider)
 	return c, ok
+}
+
+// AsRoomGenerator returns the RoomGenerator capability or nil.
+func AsRoomGenerator(p ProtocolPlugin) (RoomGenerator, bool) {
+	c, ok := p.(RoomGenerator)
+	return c, ok
+}
+
+// SettingsFieldSchemas returns the aggregate settings-scoped field schemas from
+// every registered plugin. This lets protocol-agnostic code such as settings
+// validation/redaction know which protocol-specific keys exist and which ones
+// are secrets.
+func (r *Registry) SettingsFieldSchemas() []schema.FieldSchema {
+	out := make([]schema.FieldSchema, 0)
+	for _, protocol := range r.order {
+		plugin := r.byProtocol[protocol]
+		ui, ok := AsUIProvider(plugin)
+		if !ok {
+			continue
+		}
+		for _, f := range ui.SettingsFieldSchema() {
+			if f.Scope == "" || f.Scope == "settings" {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+// InboundFieldSchemas returns the aggregate inbound-scoped field schemas from
+// every registered plugin. This lets protocol-agnostic code such as secret
+// policy know which protocol-specific inbound fields are secrets.
+func (r *Registry) InboundFieldSchemas() []schema.FieldSchema {
+	out := make([]schema.FieldSchema, 0)
+	for _, protocol := range r.order {
+		plugin := r.byProtocol[protocol]
+		ui, ok := AsUIProvider(plugin)
+		if !ok {
+			continue
+		}
+		for _, f := range ui.InboundFieldSchema() {
+			if f.Scope == "" || f.Scope == "inbound" {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }

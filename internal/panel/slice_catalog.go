@@ -23,8 +23,21 @@ func NewSliceCatalog(runtimes []service.ManagedRuntime) SliceCatalog {
 func (c SliceCatalog) Slices() []Slice {
 	return []Slice{
 		{
-			Name:        "intro",
-			RenderSlots: []RenderSlot{{Placeholder: panelIntroCardsPlaceholder, Render: panelIntroCardsHTML}, {Placeholder: panelIntroActionsPlaceholder, Render: panelIntroActionsJS}},
+			Name: "intro",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelIntroCardsPlaceholder, Render: func() string { return panelIntroCardsHTML() + panelSettingsCardHTML() }},
+				{Placeholder: panelIntroActionsPlaceholder, Render: func() string {
+					return panelIntroReliableActionsJS() + panelRequestReliabilityJS() + panelSettingsActionsJS() + panelSettingsReliabilityJS() + panelRoleTabVisibilityJS() + panelNavigationHardeningJS()
+				}},
+			},
+			EventBindings: []EventBinding{
+				{ElementID: "settings-form", Handler: "saveSettings", Event: "submit"},
+				{ElementID: "load-settings", Handler: "loadSettingsIntoForm", Event: "click"},
+			},
+		},
+		{
+			Name:        "navigation",
+			RenderSlots: panelNavigationInlineHandlerSlots(),
 		},
 		{
 			Name: "service-status",
@@ -36,29 +49,40 @@ func (c SliceCatalog) Slices() []Slice {
 			EventBindings: []EventBinding{{ElementID: "load-service-status", Handler: "loadServiceStatus", Event: "click"}},
 		},
 		{
-			Name:        "runtime-stats",
-			RenderSlots: []RenderSlot{{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML}, {Placeholder: panelRuntimeStatsActionsPlaceholder, Render: panelRuntimeStatsActionsJS}},
+			Name: "runtime-stats",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelRuntimeStatsCardsPlaceholder, Render: panelRuntimeStatsCardsHTML},
+				{Placeholder: panelRuntimeStatsActionsPlaceholder, Render: func() string {
+					return panelRuntimeStatsActionsJS() + panelRuntimeStatsVisibilityJS() + panelRuntimeStatsRequestReliabilityJS()
+				}},
+			},
 		},
 		{
-			Name:        "client-links",
-			RenderSlots: []RenderSlot{{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksCardHTML}, {Placeholder: panelClientLinksActionsPlaceholder, Render: panelClientLinksActionsJS}},
+			Name: "client-links",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelClientLinksCardPlaceholder, Render: panelClientLinksHardenedCardHTML},
+				{Placeholder: panelClientLinksActionsPlaceholder, Render: func() string {
+					return panelClientLinksActionsJS() + panelClientLinksReliabilityJS() + panelClientLinksControlsJS()
+				}},
+			},
 			EventBindings: []EventBinding{
 				{ElementID: "load-client-links", Handler: "loadClientLinks", Event: "click"},
 				{ElementID: "open-client-links-modal", Handler: "openClientLinksModal", Event: "click"},
 				{ElementID: "load-client-subscription", Handler: "loadClientSubscription", Event: "click"},
 				{ElementID: "load-client-subscription-raw", Handler: "loadRawClientSubscription", Event: "click"},
 				{ElementID: "download-client-links-json", Handler: "downloadClientLinksJSON", Event: "click"},
-				{ElementID: "download-mieru-configs", Handler: "downloadMieruConfigs", Event: "click"},
+				{ElementID: "download-client-configs", Handler: "downloadClientConfigArtifacts", Event: "click"},
 				{ElementID: "copy-client-links", Handler: "copyClientLinksOutput", Event: "click"},
 			},
 		},
-
 		{
 			Name: "inbounds",
 			RenderSlots: []RenderSlot{
 				{Placeholder: panelInboundFormPlaceholder, Render: panelInboundFormHTML},
-				{Placeholder: panelInboundActionsPlaceholder, Render: panelInboundActionsJS},
-				{Placeholder: panelDynamicFieldsPlaceholder, Render: panelDynamicFieldsJS},
+				{Placeholder: panelInboundActionsPlaceholder, Render: panelInboundReliableActionsJS},
+				{Placeholder: panelDynamicFieldsPlaceholder, Render: func() string {
+					return panelDynamicFieldsJS() + panelDynamicFieldsGenerationReliabilityJS()
+				}},
 				{Placeholder: panelClientProfileControlsPlaceholder, Render: panelClientProfileControlsHTML},
 				{Placeholder: panelClientProfileActionsPlaceholder, Render: panelClientProfileActionsJS},
 			},
@@ -70,8 +94,11 @@ func (c SliceCatalog) Slices() []Slice {
 			},
 		},
 		{
-			Name:        "routing",
-			RenderSlots: []RenderSlot{{Placeholder: panelRoutingCardPlaceholder, Render: panelRoutingCardHTML}, {Placeholder: panelRoutingActionsPlaceholder, Render: panelRoutingActionsJS}},
+			Name: "routing",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelRoutingCardPlaceholder, Render: panelRoutingHardenedCardHTML},
+				{Placeholder: panelRoutingActionsPlaceholder, Render: func() string { return panelRoutingActionsJS() + panelRoutingControlsJS() }},
+			},
 			EventBindings: []EventBinding{
 				{ElementID: "routing-rule-form", Handler: "saveRoutingRule", Event: "submit"},
 				{ElementID: "delete-routing-rule", Handler: "deleteRoutingRule", Event: "click"},
@@ -79,8 +106,11 @@ func (c SliceCatalog) Slices() []Slice {
 			},
 		},
 		{
-			Name:        "warp",
-			RenderSlots: []RenderSlot{{Placeholder: panelWarpCardPlaceholder, Render: panelWarpCardHTML}, {Placeholder: panelWarpActionsPlaceholder, Render: panelWarpActionsJS}},
+			Name: "warp",
+			RenderSlots: []RenderSlot{
+				{Placeholder: panelWarpCardPlaceholder, Render: panelWarpHardenedCardHTML},
+				{Placeholder: panelWarpActionsPlaceholder, Render: func() string { return panelWarpReliableActionsJS() + panelWarpControlsJS() }},
+			},
 			EventBindings: []EventBinding{
 				{ElementID: "warp-enabled", Handler: "applyWarpToggle", Event: "change"},
 				{ElementID: "warp-form", Handler: "saveWarpConfig", Event: "submit"},
@@ -114,7 +144,7 @@ func (c SliceCatalog) Slices() []Slice {
 			Name: "users",
 			RenderSlots: []RenderSlot{
 				{Placeholder: UsersCardPlaceholder, Render: UsersCardHTML},
-				{Placeholder: UsersActionsPlaceholder, Render: UsersActionsJS},
+				{Placeholder: UsersActionsPlaceholder, Render: func() string { return UsersActionsJS() + panelUserIdentityCleanupJS() }},
 			},
 			EventBindings: []EventBinding{
 				{ElementID: "user-form", Handler: "saveUser", Event: "submit"},
@@ -165,5 +195,6 @@ func EventBindingsJS(bindings []EventBinding) string {
     syncInboundTransportOptions();
 
     // Auto-load settings and service status on panel open.
+    loadSettingsIntoForm();
     loadServiceStatus();`
 }

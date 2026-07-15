@@ -23,12 +23,12 @@ type ProtocolPlugin interface {
 
 // Metadata collects the primitive metadata methods into a struct.
 type Metadata struct {
-	Protocol        string
-	DisplayName     string
-	Transports      []string
-	RequiresCaddy   bool
-	FirewallService string
-	MaxEnabled      int
+	Protocol        string   `json:"protocol"`
+	DisplayName     string   `json:"displayName"`
+	Transports      []string `json:"transports"`
+	RequiresCaddy   bool     `json:"requiresCaddy"`
+	FirewallService string   `json:"firewallService"`
+	MaxEnabled      int      `json:"maxEnabled"`
 }
 
 // MetadataOf returns a Metadata struct for a plugin.
@@ -57,10 +57,11 @@ type RuntimeProvider interface {
 
 // Validator contributes protocol-specific validation issues.
 type Validator interface {
-	ValidateSettings(settings model.Settings) error
+	ValidateSettings(settings model.Settings, inbound model.Inbound) error
 	ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue
 	NeedsDomain(settings model.Settings, inbound model.Inbound) bool
 	HasCredential(settings model.Settings, inbound model.Inbound) bool
+	NeedsEmail(settings model.Settings, inbound model.Inbound) bool
 }
 
 // ClientAccessProvider builds client links / artifacts for the protocol.
@@ -73,4 +74,11 @@ type UIProvider interface {
 	InboundFieldSchema() []schema.FieldSchema
 	SettingsFieldSchema() []schema.FieldSchema
 	Autofill(inbound model.Inbound) (model.Inbound, error)
+}
+
+// RoomGenerator contributes server-side generation of one-click values such as
+// meeting room IDs. The API registers a per-protocol /api/{protocol}/room route
+// for every plugin that implements this interface.
+type RoomGenerator interface {
+	GenerateRoom(provider string) (string, error)
 }

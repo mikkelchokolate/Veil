@@ -27,9 +27,9 @@ func panelClientLinksActionsJS() string {
       }
     }
 
-    async function downloadMieruConfigs() {
+    async function downloadClientConfigArtifacts() {
       const output = document.getElementById('client-links-output');
-      output.textContent = veilT('clientLinks.loadingMieru');
+      output.textContent = veilT('clientLinks.loadingClientConfigs');
       try {
         const response = await fetch('/api/client-links', { headers: requestHeaders() });
         const body = await response.json();
@@ -37,23 +37,23 @@ func panelClientLinksActionsJS() string {
           output.textContent = JSON.stringify(body, null, 2);
           return;
         }
-        const configs = (body.artifacts || []).filter(artifact => artifact.protocol === 'mieru' && artifact.content).map(artifact => ({ name: artifact.name, config: JSON.parse(artifact.content) }));
+        const configs = (body.artifacts || []).filter(artifact => artifact.kind === 'client_config' && artifact.content).map(artifact => ({ name: artifact.name, config: JSON.parse(artifact.content) }));
         if (!configs.length) {
-          output.textContent = veilT('clientLinks.noMieru');
+          output.textContent = veilT('clientLinks.noClientConfigs');
           return;
         }
         const blob = new Blob([JSON.stringify(configs, null, 2) + '\n'], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'mieru-client-configs.json';
+        link.download = 'veil-client-configs.json';
         document.body.appendChild(link);
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-        output.textContent = veilT('clientLinks.downloaded', { filename: 'mieru-client-configs.json' });
+        output.textContent = veilT('clientLinks.downloaded', { filename: 'veil-client-configs.json' });
       } catch (err) {
-        output.textContent = veilT('clientLinks.mieruFailed', { error: String(err) });
+        output.textContent = veilT('clientLinks.clientConfigsFailed', { error: String(err) });
       }
     }
 

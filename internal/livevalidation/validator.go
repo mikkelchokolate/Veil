@@ -130,7 +130,9 @@ func (v Validator) validateInbound(
 			))
 		}
 
-		if v.Ports != nil && !ownedBinding(inbound, request.CurrentInbounds) {
+		if v.Ports != nil &&
+			!ownedBinding(inbound, request.CurrentInbounds) &&
+			!ownedPanelCaddyBinding(request.Settings, inbound) {
 			available, err := v.Ports.Available(ctx, inbound.Transport, inbound.Port)
 			if err != nil {
 				issues = append(issues, issue(
@@ -149,6 +151,9 @@ func (v Validator) validateInbound(
 	}
 
 	issues = append(issues, requiredFieldIssues(request.Settings, inbound)...)
+	if supported {
+		issues = append(issues, protocolInboundIssues(request.Settings, inbound)...)
+	}
 	if supported && strings.TrimSpace(inbound.Name) != "" {
 		issues = append(issues, v.runtimeIssues(ctx, inbound)...)
 	}
@@ -172,7 +177,10 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 	if !ok {
 		return nil
 	}
-	install := rp.RuntimeInstall("amd64")
+	// RuntimeInstall is called only to obtain the binary name; the architecture
+	// argument is irrelevant for that field, so an empty value keeps validation
+	// host-architecture-agnostic.
+	install := rp.RuntimeInstall("")
 	unit := unitForInbound(p.Protocol(), inbound, rp.RuntimeDescriptors([]model.Inbound{inbound}))
 
 	issues := []model.ValidationIssue{}
@@ -222,10 +230,10 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 			"Set the domain that resolves to this host.", "candidate",
 		))
 	}
-	if inbound.Protocol == "naiveproxy" && strings.TrimSpace(settings.Email) == "" {
+	if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
 		issues = append(issues, issue(
 			"email_required", SeverityError, "settings.email", inbound.Name,
-			"NaiveProxy automatic TLS requires an email address",
+			"This protocol requires an email address",
 			"Set the ACME contact email.", "candidate",
 		))
 	}
@@ -239,6 +247,18 @@ func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model
 	return issues
 }
 
+func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
+	p, ok := protocolRegistry().Get(inbound.Protocol)
+	if !ok {
+		return nil
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateInbound(settings, inbound)
+}
+
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 	p, ok := protocolRegistry().Get(inbound.Protocol)
 	if !ok {
@@ -249,6 +269,18 @@ func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 		return false
 	}
 	return validator.NeedsDomain(settings, inbound)
+}
+
+func protocolNeedsEmail(settings model.Settings, inbound model.Inbound) bool {
+	p, ok := protocolRegistry().Get(inbound.Protocol)
+	if !ok {
+		return false
+	}
+	validator, ok := protocols.AsValidator(p)
+	if !ok {
+		return false
+	}
+	return validator.NeedsEmail(settings, inbound)
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {
@@ -274,6 +306,13 @@ func ownedBinding(candidate model.Inbound, current []model.Inbound) bool {
 		}
 	}
 	return false
+}
+
+func ownedPanelCaddyBinding(settings model.Settings, candidate model.Inbound) bool {
+	return settings.PanelAccess == "caddy" &&
+		candidate.Protocol == "naiveproxy" &&
+		candidate.Transport == "tcp" &&
+		candidate.Port == 443
 }
 
 func bindingKey(transport string, port int) string {

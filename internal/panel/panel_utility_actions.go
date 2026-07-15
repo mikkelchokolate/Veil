@@ -70,14 +70,31 @@ func panelUtilityActionsJS() string {
     });
 
     function parseReserved(value) {
-      if (!value.trim()) {
-        return [];
+      const raw = String(value || '').trim();
+      if (!raw) return [];
+      const parts = raw.split(',').map((part) => part.trim());
+      if (parts.length !== 3 || parts.some((part) => part === '')) {
+        throw new Error('Reserved bytes must contain exactly three comma-separated integers.');
       }
-      return value.split(',').map((part) => Number(part.trim())).filter((value) => Number.isInteger(value));
+      const reserved = parts.map((part) => Number(part));
+      if (reserved.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
+        throw new Error('Reserved bytes must be integers between 0 and 255.');
+      }
+      return reserved;
     }
 
     function numberOrZero(id) {
-      const value = document.getElementById(id).value;
-      return value === '' ? 0 : Number(value);
-    }`
+      const input = document.getElementById(id);
+      const raw = input ? input.value.trim() : '';
+      if (raw === '') return 0;
+      if (!input.checkValidity()) {
+        input.reportValidity();
+        throw new Error('Invalid numeric value for ' + id + '.');
+      }
+      const value = Number(raw);
+      if (!Number.isInteger(value)) {
+        throw new Error('Numeric value for ' + id + ' must be a whole number.');
+      }
+      return value;
+    }` + panelDataLoadRequestReliabilityJS()
 }
