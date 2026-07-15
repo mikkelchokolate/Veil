@@ -22,6 +22,11 @@ var serviceHealthChecker = func(serviceName string) ServiceHealthResult {
 	return service.RunFixedServiceHealthCheck(serviceName, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
 }
 
+// autoApplyAfterInboundMutation controls whether inbound mutations automatically
+// trigger a full live + services apply. Tests can disable this to avoid side
+// effects when exercising inbound CRUD in isolation.
+var autoApplyAfterInboundMutation = true
+
 // Reloader is an optional interface for runtime state reload.
 type Reloader interface {
 	Reload() error
