@@ -1,0 +1,48 @@
+name: inbound-caddy-diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    if: github.head_ref == 'feature/inbound-caddy-redesign'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.5'
+      - name: Run pinned staticcheck
+        shell: bash
+        run: |
+          set -o pipefail
+          go install honnef.co/go/tools/cmd/staticcheck@2026.1
+          staticcheck ./... 2>&1 | tee staticcheck.log
+      - name: Run verbose E2E
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... -count=1 -v 2>&1 | tee e2e.log
+      - name: Run focused redesign tests
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./internal/bindregistry ./internal/caddyassembly ./internal/caddyadmin ./internal/caddycapabilities ./internal/renderer ./internal/protocols/naiveproxy ./internal/protocols/hysteria2 ./internal/generatedconfig ./internal/api -count=1 -v 2>&1 | tee focused.log
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: inbound-caddy-diagnostics
+          path: |
+            staticcheck.log
+            e2e.log
+            focused.log
+          if-no-files-found: ignore
+          retention-days: 3
