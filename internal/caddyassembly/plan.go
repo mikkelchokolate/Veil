@@ -60,7 +60,13 @@ func BuildRenderPlan(
 			return CaddyRenderPlan{}, nil, fmt.Errorf("panel domain is required for caddy Panel access")
 		}
 		backendPort := panelBackendPort(settings.PanelListen)
+		if backendPort == 0 {
+			return CaddyRenderPlan{}, nil, fmt.Errorf("panelListen must be host:port")
+		}
 		webBasePath := veilsettings.NormalizeWebBasePath(settings.WebBasePath)
+		if webBasePath == "" || webBasePath == "/" {
+			return CaddyRenderPlan{}, nil, fmt.Errorf("webBasePath is required for caddy Panel access")
+		}
 		publicPort := settings.PanelPublicPort
 		if publicPort == 0 {
 			publicPort = 443
