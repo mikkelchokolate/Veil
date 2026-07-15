@@ -32,6 +32,7 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSONStatus(w, http.StatusCreated, created)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
@@ -66,6 +67,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSON(w, updated)
 		case http.MethodDelete:
 			err := mutation.DeleteRoutingRule(name)
@@ -74,6 +76,7 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
@@ -142,6 +145,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.autoApplyLocked(r)
 	writeJSON(w, routing.NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build())
 }
 
@@ -218,6 +222,7 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSON(w, updated)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut)

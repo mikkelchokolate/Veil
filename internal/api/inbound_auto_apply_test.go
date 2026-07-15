@@ -13,11 +13,11 @@ import (
 func TestInboundCreateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
-	origAutoApply := autoApplyAfterInboundMutation
+	origAutoApply := autoApplyAfterMutation
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
-		autoApplyAfterInboundMutation = origAutoApply
+		autoApplyAfterMutation = origAutoApply
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -62,11 +62,11 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
-	origAutoApply := autoApplyAfterInboundMutation
+	origAutoApply := autoApplyAfterMutation
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
-		autoApplyAfterInboundMutation = origAutoApply
+		autoApplyAfterMutation = origAutoApply
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -113,11 +113,11 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
-	origAutoApply := autoApplyAfterInboundMutation
+	origAutoApply := autoApplyAfterMutation
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
-		autoApplyAfterInboundMutation = origAutoApply
+		autoApplyAfterMutation = origAutoApply
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {

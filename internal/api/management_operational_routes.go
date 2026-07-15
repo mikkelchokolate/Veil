@@ -145,7 +145,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 // deadlock with concurrent explicit apply requests. Returns the apply response
 // and whether it succeeded. Caller must hold s.mu.
 func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool) {
-	if !autoApplyAfterInboundMutation {
+	if !autoApplyAfterMutation {
 		return ApplyResponse{}, false
 	}
 	if !s.serviceActionMu.TryLock() {
