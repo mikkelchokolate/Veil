@@ -179,6 +179,15 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 			t.Fatalf("veil-helper.service missing %q:\n%s", want, helper)
 		}
 	}
+	for _, forbid := range []string{
+		"PrivateNetwork",
+		"NetworkNamespacePath",
+		"JoinsNamespaceOf",
+	} {
+		if strings.Contains(helper, forbid) {
+			t.Fatalf("veil-helper.service must not contain network-isolation directive %q:\n%s", forbid, helper)
+		}
+	}
 	socket := units[UnitHelperSocket]
 	for _, want := range []string{
 		"ListenStream=/run/veil/helper.sock",
