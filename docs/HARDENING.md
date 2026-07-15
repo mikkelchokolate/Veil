@@ -207,9 +207,11 @@ runbook.
   fails on any `govulncheck` finding, so staying on tagged releases keeps you
   ahead of stdlib and dependency CVEs.
 - **Capability envelope.** Protocol runtime units that may bind privileged
-  ports keep only `CAP_NET_BIND_SERVICE`. The Panel and helper units ship with
-  empty capability sets; helper operations rely on root UID plus explicit
-  systemd filesystem and syscall restrictions instead of ambient capabilities.
+  ports keep only `CAP_NET_BIND_SERVICE`. The Panel unit ships with empty
+  `CapabilityBoundingSet` and `AmbientCapabilities`. The helper unit keeps
+  `CAP_NET_ADMIN` and `CAP_NET_RAW` so it can synchronize the host firewall,
+  and relies on root UID plus explicit systemd filesystem and syscall
+  restrictions for the rest of its privileges.
 
 Check the boundary after installation:
 
