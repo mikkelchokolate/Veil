@@ -1,0 +1,1 @@
+Retry materialization after promoted runtime catalog test compatibility fix.
