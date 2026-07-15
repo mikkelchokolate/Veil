@@ -34,7 +34,7 @@ func validateCaddyCapabilities(plan caddyassembly.CaddyRenderPlan, caps caddycap
 			continue
 		}
 		if !caps.ForwardProxy {
-			return fmt.Errorf("Caddy binary does not include the forward_proxy module required for NaiveProxy")
+			return fmt.Errorf("caddy binary does not include the forward_proxy module required for NaiveProxy")
 		}
 	}
 	return nil
