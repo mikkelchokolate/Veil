@@ -1,0 +1,1 @@
+Publish verified staticcheck and E2E compile fixes.
