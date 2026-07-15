@@ -1,0 +1,1 @@
+Publish staticcheck and Caddy-unit verified source fixes before E2E diagnostics.
