@@ -193,13 +193,14 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			break
 		}
 		adminResult.Error = err.Error()
-		results = append(results, adminResult)
 		fallback := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
-		results = append(results, fallback)
-		if !fallback.Success {
-			return results
+		if fallback.Success {
+			fallback.Output = strings.TrimSpace(strings.Join([]string{fallback.Output, "Caddy Admin API load failed; applied config through systemd fallback: " + adminResult.Error}, "\n"))
+			results = append(results, fallback)
+			break
 		}
-		break
+		results = append(results, adminResult, fallback)
+		return results
 	}
 
 	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {

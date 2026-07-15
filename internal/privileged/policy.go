@@ -205,6 +205,15 @@ func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {
 	if clean == "sing-box/warp.json" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
+	// Retired per-inbound Caddyfiles remain manageable only for migration
+	// and orphan cleanup. Paths are still confined below the staging and
+	// generated roots by resolveBelow.
+	if strings.HasPrefix(clean, "caddy/") && strings.HasSuffix(clean, ".Caddyfile") {
+		name := strings.TrimSuffix(strings.TrimPrefix(clean, "caddy/"), ".Caddyfile")
+		if !strings.Contains(name, "/") && artifactNamePattern.MatchString(name) {
+			return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
+		}
+	}
 	return managedProtocolArtifactID(clean, p.AllowedArtifactNames)
 }
 

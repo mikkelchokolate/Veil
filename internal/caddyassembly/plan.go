@@ -216,8 +216,15 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
 
 func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
 	var users []CaddyNaiveUser
+	hasExplicitlyEnabledProfile := false
+	for _, profile := range inbound.Profiles {
+		if profile.Enabled {
+			hasExplicitlyEnabledProfile = true
+			break
+		}
+	}
 	for _, p := range inbound.Profiles {
-		if !p.Enabled || strings.TrimSpace(p.Password) == "" {
+		if (hasExplicitlyEnabledProfile && !p.Enabled) || strings.TrimSpace(p.Password) == "" {
 			continue
 		}
 		username := strings.TrimSpace(p.Username)

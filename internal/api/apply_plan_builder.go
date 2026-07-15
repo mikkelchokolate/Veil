@@ -401,8 +401,15 @@ func resolveNaiveEmail(inb Inbound, settings Settings) string {
 }
 
 func naiveHasCredential(inb Inbound, settings Settings) bool {
+	hasExplicitlyEnabledProfile := false
 	for _, profile := range inb.Profiles {
-		if !profile.Enabled {
+		if profile.Enabled {
+			hasExplicitlyEnabledProfile = true
+			break
+		}
+	}
+	for _, profile := range inb.Profiles {
+		if hasExplicitlyEnabledProfile && !profile.Enabled {
 			continue
 		}
 		username := strings.TrimSpace(profile.Username)

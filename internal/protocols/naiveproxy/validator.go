@@ -66,8 +66,15 @@ func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return true }
 func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool  { return true }
 
 func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
+	hasExplicitlyEnabledProfile := false
 	for _, profile := range inbound.Profiles {
-		if !profile.Enabled || strings.TrimSpace(profile.Password) == "" {
+		if profile.Enabled {
+			hasExplicitlyEnabledProfile = true
+			break
+		}
+	}
+	for _, profile := range inbound.Profiles {
+		if (hasExplicitlyEnabledProfile && !profile.Enabled) || strings.TrimSpace(profile.Password) == "" {
 			continue
 		}
 		if strings.TrimSpace(profile.Username) != "" || strings.TrimSpace(profile.Name) != "" {
