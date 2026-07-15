@@ -1,0 +1,1 @@
+Retry materialization after restoring domain-aware cert helper compatibility.
