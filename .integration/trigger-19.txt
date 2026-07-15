@@ -1,0 +1,1 @@
+Materialize the build-verified inbound Caddy source tree into the feature branch.
