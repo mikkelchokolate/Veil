@@ -36,6 +36,7 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
 			}
+			s.autoApplyLocked(r)
 			writeJSON(w, updated)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut)
