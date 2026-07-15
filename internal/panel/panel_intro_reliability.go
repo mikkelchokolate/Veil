@@ -1,0 +1,129 @@
+package panel
+
+import "strings"
+
+// panelIntroReliableActionsJS hardens controls that live in the shared intro
+// runtime. WARP's immediate toggle is a mutation even though it is not a form
+// submit, and an update restart invalidates in-memory cookie sessions and CSRF
+// state even when the service has already returned successfully.
+func panelIntroReliableActionsJS() string {
+	actions := panelIntroActionsJS()
+	actions = strings.Replace(actions, `      'save-warp-config',
+      'apply-staged-files',`, `      'save-warp-config',
+      'warp-enabled',
+      'apply-staged-files',`, 1)
+	actions = strings.Replace(actions, `    async function staticTokenHasAdminAccess() {
+      if (!localStorage.getItem('veil_api_token')) return false;
+      try {
+        const response = await fetch('/api/version', { headers: authHeaders() });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }`, `    async function staticTokenHasAdminAccess() {
+      // This probe also detects the local no-user development mode, where the
+      // backend grants dev-anonymous administrator access without a static token.
+      try {
+        const response = await fetch('/api/version', {
+          headers: authHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        return response.ok;
+      } catch (_) {
+        return false;
+      }
+    }`, 1)
+	actions = strings.Replace(actions, `        if (data && data.authenticated) {
+          setCurrentUserRole(data.role || '');
+        } else if (await staticTokenHasAdminAccess()) {`, `        if (data && data.authenticated) {
+          const refreshedCSRFToken = String(data.csrfToken || '');
+          window.veil_csrf_token = refreshedCSRFToken;
+          if (refreshedCSRFToken) {
+            localStorage.setItem('veil_csrf_token', refreshedCSRFToken);
+          } else {
+            localStorage.removeItem('veil_csrf_token');
+          }
+          const refreshedUsername = String(data.username || '');
+          if (refreshedUsername) {
+            localStorage.setItem('veil_username', refreshedUsername);
+          } else {
+            localStorage.removeItem('veil_username');
+          }
+          setCurrentUserRole(data.role || '');
+        } else if (await staticTokenHasAdminAccess()) {`, 1)
+	actions = strings.Replace(actions, `              const checkResp = await fetch('/api/version', { headers: authHeaders() });
+              if (checkResp.ok) {
+                const checkData = await checkResp.json();
+                btn.disabled = false;
+                output.textContent = veilT('version.backOnline', { details: JSON.stringify(checkData, null, 2) });
+                return;
+              }`, `              const checkResp = await fetch('/api/version', { headers: authHeaders(), cache: 'no-store' });
+              if (checkResp.ok || checkResp.status === 401 || checkResp.status === 403) {
+                let details = 'Authentication session reset after restart.';
+                if (checkResp.ok) {
+                  try {
+                    details = JSON.stringify(await checkResp.json(), null, 2);
+                  } catch (_) {}
+                }
+                btn.disabled = false;
+                output.textContent = veilT('version.backOnline', { details });
+                invalidateCurrentUserRoleRefresh();
+                localStorage.removeItem('veil_csrf_token');
+                localStorage.removeItem('veil_username');
+                localStorage.removeItem('veil_user_role');
+                setTimeout(() => window.location.reload(), 100);
+                return;
+              }`, 1)
+	actions = strings.Replace(actions, `    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: requestHeaders()
+          });
+        } catch (_) {}
+        invalidateCurrentUserRoleRefresh();
+        localStorage.removeItem('veil_api_token');
+        localStorage.removeItem('veil_csrf_token');
+        localStorage.removeItem('veil_username');
+        localStorage.removeItem('veil_user_role');
+        tokenInput.value = '';
+        window.location.reload();
+      });
+    }`, `    let logoutInFlight = false;
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        if (logoutInFlight) return;
+        logoutInFlight = true;
+        logoutBtn.disabled = true;
+        try {
+          const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: requestHeaders()
+          });
+          const text = await response.text();
+          if (!response.ok) {
+            throw new Error(formatAPIError(text, response.status));
+          }
+          invalidateCurrentUserRoleRefresh();
+          localStorage.removeItem('veil_api_token');
+          localStorage.removeItem('veil_csrf_token');
+          localStorage.removeItem('veil_username');
+          localStorage.removeItem('veil_user_role');
+          tokenInput.value = '';
+          window.location.reload();
+        } catch (error) {
+          logoutInFlight = false;
+          logoutBtn.disabled = false;
+          alert(veilT('status.requestFailed', {
+            error: String(error && error.message ? error.message : error)
+          }));
+        }
+      });
+    }`, 1)
+	return actions + panelLocalePersistenceReliabilityJS()
+}

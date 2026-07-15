@@ -18,11 +18,45 @@ func newGeneratedConfigRegistryFrom(r *Registry) generatedconfig.ProtocolRegistr
 		protocolRenderers = append(protocolRenderers, generatedconfig.Protocol{
 			Protocol:               meta.Protocol,
 			MaxEnabled:             meta.MaxEnabled,
-			RequiresRenderSettings: meta.Protocol != "mieru",
+			RequiresRenderSettings: RequiresRenderSettings(p),
 			Render:                 cr.RenderConfig,
+			ArtifactSpec:           cr.ArtifactSpec(),
 		})
 	}
-	return generatedconfig.NewProtocolRegistry(protocolRenderers)
+	renderSettingKeys := renderSettingsFieldKeys(r)
+	return generatedconfig.NewProtocolRegistryWithRenderSettingKeys(protocolRenderers, renderSettingKeys)
+}
+
+// renderSettingsFieldKeys collects the settings-scoped protocol field keys from
+// all registered UI providers. The render-settings policy uses these keys
+// instead of a hardcoded protocol list so new protocol plugins are picked up
+// automatically.
+func renderSettingsFieldKeys(r *Registry) []string {
+	keys := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, f := range r.SettingsFieldSchemas() {
+		if f.Scope != "" && f.Scope != "settings" {
+			continue
+		}
+		if _, ok := seen[f.Key]; ok {
+			continue
+		}
+		seen[f.Key] = struct{}{}
+		keys = append(keys, f.Key)
+	}
+	return keys
+}
+
+// NeedsCaddyCertSync reports whether a protocol requires Caddy-managed TLS
+// certificates to be synced to disk when PanelAccess is "caddy".
+func NeedsCaddyCertSync(protocol string) bool {
+	registry := NewRegistry()
+	p, ok := registry.Get(protocol)
+	if !ok {
+		return false
+	}
+	csp, ok := p.(interface{ NeedsCaddyCertSync() bool })
+	return ok && csp.NeedsCaddyCertSync()
 }
 
 // Legacy unit constants remain here until all callers migrate to the registry.

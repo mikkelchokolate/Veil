@@ -81,9 +81,10 @@ type mockValidator struct {
 	validateInbound  func(model.Settings, model.Inbound) []model.ValidationIssue
 	needsDomain      func(model.Settings, model.Inbound) bool
 	hasCredential    func(model.Settings, model.Inbound) bool
+	needsEmail       func(model.Settings, model.Inbound) bool
 }
 
-func (m *mockValidator) ValidateSettings(settings model.Settings) error {
+func (m *mockValidator) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
 	if m.validateSettings != nil {
 		return m.validateSettings(settings)
 	}
@@ -107,6 +108,13 @@ func (m *mockValidator) NeedsDomain(settings model.Settings, inbound model.Inbou
 func (m *mockValidator) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	if m.hasCredential != nil {
 		return m.hasCredential(settings, inbound)
+	}
+	return false
+}
+
+func (m *mockValidator) NeedsEmail(settings model.Settings, inbound model.Inbound) bool {
+	if m.needsEmail != nil {
+		return m.needsEmail(settings, inbound)
 	}
 	return false
 }
@@ -632,6 +640,56 @@ func TestGeneratedConfigRegistryFromMockRenderers(t *testing.T) {
 	}
 }
 
+func TestGeneratedConfigRegistryPropagatesArtifactSpecs(t *testing.T) {
+	r := NewRegistryRaw()
+	r.Register(&mockConfigRenderer{
+		mockPlugin: &mockPlugin{protocol: "mieru", displayName: "Mieru", maxEnabled: 1},
+		spec:       generatedconfig.ArtifactSpec{Subpath: "mieru/server_config.json", ValidationName: "mieru"},
+	})
+	r.Register(&mockConfigRenderer{
+		mockPlugin: &mockPlugin{protocol: "other", displayName: "Other", maxEnabled: 0},
+		spec:       generatedconfig.ArtifactSpec{Subpath: "other/config.yaml", ValidationName: "other"},
+	})
+	r.Register(&mockPlugin{protocol: "plain", displayName: "Plain"})
+
+	registry := newGeneratedConfigRegistryFrom(r)
+	specs := registry.ArtifactSpecs()
+	if len(specs) != 2 {
+		t.Fatalf("ArtifactSpecs() = %+v, want 2 specs", specs)
+	}
+	want := map[string]string{
+		"mieru": "mieru/server_config.json",
+		"other": "other/config.yaml",
+	}
+	got := map[string]string{}
+	for _, spec := range specs {
+		got[spec.ValidationName] = spec.Subpath
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ArtifactSpecs() = %+v, want %+v", got, want)
+	}
+}
+
+func TestArtifactCatalogFromRegistryIncludesProtocolSpecsAndWarp(t *testing.T) {
+	registry := newGeneratedConfigRegistryFrom(NewRegistry())
+	catalog := generatedconfig.NewArtifactCatalogFromRegistry(registry)
+
+	want := map[string]string{
+		generatedconfig.CaddyfileSubpath:       "caddy",
+		generatedconfig.Hysteria2ConfigSubpath: "hysteria2",
+		generatedconfig.MieruConfigSubpath:     "mieru",
+		generatedconfig.OlcrtcConfigSubpath:    "olcrtc",
+		generatedconfig.WarpConfigSubpath:      "warp",
+	}
+	got := map[string]string{}
+	for _, spec := range catalog.All() {
+		got[spec.Subpath] = spec.ValidationName
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog specs = %+v, want %+v", got, want)
+	}
+}
+
 func TestGeneratedConfigRegistryConstants(t *testing.T) {
 	if UnitCaddy != "veil-caddy@.service" {
 		t.Fatalf("UnitCaddy = %q", UnitCaddy)
@@ -892,7 +950,7 @@ func TestInstallAllRuntimesForSkipsPluginsWithoutRuntimeProvider(t *testing.T) {
 		},
 	}
 
-	results := installAllRuntimesFor(ctx, opts, r)
+	results := installRuntimesFor(ctx, opts, r, nil)
 	// The registry contributes "demo"; WARP is always appended from the catalog.
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results (plain plugin skipped, warp included), got %d", len(results))

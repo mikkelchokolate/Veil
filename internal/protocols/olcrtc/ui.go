@@ -35,15 +35,38 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 			},
 			Scope: "inbound",
 		},
-		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, GenerateAction: "room", Scope: "inbound"},
+		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, GenerateAction: "room", GenerateActionField: "olcrtcAuth", Scope: "inbound"},
 	}
 }
 
 // SettingsFieldSchema returns the dynamic fields for global settings.
 func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
-		{Key: "olcrtcAuth", Label: "olcRTC Auth Provider", Type: schema.FieldText, Scope: "settings"},
-		{Key: "olcrtcTransport", Label: "olcRTC Transport", Type: schema.FieldText, Scope: "settings"},
+		{
+			Key:     "olcrtcAuth",
+			Label:   "olcRTC Auth Provider",
+			Type:    schema.FieldSelect,
+			Default: "jitsi",
+			Options: []schema.FieldOption{
+				{Label: "jitsi", Value: "jitsi", Attributes: map[string]string{"data-autoroom": "true"}},
+				{Label: "telemost", Value: "telemost", Attributes: map[string]string{"data-autoroom": "false"}},
+				{Label: "wbstream", Value: "wbstream", Attributes: map[string]string{"data-autoroom": "false"}},
+			},
+			Scope: "settings",
+		},
+		{
+			Key:     "olcrtcTransport",
+			Label:   "olcRTC Transport",
+			Type:    schema.FieldSelect,
+			Default: "datachannel",
+			Options: []schema.FieldOption{
+				{Label: "datachannel", Value: "datachannel"},
+				{Label: "vp8channel", Value: "vp8channel"},
+				{Label: "seichannel", Value: "seichannel"},
+				{Label: "videochannel", Value: "videochannel"},
+			},
+			Scope: "settings",
+		},
 		{Key: "olcrtcRoomID", Label: "olcRTC Room ID", Type: schema.FieldText, Scope: "settings"},
 	}
 }
@@ -85,7 +108,7 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields["olcrtcRoomID"] == nil || inbound.ProtocolFields["olcrtcRoomID"] == "" {
 		inbound.ProtocolFields["olcrtcRoomID"] = inbound.OlcrtcRoomID
 	}
-	if inbound.Password == "" && !isOlcrtcKey(inbound.Password) {
+	if inbound.Password == "" || !isOlcrtcKey(inbound.Password) {
 		key, err := generateRandomHex(64)
 		if err != nil {
 			return inbound, err

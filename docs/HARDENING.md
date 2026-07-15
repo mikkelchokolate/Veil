@@ -183,8 +183,7 @@ runbook.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
-  only an allowlisted protocol over `AF_UNIX`, and runs with
-  `PrivateNetwork=true`. It has no TCP or UDP listener.
+  only an allowlisted protocol over `AF_UNIX`. It has no TCP or UDP listener.
 - **Root operation allowlist.** The helper may promote or restore generated
   configuration, control allowlisted Managed systemd units, read bounded
   journald output, create/verify/restore encrypted backups, rotate the state
@@ -208,16 +207,18 @@ runbook.
   fails on any `govulncheck` finding, so staying on tagged releases keeps you
   ahead of stdlib and dependency CVEs.
 - **Capability envelope.** Protocol runtime units that may bind privileged
-  ports keep only `CAP_NET_BIND_SERVICE`. The Panel and helper units ship with
-  empty capability sets; helper operations rely on root UID plus explicit
-  systemd filesystem and syscall restrictions instead of ambient capabilities.
+  ports keep only `CAP_NET_BIND_SERVICE`. The Panel unit ships with empty
+  `CapabilityBoundingSet` and `AmbientCapabilities`. The helper unit keeps
+  `CAP_NET_ADMIN` and `CAP_NET_RAW` so it can synchronize the host firewall,
+  and relies on root UID plus explicit systemd filesystem and syscall
+  restrictions for the rest of its privileges.
 
 Check the boundary after installation:
 
 ```bash
 systemctl status veil.service veil-helper.socket veil-helper.service
 systemctl show veil.service -p User -p Group -p CapabilityBoundingSet
-systemctl show veil-helper.service -p PrivateNetwork -p RestrictAddressFamilies
+systemctl show veil-helper.service -p RestrictAddressFamilies
 stat -c '%U:%G %a %n' /run/veil/helper.sock
 ```
 

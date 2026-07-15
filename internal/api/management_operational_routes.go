@@ -5,6 +5,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 var firewallStatusReader = func() (bool, error) {
@@ -18,7 +19,7 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := clientaccess.BuildClientLinks(s.settings, s.inbounds)
+	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -40,7 +41,7 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	format := query.Get("format")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := clientaccess.BuildClientLinks(s.settings, s.inbounds)
+	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -115,6 +116,12 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if applyRequiresServiceActionLock(req) {
+		if !s.beginServiceAction(w) {
+			return
+		}
+		defer s.serviceActionMu.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
@@ -131,4 +138,29 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, response)
+}
+
+// autoApplyLocked runs a full live + services apply while already holding s.mu.
+// It best-effort acquires the service action lock via TryLock so it cannot
+// deadlock with concurrent explicit apply requests. Returns the apply response
+// and whether it succeeded. Caller must hold s.mu.
+func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool) {
+	if !autoApplyAfterMutation {
+		return ApplyResponse{}, false
+	}
+	if !s.serviceActionMu.TryLock() {
+		s.logUserAction(r, "auto_apply_configuration", "system", false, "service action lock busy")
+		return ApplyResponse{}, false
+	}
+	defer s.serviceActionMu.Unlock()
+	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	success := err == nil && status == http.StatusOK
+	details := ""
+	if err != nil {
+		details = err.Error()
+	} else if status != http.StatusOK {
+		details = http.StatusText(status)
+	}
+	s.logUserAction(r, "auto_apply_configuration", "system", success, details)
+	return response, success
 }

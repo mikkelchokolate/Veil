@@ -6,7 +6,7 @@ import (
 )
 
 func TestPanelRenderingShellReplacesAllVeilPlaceholders(t *testing.T) {
-	html := panelHTML("/", "", "en")
+	html := panelHTMLForCatalog("/", "", "en", NewVisibleManagedRuntimeCatalog())
 	if strings.Contains(html, "__VEIL_PANEL_") {
 		t.Fatalf("Panel rendering shell left unresolved placeholder in HTML")
 	}
@@ -18,7 +18,7 @@ func TestPanelRenderingShellReplacesAllVeilPlaceholders(t *testing.T) {
 }
 
 func TestPanelHTMLIncludesInboundPasswordGenerationUI(t *testing.T) {
-	html := panelHTML("/secret/", "", "en")
+	html := panelHTMLForCatalog("/secret/", "", "en", NewVisibleManagedRuntimeCatalog())
 	for _, want := range []string{
 		`id="inbound-password"`,
 		`id="inbound-profiles"`,

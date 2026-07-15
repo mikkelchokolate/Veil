@@ -11,7 +11,7 @@ import (
 func TestHandleOlcrtcRoomGeneratesForJitsi(t *testing.T) {
 	state := &managementState{}
 	w := httptest.NewRecorder()
-	state.handleOlcrtcRoom(w, httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"jitsi"}`)))
+	state.handleProtocolRoom("olcrtc")(w, httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"jitsi"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("jitsi room generation expected 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -30,7 +30,7 @@ func TestHandleOlcrtcRoomGeneratesForJitsi(t *testing.T) {
 func TestHandleOlcrtcRoomRefusesManualProvider(t *testing.T) {
 	state := &managementState{}
 	w := httptest.NewRecorder()
-	state.handleOlcrtcRoom(w, httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"telemost"}`)))
+	state.handleProtocolRoom("olcrtc")(w, httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"telemost"}`)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("telemost room generation should be 400 (manual room), got %d: %s", w.Code, w.Body.String())
 	}

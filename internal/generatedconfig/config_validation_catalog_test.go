@@ -3,7 +3,7 @@ package generatedconfig
 import "testing"
 
 func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
-	catalog := NewConfigValidationCatalog()
+	catalog := NewConfigValidationCatalog(NewDefaultArtifactCatalog())
 	cases := []struct {
 		path string
 		name string

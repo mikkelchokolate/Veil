@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
 type Paths struct {
@@ -107,8 +108,8 @@ func (m ManagedMaterial) Files() ([]File, error) {
 		files = append(files, File{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o600})
 	}
 	if paths.SystemdDir != "" {
-		units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
-		for _, name := range renderer.ManagedSystemdUnitNames() {
+		units := systemdunits.Render(renderer.SystemdConfig{EtcDir: paths.EtcDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary})
+		for _, name := range systemdunits.Names() {
 			files = append(files, File{Path: filepath.Join(paths.SystemdDir, name), Content: units[name], Mode: 0o644})
 		}
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
 )
 
 func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
@@ -193,6 +195,18 @@ func TestManagementAPISettingsPutRejectsRemovedStackField(t *testing.T) {
 }
 
 func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
+	orig := warpRegisterFunc
+	t.Cleanup(func() { warpRegisterFunc = orig })
+	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
+		return veilwarp.Registration{
+			PrivateKey:    "auto-private",
+			PeerPublicKey: "auto-peer",
+			Endpoint:      "engage.cloudflareclient.com:2408",
+			LocalAddress:  "172.16.0.2/32",
+			Reserved:      []int{1, 2, 3},
+		}, nil
+	}
+
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 

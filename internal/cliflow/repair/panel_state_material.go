@@ -60,7 +60,7 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 	}
 	snapshot := m.snapshot
 	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")})
-	unitNames := runtimeUnitNamesForState(snapshot.Inbounds, snapshot.Warp)
+	unitNames := runtimeUnitNamesForState(snapshot.Settings, snapshot.Inbounds, snapshot.Warp)
 	if snapshot.Settings.PanelAccess == "caddy" {
 		unitNames = appendRepairUnit(unitNames, renderer.UnitCaddy)
 	}

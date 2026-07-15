@@ -34,7 +34,7 @@ func TestWriteInboundManagementError(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name, protocol, transport"},
+		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name must contain only letters"},
 		{inbounds.ErrInboundDuplicateName, http.StatusConflict, "inbound name already exists"},
 		{inbounds.ErrInboundDuplicateTransportPort, http.StatusConflict, "transport/port already exists"},
 		{inbounds.ErrInboundUnsupportedProtocolTransport, http.StatusBadRequest, "unsupported inbound"},
@@ -61,7 +61,7 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 	post := httptest.NewRequest(http.MethodPost, "/api/olcrtc/room", strings.NewReader(`{"provider":"jitsi"}`))
 	post.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	state.handleOlcrtcRoom(rec, post)
+	state.handleProtocolRoom("olcrtc")(rec, post)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -71,7 +71,7 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 
 	get := httptest.NewRequest(http.MethodGet, "/api/olcrtc/room", nil)
 	rec = httptest.NewRecorder()
-	state.handleOlcrtcRoom(rec, get)
+	state.handleProtocolRoom("olcrtc")(rec, get)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}
@@ -105,5 +105,12 @@ func TestHandleInboundByNameValidation(t *testing.T) {
 	state.handleInboundByName(rec, get)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("nested path status=%d", rec.Code)
+	}
+
+	get = httptest.NewRequest(http.MethodGet, "/api/inbounds/bad.name", nil)
+	rec = httptest.NewRecorder()
+	state.handleInboundByName(rec, get)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unsafe name status=%d", rec.Code)
 	}
 }

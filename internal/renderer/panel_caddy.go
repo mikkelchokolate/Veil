@@ -3,8 +3,10 @@ package renderer
 import (
 	"bytes"
 	"errors"
-	"strings"
+	"fmt"
 	"text/template"
+
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
 type PanelCaddyConfig struct {
@@ -22,16 +24,17 @@ func RenderPanelCaddyfile(cfg PanelCaddyConfig) (string, error) {
 	if cfg.PanelPort <= 0 {
 		return "", errors.New("panel port is required")
 	}
-	if cfg.WebBasePath == "" || cfg.WebBasePath == "/" {
+	normalized, err := webbasepath.Normalize(cfg.WebBasePath)
+	if err != nil {
+		return "", fmt.Errorf("web base path: %w", err)
+	}
+	if normalized == "/" {
 		return "", errors.New("web base path is required")
 	}
 	// Preserve trailing slash semantics used by the Panel router while also
 	// providing a no-slash variant for the exact-path redirect.
-	cfg.WebBasePathSlash = cfg.WebBasePath
-	if !strings.HasSuffix(cfg.WebBasePathSlash, "/") {
-		cfg.WebBasePathSlash += "/"
-	}
-	cfg.WebBasePath = strings.TrimSuffix(cfg.WebBasePath, "/")
+	cfg.WebBasePathSlash = normalized
+	cfg.WebBasePath = normalized[:len(normalized)-1]
 	// TLS: try ACME first (a real, browser-trusted cert — best masking, no
 	// warnings), and automatically fall back to Caddy's internal self-signed CA
 	// if ACME can't issue (no public DNS, ports unreachable, rate limits). So

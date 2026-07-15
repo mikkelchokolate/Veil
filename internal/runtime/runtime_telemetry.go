@@ -11,8 +11,12 @@ type RuntimeTelemetry struct {
 	readDisk        func() DiskStats
 }
 
-func NewRuntimeTelemetry() RuntimeTelemetry {
-	procfs := NewRuntimeProcFS()
+// NewRuntimeTelemetryWithPolicy creates a telemetry reader that uses the given
+// managed-process policy for process discovery. Callers that can reach the
+// protocol registry should derive the policy from RuntimeProvider.RuntimeInstall
+// so it reflects the installed set of protocol plugins.
+func NewRuntimeTelemetryWithPolicy(policy ManagedProcessPolicy) RuntimeTelemetry {
+	procfs := NewRuntimeProcFSWithPolicy(policy)
 	return RuntimeTelemetry{
 		readSystem:      procfs.System,
 		readTLSCertPath: func() string { return os.Getenv("VEIL_TLS_CERT") },

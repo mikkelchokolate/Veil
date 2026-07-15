@@ -3,10 +3,12 @@ package panel
 const panelInboundActionsPlaceholder = "__VEIL_PANEL_INBOUND_ACTIONS__"
 
 func panelInboundActionsJS() string {
-	return panelInboundProtocolTransportRulesJS() + `    // Global cash and modals handlers
+	return panelInboundProtocolTransportRulesJS() + `    // Global cache and modal handlers.
     window.cachedInbounds = [];
     window.cachedSettings = window.cachedSettings || null;
     window.cachedWarp = window.cachedWarp || null;
+    window.inboundEditorMode = 'add';
+    window.inboundEditorOriginalName = '';
 
     const inboundValidationDebounceMs = 300;
     let inboundValidationTimer = null;
@@ -36,11 +38,7 @@ func panelInboundActionsJS() string {
         protocol: 'inbound-protocol',
         transport: 'inbound-transport',
         port: 'inbound-port',
-        password: 'inbound-password',
-        naivePassword: 'inbound-naive-password',
-        hysteria2Password: 'inbound-hysteria2-password',
-        hysteria2Insecure: 'inbound-hysteria2-insecure',
-        olcrtcRoomID: 'inbound-olcrtc-room-id'
+        password: 'inbound-password'
       };
       return document.getElementById(ids[normalized] || '');
     }
@@ -133,10 +131,16 @@ func panelInboundActionsJS() string {
         }
         const candidate = buildInboundCandidate();
         const inbounds = Array.isArray(window.cachedInbounds) ? window.cachedInbounds.map((item) => Object.assign({}, item)) : [];
-        const existingIndex = inbounds.findIndex((item) => item.name === candidate.name);
-        if (existingIndex >= 0) {
-          inbounds[existingIndex] = candidate;
+        if (window.inboundEditorMode === 'edit') {
+          const existingIndex = inbounds.findIndex((item) => item.name === window.inboundEditorOriginalName);
+          if (existingIndex >= 0) {
+            inbounds[existingIndex] = candidate;
+          } else {
+            inbounds.push(candidate);
+          }
         } else {
+          // Keep an existing inbound with the same name in the candidate list so
+          // validation and the eventual POST cannot silently turn Add into Edit.
           inbounds.push(candidate);
         }
         const response = await fetch('/api/validation', {
@@ -189,18 +193,28 @@ func panelInboundActionsJS() string {
       inboundValidationTimer = setTimeout(validateInboundCandidate, inboundValidationDebounceMs);
     }
 
+    function scheduleInboundValidationForChange(event) {
+      const target = event && event.target;
+      if (target && target.matches && target.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) {
+        return;
+      }
+      scheduleInboundValidation();
+    }
+
     window.openAddInboundModal = function() {
+      window.inboundEditorMode = 'add';
+      window.inboundEditorOriginalName = '';
       document.getElementById('inbound-modal-title').innerText = veilT('modal.addInbound');
       document.getElementById('inbound-name').value = '';
       document.getElementById('inbound-name').readOnly = false;
-      document.getElementById('inbound-protocol').value = 'naiveproxy';
+      const protocolSelect = document.getElementById('inbound-protocol');
+      protocolSelect.value = protocolSelect.options[0] ? protocolSelect.options[0].value : '';
       document.getElementById('inbound-transport').value = 'tcp';
       document.getElementById('inbound-port').value = '';
       document.getElementById('inbound-password').value = '';
       document.getElementById('inbound-enabled').checked = true;
       document.getElementById('inbound-profiles').value = '';
-      
-      // Clear client profile helpers
+
       document.getElementById('client-profile-name').value = '';
       document.getElementById('client-profile-username').value = '';
       document.getElementById('client-profile-password').value = '';
@@ -208,7 +222,7 @@ func panelInboundActionsJS() string {
       document.getElementById('delete-inbound').style.display = 'none';
       syncInboundTransportOptions();
       renderDynamicProtocolFields(null);
-      
+
       openVeilDialog(document.getElementById('inbound-modal-overlay'));
       clearInboundValidation();
       scheduleInboundValidation();
@@ -226,6 +240,8 @@ func panelInboundActionsJS() string {
       const inbound = window.cachedInbounds.find(i => i.name === name);
       if (!inbound) return;
 
+      window.inboundEditorMode = 'edit';
+      window.inboundEditorOriginalName = inbound.name;
       document.getElementById('inbound-modal-title').innerText = veilT('inbounds.editTitle', { name });
       document.getElementById('inbound-name').value = inbound.name;
       document.getElementById('inbound-name').readOnly = true;
@@ -237,86 +253,175 @@ func panelInboundActionsJS() string {
       document.getElementById('inbound-enabled').checked = !!inbound.enabled;
       document.getElementById('inbound-profiles').value = inbound.profiles ? JSON.stringify(inbound.profiles, null, 2) : '[]';
 
-      // Clear client profile helpers
       document.getElementById('client-profile-name').value = '';
       document.getElementById('client-profile-username').value = '';
       document.getElementById('client-profile-password').value = '';
 
       document.getElementById('delete-inbound').style.display = 'block';
       renderDynamicProtocolFields(inbound);
-      
+
       openVeilDialog(document.getElementById('inbound-modal-overlay'));
       clearInboundValidation();
       scheduleInboundValidation();
     };
 
-    window.toggleInboundActive = async function(name, checked) {
+    window.toggleInboundActive = async function(name, checked, control) {
       const inbound = window.cachedInbounds.find(i => i.name === name);
       if (!inbound) return;
+      if (control) control.disabled = true;
       const payload = Object.assign({}, inbound, { enabled: checked });
-      await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', {
+      const updated = await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      loadInboundsIntoOutput();
+      if (updated === null) {
+        if (control) {
+          control.checked = !checked;
+          control.disabled = isViewerRole();
+        }
+        return;
+      }
+      await loadInboundsIntoOutput();
     };
 
     window.directDeleteInbound = async function(name) {
       if (confirm(veilT('confirm.deleteInbound', { name }))) {
-        await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
-        loadInboundsIntoOutput();
+        const deleted = await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+        if (deleted !== null) {
+          await loadInboundsIntoOutput();
+        }
       }
     };
 
+    function appendInboundEmptyState(tbody) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.style.textAlign = 'center';
+      cell.style.color = 'var(--text-muted)';
+      cell.style.padding = '24px';
+      cell.textContent = 'No inbounds configured. Click Add Inbound to start.';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    }
+
+    function inboundBadgeStyle(protocol) {
+      if (protocol === 'hysteria2') {
+        return 'background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3);';
+      }
+      if (protocol === 'mieru') {
+        return 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);';
+      }
+      if (protocol === 'olcrtc') {
+        return 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);';
+      }
+      return 'background: rgba(79, 70, 229, 0.15); color: #818cf8; border: 1px solid rgba(79, 70, 229, 0.3);';
+    }
+
+    function createInboundActionButton(label, action, inbound, className) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.inboundAction = action;
+      button.dataset.inboundName = String(inbound.name || '');
+      button.dataset.inboundProtocol = String(inbound.protocol || '');
+      if (className) button.className = className;
+      if (action === 'edit' || action === 'delete') {
+        button.dataset.adminOnly = 'true';
+      }
+      if (action === 'delete') {
+        button.style.color = 'var(--accent-danger)';
+      }
+      return button;
+    }
+
+    function createInboundRow(inbound) {
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      const name = document.createElement('strong');
+      name.style.color = '#fff';
+      name.style.fontSize = '0.95rem';
+      name.textContent = String(inbound.name || '');
+      nameCell.appendChild(name);
+      row.appendChild(nameCell);
+
+      const protocolCell = document.createElement('td');
+      const protocolBadge = document.createElement('span');
+      protocolBadge.className = 'badge';
+      protocolBadge.style.cssText = inboundBadgeStyle(inbound.protocol);
+      protocolBadge.textContent = String(inbound.protocol || '') + ' (' + String(inbound.transport || '') + ')';
+      protocolCell.appendChild(protocolBadge);
+      row.appendChild(protocolCell);
+
+      const portCell = document.createElement('td');
+      const port = document.createElement('code');
+      port.style.fontSize = '0.95rem';
+      port.style.color = 'var(--accent-warning)';
+      port.textContent = String(inbound.port || '');
+      portCell.appendChild(port);
+      row.appendChild(portCell);
+
+      const clientsCell = document.createElement('td');
+      const clients = document.createElement('span');
+      clients.className = 'badge badge-success';
+      clients.style.cssText = 'background: rgba(16, 185, 129, 0.1); color: #34d399;';
+      clients.textContent = String(Array.isArray(inbound.profiles) ? inbound.profiles.length : 0) + ' users';
+      clientsCell.appendChild(clients);
+      row.appendChild(clientsCell);
+
+      const statusCell = document.createElement('td');
+      const switchLabel = document.createElement('label');
+      switchLabel.className = 'switch';
+      const status = document.createElement('input');
+      status.type = 'checkbox';
+      status.dataset.adminOnly = 'true';
+      status.checked = Boolean(inbound.enabled);
+      status.addEventListener('change', () => toggleInboundActive(inbound.name, status.checked, status));
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      switchLabel.appendChild(status);
+      switchLabel.appendChild(slider);
+      statusCell.appendChild(switchLabel);
+      row.appendChild(statusCell);
+
+      const actionsCell = document.createElement('td');
+      actionsCell.style.textAlign = 'center';
+      const dropdown = document.createElement('div');
+      dropdown.className = 'dropdown';
+      const dropdownButton = document.createElement('button');
+      dropdownButton.type = 'button';
+      dropdownButton.className = 'dropdown-btn';
+      dropdownButton.style.padding = '6px 12px';
+      dropdownButton.style.fontSize = '0.8rem';
+      dropdownButton.textContent = 'Actions ▾';
+      const content = document.createElement('div');
+      content.className = 'dropdown-content';
+      content.appendChild(createInboundActionButton('Edit Inbound', 'edit', inbound));
+      content.appendChild(createInboundActionButton('Client Links', 'links', inbound));
+      content.appendChild(createInboundActionButton('Delete', 'delete', inbound));
+      dropdown.appendChild(dropdownButton);
+      dropdown.appendChild(content);
+      actionsCell.appendChild(dropdown);
+      row.appendChild(actionsCell);
+
+      return row;
+    }
+
     async function loadInboundsIntoOutput() {
       const inbounds = await loadJSON('/api/inbounds', 'inbounds-output');
-      if (Array.isArray(inbounds)) {
-        window.cachedInbounds = inbounds;
-        const tbody = document.getElementById('inbounds-tbody');
-        tbody.innerHTML = '';
-        if (inbounds.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No inbounds configured. Click Add Inbound to start.</td></tr>';
-          return;
-        }
-        inbounds.forEach(inbound => {
-          const clientCount = inbound.profiles ? inbound.profiles.length : 0;
-          const statusChecked = inbound.enabled ? 'checked' : '';
-          
-          let badgeStyle = 'background: rgba(79, 70, 229, 0.15); color: #818cf8; border: 1px solid rgba(79, 70, 229, 0.3);';
-          if (inbound.protocol === 'hysteria2') {
-            badgeStyle = 'background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3);';
-          } else if (inbound.protocol === 'mieru') {
-            badgeStyle = 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);';
-          } else if (inbound.protocol === 'olcrtc') {
-            badgeStyle = 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);';
-          }
-          
-          const row = document.createElement('tr');
-          row.innerHTML = '<td><strong style="color: #fff; font-size: 0.95rem;">' + inbound.name + '</strong></td>' +
-            '<td><span class="badge" style="' + badgeStyle + '">' + inbound.protocol + ' (' + inbound.transport + ')</span></td>' +
-            '<td><code style="font-size: 0.95rem; color: var(--accent-warning);">' + inbound.port + '</code></td>' +
-            '<td><span class="badge badge-success" style="background: rgba(16, 185, 129, 0.1); color: #34d399;">' + clientCount + ' users</span></td>' +
-            '<td>' +
-              '<label class="switch">' +
-                '<input type="checkbox" data-admin-only="true" ' + statusChecked + ' onchange="toggleInboundActive(\'' + inbound.name + '\', this.checked)">' +
-                '<span class="slider"></span>' +
-              '</label>' +
-            '</td>' +
-            '<td style="text-align: center;">' +
-              '<div class="dropdown">' +
-                '<button type="button" class="dropdown-btn" style="padding: 6px 12px; font-size: 0.8rem;">Actions ▾</button>' +
-                '<div class="dropdown-content">' +
-                  '<button type="button" data-admin-only="true" onclick="openEditInboundModal(\'' + inbound.name + '\')">Edit Inbound</button>' +
-                  '<button type="button" onclick="openClientLinksModalFor(\'' + inbound.name + '\', \'' + inbound.protocol + '\')">Client Links</button>' +
-                  '<button type="button" data-admin-only="true" onclick="directDeleteInbound(\'' + inbound.name + '\')" style="color: var(--accent-danger);">Delete</button>' +
-                '</div>' +
-              '</div>' +
-            '</td>';
-          tbody.appendChild(row);
-        });
-        applyViewerRoleGuard();
+      if (!Array.isArray(inbounds)) return;
+      window.cachedInbounds = inbounds;
+      const tbody = document.getElementById('inbounds-tbody');
+      if (!tbody) return;
+      tbody.textContent = '';
+      if (inbounds.length === 0) {
+        appendInboundEmptyState(tbody);
+        return;
       }
+      inbounds.forEach((inbound) => tbody.appendChild(createInboundRow(inbound)));
+      applyViewerRoleGuard();
     }
 
     function randomPassword() {
@@ -342,37 +447,6 @@ func panelInboundActionsJS() string {
       scheduleInboundValidation();
     };
 
-    // updateOlcrtcGenerateButton enables the room "Generate" button only for
-    // providers that support automatic rooms (Jitsi). Telemost/WbStream require
-    // a room created on the service first, so the button is disabled for them.
-    window.updateOlcrtcGenerateButton = function() {
-      const authSelect = document.getElementById('protocol-field-olcrtcAuth');
-      const btn = document.getElementById('protocol-field-olcrtcRoomID-generate');
-      if (!authSelect || !btn) return;
-      const opt = authSelect.selectedOptions[0];
-      const auto = !!(opt && opt.dataset.autoroom === 'true');
-      btn.disabled = !auto;
-      btn.title = auto ? '' : 'This provider needs a room created on its website first; auto-generate is unavailable.';
-    };
-
-    window.genInboundOlcrtcRoomID = async function() {
-      const authSelect = document.getElementById('inbound-olcrtc-auth');
-      const provider = authSelect ? authSelect.value : 'jitsi';
-      const el = document.getElementById('inbound-olcrtc-room-id');
-      if (!el) return;
-      try {
-        const resp = await fetch('/api/olcrtc/room', {
-          method: 'POST',
-          headers: requestHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ provider })
-        });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        el.value = data.roomID || '';
-        scheduleInboundValidation();
-      } catch (_) {}
-    };
-
     window.renderDynamicProtocolFields = function(inbound) {
       const container = document.getElementById('inbound-protocol-fields');
       if (!container) return;
@@ -381,6 +455,11 @@ func panelInboundActionsJS() string {
       ensureProtocolSchemas().then(() => {
         veilRenderDynamicProtocolFields(container, protocol, values);
         scheduleInboundValidation();
+      }).catch((error) => {
+        container.textContent = 'Could not load protocol fields: ' + String(error && error.message ? error.message : error);
+        inboundValidationValid = false;
+        const saveButton = document.getElementById('save-inbound');
+        if (saveButton) saveButton.disabled = true;
       });
     };
 
@@ -405,10 +484,10 @@ func panelInboundActionsJS() string {
         document.getElementById('inbounds-output').textContent = veilT('inbounds.nameRequired');
         return;
       }
-      const exists = Array.isArray(window.cachedInbounds) && window.cachedInbounds.some((inbound) => inbound.name === name);
-
-      const saved = await loadJSON(exists ? '/api/inbounds/' + encodeURIComponent(name) : '/api/inbounds', 'inbounds-output', {
-        method: exists ? 'PUT' : 'POST',
+      const isEdit = window.inboundEditorMode === 'edit';
+      const originalName = window.inboundEditorOriginalName || name;
+      const saved = await loadJSON(isEdit ? '/api/inbounds/' + encodeURIComponent(originalName) : '/api/inbounds', 'inbounds-output', {
+        method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -416,7 +495,7 @@ func panelInboundActionsJS() string {
         return;
       }
       closeInboundModal();
-      loadInboundsIntoOutput();
+      await loadInboundsIntoOutput();
     }
 
     async function deleteInbound() {
@@ -426,9 +505,10 @@ func panelInboundActionsJS() string {
         return;
       }
       if (confirm(veilT('confirm.deleteInbound', { name }))) {
-        await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+        const deleted = await loadJSON('/api/inbounds/' + encodeURIComponent(name), 'inbounds-output', { method: 'DELETE' });
+        if (!deleted) return;
         closeInboundModal();
-        loadInboundsIntoOutput();
+        await loadInboundsIntoOutput();
       }
     }
 
@@ -474,6 +554,23 @@ func panelInboundActionsJS() string {
     }
 
     document.addEventListener('click', (event) => {
+      const actionButton = event.target.closest('[data-inbound-action]');
+      if (actionButton) {
+        const action = actionButton.dataset.inboundAction;
+        const name = actionButton.dataset.inboundName || '';
+        const protocol = actionButton.dataset.inboundProtocol || '';
+        closeAllInboundDropdowns();
+        if (action === 'edit') {
+          openEditInboundModal(name);
+        } else if (action === 'links') {
+          openClientLinksModalFor(name, protocol);
+        } else if (action === 'delete') {
+          directDeleteInbound(name);
+        }
+        event.stopPropagation();
+        return;
+      }
+
       const btn = event.target.closest('#inbounds-table .dropdown-btn');
       if (btn) {
         const dropdown = btn.closest('.dropdown');
@@ -486,22 +583,17 @@ func panelInboundActionsJS() string {
         event.stopPropagation();
         return;
       }
-      if (event.target.closest('.dropdown-content') && event.target.closest('button')) {
-        closeAllInboundDropdowns();
-        return;
-      }
       closeAllInboundDropdowns();
     });
 
     window.addEventListener('resize', closeAllInboundDropdowns);
     window.addEventListener('scroll', closeAllInboundDropdowns, true);
 
-    // Auto load inbounds list on startup
     window.addEventListener('DOMContentLoaded', () => {
       const form = document.getElementById('inbound-form');
       if (form) {
         form.addEventListener('input', scheduleInboundValidation);
-        form.addEventListener('change', scheduleInboundValidation);
+        form.addEventListener('change', scheduleInboundValidationForChange);
       }
       setTimeout(loadInboundsIntoOutput, 500);
     });`

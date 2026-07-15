@@ -8,11 +8,12 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 var stagedConfigValidator = func(paths []string) []ConfigValidationResult {
-	return generatedconfig.NewStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
+	return newPluginStagedConfigValidator(generatedconfig.RunFixedConfigValidation).Validate(paths)
 }
 var serviceActionRunner = func(command []string) ServiceActionResult {
 	return service.RunFixedServiceAction(command, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
@@ -20,6 +21,12 @@ var serviceActionRunner = func(command []string) ServiceActionResult {
 var serviceHealthChecker = func(serviceName string) ServiceHealthResult {
 	return service.RunFixedServiceHealthCheck(serviceName, service.NewCommandPolicy(NewManagedRuntimeCatalog()), nil)
 }
+
+// autoApplyAfterMutation controls whether management state mutations
+// (inbounds, settings, routing rules/presets, WARP) automatically trigger a
+// full live + services apply. Tests can disable this to avoid side effects
+// when exercising CRUD in isolation.
+var autoApplyAfterMutation = true
 
 // Reloader is an optional interface for runtime state reload.
 type Reloader interface {
@@ -36,7 +43,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/routing/presets", s.handleRoutingPresets)
 	mux.HandleFunc("/api/routing/presets/", s.handleRoutingPresetByName)
 	mux.HandleFunc("/api/warp", s.handleWarp)
-	mux.HandleFunc("/api/olcrtc/room", s.handleOlcrtcRoom)
+	s.registerProtocolRoomRoutes(mux)
 	mux.HandleFunc("/api/client-links/qr", s.handleClientLinkQR)
 	mux.HandleFunc("/api/client-links/subscription", s.handleClientLinksSubscription)
 	mux.HandleFunc("/api/client-links", s.handleClientLinks)
@@ -45,11 +52,11 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
-	mux.HandleFunc("/api/auth/login", s.handleLogin)
-	mux.HandleFunc("/api/auth/logout", s.handleLogout)
-	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/login", s.handleLoginWithRevalidation)
+	mux.HandleFunc("/api/auth/logout", s.handleLogoutWithSettingsSnapshot)
+	mux.HandleFunc("/api/auth/status", s.handleEffectiveAuthStatus)
 	mux.HandleFunc("/api/auth/locale", s.handleAuthLocale)
-	mux.HandleFunc("/api/auth/sessions", s.handleAuthSessions)
+	mux.HandleFunc("/api/auth/sessions", s.handlePersistentAuthSessions)
 	mux.HandleFunc("/api/admin/rotate-key", s.handleRotateKey)
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/backups", s.handleBackups)
@@ -58,8 +65,21 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backups/", s.handleBackupByName)
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
-	mux.HandleFunc("/api/users", s.handleUsersRoute)
-	mux.HandleFunc("/api/users/", s.handleUsersRoute)
+	mux.HandleFunc("/api/users", s.handleUsersRouteWithAdminInvariant)
+	mux.HandleFunc("/api/users/", s.handleReliableUserItemRoute)
+}
+
+// registerProtocolRoomRoutes registers per-protocol room generation routes for
+// any plugin that implements protocols.RoomGenerator. This keeps the router
+// agnostic of the concrete protocol set.
+func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
+	for _, p := range protocols.NewRegistry().All() {
+		if _, ok := protocols.AsRoomGenerator(p); !ok {
+			continue
+		}
+		protocol := p.Protocol()
+		mux.HandleFunc("/api/"+protocol+"/room", s.handleProtocolRoom(protocol))
+	}
 }
 
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
@@ -98,6 +118,7 @@ func (s *managementState) renderManagementConfigsLocked() (map[string]string, er
 func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
 	return NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: s.applyRoot,
+		LiveRoot:  s.liveRoot,
 		Settings:  s.settings,
 		Inbounds:  s.inbounds,
 		Rules:     s.rules,

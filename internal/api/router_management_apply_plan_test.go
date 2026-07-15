@@ -72,7 +72,7 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"secret","hysteria2Password":"hy2-secret"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"p","hysteria2Password":"hy2"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
@@ -94,11 +94,17 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
-		t.Fatalf("expected all enabled Inbounds in apply plan: %+v", response.Configs)
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/naive.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/hysteria2.yaml") {
+		t.Fatalf("expected all enabled Inbound configs in apply plan: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "restart veil-caddy@.service") || !containsString(response.Actions, "restart veil-hysteria2@.service") {
+	if containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+		t.Fatalf("apply plan should not target fallback configs for enabled inbounds: %+v", response.Configs)
+	}
+	if !containsString(response.Actions, "reload veil-caddy@naive.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
+	}
+	if containsString(response.Actions, "reload veil-caddy@.service") || containsString(response.Actions, "restart veil-hysteria2@.service") {
+		t.Fatalf("apply plan should not target template units as active actions: %+v", response.Actions)
 	}
 }
 

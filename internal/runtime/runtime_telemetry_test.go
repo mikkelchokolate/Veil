@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeTelemetryCollectsSystemAndPropagatesErrors(t *testing.T) {
-	telemetry := NewRuntimeTelemetry()
+	telemetry := NewRuntimeTelemetryWithPolicy(NewManagedProcessPolicyFor(nil))
 	telemetry.readSystem = func() (SystemStats, error) {
 		return SystemStats{MemoryTotalMB: 2048}, nil
 	}
@@ -27,7 +27,7 @@ func TestRuntimeTelemetryCollectsSystemAndPropagatesErrors(t *testing.T) {
 }
 
 func TestRuntimeTelemetryObservationAggregatesSnapshot(t *testing.T) {
-	telemetry := NewRuntimeTelemetry()
+	telemetry := NewRuntimeTelemetryWithPolicy(NewManagedProcessPolicyFor(nil))
 	telemetry.readSystem = func() (SystemStats, error) { return SystemStats{CPUPercent: 5.5}, nil }
 	telemetry.readTLSCertPath = func() string { return "" }
 	telemetry.readNetwork = func() (NetworkStats, error) { return NetworkStats{}, nil }

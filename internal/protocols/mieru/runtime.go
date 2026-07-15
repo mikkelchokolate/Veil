@@ -1,6 +1,7 @@
 package mieru
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -8,28 +9,17 @@ import (
 
 // RuntimeDescriptors returns the single aggregated mieru unit.
 func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.ManagedRuntime {
-	for _, inbound := range enabledInbounds {
-		if inbound.Protocol == p.Protocol() {
-			return []service.ManagedRuntime{{
-				Name:             "mieru",
-				ActionName:       "mieru",
-				Protocol:         p.Protocol(),
-				Unit:             "veil-mieru.service",
-				PromotedSubpath:  "mieru/server_config.json",
-				PromotedVerb:     "restart",
-				ManualRestart:    true,
-				HealthCheckAfter: true,
-			}}
-		}
-	}
 	// Always expose the aggregated unit so capability metadata and empty-state
-	// runtime catalogs can discover it.
+	// runtime catalogs can discover it. Mieru configs aggregate all enabled
+	// inbounds into a single server_config.json, so there is no per-inbound
+	// branch.
+	_ = enabledInbounds
 	return []service.ManagedRuntime{{
 		Name:             "mieru",
 		ActionName:       "mieru",
 		Protocol:         p.Protocol(),
 		Unit:             "veil-mieru.service",
-		PromotedSubpath:  "mieru/server_config.json",
+		PromotedSubpath:  generatedconfig.MieruConfigSubpath,
 		PromotedVerb:     "restart",
 		ManualRestart:    true,
 		HealthCheckAfter: true,
@@ -39,10 +29,11 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 // RuntimeInstall returns the Mieru runtime descriptor.
 func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
 	return runtimeinstall.Runtime{
-		Name:   "mieru",
-		Binary: "mita",
-		Method: runtimeinstall.MethodArchive,
-		Repo:   "enfein/mieru",
+		Name:        "mieru",
+		Binary:      "mita",
+		Method:      runtimeinstall.MethodArchive,
+		Repo:        "enfein/mieru",
+		Description: "mita is downloaded from its upstream GitHub release",
 		AssetMatch: func(name string) bool {
 			return startsWith(name, "mita_") && endsWith(name, "_linux_"+arch+".tar.gz")
 		},

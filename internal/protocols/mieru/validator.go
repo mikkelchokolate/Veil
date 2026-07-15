@@ -7,13 +7,16 @@ import (
 )
 
 // ValidateSettings is a no-op for Mieru global settings.
-func (Plugin) ValidateSettings(model.Settings) error { return nil }
+func (Plugin) ValidateSettings(model.Settings, model.Inbound) error { return nil }
 
 // ValidateInbound is a no-op for Mieru-specific inbound checks.
 func (Plugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationIssue { return nil }
 
 // NeedsDomain reports that Mieru does not require a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return false }
+
+// NeedsEmail reports that Mieru does not need an email address.
+func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
 
 // HasCredential reports whether the inbound has a usable Mieru credential.
 func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {

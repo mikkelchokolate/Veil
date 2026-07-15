@@ -8,6 +8,7 @@ import (
 
 type GeneratedConfigInput struct {
 	ApplyRoot string
+	LiveRoot  string
 	Settings  Settings
 	Inbounds  []Inbound
 	Rules     []RoutingRule
@@ -17,6 +18,7 @@ type GeneratedConfigInput struct {
 func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, error) {
 	return generatedconfig.NewSetBuilder(generatedconfig.SetInput{
 		ApplyRoot:  input.ApplyRoot,
+		LiveRoot:   input.LiveRoot,
 		Settings:   input.Settings,
 		Inbounds:   input.Inbounds,
 		WarpConfig: input.Warp,

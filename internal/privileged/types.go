@@ -136,15 +136,17 @@ type BackupArchive struct {
 }
 
 type BackupResult struct {
-	ArchiveName     string          `json:"archiveName,omitempty"`
-	Archives        []BackupArchive `json:"archives,omitempty"`
-	Verified        bool            `json:"verified,omitempty"`
-	Restored        bool            `json:"restored,omitempty"`
-	Pruned          []string        `json:"pruned,omitempty"`
-	Kept            []string        `json:"kept,omitempty"`
-	SafetyStatePath string          `json:"safetyStatePath,omitempty"`
-	SafetyKeyPath   string          `json:"safetyKeyPath,omitempty"`
-	Data            []byte          `json:"data,omitempty"`
+	ArchiveName     string                    `json:"archiveName,omitempty"`
+	Archives        []BackupArchive           `json:"archives,omitempty"`
+	Verification    *BackupVerificationReport `json:"verification,omitempty"`
+	Verified        bool                      `json:"verified,omitempty"`
+	Restored        bool                      `json:"restored,omitempty"`
+	Pruned          []string                  `json:"pruned,omitempty"`
+	Kept            []string                  `json:"kept,omitempty"`
+	SafetyStatePath string                    `json:"safetyStatePath,omitempty"`
+	SafetyKeyPath   string                    `json:"safetyKeyPath,omitempty"`
+	Data            []byte                    `json:"data,omitempty"`
+	Warning         string                    `json:"warning,omitempty"`
 }
 
 type RotateKeyRequest struct{}

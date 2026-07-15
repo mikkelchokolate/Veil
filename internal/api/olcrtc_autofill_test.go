@@ -6,7 +6,7 @@ import (
 )
 
 func TestAutofillOlcrtcInboundProvisionsRoomAndKey(t *testing.T) {
-	in, err := autofillOlcrtcInbound(Inbound{Name: "olc", Protocol: "olcrtc", Transport: "udp", Port: 6523})
+	in, err := autofillInbound(Inbound{Name: "olc", Protocol: "olcrtc", Transport: "udp", Port: 6523})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestAutofillOlcrtcInboundPreservesExistingAndIgnoresOthers(t *testing.T) {
 		OlcrtcRoomID: "https://meet.example/room1",
 		Password:     "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
 	}
-	got, err := autofillOlcrtcInbound(existing)
+	got, err := autofillInbound(existing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestAutofillOlcrtcInboundPreservesExistingAndIgnoresOthers(t *testing.T) {
 
 	// Non-olcrtc inbounds are untouched.
 	mieru := Inbound{Name: "m", Protocol: "mieru", Password: "short"}
-	out, err := autofillOlcrtcInbound(mieru)
+	out, err := autofillInbound(mieru)
 	if err != nil {
 		t.Fatal(err)
 	}

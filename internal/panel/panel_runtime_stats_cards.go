@@ -76,7 +76,7 @@ func panelRuntimeStatsCardsHTML() string {
       <div style="display: flex; gap: 8px;">
         <button id="load-system-stats" type="button">Refresh telemetry</button>
         <button id="toggle-telemetry-refresh" class="danger" type="button">Auto-refresh: ON (1s)</button>
-        <button onclick="toggleRawView('system-stats-output')" class="secondary" type="button">Raw JSON</button>
+        <button data-raw-output="system-stats-output" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="system-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
@@ -101,7 +101,7 @@ func panelRuntimeStatsCardsHTML() string {
       </div>
       <div style="display: flex; gap: 8px;">
         <button id="load-network-stats" type="button">Load network stats</button>
-        <button onclick="toggleRawView('network-stats-output')" class="secondary" type="button">Raw JSON</button>
+        <button data-raw-output="network-stats-output" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="network-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
@@ -112,7 +112,7 @@ func panelRuntimeStatsCardsHTML() string {
       <div id="connections-list" style="display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0;"></div>
       <div style="display: flex; gap: 8px;">
         <button id="load-connections-stats" type="button">Load connections</button>
-        <button onclick="toggleRawView('connections-stats-output')" class="secondary" type="button">Raw JSON</button>
+        <button data-raw-output="connections-stats-output" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="connections-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
@@ -138,7 +138,7 @@ func panelRuntimeStatsCardsHTML() string {
       </div>
       <div style="display: flex; gap: 8px;">
         <button id="load-processes-stats" type="button">Load processes</button>
-        <button onclick="toggleRawView('processes-stats-output')" class="secondary" type="button">Raw JSON</button>
+        <button data-raw-output="processes-stats-output" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="processes-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>
@@ -149,7 +149,7 @@ func panelRuntimeStatsCardsHTML() string {
       <div id="disk-paths-container" style="margin: 16px 0; display: flex; flex-direction: column; gap: 12px;"></div>
       <div style="display: flex; gap: 8px;">
         <button id="load-disk-stats" type="button">Load disk usage</button>
-        <button onclick="toggleRawView('disk-stats-output')" class="secondary" type="button">Raw JSON</button>
+        <button data-raw-output="disk-stats-output" class="secondary" type="button">Raw JSON</button>
       </div>
       <pre id="disk-stats-output" role="status" aria-live="polite" style="display: none; margin-top: 16px;">Not loaded</pre>
     </div>`

@@ -49,7 +49,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https://api.qrserver.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
@@ -76,7 +76,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
 				if setupRequired {
-					_, _ = w.Write([]byte(panel.SetupHTML(routes.BasePath, locale)))
+					_, _ = w.Write([]byte(panel.ReliableSetupHTML(routes.BasePath, locale)))
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
@@ -84,12 +84,12 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.LoginHTML(routes.BasePath, locale)))
+					_, _ = w.Write([]byte(panel.ReliableLoginHTML(routes.BasePath, locale)))
 					return
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTML(routes.BasePath, csrfToken, locale)))
+		_, _ = w.Write([]byte(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State))))
 	}
 }
 
@@ -116,8 +116,8 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func panelHTML(basePath string, csrfToken string, locale string) string {
-	return panel.NewRenderer(panel.NewSliceCatalog(NewVisibleManagedRuntimeCatalog().Runtimes()).RenderSlots()).HTML(basePath, csrfToken, locale) + "<!-- " + "/api/services/mieru/" + "restart" + " -->"
+func panelHTMLForCatalog(basePath string, csrfToken string, locale string, catalog ManagedRuntimeCatalog) string {
+	return panel.AuthenticationExpiryReliableHTML(panel.StorageReliableHTML(panel.NewRenderer(panel.NewSliceCatalog(catalog.Runtimes()).RenderSlots()).HTML(basePath, panel.EscapeJavaScriptString(csrfToken), locale)))
 }
 
 func (routes PanelRoutes) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -149,8 +149,15 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writePrivilegedHelperUnavailable(w)
 		return
 	}
-	routes.State.updateMu.Lock()
-	defer routes.State.updateMu.Unlock()
+	if !routes.State.beginPanelUpdate(w) {
+		return
+	}
+	releaseLocks := true
+	defer func() {
+		if releaseLocks {
+			routes.State.endPanelUpdate()
+		}
+	}()
 	if routes.State.updateStager == nil {
 		writeError(w, "panel update staging is unavailable", http.StatusServiceUnavailable)
 		return
@@ -175,9 +182,13 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	state := routes.State
+	privilegedClient := routes.State.privileged
+	releaseLocks = false
 	go func() {
+		defer state.endPanelUpdate()
 		time.Sleep(100 * time.Millisecond)
-		_ = routes.State.privileged.RestartPanel(context.Background())
+		_ = privilegedClient.RestartPanel(context.Background())
 	}()
 
 	writeJSON(w, map[string]any{

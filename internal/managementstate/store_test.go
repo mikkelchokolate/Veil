@@ -253,6 +253,30 @@ func TestStoreMarshalEncryptsWithCipher(t *testing.T) {
 	}
 }
 
+func TestStoreMarshalDoesNotMutateProtocolFields(t *testing.T) {
+	var key [secrets.KeySize]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+	store := NewStore("", cipher)
+	originalPF := map[string]any{"naivePassword": "plain-secret"}
+	snapshot := model.ManagementSnapshot{Settings: model.Settings{ProtocolFields: originalPF}}
+	_, err = store.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if snapshot.Settings.ProtocolFields["naivePassword"] != "plain-secret" {
+		t.Fatalf("Marshal mutated input ProtocolFields: %+v", snapshot.Settings.ProtocolFields)
+	}
+	if originalPF["naivePassword"] != "plain-secret" {
+		t.Fatalf("Marshal mutated caller's ProtocolFields map: %+v", originalPF)
+	}
+}
+
 func TestEncryptDecryptSnapshotHelpers(t *testing.T) {
 	var key [secrets.KeySize]byte
 	if _, err := rand.Read(key[:]); err != nil {

@@ -58,3 +58,26 @@ func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
 		t.Fatalf("NaiveProxy with Caddy settings should be valid: %+v", plan)
 	}
 }
+
+func TestBuildApplyPlanAcceptsNaiveProxyWithInboundCredentials(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", Email: "admin@example.com"},
+		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, NaiveUsername: "veil", NaivePassword: "secret"}},
+	})
+	if !plan.Valid {
+		t.Fatalf("NaiveProxy with inbound credentials should be valid: %+v", plan)
+	}
+}
+
+func TestBuildApplyPlanRejectsNaiveProxyWithMissingInboundCredentials(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", Email: "admin@example.com"},
+		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
+	})
+	if plan.Valid {
+		t.Fatalf("NaiveProxy without credentials should be invalid: %+v", plan)
+	}
+	if !strings.Contains(strings.Join(plan.Errors, "\n"), "naive username and password are required") {
+		t.Fatalf("missing inbound credential error: %+v", plan.Errors)
+	}
+}

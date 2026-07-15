@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/observability"
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
 type RouterComposition struct {
@@ -16,13 +17,18 @@ func NewRouterComposition(info ServerInfo) RouterComposition {
 
 func (c RouterComposition) Build() (http.Handler, Reloader) {
 	info := c.Info
+	basePath, err := webbasepath.Normalize(info.WebBasePath)
+	if err != nil {
+		// ServerInfo may be built directly in tests or embedded integrations rather
+		// than through the validated serve configuration. Fail closed to root so an
+		// unsafe value cannot be inserted into routes or rendered JavaScript.
+		basePath = "/"
+	}
+	info.WebBasePath = basePath
+
 	mux := http.NewServeMux()
 	state := newManagementState(info)
 	metrics := observability.NewMetricsCollector()
-	basePath := info.WebBasePath
-	if basePath == "" {
-		basePath = "/"
-	}
 	mux.HandleFunc("/metrics", metrics.ServeHTTP)
 	RuntimeRoutes{}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)

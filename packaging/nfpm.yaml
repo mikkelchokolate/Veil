@@ -65,6 +65,13 @@ contents:
     file_info:
       mode: 0750
 
+# Alpine invokes a distinct hook for package upgrades. Reuse the hardened
+# post-install migration and ownership repair logic so APK upgrades receive the
+# same fail-closed handling as fresh installs and DEB/RPM upgrades.
+apk:
+  scripts:
+    postupgrade: packaging/scripts/postinstall.sh
+
 overrides:
   deb:
     depends:

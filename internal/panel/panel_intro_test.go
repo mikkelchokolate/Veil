@@ -33,6 +33,57 @@ func TestPanelIntroActionsModuleRendersTokenPreviewAndVersionActions(t *testing.
 	}
 }
 
+func TestPanelRoleResolutionFailsClosedAndValidatesStaticToken(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`return currentUserRole() !== 'admin';`,
+		`async function staticTokenHasAdminAccess()`,
+		`const response = await fetch('/api/version', { headers: authHeaders() });`,
+		`setCurrentUserRole('');`,
+		`} else if (await staticTokenHasAdminAccess()) {`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("role resolution missing fail-closed behavior %q", want)
+		}
+	}
+	if strings.Contains(actions, `else if (localStorage.getItem('veil_api_token'))`) {
+		t.Fatal("an unvalidated local API token must not grant admin UI access")
+	}
+}
+
+func TestPanelVersionPollingIsSequentialAndCannotOverwriteSuccessAtTimeout(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`for (let attempt = 1; attempt <= maxAttempts; attempt += 1)`,
+		`await new Promise((resolve) => setTimeout(resolve, 2000));`,
+		`output.textContent = veilT('version.backOnline'`,
+		`return;`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("version polling missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `const pollInterval = setInterval`) {
+		t.Fatal("version polling must not overlap requests through setInterval")
+	}
+}
+
+func TestPanelLoadJSONTreatsNoContentAsSuccess(t *testing.T) {
+	actions := panelIntroActionsJS()
+	for _, want := range []string{
+		`const requestOptions = Object.assign({}, options || {});`,
+		`if (!text) {`,
+		`return { success: true };`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("loadJSON success contract missing %q", want)
+		}
+	}
+	if strings.Contains(actions, `const parsed = text ? JSON.parse(text) : null;`) {
+		t.Fatal("loadJSON must not return null for a successful empty response")
+	}
+}
+
 func TestPanelIntroCardsModuleRendersOverviewVersionTokenAndPreview(t *testing.T) {
 	cards := panelIntroCardsHTML()
 	for _, want := range []string{

@@ -32,18 +32,18 @@ func TestApplyProtocolCapabilityShouldValidateRender(t *testing.T) {
 	}
 }
 
-func TestApplyProtocolCapabilityValidateSettingsRequiresNaiveCaddy(t *testing.T) {
-	cap := ApplyProtocolCapability{RequiresCaddySettings: true}
-	err := cap.ValidateSettings(Settings{})
+func TestApplyProtocolCapabilityValidateSettingsUsesProtocolValidator(t *testing.T) {
+	cap := ApplyProtocolCapability{Protocol: "naiveproxy"}
+	err := cap.ValidateSettings(Settings{}, Inbound{})
 	if err == nil {
-		t.Fatal("expected naive caddy settings requirement error")
+		t.Fatal("expected naiveproxy settings validation error")
 	}
 	if !strings.Contains(err.Error(), "domain, email, naive username, and naive password") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	cap = ApplyProtocolCapability{RequiresCaddySettings: false}
-	if err := cap.ValidateSettings(Settings{}); err != nil {
+	cap = ApplyProtocolCapability{Protocol: "hysteria2"}
+	if err := cap.ValidateSettings(Settings{}, Inbound{}); err != nil {
 		t.Fatalf("unexpected settings error: %v", err)
 	}
 }

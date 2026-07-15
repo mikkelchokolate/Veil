@@ -49,33 +49,43 @@ func TestInboundValidationUpdateRejectsInvalidAndUnsupported(t *testing.T) {
 		wantError error
 	}{
 		{
+			name:      "missing name",
+			inbound:   Inbound{Protocol: "naiveproxy", Transport: "tcp", Port: 443},
+			wantError: ErrInboundInvalid,
+		},
+		{
+			name:      "unsafe name",
+			inbound:   Inbound{Name: "../escape", Protocol: "naiveproxy", Transport: "tcp", Port: 443},
+			wantError: ErrInboundInvalid,
+		},
+		{
 			name:      "missing protocol",
-			inbound:   Inbound{Transport: "tcp", Port: 443},
+			inbound:   Inbound{Name: "n", Transport: "tcp", Port: 443},
 			wantError: ErrInboundInvalid,
 		},
 		{
 			name:      "missing transport",
-			inbound:   Inbound{Protocol: "naiveproxy", Port: 443},
+			inbound:   Inbound{Name: "n", Protocol: "naiveproxy", Port: 443},
 			wantError: ErrInboundInvalid,
 		},
 		{
 			name:      "invalid port",
-			inbound:   Inbound{Protocol: "naiveproxy", Transport: "tcp", Port: 0},
+			inbound:   Inbound{Name: "n", Protocol: "naiveproxy", Transport: "tcp", Port: 0},
 			wantError: ErrInboundInvalid,
 		},
 		{
 			name:      "unsupported transport",
-			inbound:   Inbound{Protocol: "naiveproxy", Transport: "udp", Port: 443},
+			inbound:   Inbound{Name: "n", Protocol: "naiveproxy", Transport: "udp", Port: 443},
 			wantError: ErrInboundUnsupportedProtocolTransport,
 		},
 		{
 			name:      "unknown protocol",
-			inbound:   Inbound{Protocol: "unknown", Transport: "tcp", Port: 443},
+			inbound:   Inbound{Name: "n", Protocol: "unknown", Transport: "tcp", Port: 443},
 			wantError: ErrInboundUnsupportedProtocolTransport,
 		},
 		{
 			name:      "valid update",
-			inbound:   Inbound{Protocol: "hysteria2", Transport: "udp", Port: 8443},
+			inbound:   Inbound{Name: "safe_name-1", Protocol: "hysteria2", Transport: "udp", Port: 8443},
 			wantError: nil,
 		},
 	}

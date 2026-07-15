@@ -9,7 +9,7 @@ import (
 func TestPanelInboundProtocolOptionsRenderFromCatalog(t *testing.T) {
 	html := panelInboundProtocolOptionsHTML()
 	for _, choice := range protocols.NewCatalog().Choices() {
-		want := `<option value="` + choice.Protocol + `">` + choice.Protocol + `</option>`
+		want := `<option value="` + choice.Protocol + `">` + choice.DisplayName + `</option>`
 		if !strings.Contains(html, want) {
 			t.Fatalf("protocol options missing %q in %s", want, html)
 		}

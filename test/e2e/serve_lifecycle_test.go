@@ -3,8 +3,10 @@
 package e2e
 
 import (
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -117,20 +119,30 @@ func TestStatePersistsAcrossRestart(t *testing.T) {
 	}
 	drain(resp)
 	statePath := srv.statePath
+	keyPath := filepath.Join(filepath.Dir(statePath), "state.key")
 	srv.gracefulShutdown()
 
-	// Read the seed from the now-stopped server's state file and relaunch.
+	// Relaunch with both the encrypted state and the key that encrypted it. A
+	// new key must fail closed rather than silently serving default state.
 	seed, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("read state: %v", err)
 	}
-	srv2 := startServer(t, serverOptions{token: "tok", seedState: string(seed)})
+	srv2 := startServer(t, serverOptions{
+		token:     "tok",
+		seedState: string(seed),
+		extraEnv:  []string{"VEIL_KEY_PATH=" + keyPath},
+	})
 	resp = srv2.do(http.MethodGet, "/api/inbounds", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("inbounds expected 200, got %d", resp.StatusCode)
 	}
-	raw, _ := os.ReadFile(srv2.statePath)
-	if !strings.Contains(string(raw), "persist-me") {
-		t.Fatalf("expected persisted inbound 'persist-me' after restart in %s", srv2.statePath)
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read inbounds response: %v", err)
+	}
+	if !strings.Contains(string(body), "persist-me") {
+		t.Fatalf("persisted inbound was not loaded after restart: %s", body)
 	}
 }

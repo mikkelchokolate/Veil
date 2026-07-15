@@ -19,8 +19,10 @@ type Material struct {
 type ProtocolCapability struct {
 	Protocol               string
 	Config                 string
+	ConfigForInbound       func(model.Inbound) string
 	Action                 string
-	ValidateSettings       func(model.Settings) error
+	ActionForInbound       func(model.Inbound) string
+	ValidateSettings       func(model.Settings, model.Inbound) error
 	ValidateInboundRender  bool
 	RequiresRenderSettings bool
 }
@@ -77,12 +79,24 @@ func Build(input Input) model.ApplyPlanResponse {
 			continue
 		}
 		if capability.ValidateSettings != nil {
-			if err := capability.ValidateSettings(input.Settings); err != nil {
+			if err := capability.ValidateSettings(input.Settings, inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())
 			}
 		}
-		plan.Configs = appendUnique(plan.Configs, capability.Config)
-		plan.Actions = appendUnique(plan.Actions, capability.Action)
+		config := capability.Config
+		if capability.ConfigForInbound != nil {
+			if perInboundConfig := capability.ConfigForInbound(inbound); perInboundConfig != "" {
+				config = perInboundConfig
+			}
+		}
+		plan.Configs = appendUnique(plan.Configs, config)
+		action := capability.Action
+		if capability.ActionForInbound != nil {
+			if perInboundAction := capability.ActionForInbound(inbound); perInboundAction != "" {
+				action = perInboundAction
+			}
+		}
+		plan.Actions = appendUnique(plan.Actions, action)
 		if capability.ShouldValidateRender(input.RenderSettingsAvailable) && input.ValidateInboundRender != nil {
 			if err := input.ValidateInboundRender(inbound); err != nil {
 				plan.Errors = append(plan.Errors, err.Error())

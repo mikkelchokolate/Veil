@@ -71,8 +71,8 @@ func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", res.StatusCode)
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415, got %d", res.StatusCode)
 	}
 }
 

@@ -9,7 +9,7 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 	actions := panelApplyActionsJS()
 	for _, want := range []string{
 		`function applyHistoryPath()`,
-		`async function loadApplyHistory()`,
+		`loadApplyHistory = async function()`,
 		`build-apply-plan`,
 		`apply-staged-files`,
 		`apply-live-configs`,
@@ -23,9 +23,50 @@ func TestPanelApplyActionsModuleRendersApplyWorkflowActions(t *testing.T) {
 		`apply-file-diff-preview-body`,
 		`apply-safety-warnings`,
 		`No file content is shown`,
+		`setApplyMutationButtonsDisabled = function(disabled)`,
+		`if (result === null)`,
+		`setApplyMutationButtonsDisabled(true)`,
+		`setApplyMutationButtonsDisabled(!plan || plan.valid !== true)`,
+		`return null`,
 	} {
 		if !strings.Contains(actions, want) {
 			t.Fatalf("Apply actions missing %q", want)
+		}
+	}
+}
+
+func TestPanelApplyWorkflowSerializesCommandsAndRestoresPlanState(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`let applyWorkflowInFlight = false;`,
+		`let applyMutationButtonsDisabled = true;`,
+		`if (applyWorkflowInFlight) return null;`,
+		`function setApplyWorkflowBusy(busy)`,
+		`applyWorkflowInFlight = Boolean(busy);`,
+		`button.disabled = applyMutationButtonsDisabled || applyWorkflowInFlight || isViewerRole();`,
+		`setApplyWorkflowBusy(true);`,
+		`finally {`,
+		`setApplyWorkflowBusy(false);`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Apply workflow single-flight guard missing %q", want)
+		}
+	}
+}
+
+func TestPanelApplyHistoryUsesWorkflowLockAndValidatesLimit(t *testing.T) {
+	actions := panelApplyActionsJS()
+	for _, want := range []string{
+		`loadApplyHistory = async function()`,
+		`if (applyWorkflowInFlight) return null;`,
+		`limitInput && !limitInput.checkValidity()`,
+		`!Number.isInteger(Number(rawLimit))`,
+		`limitInput.reportValidity();`,
+		`return await loadJSON(applyHistoryPath(), 'apply-plan-output');`,
+		`setApplyHistoryButtonDisabled(applyWorkflowInFlight);`,
+	} {
+		if !strings.Contains(actions, want) {
+			t.Fatalf("Apply history reliability missing %q", want)
 		}
 	}
 }
@@ -35,9 +76,9 @@ func TestPanelApplyCardModuleRendersApplyControls(t *testing.T) {
 	for _, want := range []string{
 		`<h2>Apply plan</h2>`,
 		`id="build-apply-plan"`,
-		`id="apply-staged-files"`,
-		`id="apply-live-configs"`,
-		`id="reload-services"`,
+		`id="apply-staged-files" type="button" disabled`,
+		`id="apply-live-configs" type="button" disabled`,
+		`id="reload-services" type="button" disabled`,
 		`id="load-apply-history"`,
 		`id="apply-runtime-output"`,
 		`id="apply-safety-warnings"`,

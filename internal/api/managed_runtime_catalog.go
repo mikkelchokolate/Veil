@@ -20,16 +20,16 @@ type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 
 // NewManagedRuntimeCatalog returns the broad management catalog used for apply,
 // repair, privileged policy checks, and backward-compatible service commands. It
-// intentionally includes fallback/template runtimes when no saved state exists so
-// first-apply and recovery paths can still validate, promote, and restart units.
+// intentionally includes fallback/template runtimes so first-apply, recovery,
+// orphan cleanup, and rollback paths can validate, promote, stop, and restart
+// managed units even when the current saved state no longer references them.
 func NewManagedRuntimeCatalog() ManagedRuntimeCatalog {
-	_, inbounds, warp := loadSnapshotFromState()
-	return NewManagedRuntimeCatalogFor(inbounds, warp)
+	return NewManagedRuntimeCatalogFor(Settings{}, nil, WarpConfig{})
 }
 
-// NewManagedRuntimeCatalogFor returns the broad management catalog. Use
-// NewVisibleManagedRuntimeCatalog for operator-facing status/UI lists.
-func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
+// NewManagedRuntimeCatalogFor returns a state-scoped catalog for active apply
+// planning. Pass nil inbounds for the broad fallback/template catalog.
+func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 
 	registry := protocols.NewRegistry()
@@ -46,6 +46,15 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 		if len(selected) > 0 {
 			runtimes = append(runtimes, rp.RuntimeDescriptors(selected)...)
 		}
+	}
+
+	// Ensure the panel caddy runtime is present and uses the canonical empty
+	// Protocol. In the broad fallback catalog (nil inbounds) the naiveproxy
+	// plugin's fallback descriptor contributes the same unit with
+	// Protocol="naiveproxy"; replace it so panel caddy is consistently
+	// classified as a panel runtime, not a protocol runtime.
+	if settings.PanelAccess == "caddy" || len(inbounds) == 0 {
+		runtimes = replaceOrAppendRuntime(runtimes, panelCaddyRuntime())
 	}
 
 	if warp.Enabled || len(inbounds) == 0 {
@@ -66,17 +75,77 @@ func NewManagedRuntimeCatalogFor(inbounds []Inbound, warp WarpConfig) ManagedRun
 	return sortManagedRuntimes(runtimes)
 }
 
+func replaceOrAppendRuntime(runtimes []ManagedRuntime, runtime ManagedRuntime) []ManagedRuntime {
+	for i, r := range runtimes {
+		if r.Unit == runtime.Unit {
+			runtimes[i] = runtime
+			return runtimes
+		}
+	}
+	return append(runtimes, runtime)
+}
+
+func panelCaddyRuntime() ManagedRuntime {
+	return ManagedRuntime{
+		Name:             "caddy-panel",
+		ActionName:       "caddy-panel",
+		Transport:        "tcp",
+		Unit:             "veil-caddy@panel.service",
+		TemplateUnit:     renderer.UnitCaddy,
+		PromotedSubpath:  generatedconfig.CaddyfileSubpath,
+		PromotedVerb:     "reload",
+		ManualRestart:    true,
+		HealthCheckAfter: true,
+	}
+}
+
 // NewVisibleManagedRuntimeCatalog returns the operator-facing catalog for the
-// dashboard and /api/status. Once a saved state exists, it only exposes services
-// configured in that state, plus Veil itself. If state is absent, it falls back to
-// the broad catalog so first-run/recovery environments retain their legacy
-// management affordances.
+// dashboard and /api/status when no live managementState is available. Once a
+// saved state exists, it only exposes services configured in that state, plus
+// Veil itself. If state is absent, it falls back to the broad catalog so
+// first-run/recovery environments retain their legacy management affordances.
 func NewVisibleManagedRuntimeCatalog() ManagedRuntimeCatalog {
 	settings, inbounds, warp, ok := loadSnapshotFromStateWithOK()
 	if !ok {
-		return NewManagedRuntimeCatalogFor(inbounds, warp)
+		return NewManagedRuntimeCatalogFor(settings, inbounds, warp)
 	}
 	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+}
+
+// NewVisibleManagedRuntimeCatalogForState returns the operator-facing catalog
+// from the active in-memory management state. Routes should prefer this over the
+// environment/file fallback above so status and panel controls reflect the state
+// already loaded by the running process, including changes made during this
+// process lifetime.
+func NewVisibleManagedRuntimeCatalogForState(state *managementState) ManagedRuntimeCatalog {
+	if state == nil {
+		return NewVisibleManagedRuntimeCatalog()
+	}
+	state.mu.Lock()
+	settings := state.settings
+	inbounds := append([]Inbound(nil), state.inbounds...)
+	warp := state.warp
+	statePath := state.statePath
+	state.mu.Unlock()
+
+	if !visibleStateHasRuntimeScope(settings, inbounds, warp) && !stateFileExists(statePath) {
+		return NewManagedRuntimeCatalogFor(Settings{}, nil, WarpConfig{})
+	}
+	return NewManagedRuntimeCatalogForSnapshot(settings, inbounds, warp)
+}
+
+func visibleStateHasRuntimeScope(settings Settings, inbounds []Inbound, warp WarpConfig) bool {
+	return settings.PanelAccess == "caddy" || len(inbounds) > 0 || warp.Enabled
+}
+
+func stateFileExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	return true
 }
 
 func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
@@ -86,12 +155,11 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 		runtimes = append(runtimes, ManagedRuntime{
 			Name:             "caddy-panel",
 			ActionName:       "caddy-panel",
-			Protocol:         "naiveproxy",
 			Transport:        "tcp",
 			Unit:             "veil-caddy@panel.service",
 			TemplateUnit:     renderer.UnitCaddy,
 			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
-			PromotedVerb:     "restart",
+			PromotedVerb:     "reload",
 			ManualRestart:    true,
 			HealthCheckAfter: true,
 		})
@@ -145,11 +213,6 @@ func enabledInboundsForProtocol(inbounds []Inbound, protocol string) []Inbound {
 		}
 	}
 	return selected
-}
-
-func loadSnapshotFromState() (Settings, []Inbound, WarpConfig) {
-	settings, inbounds, warp, _ := loadSnapshotFromStateWithOK()
-	return settings, inbounds, warp
 }
 
 func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {

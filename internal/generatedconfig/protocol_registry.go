@@ -4,13 +4,15 @@ import "fmt"
 
 type ConfigInput struct {
 	ApplyRoot string
+	LiveRoot  string
 	Settings  Settings
 	Inbounds  []Inbound
 	Warp      WarpConfig
 }
 
 type ProtocolRegistry struct {
-	protocols []Protocol
+	protocols         []Protocol
+	renderSettingKeys []string
 }
 
 type Protocol struct {
@@ -18,6 +20,7 @@ type Protocol struct {
 	MaxEnabled             int
 	RequiresRenderSettings bool
 	Render                 func(ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error)
+	ArtifactSpec           ArtifactSpec
 }
 
 type ProtocolRenderInput struct {
@@ -28,9 +31,27 @@ type ProtocolRenderInput struct {
 }
 
 func NewProtocolRegistry(protocols []Protocol) ProtocolRegistry {
+	return NewProtocolRegistryWithRenderSettingKeys(protocols, nil)
+}
+
+// NewProtocolRegistryWithRenderSettingKeys creates a registry and carries the
+// set of protocol-field keys that the render-settings policy should treat as
+// render-relevant. This keeps the policy in sync with the installed protocol
+// plugins instead of a hardcoded key list.
+func NewProtocolRegistryWithRenderSettingKeys(protocols []Protocol, renderSettingKeys []string) ProtocolRegistry {
 	out := make([]Protocol, len(protocols))
 	copy(out, protocols)
-	return ProtocolRegistry{protocols: out}
+	keys := make([]string, len(renderSettingKeys))
+	copy(keys, renderSettingKeys)
+	return ProtocolRegistry{protocols: out, renderSettingKeys: keys}
+}
+
+// RenderSettingFieldKeys returns the render-relevant protocol-field keys
+// configured for this registry.
+func (r ProtocolRegistry) RenderSettingFieldKeys() []string {
+	keys := make([]string, len(r.renderSettingKeys))
+	copy(keys, r.renderSettingKeys)
+	return keys
 }
 
 func (r ProtocolRegistry) Validate(settings Settings, inbounds []Inbound) error {
@@ -50,14 +71,14 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 	if err := r.Validate(input.Settings, input.Inbounds); err != nil {
 		return nil, err
 	}
-	paths := NewPaths(input.ApplyRoot)
+	paths := NewPathsWithLiveRoot(input.ApplyRoot, input.LiveRoot)
 	configs := map[string]string{}
 	for _, protocol := range r.protocols {
 		selected := r.enabledInbounds(input.Settings, input.Inbounds, protocol.Protocol)
 		if len(selected) == 0 {
 			continue
 		}
-		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicy().HasRenderSettings(input.Settings) {
+		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicyWithFieldKeys(r.renderSettingKeys).HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
 		}
 		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
@@ -102,4 +123,17 @@ func (ProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, p
 		}
 	}
 	return selected
+}
+
+// ArtifactSpecs returns the artifact metadata for every registered protocol that
+// contributes generated config artifacts. The result preserves registration order.
+func (r ProtocolRegistry) ArtifactSpecs() []ArtifactSpec {
+	out := make([]ArtifactSpec, 0, len(r.protocols))
+	for _, protocol := range r.protocols {
+		if protocol.ArtifactSpec.Subpath == "" {
+			continue
+		}
+		out = append(out, protocol.ArtifactSpec)
+	}
+	return out
 }

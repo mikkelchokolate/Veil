@@ -5,6 +5,8 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 	"github.com/mikkelchokolate/Veil/internal/routing"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 	veilwarp "github.com/mikkelchokolate/Veil/internal/warp"
@@ -19,6 +21,7 @@ var (
 	ErrRoutingRuleInvalid       = routing.ErrRoutingRuleInvalid
 	ErrRoutingRuleNotFound      = routing.ErrRoutingRuleNotFound
 	ErrRoutingRuleDuplicateName = routing.ErrRoutingRuleDuplicateName
+	ErrLastAdministrator        = errors.New("cannot remove the last administrator")
 )
 
 type MutationTarget struct {
@@ -32,8 +35,9 @@ type MutationTarget struct {
 type ManagementStateMutationTarget = MutationTarget
 
 type Mutation struct {
-	target MutationTarget
-	save   func() error
+	target               MutationTarget
+	save                 func() error
+	settingsFieldSchemas []schema.FieldSchema
 }
 
 type ManagementStateMutation = Mutation
@@ -42,7 +46,11 @@ func NewMutation(target MutationTarget, save func() error) Mutation {
 	if save == nil {
 		save = func() error { return nil }
 	}
-	return Mutation{target: target, save: save}
+	return Mutation{
+		target:               target,
+		save:                 save,
+		settingsFieldSchemas: protocols.NewRegistry().SettingsFieldSchemas(),
+	}
 }
 
 func NewManagementStateMutation(target ManagementStateMutationTarget, save func() error) ManagementStateMutation {
@@ -53,7 +61,7 @@ func (m Mutation) Settings() Settings {
 	if m.target.Settings == nil {
 		return Settings{}
 	}
-	return veilsettings.NewSettingsRedaction().Redact(*m.target.Settings)
+	return veilsettings.NewSettingsRedactionWithFieldSchemas(m.settingsFieldSchemas).Redact(*m.target.Settings)
 }
 
 func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
@@ -61,16 +69,19 @@ func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
 	if m.target.Settings != nil {
 		current = *m.target.Settings
 	}
-	if err := veilsettings.NewSettingsValidation().NormalizeAndValidate(&update, current); err != nil {
+	if err := veilsettings.NewSettingsValidationWithFieldSchemas(m.settingsFieldSchemas).NormalizeAndValidate(&update, current); err != nil {
 		return Settings{}, err
 	}
 	if m.target.Settings != nil {
 		*m.target.Settings = update
 	}
 	if err := m.save(); err != nil {
+		if m.target.Settings != nil {
+			*m.target.Settings = current
+		}
 		return Settings{}, err
 	}
-	return veilsettings.NewSettingsRedaction().Redact(update), nil
+	return veilsettings.NewSettingsRedactionWithFieldSchemas(m.settingsFieldSchemas).Redact(update), nil
 }
 
 func (m Mutation) Inbounds() []Inbound {
@@ -121,10 +132,17 @@ func (m Mutation) DeleteInbound(name string) error {
 }
 
 func (m Mutation) replaceInbounds(next []Inbound) error {
+	previous := m.Inbounds()
 	if m.target.Inbounds != nil {
 		*m.target.Inbounds = next
 	}
-	return m.save()
+	if err := m.save(); err != nil {
+		if m.target.Inbounds != nil {
+			*m.target.Inbounds = previous
+		}
+		return err
+	}
+	return nil
 }
 
 func (m Mutation) RoutingRules() []RoutingRule {
@@ -191,10 +209,17 @@ func (m Mutation) routingRuleIndex(name string) int {
 }
 
 func (m Mutation) replaceRoutingRules(next []RoutingRule) error {
+	previous := m.RoutingRules()
 	if m.target.Rules != nil {
 		*m.target.Rules = next
 	}
-	return m.save()
+	if err := m.save(); err != nil {
+		if m.target.Rules != nil {
+			*m.target.Rules = previous
+		}
+		return err
+	}
+	return nil
 }
 
 func (m Mutation) Warp() WarpConfig {
@@ -209,6 +234,7 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 	if m.target.Warp != nil {
 		current = *m.target.Warp
 	}
+	currentRules := m.RoutingRules()
 	update = veilwarp.PreserveRedacted(update, current)
 	veilwarp.SetDefaults(&update)
 	if m.target.Warp != nil {
@@ -245,6 +271,12 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 	}
 
 	if err := m.save(); err != nil {
+		if m.target.Warp != nil {
+			*m.target.Warp = current
+		}
+		if m.target.Rules != nil {
+			*m.target.Rules = currentRules
+		}
 		return WarpConfig{}, err
 	}
 	return veilwarp.Redact(update), nil
@@ -269,8 +301,10 @@ func (m Mutation) CreateUser(user model.User) (model.User, error) {
 			return model.User{}, errors.New("user already exists")
 		}
 	}
+	previous := cloneUsers(*m.target.Users)
 	*m.target.Users = append(*m.target.Users, user)
 	if err := m.save(); err != nil {
+		*m.target.Users = previous
 		return model.User{}, err
 	}
 	return user, nil
@@ -290,15 +324,23 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 	if update.Role != "admin" && update.Role != "viewer" {
 		return model.User{}, errors.New("invalid role")
 	}
+	if (*m.target.Users)[idx].Role == "admin" && update.Role != "admin" && administratorCount(*m.target.Users) <= 1 {
+		return model.User{}, ErrLastAdministrator
+	}
 	if !validUserLocale(update.Locale) {
 		return model.User{}, errors.New("invalid user locale")
 	}
 	update.Username = username
+	if update.PasswordHash == "" {
+		update.PasswordHash = (*m.target.Users)[idx].PasswordHash
+	}
 	if update.Locale == "" {
 		update.Locale = (*m.target.Users)[idx].Locale
 	}
+	previous := cloneUsers(*m.target.Users)
 	(*m.target.Users)[idx] = update
 	if err := m.save(); err != nil {
+		*m.target.Users = previous
 		return model.User{}, err
 	}
 	return update, nil
@@ -306,6 +348,16 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 
 func validUserLocale(locale string) bool {
 	return locale == "" || locale == "en" || locale == "ru"
+}
+
+func administratorCount(users []model.User) int {
+	count := 0
+	for _, user := range users {
+		if user.Role == "admin" {
+			count++
+		}
+	}
+	return count
 }
 
 func (m Mutation) DeleteUser(username string) error {
@@ -319,6 +371,14 @@ func (m Mutation) DeleteUser(username string) error {
 	if idx == -1 {
 		return errors.New("user not found")
 	}
+	if (*m.target.Users)[idx].Role == "admin" && administratorCount(*m.target.Users) <= 1 {
+		return ErrLastAdministrator
+	}
+	previous := cloneUsers(*m.target.Users)
 	*m.target.Users = append((*m.target.Users)[:idx], (*m.target.Users)[idx+1:]...)
-	return m.save()
+	if err := m.save(); err != nil {
+		*m.target.Users = previous
+		return err
+	}
+	return nil
 }

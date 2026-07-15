@@ -9,7 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
-func TestSyncCaddyCertForHysteria2(t *testing.T) {
+func TestSyncCaddyCert(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{
 		Mode:       "dev",
@@ -17,14 +17,14 @@ func TestSyncCaddyCertForHysteria2(t *testing.T) {
 		Privileged: client,
 	})
 	ctx := NewManagementApplyContext(state)
-	result := ctx.syncCaddyCertForHysteria2()
+	result := ctx.syncCaddyCert()
 	if !result.Success {
 		t.Fatalf("expected success, got %+v", result)
 	}
 
 	stateNoPrivileged := newManagementState(ServerInfo{Mode: "dev", Domain: "vpn.example.com", RequirePrivilegedHelper: true})
 	ctx = NewManagementApplyContext(stateNoPrivileged)
-	result = ctx.syncCaddyCertForHysteria2()
+	result = ctx.syncCaddyCert()
 	if result.Success || result.Error != "privileged helper is unavailable" {
 		t.Fatalf("expected unavailable error, got %+v", result)
 	}
@@ -79,15 +79,15 @@ func TestWarpUnitActiveLocked(t *testing.T) {
 	}
 }
 
-func TestHysteria2ConfigReloadNeeded(t *testing.T) {
+func TestCaddyCertSyncNeeded(t *testing.T) {
 	root := t.TempDir()
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: filepath.Join(root, "live")})
 	ctx := NewManagementApplyContext(state)
 	liveFiles := []string{filepath.Join(root, "live", "hysteria2", "server.yaml")}
-	if !ctx.hysteria2ConfigReloadNeeded(liveFiles) {
+	if !ctx.caddyCertSyncNeeded(liveFiles) {
 		t.Fatal("expected reload needed for hysteria2 live file")
 	}
-	if ctx.hysteria2ConfigReloadNeeded([]string{filepath.Join(root, "live", "caddy", "panel.Caddyfile")}) {
+	if ctx.caddyCertSyncNeeded([]string{filepath.Join(root, "live", "caddy", "panel.Caddyfile")}) {
 		t.Fatal("expected no reload for caddy file")
 	}
 }
