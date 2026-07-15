@@ -14,6 +14,8 @@ func TestBuildRenderPlanPanelAndNaive(t *testing.T) {
 		PanelDomain:     "panel.example.com",
 		PanelPublicPort: 443,
 		PanelEmail:      "admin@example.com",
+		PanelListen:     "127.0.0.1:2096",
+		WebBasePath:    "/panel/",
 	}
 	inbounds := []model.Inbound{
 		{
