@@ -11,6 +11,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/naiveproxy"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -223,28 +224,44 @@ func unitForInbound(protocol string, inbound model.Inbound, descriptors []servic
 
 func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	issues := []model.ValidationIssue{}
-	if protocolNeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
-		issues = append(issues, issue(
-			"domain_required", SeverityError, "settings.domain", inbound.Name,
-			"This protocol requires a public domain",
-			"Set the domain that resolves to this host.", "candidate",
-		))
-	}
-	if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
-		issues = append(issues, issue(
-			"email_required", SeverityError, "settings.email", inbound.Name,
-			"This protocol requires an email address",
-			"Set the ACME contact email.", "candidate",
-		))
+	if inbound.Protocol == "naiveproxy" {
+		if strings.TrimSpace(naiveproxy.NaiveDomain(settings, inbound)) == "" {
+			issues = append(issues, issue("domain_required", SeverityError, "domain", inbound.Name,
+				"This protocol requires a public domain", "Set the inbound domain that resolves to this host.", "candidate"))
+		}
+		if resolveNaiveEmail(settings, inbound) == "" {
+			issues = append(issues, issue("email_required", SeverityError, "email", inbound.Name,
+				"NaiveProxy automatic TLS requires an email address", "Set an inbound or default ACME contact email.", "candidate"))
+		}
+	} else {
+		if protocolNeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
+			issues = append(issues, issue("domain_required", SeverityError, "settings.domain", inbound.Name,
+				"This protocol requires a public domain", "Set the domain that resolves to this host.", "candidate"))
+		}
+		if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
+			issues = append(issues, issue("email_required", SeverityError, "settings.email", inbound.Name,
+				"This protocol requires an email address", "Set the ACME contact email.", "candidate"))
+		}
 	}
 	if !hasCredential(settings, inbound) {
-		issues = append(issues, issue(
-			"credential_required", SeverityError, "password", inbound.Name,
-			"This inbound has no usable client credential",
-			"Set an inbound credential or enable a client profile with credentials.", "candidate",
-		))
+		issues = append(issues, issue("credential_required", SeverityError, "password", inbound.Name,
+			"This protocol requires credentials", "Set a password or enabled client profile.", "candidate"))
 	}
 	return issues
+}
+
+func resolveNaiveEmail(settings model.Settings, inbound model.Inbound) string {
+	if inbound.ProtocolFields != nil {
+		if email, ok := inbound.ProtocolFields["email"].(string); ok && strings.TrimSpace(email) != "" {
+			return strings.TrimSpace(email)
+		}
+	}
+	for _, candidate := range []string{settings.DefaultAcmeEmail, settings.PanelEmail, settings.Email} {
+		if value := strings.TrimSpace(candidate); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {

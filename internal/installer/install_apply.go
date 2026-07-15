@@ -20,7 +20,7 @@ type ApplyPaths struct {
 }
 
 type ApplyResult struct {
-	CaddyfilePath     string
+	CaddyJSONPath     string
 	Hysteria2Path     string
 	FallbackIndexPath string
 	WrittenFiles      []string
@@ -52,7 +52,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	result := ApplyResult{
-		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "panel.Caddyfile"),
+		CaddyJSONPath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "config.json"),
 		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(a.paths.VarDir, "www", "index.html"),
 	}

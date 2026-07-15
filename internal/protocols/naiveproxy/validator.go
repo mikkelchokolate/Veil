@@ -7,11 +7,25 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-// ValidateSettings ensures the global settings and credentials required by
-// NaiveProxy/Caddy are present.
+// Validator is retained as an alias for callers that use the dedicated name.
+type Validator = Plugin
+
 func (p Plugin) ValidateSettings(settings model.Settings, inbound model.Inbound) error {
-	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" {
-		return errNaiveCaddySettingsRequired{}
+	if strings.TrimSpace(NaiveDomain(settings, inbound)) == "" {
+		return errors.New("naive public domain is required")
+	}
+	email := strings.TrimSpace(NaiveEmail(settings, inbound))
+	if email == "" {
+		email = strings.TrimSpace(settings.DefaultAcmeEmail)
+	}
+	if email == "" {
+		email = strings.TrimSpace(settings.PanelEmail)
+	}
+	if email == "" {
+		email = strings.TrimSpace(settings.Email)
+	}
+	if email == "" {
+		return errors.New("ACME email is required for naiveproxy")
 	}
 	if !p.HasCredential(settings, inbound) {
 		return errors.New("naive username and password are required")
@@ -19,27 +33,38 @@ func (p Plugin) ValidateSettings(settings model.Settings, inbound model.Inbound)
 	return nil
 }
 
-// ValidateInbound checks one inbound for naiveproxy-specific problems.
 func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
-	if p.HasCredential(settings, inbound) {
-		return nil
+	var issues []model.ValidationIssue
+	if strings.TrimSpace(NaiveDomain(settings, inbound)) == "" {
+		issues = append(issues, model.ValidationIssue{
+			Code: "naive_domain_required", Severity: "error", Field: "domain",
+			InboundID: inbound.Name, Message: "NaiveProxy inbound requires a public domain", Source: "naiveproxy",
+		})
 	}
-	return []model.ValidationIssue{{
-		Code:      "naive_credential_required",
-		Severity:  "error",
-		Field:     "inbound",
-		InboundID: inbound.Name,
-		Message:   "NaiveProxy inbound requires a username and password",
-	}}
+	if transport := NaiveTransport(inbound); transport != "tcp" {
+		issues = append(issues, model.ValidationIssue{
+			Code: "naive_transport_invalid", Severity: "error", Field: "transport",
+			InboundID: inbound.Name, Message: "NaiveProxy supports only the tcp transport in this release", Source: "naiveproxy",
+		})
+	}
+	if port := NaivePublicPort(settings, inbound); port < 1 || port > 65535 {
+		issues = append(issues, model.ValidationIssue{
+			Code: "naive_public_port_invalid", Severity: "error", Field: "publicPort",
+			InboundID: inbound.Name, Message: "publicPort must be between 1 and 65535", Source: "naiveproxy",
+		})
+	}
+	if !p.HasCredential(settings, inbound) {
+		issues = append(issues, model.ValidationIssue{
+			Code: "naive_credential_required", Severity: "error", Field: "profiles",
+			InboundID: inbound.Name, Message: "At least one username/password profile is required", Source: "naiveproxy",
+		})
+	}
+	return issues
 }
 
-// NeedsDomain reports that naiveproxy needs a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return true }
+func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool  { return true }
 
-// NeedsEmail reports that naiveproxy needs an email for ACME TLS.
-func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return true }
-
-// HasCredential reports whether the inbound has a usable naiveproxy credential.
 func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	for _, profile := range inbound.Profiles {
 		if !profile.Enabled || strings.TrimSpace(profile.Password) == "" {
@@ -49,13 +74,5 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 			return true
 		}
 	}
-	username := naiveUsername(settings, inbound)
-	password := naivePassword(settings, inbound)
-	return username != "" && password != ""
-}
-
-type errNaiveCaddySettingsRequired struct{}
-
-func (errNaiveCaddySettingsRequired) Error() string {
-	return "domain, email, naive username, and naive password are required for NaiveProxy/Caddy"
+	return naiveUsername(settings, inbound) != "" && naivePassword(settings, inbound) != ""
 }

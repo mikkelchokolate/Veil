@@ -45,8 +45,8 @@ contents:
   - src: packaging/systemd/veil-backup.timer
     dst: /lib/systemd/system/veil-backup.timer
     type: config
-  - src: packaging/systemd/veil-caddy@.service
-    dst: /lib/systemd/system/veil-caddy@.service
+  - src: packaging/systemd/veil-caddy.service
+    dst: /lib/systemd/system/veil-caddy.service
     type: config
   - src: packaging/systemd/veil-hysteria2@.service
     dst: /lib/systemd/system/veil-hysteria2@.service

@@ -44,7 +44,7 @@ func TestIntegrationPanelPermissionMatrix(t *testing.T) {
 	writeFixture(t, filepath.Join(etcDir, "state.key"), "key")
 	writeFixture(t, filepath.Join(etcDir, "veil.env"), "token")
 	writeFixture(t, filepath.Join(etcDir, "backup.passphrase"), "passphrase")
-	writeFixture(t, filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile"), "config")
+	writeFixture(t, filepath.Join(etcDir, "generated", "caddy", "config.json"), "config")
 	writeFixture(t, filepath.Join(varDir, "state.json"), "state")
 	writeFixture(t, filepath.Join(varDir, "sessions.json"), "sessions")
 	writeFixture(t, filepath.Join(varDir, "backups", "daily.enc"), "backup")

@@ -23,7 +23,7 @@ func TestBuildRURecommendedProfileDefaultsToPanelOnly(t *testing.T) {
 	if profile.InstallPanelCaddy {
 		t.Fatalf("expected direct/local panel-only profile, got %+v", profile)
 	}
-	if profile.Caddyfile != "" {
+	if profile.CaddyJSON != "" {
 		t.Fatalf("panel-only profile should not include protocol artifacts: %+v", profile)
 	}
 	if profile.PanelAuthToken != "secret-panel" || !profile.PanelTLSEnabled {
@@ -54,22 +54,15 @@ func TestBuildRURecommendedProfileGeneratesWebBasePathForPanelCaddyAccess(t *tes
 	}
 }
 
-func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyfile(t *testing.T) {
+func TestBuildRURecommendedProfileIncludesPanelReverseProxyInCaddyJSON(t *testing.T) {
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(profile.Caddyfile, "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("Caddyfile missing reverse_proxy for panel port:\n%s", profile.Caddyfile)
+	if !strings.Contains(profile.CaddyJSON, `"dial": "127.0.0.1:2096"`) {
+		t.Fatalf("Caddy JSON missing reverse_proxy for panel port:\n%s", profile.CaddyJSON)
 	}
-	if !strings.Contains(profile.Caddyfile, "handle /"+strings.Trim(profile.WebBasePath, "/")+"/*") {
-		t.Fatalf("Caddyfile missing handle_path for web base path %s:\n%s", profile.WebBasePath, profile.Caddyfile)
-	}
-}
-
-func TestBuildRURecommendedProfileRejectsPanelCaddyWhenPanelPortZero(t *testing.T) {
-	_, err := BuildRURecommendedProfile(RURecommendedInput{PanelAccess: "caddy", Domain: "example.com", Email: "admin@example.com", Secret: func(label string) string { return "secret-" + label }, PanelPort: 0})
-	if err == nil {
-		t.Fatalf("expected Panel Caddy access to require selected Panel port")
+	if !strings.Contains(profile.CaddyJSON, strings.TrimRight(profile.WebBasePath, "/")) {
+		t.Fatalf("Caddy JSON missing web base path %s:\n%s", profile.WebBasePath, profile.CaddyJSON)
 	}
 }

@@ -20,7 +20,7 @@ func TestRepairDryRunWithAuditLogDoesNotCreateLog(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "config.json"), []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestRepairApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "config.json"), []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
 

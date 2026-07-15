@@ -24,10 +24,11 @@ type Protocol struct {
 }
 
 type ProtocolRenderInput struct {
-	Settings Settings
-	Paths    Paths
-	Inbounds []Inbound
-	Warp     WarpConfig
+	Settings    Settings
+	Paths       Paths
+	Inbounds    []Inbound
+	AllInbounds []Inbound
+	Warp        WarpConfig
 }
 
 func NewProtocolRegistry(protocols []Protocol) ProtocolRegistry {
@@ -81,7 +82,7 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicyWithFieldKeys(r.renderSettingKeys).HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
 		}
-		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
+		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, AllInbounds: input.Inbounds, Warp: input.Warp})
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +100,7 @@ func (r ProtocolRegistry) RenderInbound(settings Settings, paths Paths, inbound 
 	if !ok {
 		return GeneratedConfigArtifact{}, false, nil
 	}
-	arts, ok, err := protocol.Render(ProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}, Warp: warp})
+	arts, ok, err := protocol.Render(ProtocolRenderInput{Settings: settings, Paths: paths, Inbounds: []Inbound{inbound}, AllInbounds: []Inbound{inbound}, Warp: warp})
 	if err != nil || !ok || len(arts) == 0 {
 		return GeneratedConfigArtifact{}, ok, err
 	}

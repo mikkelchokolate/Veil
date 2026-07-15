@@ -156,13 +156,98 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 	}
 }
 
+// TestNaiveInboundCreateDeleteCaddyJSON creates a naiveproxy inbound, stages
+// an apply, and verifies the generated Caddy JSON config contains the
+// forward_proxy handler and the inbound's domain. It then deletes the inbound,
+// re-applies, and asserts the generated config is cleaned up.
+//
+// The settings payload includes domain/email/naiveUsername/naivePassword in
+// addition to defaultAcmeEmail because the current naiveproxy settings
+// validator requires the legacy fallback fields to be present.
+func TestNaiveInboundCreateDeleteCaddyJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","panelAccess":"direct","domain":"vpn.example.com","email":"admin@example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword","defaultInboundPublicPort":443}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true,"naiveUsername":"alice","naivePassword":"alice-pass","protocolFields":{"domain":"proxy.example.com","transport":"tcp","publicPort":8443}}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("inbound expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apply plan expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	planBody := readJSON(t, resp)
+	if valid, ok := planBody["valid"].(bool); !ok || !valid {
+		t.Fatalf("expected valid plan, got %v", planBody)
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("apply expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	caddyJSON := filepath.Join(srv.applyRoot, "generated", "caddy", "config.json")
+	data, err := os.ReadFile(caddyJSON)
+	if err != nil {
+		t.Fatalf("expected Caddy JSON at %s: %v", caddyJSON, err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "forward_proxy") {
+		t.Error("Caddy JSON missing forward_proxy handler")
+	}
+	if !strings.Contains(s, "proxy.example.com") {
+		t.Error("Caddy JSON missing naive domain")
+	}
+
+	// Delete the naive inbound and re-apply so the config is regenerated
+	// without it.
+	resp = srv.do(http.MethodDelete, "/api/inbounds/naive-tcp", "")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete inbound expected 204, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apply plan after delete expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	planBody = readJSON(t, resp)
+	if valid, ok := planBody["valid"].(bool); !ok || !valid {
+		t.Fatalf("expected valid plan after delete, got %v", planBody)
+	}
+	drain(resp)
+
+	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("apply after delete expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	_, err = os.ReadFile(caddyJSON)
+	if !os.IsNotExist(err) {
+		t.Fatalf("expected Caddy JSON to be removed after inbound deletion, got err=%v", err)
+	}
+}
+
 // TestRejectsDuplicatePortsEndToEnd confirms the safeguard against
 // multiple inbounds trying to listen on the same port surfaces as
 // an apply/plan error over the HTTP surface.
 func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "tok"})
 
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
 	drain(resp)
 
 	// First NaiveProxy inbound on port 20001

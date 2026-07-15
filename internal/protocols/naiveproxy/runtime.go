@@ -7,48 +7,37 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
-const templateUnit = "veil-caddy@.service"
+const caddyUnit = "veil-caddy.service"
 
-// RuntimeDescriptors returns per-inbound caddy units for naiveproxy.
+// RuntimeDescriptors returns one consolidated Caddy runtime. A nil inbound
+// slice asks for the broad fallback descriptor used by policy/repair catalogs;
+// a non-nil slice only contributes it when naiveproxy is enabled.
 func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.ManagedRuntime {
-	var runtimes []service.ManagedRuntime
-	count := 0
-	for _, inbound := range enabledInbounds {
-		if inbound.Protocol != p.Protocol() {
-			continue
+	if enabledInbounds != nil {
+		found := false
+		for _, inbound := range enabledInbounds {
+			if inbound.Enabled && inbound.Protocol == p.Protocol() {
+				found = true
+				break
+			}
 		}
-		count++
-		runtimes = append(runtimes, service.ManagedRuntime{
-			Name:             "caddy-" + inbound.Name,
-			ActionName:       "caddy-" + inbound.Name,
-			Protocol:         p.Protocol(),
-			Transport:        "tcp",
-			Unit:             "veil-caddy@" + inbound.Name + ".service",
-			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "caddy/" + inbound.Name + ".Caddyfile",
-			PromotedVerb:     "reload",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
+		if !found {
+			return nil
+		}
 	}
-	if count == 0 {
-		runtimes = append(runtimes, service.ManagedRuntime{
-			Name:             "caddy-panel",
-			ActionName:       "caddy-panel",
-			Protocol:         p.Protocol(),
-			Transport:        "tcp",
-			Unit:             "veil-caddy@panel.service",
-			TemplateUnit:     templateUnit,
-			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
-			PromotedVerb:     "reload",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
-	}
-	return runtimes
+	return []service.ManagedRuntime{{
+		Name:             caddyUnit,
+		ActionName:       "caddy",
+		Protocol:         p.Protocol(),
+		Transport:        "tcp",
+		Unit:             caddyUnit,
+		PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
+		PromotedVerb:     "reload",
+		ManualRestart:    true,
+		HealthCheckAfter: true,
+	}}
 }
 
-// RuntimeInstall returns the Caddy-with-naive runtime descriptor.
 func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
 	return runtimeinstall.Runtime{
 		Name:        "naiveproxy",

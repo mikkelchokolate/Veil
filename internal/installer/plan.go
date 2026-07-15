@@ -25,7 +25,7 @@ func CaddyPanelBuildHint(binaryPath string) BuildHint {
 func PanelSystemdUnits(profile RURecommendedProfile) []string {
 	units := []string{renderer.UnitHelperSocket, renderer.UnitVeil}
 	if profile.InstallPanelCaddy {
-		units = append(units, "veil-caddy@panel.service")
+		units = append(units, renderer.UnitCaddy)
 	}
 	return units
 }
@@ -71,7 +71,10 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 	panelHTTPSPort := 0
 	if profile.InstallPanelCaddy {
 		panelPort = 0
-		panelHTTPSPort = 443
+		panelHTTPSPort = profile.PanelPublicPort
+		if panelHTTPSPort == 0 {
+			panelHTTPSPort = 443
+		}
 	}
 	return InstallPlan{
 		Profile:        profile,

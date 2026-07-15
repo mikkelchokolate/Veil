@@ -34,8 +34,8 @@ func (p Paths) Generated(subpath string) string {
 	return filepath.Join(p.ApplyRoot, "generated", filepath.FromSlash(subpath))
 }
 
-func (p Paths) Caddyfile() string {
-	return p.Generated(CaddyfileSubpath)
+func (p Paths) CaddyJSON() string {
+	return p.Generated(CaddyJSONConfigSubpath)
 }
 
 func (p Paths) Hysteria2() string {

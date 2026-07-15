@@ -54,7 +54,7 @@ func TestProtocolRegistryRenderCollectsMultipleArtifacts(t *testing.T) {
 		{Protocol: "mieru", Render: func(input ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error) {
 			return []GeneratedConfigArtifact{
 				{Path: input.Paths.Mieru(), Body: "one"},
-				{Path: input.Paths.Caddyfile(), Body: "two"},
+				{Path: input.Paths.CaddyJSON(), Body: "two"},
 			}, true, nil
 		}},
 	})
@@ -63,7 +63,7 @@ func TestProtocolRegistryRenderCollectsMultipleArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if configs[paths.Mieru()] != "one" || configs[paths.Caddyfile()] != "two" {
+	if configs[paths.Mieru()] != "one" || configs[paths.CaddyJSON()] != "two" {
 		t.Fatalf("configs = %+v", configs)
 	}
 }

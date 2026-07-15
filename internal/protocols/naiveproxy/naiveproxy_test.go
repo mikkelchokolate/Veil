@@ -510,54 +510,38 @@ func TestArtifactSpec(t *testing.T) {
 func TestRuntimeDescriptorsWithMatchingInbounds(t *testing.T) {
 	p := New()
 	inbounds := []model.Inbound{
-		{Name: "n1", Protocol: "naiveproxy", Transport: "tcp", Port: 443},
-		{Name: "n2", Protocol: "naiveproxy", Transport: "tcp", Port: 8443},
-		{Name: "h1", Protocol: "hysteria2", Transport: "udp", Port: 443},
+		{Name: "n1", Protocol: "naiveproxy", Enabled: true, Transport: "tcp", Port: 443},
+		{Name: "n2", Protocol: "naiveproxy", Enabled: true, Transport: "tcp", Port: 8443},
+		{Name: "h1", Protocol: "hysteria2", Enabled: true, Transport: "udp", Port: 443},
 	}
 
 	runtimes := p.RuntimeDescriptors(inbounds)
-	if len(runtimes) != 2 {
-		t.Fatalf("len(runtimes) = %d, want 2", len(runtimes))
-	}
-
-	for i, wantName := range []string{"caddy-n1", "caddy-n2"} {
-		if runtimes[i].Name != wantName {
-			t.Errorf("runtimes[%d].Name = %q, want %q", i, runtimes[i].Name, wantName)
-		}
-		if runtimes[i].Unit != "veil-caddy@"+strings.TrimPrefix(runtimes[i].Name, "caddy-")+".service" {
-			t.Errorf("runtimes[%d].Unit = %q, unexpected", i, runtimes[i].Unit)
-		}
-		if runtimes[i].TemplateUnit != templateUnit {
-			t.Errorf("runtimes[%d].TemplateUnit = %q, want %q", i, runtimes[i].TemplateUnit, templateUnit)
-		}
-		if !runtimes[i].ManualRestart || !runtimes[i].HealthCheckAfter {
-			t.Errorf("runtimes[%d] missing ManualRestart/HealthCheckAfter", i)
-		}
-	}
-}
-
-func TestRuntimeDescriptorsNoMatchingInbounds(t *testing.T) {
-	p := New()
-	runtimes := p.RuntimeDescriptors([]model.Inbound{
-		{Name: "h1", Protocol: "hysteria2", Transport: "udp", Port: 443},
-	})
 	if len(runtimes) != 1 {
-		t.Fatalf("len(runtimes) = %d, want 1", len(runtimes))
+		t.Fatalf("len(runtimes) = %d, want one consolidated Caddy runtime", len(runtimes))
 	}
 	want := service.ManagedRuntime{
-		Name:             "caddy-panel",
-		ActionName:       "caddy-panel",
+		Name:             caddyUnit,
+		ActionName:       "caddy",
 		Protocol:         "naiveproxy",
 		Transport:        "tcp",
-		Unit:             "veil-caddy@panel.service",
-		TemplateUnit:     templateUnit,
-		PromotedSubpath:  "caddy/panel.Caddyfile",
+		Unit:             caddyUnit,
+		PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
 		PromotedVerb:     "reload",
 		ManualRestart:    true,
 		HealthCheckAfter: true,
 	}
 	if !reflect.DeepEqual(runtimes[0], want) {
 		t.Errorf("runtime = %+v, want %+v", runtimes[0], want)
+	}
+}
+
+func TestRuntimeDescriptorsNoMatchingInbounds(t *testing.T) {
+	p := New()
+	runtimes := p.RuntimeDescriptors([]model.Inbound{
+		{Name: "h1", Protocol: "hysteria2", Enabled: true, Transport: "udp", Port: 443},
+	})
+	if len(runtimes) != 0 {
+		t.Fatalf("len(runtimes) = %d, want no naiveproxy runtime", len(runtimes))
 	}
 }
 

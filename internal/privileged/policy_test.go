@@ -120,7 +120,7 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	policy := testPolicy(t)
 	resolved, err := policy.ResolvePromotion(PromoteRequest{
 		ArtifactIDs: []string{
-			"caddy/edge.Caddyfile",
+			"caddy/config.json",
 			"hysteria2/udp-edge.yaml",
 			"olcrtc/rtc-edge.yaml",
 			"mieru/server_config.json",
@@ -256,11 +256,12 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		id      string
 		allowed bool
 	}{
-		{"caddy/edge.Caddyfile", true},
+		{"caddy/config.json", true},
 		{"hysteria2/udp.yaml", true},
 		{"olcrtc/rtc.yaml", true},
 		{"mieru/server_config.json", true},
 		{"sing-box/warp.json", true},
+		{"caddy/edge.json", false},
 		{"caddy/edge.yaml", false},
 		{"hysteria2/udp.Caddyfile", false},
 		{"caddy/bad!.Caddyfile", false},
@@ -383,6 +384,20 @@ func TestPolicyAllowsUnitPrefixesAndRejectsDangerousNames(t *testing.T) {
 	for _, unit := range []string{"veil-hysteria2@edge.service; reboot", "veil-hysteria2@../edge.service", "veil-other@edge.service"} {
 		if policy.allowsUnit(unit) {
 			t.Fatalf("expected unit %q to be rejected", unit)
+		}
+	}
+}
+
+func TestDefaultPolicyAllowsLegacyCaddyTemplateUnits(t *testing.T) {
+	policy := DefaultPolicy()
+	for _, unit := range []string{"veil-caddy@legacy.service", "veil-caddy@panel.service"} {
+		if !policy.allowsUnit(unit) {
+			t.Fatalf("expected legacy caddy unit %q to be allowed", unit)
+		}
+	}
+	for _, unit := range []string{"veil-caddy@../escape.service", "veil-caddy@legacy.service; reboot"} {
+		if policy.allowsUnit(unit) {
+			t.Fatalf("expected dangerous unit %q to be rejected", unit)
 		}
 	}
 }

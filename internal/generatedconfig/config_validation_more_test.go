@@ -40,7 +40,7 @@ func TestRunFixedConfigValidationMarksValidResult(t *testing.T) {
 		},
 	}
 
-	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/Caddyfile", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"})
+	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/config.json", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/config.json", "--adapter", "json"})
 	if !result.Valid {
 		t.Fatalf("expected valid result, got %+v", result)
 	}
@@ -73,7 +73,7 @@ func TestRunFixedConfigValidationCapturesTimeout(t *testing.T) {
 		},
 	}
 
-	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/Caddyfile", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"})
+	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/config.json", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/config.json", "--adapter", "json"})
 	if result.Valid || result.Error != "validation timed out" {
 		t.Fatalf("expected timeout error, got %+v", result)
 	}
@@ -88,7 +88,7 @@ func TestRunFixedConfigValidationReturnsTempDirError(t *testing.T) {
 	}
 	t.Setenv("TMPDIR", badDir)
 
-	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/Caddyfile", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"})
+	result := RunFixedConfigValidation("caddy", "/etc/veil/generated/caddy/config.json", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/config.json", "--adapter", "json"})
 	if result.Valid || result.Error == "" {
 		t.Fatalf("expected temp dir error, got %+v", result)
 	}

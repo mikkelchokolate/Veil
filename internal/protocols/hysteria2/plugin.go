@@ -94,3 +94,15 @@ func masqueradeURL(settings model.Settings, inbound model.Inbound) string {
 	}
 	return url
 }
+
+// Hysteria2Domain returns the public domain stored on the inbound ProtocolFields.
+func Hysteria2Domain(inbound model.Inbound) string {
+	if inbound.ProtocolFields == nil {
+		return ""
+	}
+	v, ok := inbound.ProtocolFields["domain"].(string)
+	if !ok {
+		return ""
+	}
+	return v
+}

@@ -47,7 +47,7 @@ func TestServicesRestartSuccess(t *testing.T) {
 	defer func() { serviceActionRunner = orig }()
 
 	r, _ := NewRouter(ServerInfo{Version: "test"})
-	req := httptest.NewRequest(http.MethodPost, "/api/services/caddy-panel/restart", strings.NewReader(`{"confirm":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/services/mieru/restart", strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

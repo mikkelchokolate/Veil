@@ -11,9 +11,13 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strconv"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -21,7 +25,10 @@ type ProfileInput struct {
 	PanelAccess string
 	Domain      string
 	Email       string
+	PanelDomain string
+	PanelEmail  string
 	PanelPort   int
+	PublicPort  int
 }
 
 type ModeResolution struct {
@@ -57,20 +64,65 @@ func (m Mode) Resolve(port int) (ModeResolution, error) {
 
 type ProfileMaterial struct {
 	PanelListen       string
+	PanelPublicPort   int
 	PanelTLSEnabled   bool
 	PanelTLSCertPEM   string
 	PanelTLSKeyPEM    string
 	WebBasePath       string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 }
 
 type Profile struct {
-	input ProfileInput
+	settings   model.Settings
+	PublicPort int
 }
 
 func NewProfile(input ProfileInput) Profile {
-	return Profile{input: input}
+	publicPort := input.PublicPort
+	if publicPort == 0 {
+		publicPort = 443
+	}
+	settings := model.Settings{
+		PanelAccess:     input.PanelAccess,
+		PanelDomain:     input.PanelDomain,
+		Domain:          input.Domain,
+		PanelEmail:      input.PanelEmail,
+		Email:           input.Email,
+		PanelListen:     RecommendedListen(input.PanelAccess, input.PanelPort),
+		PanelPublicPort: publicPort,
+	}
+	return Profile{settings: settings, PublicPort: publicPort}
+}
+
+// BuildProfile builds a Panel access Profile from model settings. It defaults
+// PanelPublicPort to 443 when zero and resolves the panel-specific domain/email
+// with fallback to the legacy Domain/Email fields.
+func BuildProfile(settings model.Settings) (Profile, error) {
+	publicPort := settings.PanelPublicPort
+	if publicPort == 0 {
+		publicPort = 443
+	}
+	if _, err := panelPortFromListen(settings.PanelListen); err != nil {
+		return Profile{}, err
+	}
+	settings.PanelPublicPort = publicPort
+	return Profile{settings: settings, PublicPort: publicPort}, nil
+}
+
+func panelPortFromListen(listen string) (int, error) {
+	if listen == "" {
+		return 0, fmt.Errorf("panelListen is required")
+	}
+	_, portStr, err := net.SplitHostPort(listen)
+	if err != nil {
+		return 0, fmt.Errorf("panelListen must be host:port")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return 0, fmt.Errorf("panelListen port must be a valid integer between 1 and 65535")
+	}
+	return port, nil
 }
 
 // newTLSFunc is overridable in tests so that Profile.Build TLS error paths can
@@ -78,30 +130,41 @@ func NewProfile(input ProfileInput) Profile {
 var newTLSFunc = NewTLS
 
 func (p Profile) Build() (ProfileMaterial, error) {
-	input := p.input
-	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
+	settings := p.settings
+	material := ProfileMaterial{PanelListen: settings.PanelListen, PanelPublicPort: p.PublicPort}
 	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
-	panelCaddy := input.PanelAccess == "caddy"
+	settings.WebBasePath = material.WebBasePath
+	if settings.PanelDomain == "" {
+		settings.PanelDomain = settings.Domain
+	}
+	if settings.PanelEmail == "" {
+		settings.PanelEmail = settings.Email
+	}
+	panelCaddy := settings.PanelAccess == "caddy"
 	if panelCaddy {
-		if err := hostenv.ValidateDomain(input.Domain); err != nil {
+		if err := hostenv.ValidateDomain(settings.PanelDomain); err != nil {
 			return ProfileMaterial{}, err
 		}
-		if err := hostenv.ValidateEmail(input.Email); err != nil {
+		if err := hostenv.ValidateEmail(settings.PanelEmail); err != nil {
 			return ProfileMaterial{}, err
 		}
 		material.InstallPanelCaddy = true
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: material.WebBasePath})
+		plan, _, err := caddyassembly.BuildRenderPlan(settings, nil, nil)
 		if err != nil {
 			return ProfileMaterial{}, err
 		}
-		material.Caddyfile = caddyfile
+		body, err := renderer.RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+		if err != nil {
+			return ProfileMaterial{}, err
+		}
+		material.CaddyJSON = string(body)
 		return material, nil
 	}
 	var extraIPs []net.IP
-	if input.PanelAccess == "direct" {
+	if settings.PanelAccess == "direct" {
 		extraIPs = nonLoopbackInterfaceIPs()
 	}
-	panelTLS, err := newTLSFunc().Generate(input.Domain, extraIPs)
+	panelTLS, err := newTLSFunc().Generate(settings.PanelDomain, extraIPs)
 	if err != nil {
 		return ProfileMaterial{}, err
 	}

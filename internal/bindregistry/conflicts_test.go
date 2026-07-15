@@ -70,7 +70,7 @@ func TestValidateNoConflictsStableOrder(t *testing.T) {
 	t.Parallel()
 
 	owners := map[BindKey]BindOwner{
-		{Address: "0.0.0.0", Port: 443, Network: ListenTCP}: {Kind: BindOwnerPanelCaddy},
+		{Address: "0.0.0.0", Port: 443, Network: ListenTCP}:    {Kind: BindOwnerPanelCaddy},
 		{Address: "192.0.2.10", Port: 443, Network: ListenTCP}: {Kind: BindOwnerNaive, InboundName: "a"},
 		{Address: "192.0.2.11", Port: 443, Network: ListenTCP}: {Kind: BindOwnerNaive, InboundName: "b"},
 	}

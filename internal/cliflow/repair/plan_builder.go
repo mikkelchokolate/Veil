@@ -12,9 +12,12 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/panelmaterial"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/runtime"
@@ -200,9 +203,20 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 		profile.PanelTLSCertPEM = ""
 		profile.PanelTLSKeyPEM = ""
 		profile.InstallPanelCaddy = true
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: profile.Domain, Email: profile.Email, PanelPort: panelPortFromListen(profile.PanelListen), WebBasePath: profile.WebBasePath})
+		settings := model.Settings{
+			PanelAccess:     "caddy",
+			PanelDomain:     profile.Domain,
+			PanelEmail:      profile.Email,
+			PanelListen:     profile.PanelListen,
+			WebBasePath:     profile.WebBasePath,
+			PanelPublicPort: 443,
+		}
+		plan, _, err := caddyassembly.BuildRenderPlan(settings, nil, nil)
 		if err == nil {
-			profile.Caddyfile = caddyfile
+			body, err := renderer.RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+			if err == nil {
+				profile.CaddyJSON = string(body)
+			}
 		}
 		return
 	}

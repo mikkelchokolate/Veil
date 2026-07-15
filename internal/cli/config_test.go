@@ -16,7 +16,7 @@ func TestConfigValidateValidState(t *testing.T) {
     "panelListen": "127.0.0.1:2096",
     "mode": "server",
     "domain": "vpn.example.com",
-    "email": "admin@example.com",
+    "defaultAcmeEmail": "admin@example.com",
     "naiveUsername": "veil",
     "naivePassword": "secret"
   },
@@ -184,7 +184,7 @@ func TestConfigValidateRejectsPanelCaddyTCP443Conflict(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "state.json")
 	state := `{
-  "settings": {"panelListen": "127.0.0.1:2096", "panelAccess":"caddy", "webBasePath":"/panel/", "mode": "server", "domain":"panel.example.com", "email":"admin@example.com"},
+  "settings": {"panelListen": "127.0.0.1:2096", "panelAccess":"caddy", "webBasePath":"/panel/", "mode": "server", "panelDomain":"panel.example.com", "panelEmail":"admin@example.com"},
   "inbounds": [
     {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true, "password":"secret"}
   ],
@@ -204,8 +204,8 @@ func TestConfigValidateRejectsPanelCaddyTCP443Conflict(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for Panel Caddy TCP/443 conflict")
 	}
-	if !strings.Contains(out.String(), "panel caddy access uses 443/tcp") {
-		t.Fatalf("expected Panel Caddy TCP/443 conflict error, got: %s", out.String())
+	if !strings.Contains(out.String(), "is claimed by multiple owners") {
+		t.Fatalf("expected bind conflict error, got: %s", out.String())
 	}
 }
 

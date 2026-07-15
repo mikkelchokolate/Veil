@@ -57,8 +57,73 @@ func (v SettingsValidation) NormalizeAndValidate(settings *Settings, current Set
 	if err := v.normalizeProtocolFields(settings, current); err != nil {
 		return err
 	}
-	if settings.PanelAccess == "caddy" && (strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "") {
-		return errors.New("--domain and --email are required for caddy Panel access")
+
+	if settings.PanelDomain == "" {
+		settings.PanelDomain = current.PanelDomain
+	}
+	if settings.PanelEmail == "" {
+		settings.PanelEmail = current.PanelEmail
+	}
+	if settings.DefaultAcmeEmail == "" {
+		settings.DefaultAcmeEmail = current.DefaultAcmeEmail
+	}
+	if settings.PanelPublicPort == 0 {
+		settings.PanelPublicPort = current.PanelPublicPort
+	}
+	if settings.PanelPublicPort == 0 {
+		settings.PanelPublicPort = 443
+	}
+	if settings.DefaultInboundPublicPort == 0 {
+		settings.DefaultInboundPublicPort = current.DefaultInboundPublicPort
+	}
+	if settings.DefaultInboundPublicPort == 0 {
+		settings.DefaultInboundPublicPort = 443
+	}
+	if settings.AcmeChallengeMode == "" {
+		settings.AcmeChallengeMode = current.AcmeChallengeMode
+	}
+	if settings.AcmeChallengeMode == "" {
+		settings.AcmeChallengeMode = "tls-alpn-01"
+	}
+
+	if settings.PanelAccess == "caddy" {
+		if strings.TrimSpace(settings.PanelDomain) == "" {
+			settings.PanelDomain = strings.TrimSpace(settings.Domain)
+		}
+		if strings.TrimSpace(settings.PanelEmail) == "" {
+			settings.PanelEmail = strings.TrimSpace(settings.Email)
+		}
+		if strings.TrimSpace(settings.PanelDomain) == "" || strings.TrimSpace(settings.PanelEmail) == "" {
+			return errors.New("panelDomain and panelEmail are required for caddy Panel access")
+		}
+	}
+	if settings.PanelPublicPort < 1 || settings.PanelPublicPort > 65535 {
+		return errors.New("panelPublicPort must be between 1 and 65535")
+	}
+	if settings.DefaultInboundPublicPort < 1 || settings.DefaultInboundPublicPort > 65535 {
+		return errors.New("defaultInboundPublicPort must be between 1 and 65535")
+	}
+	switch settings.AcmeChallengeMode {
+	case "http-01", "tls-alpn-01":
+	case "dns-01":
+		return errors.New("dns-01 ACME challenge requires DNS provider credentials, which are not yet configured")
+	default:
+		return errors.New("acmeChallengeMode must be http-01, tls-alpn-01, or dns-01")
+	}
+	if settings.PanelDomain != "" {
+		if err := hostenv.ValidateDomain(settings.PanelDomain); err != nil {
+			return errors.New("panelDomain: " + err.Error())
+		}
+	}
+	if settings.PanelEmail != "" {
+		if err := hostenv.ValidateEmail(settings.PanelEmail); err != nil {
+			return errors.New("panelEmail: " + err.Error())
+		}
+	}
+	if settings.DefaultAcmeEmail != "" {
+		if err := hostenv.ValidateEmail(settings.DefaultAcmeEmail); err != nil {
+			return errors.New("defaultAcmeEmail: " + err.Error())
+		}
 	}
 	if settings.Domain != "" {
 		if err := hostenv.ValidateDomain(settings.Domain); err != nil {

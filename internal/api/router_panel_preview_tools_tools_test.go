@@ -221,18 +221,24 @@ func TestFirewallEndpoint(t *testing.T) {
 		if !result.Active {
 			t.Error("expected UFW active")
 		}
-		if len(result.Rules) != 1 {
-			t.Fatalf("expected 1 Panel rule, got %d: %+v", len(result.Rules), result.Rules)
+		if len(result.Rules) != 2 {
+			t.Fatalf("expected panel + TLS-ALPN-01 rules, got %d: %+v", len(result.Rules), result.Rules)
 		}
 		hasPanel := false
+		hasTLSALPN := false
 		for _, rule := range result.Rules {
 			switch {
 			case rule.Port == 2096 && rule.Protocol == "tcp":
 				hasPanel = true
+			case rule.Port == 443 && rule.Protocol == "tcp":
+				hasTLSALPN = true
 			}
 		}
 		if !hasPanel {
 			t.Error("missing panel TCP/2096 rule")
+		}
+		if !hasTLSALPN {
+			t.Error("missing TLS-ALPN-01 TCP/443 rule")
 		}
 	})
 

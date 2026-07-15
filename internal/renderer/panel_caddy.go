@@ -13,6 +13,7 @@ type PanelCaddyConfig struct {
 	Domain           string
 	Email            string
 	PanelPort        int
+	PublicPort       int
 	WebBasePath      string
 	WebBasePathSlash string
 }
@@ -31,6 +32,9 @@ func RenderPanelCaddyfile(cfg PanelCaddyConfig) (string, error) {
 	if normalized == "/" {
 		return "", errors.New("web base path is required")
 	}
+	if cfg.PublicPort == 0 {
+		cfg.PublicPort = 443
+	}
 	// Preserve trailing slash semantics used by the Panel router while also
 	// providing a no-slash variant for the exact-path redirect.
 	cfg.WebBasePathSlash = normalized
@@ -40,7 +44,7 @@ func RenderPanelCaddyfile(cfg PanelCaddyConfig) (string, error) {
 	// if ACME can't issue (no public DNS, ports unreachable, rate limits). So
 	// the operator just enters a domain and it always works, using a trusted
 	// cert whenever possible.
-	const tpl = `{{ .Domain }} {
+	const tpl = `{{ .Domain }}{{ if ne .PublicPort 443 }}:{{ .PublicPort }}{{ end }} {
   tls {
     issuer acme{{ if .Email }} {
       email {{ .Email }}

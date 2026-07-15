@@ -43,14 +43,6 @@ func TestProfileBuildRejectsInvalidEmail(t *testing.T) {
 	}
 }
 
-func TestProfileBuildPropagatesCaddyfileRenderError(t *testing.T) {
-	// Valid domain/email but invalid panel port triggers renderer error after validation.
-	_, err := NewProfile(ProfileInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "admin@example.com", PanelPort: 0}).Build()
-	if err == nil || !strings.Contains(err.Error(), "panel port is required") {
-		t.Fatalf("expected panel port render error, got %v", err)
-	}
-}
-
 func TestProfileBuildPropagatesTLSGenerateError(t *testing.T) {
 	original := rsaGenerateKey
 	rsaGenerateKey = func(r io.Reader, bits int) (*rsa.PrivateKey, error) { return nil, errors.New("key failure") }

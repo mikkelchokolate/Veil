@@ -20,7 +20,7 @@ func TestRepairWithBackupDirPrintsBackupID(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	caddyfilePath := filepath.Join(caddyfileDir, "Caddyfile")
+	caddyfilePath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(caddyfilePath, []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestRepairDryRunDoesNotCreateBackup(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	caddyfilePath := filepath.Join(caddyfileDir, "Caddyfile")
+	caddyfilePath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(caddyfilePath, []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRepairDefaultsBackupDirWhenNotSet(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	caddyfilePath := filepath.Join(caddyfileDir, "Caddyfile")
+	caddyfilePath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(caddyfilePath, []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestRepairExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	caddyfilePath := filepath.Join(caddyfileDir, "Caddyfile")
+	caddyfilePath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(caddyfilePath, []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestRepairApplyWithAuditLogWritesSuccessEventWithBackupID(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "config.json"), []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
 	// Also pre-create veil.env with old content
@@ -303,7 +303,7 @@ func TestRepairApplyBackupFailureWithAuditLog(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(caddyfileDir, "Caddyfile"), []byte("old-drifting-content"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(caddyfileDir, "config.json"), []byte("old-drifting-content"), 0o600); err != nil {
 		t.Fatalf("write caddyfile: %v", err)
 	}
 

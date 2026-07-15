@@ -6,7 +6,34 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
+
+func TestProfileUsesPanelPublicPort(t *testing.T) {
+	settings := model.Settings{
+		PanelListen:     "127.0.0.1:2096",
+		PanelAccess:     "caddy",
+		PanelDomain:     "panel.example.com",
+		PanelEmail:      "a@example.com",
+		PanelPublicPort: 8443,
+		WebBasePath:     "/panel-secret/",
+	}
+	profile, err := BuildProfile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.PublicPort != 8443 {
+		t.Errorf("public port = %d", profile.PublicPort)
+	}
+	material, err := profile.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(material.CaddyJSON, `":8443"`) {
+		t.Errorf("Caddy JSON missing public port listen:\n%s", material.CaddyJSON)
+	}
+}
 
 func TestPanelAccessModeBuildsListenAddressAndCaddyRequirement(t *testing.T) {
 	for _, tc := range []struct {
@@ -48,9 +75,9 @@ func TestProfileBuildsPanelCaddyAccessMaterial(t *testing.T) {
 	if material.WebBasePath == "" || !strings.HasPrefix(material.WebBasePath, "/") || !strings.HasSuffix(material.WebBasePath, "/") {
 		t.Fatalf("web base path = %q", material.WebBasePath)
 	}
-	for _, want := range []string{"panel.example.com", "reverse_proxy 127.0.0.1:2096", "handle " + strings.TrimRight(material.WebBasePath, "/") + "/*"} {
-		if !strings.Contains(material.Caddyfile, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, material.Caddyfile)
+	for _, want := range []string{"panel.example.com", `"dial": "127.0.0.1:2096"`, strings.TrimRight(material.WebBasePath, "/")} {
+		if !strings.Contains(material.CaddyJSON, want) {
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, material.CaddyJSON)
 		}
 	}
 }

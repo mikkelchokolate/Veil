@@ -26,7 +26,7 @@ func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 		t.Fatalf("apply profile: %v", err)
 	}
 
-	assertFileMissing(t, result.CaddyfilePath)
+	assertFileMissing(t, result.CaddyJSONPath)
 	assertFileMissing(t, result.Hysteria2Path)
 	assertFileMissing(t, result.FallbackIndexPath)
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
@@ -59,12 +59,12 @@ func TestApplyRURecommendedProfileWritesPanelCaddyAccessFiles(t *testing.T) {
 		t.Fatalf("apply profile: %v", err)
 	}
 
-	assertFileContains(t, result.CaddyfilePath, "reverse_proxy 127.0.0.1:2096")
+	assertFileContains(t, result.CaddyJSONPath, `"dial": "127.0.0.1:2096"`)
 	assertFileContains(t, result.FallbackIndexPath, "Veil")
 	assertFileMissing(t, result.Hysteria2Path)
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
-	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-caddy@.service"), "caddy")
+	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil-caddy.service"), "caddy")
 	assertFileMissing(t, filepath.Join(dir, "etc", "systemd", "system", "veil-hysteria2.service"))
 	for _, name := range systemdunits.Names() {
 		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")

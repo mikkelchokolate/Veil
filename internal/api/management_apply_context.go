@@ -3,19 +3,26 @@ package api
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
-	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
+
+// caddyAdminLoader loads a Caddy JSON config through the Admin API. Tests
+// override this variable to assert the Admin API path or inject failures.
+var caddyAdminLoader = func(configJSON []byte) error {
+	return caddyadmin.NewClient("").LoadConfig(configJSON)
+}
 
 // firewallApplier is the UFW rule applier used by apply. Tests can override it
 // to avoid running real ufw commands.
@@ -147,41 +154,72 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
-	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.caddyCertSyncNeeded(liveFiles) {
-		results = append(results, ctx.syncCaddyCert())
-		if !results[len(results)-1].Success {
+
+	// Retire removed/legacy units first so their listeners cannot block the
+	// consolidated Caddy process or another newly promoted runtime.
+	for _, unit := range ctx.state.orphanedUnits {
+		stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
+		results = append(results, stop)
+		if !stop.Success {
+			return results
+		}
+		disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
+		results = append(results, disable)
+		if !disable.Success {
 			return results
 		}
 	}
 
-	// Stop and disable units whose configs were removed before reloading the
-	// promoted services. This frees ports and other resources so the new
-	// configuration can bind them without conflicting with the previous state.
-	if len(ctx.state.orphanedUnits) > 0 {
-		for _, unit := range ctx.state.orphanedUnits {
-			stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
-			results = append(results, stop)
-			if !stop.Success {
-				return results
-			}
-			disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
-			results = append(results, disable)
-			if !disable.Success {
-				return results
-			}
-		}
-	}
+	catalog := ctx.managedRuntimeCatalogLocked()
 
-	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
-		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
+	// Load Caddy JSON before certificate synchronization and before starting
+	// Hysteria2. New domains can then begin ACME issuance immediately.
+	for _, runtime := range catalog.Runtimes() {
+		if runtime.Unit != renderer.UnitCaddy || runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
 		}
 		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
 		if !containsCleanPath(liveFiles, want) {
 			continue
 		}
-		// Re-enable WARP for boot persistence: teardown disables the unit, so a
-		// later restart alone would leave it disabled and gone after a reboot.
+		adminResult := ServiceActionResult{Name: renderer.UnitCaddy, Command: []string{"caddy", "admin", "load"}}
+		configBytes, err := os.ReadFile(want)
+		if err == nil {
+			err = caddyAdminLoader(configBytes)
+		}
+		if err == nil {
+			adminResult.Success = true
+			results = append(results, adminResult)
+			break
+		}
+		adminResult.Error = err.Error()
+		results = append(results, adminResult)
+		fallback := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
+		results = append(results, fallback)
+		if !fallback.Success {
+			return results
+		}
+		break
+	}
+
+	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {
+		for _, domain := range ctx.hysteria2DomainsLocked() {
+			result := ctx.syncCaddyCertForHysteria2(domain)
+			results = append(results, result)
+			if !result.Success {
+				return results
+			}
+		}
+	}
+
+	for _, runtime := range catalog.Runtimes() {
+		if runtime.Unit == renderer.UnitCaddy || runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
+			continue
+		}
+		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
+		if !containsCleanPath(liveFiles, want) {
+			continue
+		}
 		if runtime.Unit == renderer.UnitWarp && ctx.state.warp.Enabled {
 			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
 			results = append(results, enable)
@@ -196,11 +234,7 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		}
 	}
 
-	// Synchronize firewall rules for the panel and enabled inbounds. This is
-	// intentionally non-fatal: a firewall misconfiguration should not roll back
-	// an otherwise successful apply.
 	results = append(results, ctx.syncFirewallLocked()...)
-
 	return results
 }
 
@@ -212,60 +246,72 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 	if len(records) == 0 || records[0].BackupID == "" || ctx.state.privileged == nil {
 		return nil, nil
 	}
-	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{
-		RestoreBackupID: records[0].BackupID,
-	})
+	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{RestoreBackupID: records[0].BackupID})
 	if err != nil {
-		return nil, []ServiceActionResult{{
-			Name: "promotion-rollback", Command: []string{"helper", "promote", "restore"},
-			Success: false, Error: err.Error(),
-		}}
+		return nil, []ServiceActionResult{{Name: "promotion-rollback", Command: []string{"helper", "promote", "restore"}, Success: false, Error: err.Error()}}
 	}
 	rollbackFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
-	// The units removed during the failed apply are about to be restored; do not
-	// stop/disable them again while reloading services for the restored state.
+
+	if err := ctx.restoreCommittedManagementStateLocked(); err != nil {
+		return rollbackFiles, []ServiceActionResult{{Name: "management-state-restore", Command: []string{"restore", "management-state"}, Success: false, Error: err.Error()}}
+	}
+
 	ctx.state.orphanedUnits = nil
 	rollbackActions := ctx.reloadPromotedServicesLocked(rollbackFiles)
 
-	liveFilesMap := make(map[string]bool)
-	for _, lf := range liveFiles {
-		liveFilesMap[filepath.Clean(lf)] = true
+	liveFilesMap := map[string]bool{}
+	for _, path := range liveFiles {
+		liveFilesMap[filepath.Clean(path)] = true
 	}
-	rollbackFilesMap := make(map[string]bool)
-	for _, rf := range rollbackFiles {
-		rollbackFilesMap[filepath.Clean(rf)] = true
+	rollbackFilesMap := map[string]bool{}
+	for _, path := range rollbackFiles {
+		rollbackFilesMap[filepath.Clean(path)] = true
 	}
 	var restoredUnits []string
 	for _, record := range records {
 		cleanPath := filepath.Clean(record.LivePath)
-		if liveFilesMap[cleanPath] {
-			// File stayed live after the apply; it was only updated, so the
-			// service reload above already applied the restored config.
-			continue
-		}
-		if !rollbackFilesMap[cleanPath] {
-			// The file was removed during apply but was not restored; leave the
-			// unit stopped.
+		if liveFilesMap[cleanPath] || !rollbackFilesMap[cleanPath] {
 			continue
 		}
 		if unit, ok := UnitForLiveConfig(record.LivePath); ok {
 			restoredUnits = append(restoredUnits, unit)
 		}
 	}
-	if len(restoredUnits) > 0 {
-		for _, unit := range restoredUnits {
-			rollbackActions = append(rollbackActions,
-				ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable),
-				ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStart),
-			)
-		}
+	for _, unit := range restoredUnits {
+		rollbackActions = append(rollbackActions,
+			ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable),
+			ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStart),
+		)
 	}
 	return rollbackFiles, rollbackActions
 }
 
+func (ctx ManagementApplyContext) restoreCommittedManagementStateLocked() error {
+	committedPath := filepath.Join(ctx.state.applyRoot, "generated", "veil", "committed-management-state.json")
+	snapshot, ok, err := managementstate.NewStore(committedPath, ctx.state.cipher).Load()
+	if err != nil || !ok {
+		return nil
+	}
+	ctx.state.settings = snapshot.Settings
+	ctx.state.inbounds = snapshot.Inbounds
+	ctx.state.rules = snapshot.Rules
+	ctx.state.routingPreset = snapshot.RoutingPreset
+	ctx.state.routingSource = snapshot.RoutingSource
+	ctx.state.warp = snapshot.Warp
+	ctx.state.users = snapshot.Users
+	ctx.state.setup = snapshot.Setup
+	return ctx.state.saveLocked()
+}
+
+// caddyCertSyncNeeded is retained for internal callers while certificate
+// synchronization is migrated to per-domain ownership.
 func (ctx ManagementApplyContext) caddyCertSyncNeeded(liveFiles []string) bool {
+	return ctx.hysteria2ConfigReloadNeeded(liveFiles)
+}
+
+func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
 	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
-		if !protocols.NeedsCaddyCertSync(runtime.Protocol) {
+		if runtime.Protocol != "hysteria2" {
 			continue
 		}
 		if runtime.PromotedSubpath == "" {
@@ -279,17 +325,47 @@ func (ctx ManagementApplyContext) caddyCertSyncNeeded(liveFiles []string) bool {
 	return false
 }
 
+func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
+	seen := make(map[string]struct{})
+	var domains []string
+	for _, inb := range ctx.state.inbounds {
+		if !inb.Enabled || inb.Protocol != "hysteria2" {
+			continue
+		}
+		domain := inboundDomain(inb)
+		if domain == "" {
+			continue
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		domains = append(domains, domain)
+	}
+	return domains
+}
+
+// syncCaddyCert preserves the previous internal helper while routing through
+// the domain-aware certificate synchronization path.
 func (ctx ManagementApplyContext) syncCaddyCert() ServiceActionResult {
+	domain := strings.TrimSpace(ctx.state.settings.PanelDomain)
+	if domain == "" {
+		domain = strings.TrimSpace(ctx.state.settings.Domain)
+	}
+	return ctx.syncCaddyCertForHysteria2(domain)
+}
+
+func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) ServiceActionResult {
 	result := ServiceActionResult{
 		Name:    "sync-caddy-cert",
-		Command: []string{"helper", "sync_caddy_cert", ctx.state.settings.Domain},
+		Command: []string{"helper", "sync_caddy_cert", domain},
 	}
 	if ctx.state.privileged == nil {
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
 	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
-		Domain: ctx.state.settings.Domain,
+		Domain: domain,
 		OutDir: "/etc/veil/certs",
 	})
 	if err != nil {
@@ -297,7 +373,7 @@ func (ctx ManagementApplyContext) syncCaddyCert() ServiceActionResult {
 		return result
 	}
 	if !syncResult.Found {
-		result.Error = "Caddy has not yet issued a certificate for " + ctx.state.settings.Domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
+		result.Error = "Caddy has not yet issued a certificate for " + domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
 		return result
 	}
 	result.Success = true
@@ -402,6 +478,9 @@ func containsCleanPath(paths []string, want string) bool {
 }
 
 func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
+	if success && (stage == "live" || stage == "services") {
+		_ = NewManagementStateLifecycle(ctx.state).commitCurrentSnapshotLocked()
+	}
 	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }
 

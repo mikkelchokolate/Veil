@@ -105,14 +105,18 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 		return "", err
 	}
 	url := masqueradeURL(r.settings, inbound)
+	domain := hysteria2Domain(inbound)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
-		Domain:        r.settings.Domain,
+		Domain:        domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
+	if domain != "" {
+		hystConfig.CertPath = r.paths.CertPath(domain)
+		hystConfig.KeyPath = r.paths.KeyPath(domain)
+	} else if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
 		hystConfig.CertPath = r.paths.CertPath(r.settings.Domain)
 		hystConfig.KeyPath = r.paths.KeyPath(r.settings.Domain)
 	} else {
@@ -165,6 +169,10 @@ func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig)
 
 func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
 	return NewInboundRenderer(settings, Paths{}, warp).RenderOlcrtc(inbound)
+}
+
+func hysteria2Domain(inbound Inbound) string {
+	return protocolString(inbound.ProtocolFields, "domain", "")
 }
 
 func (r InboundRenderer) Paths() Paths {

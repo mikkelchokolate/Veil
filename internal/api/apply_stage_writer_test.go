@@ -6,9 +6,48 @@ import (
 	"testing"
 )
 
+func TestCleanStaleGeneratedFilesRemovesOnlyManagedStaleFiles(t *testing.T) {
+	root := t.TempDir()
+	caddyDir := filepath.Join(root, "generated", "caddy")
+	mieruDir := filepath.Join(root, "generated", "mieru")
+	otherDir := filepath.Join(root, "generated", "other")
+	for _, dir := range []string{caddyDir, mieruDir, otherDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	staleCaddy := filepath.Join(caddyDir, "stale.json")
+	keepCaddy := filepath.Join(caddyDir, "config.json")
+	staleMieru := filepath.Join(mieruDir, "stale.json")
+	otherFile := filepath.Join(otherDir, "preserve.me")
+	for _, path := range []string{staleCaddy, keepCaddy, staleMieru, otherFile} {
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	keep := map[string]bool{keepCaddy: true}
+	if err := cleanStaleGeneratedFiles(filepath.Join(root, "generated"), keep); err != nil {
+		t.Fatalf("cleanStaleGeneratedFiles: %v", err)
+	}
+
+	if _, err := os.Stat(staleCaddy); !os.IsNotExist(err) {
+		t.Errorf("stale caddy file should be removed: %v", err)
+	}
+	if _, err := os.Stat(staleMieru); !os.IsNotExist(err) {
+		t.Errorf("stale mieru file should be removed: %v", err)
+	}
+	if _, err := os.Stat(keepCaddy); err != nil {
+		t.Errorf("kept caddy file should remain: %v", err)
+	}
+	if _, err := os.Stat(otherFile); err != nil {
+		t.Errorf("unmanaged file outside managed subdirs should be preserved: %v", err)
+	}
+}
+
 func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 	root := t.TempDir()
-	configPath := filepath.Join(root, "generated", "caddy", "Caddyfile")
+	configPath := filepath.Join(root, "generated", "caddy", "config.json")
 	written, validations, renderedPaths, err := WriteApplyStage(ApplyStageInput{
 		ApplyRoot: root,
 		Plan:      ApplyPlanResponse{Valid: true, Configs: []string{"caddy"}},

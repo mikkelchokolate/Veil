@@ -51,7 +51,11 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if settings.PanelAccess == "caddy" && settings.Domain != "" {
+	if domain := Hysteria2Domain(inbound); domain != "" {
+		hystConfig.Domain = domain
+		hystConfig.CertPath = paths.CertPath(domain)
+		hystConfig.KeyPath = paths.KeyPath(domain)
+	} else if settings.PanelAccess == "caddy" && settings.Domain != "" {
 		hystConfig.CertPath = paths.CertPath(settings.Domain)
 		hystConfig.KeyPath = paths.KeyPath(settings.Domain)
 	} else {

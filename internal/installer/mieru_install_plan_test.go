@@ -41,8 +41,8 @@ func TestPanelInstallWritesDormantManagedRuntimeUnitsWithoutProxyConfig(t *testi
 	if _, err := os.Stat(filepath.Join(dir, "etc", "systemd", "system", "veil-olcrtc@.service")); err != nil {
 		t.Fatalf("Panel install should write dormant olcRTC unit template, stat err: %v", err)
 	}
-	if _, err := os.Stat(result.CaddyfilePath); !os.IsNotExist(err) {
-		t.Fatalf("Panel install should not write Caddyfile, stat err: %v", err)
+	if _, err := os.Stat(result.CaddyJSONPath); !os.IsNotExist(err) {
+		t.Fatalf("Panel install should not write Caddy JSON, stat err: %v", err)
 	}
 	if _, err := os.Stat(result.Hysteria2Path); !os.IsNotExist(err) {
 		t.Fatalf("Panel install should not write Hysteria2 config, stat err: %v", err)

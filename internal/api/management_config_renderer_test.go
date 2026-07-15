@@ -10,7 +10,7 @@ func TestManagementConfigRendererBuildsGeneratedConfigSet(t *testing.T) {
 	root := t.TempDir()
 	renderer := NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: root,
-		Settings:  Settings{Domain: "vpn.example.com", Email: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-pass", Hysteria2Password: "hy2-pass"},
+		Settings:  Settings{Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-pass", Hysteria2Password: "hy2-pass"},
 		Inbounds:  []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 	})
 
@@ -18,9 +18,9 @@ func TestManagementConfigRendererBuildsGeneratedConfigSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	body := configs[filepath.Join(root, "generated", "caddy", "naive.Caddyfile")]
-	if !strings.Contains(body, "vpn.example.com") {
-		t.Fatalf("Caddyfile missing domain: %s", body)
+	body := configs[filepath.Join(root, "generated", "caddy", "config.json")]
+	if !strings.Contains(body, `"handler": "forward_proxy"`) {
+		t.Fatalf("Caddy JSON missing forward_proxy handler: %s", body)
 	}
 }
 

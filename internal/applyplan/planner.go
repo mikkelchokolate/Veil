@@ -1,7 +1,6 @@
 package applyplan
 
 import (
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -54,23 +53,18 @@ func Build(input Input) model.ApplyPlanResponse {
 		Operations: []model.ApplyOperation{},
 	}
 	appendMaterial(&plan, input.PanelAccess)
-	seen := map[string]bool{}
 	capabilities := protocolCapabilities(input.Capabilities)
 	for _, inbound := range input.Inbounds {
 		if !inbound.Enabled {
 			continue
 		}
-		if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" {
+		transport := effectiveInboundTransport(inbound)
+		if inbound.Name == "" || inbound.Protocol == "" || transport == "" {
 			plan.Errors = append(plan.Errors, "enabled inbounds require name, protocol, and transport")
 		}
 		if inbound.Port <= 0 {
 			plan.Errors = append(plan.Errors, "enabled inbounds require a positive port")
 		}
-		key := inbound.Transport + ":" + fmt.Sprint(inbound.Port)
-		if seen[key] {
-			plan.Errors = append(plan.Errors, "duplicate enabled inbound transport/port")
-		}
-		seen[key] = true
 		capability, ok := capabilities[inbound.Protocol]
 		if !ok {
 			if inbound.Protocol != "" {
@@ -155,6 +149,24 @@ func Build(input Input) model.ApplyPlanResponse {
 	}
 	plan.Operations = buildOperations(plan.Configs, plan.Actions, plan.Runtimes, input.GeneratedRoot, input.LiveRoot)
 	return plan
+}
+
+func effectiveInboundTransport(inbound model.Inbound) string {
+	if strings.TrimSpace(inbound.Transport) != "" {
+		return strings.TrimSpace(inbound.Transport)
+	}
+	if inbound.ProtocolFields != nil {
+		if value, ok := inbound.ProtocolFields["transport"].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	switch inbound.Protocol {
+	case "naiveproxy":
+		return "tcp"
+	case "hysteria2", "olcrtc":
+		return "udp"
+	}
+	return ""
 }
 
 func buildOperations(configs, actions, runtimes []string, generatedRoot, liveRoot string) []model.ApplyOperation {

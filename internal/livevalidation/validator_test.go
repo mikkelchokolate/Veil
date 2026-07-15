@@ -174,16 +174,48 @@ func TestValidatorReportsMissingDomainEmailCredentialBinaryAndUnit(t *testing.T)
 	}
 }
 
+func TestValidatorAcceptsNaiveInboundWithPerInboundDomainAndEmail(t *testing.T) {
+	validator := testValidator()
+	validator.DNS = fakeDNSResolver{hosts: map[string][]string{"p.example.com": {"203.0.113.10"}}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{
+			DefaultAcmeEmail: "admin@example.com",
+			NaiveUsername:    "veil",
+			NaivePassword:    "secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name:      "public",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain": "p.example.com",
+			},
+		}},
+	})
+
+	if !response.Valid {
+		t.Fatalf("naive inbound with per-inbound domain/email should be valid: %+v", response)
+	}
+	for _, code := range []string{"domain_required", "email_required"} {
+		if hasIssueCode(response, code) {
+			t.Fatalf("unexpected %s issue: %+v", code, response)
+		}
+	}
+}
+
 func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
 	validator := testValidator()
 	validator.Ports = fakePortProbe{err: errors.New("permission denied")}
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "missing.example",
-			Email:         "admin@example.com",
-			NaiveUsername: "veil",
-			NaivePassword: "secret",
+			Domain:           "missing.example",
+			DefaultAcmeEmail: "admin@example.com",
+			NaiveUsername:    "veil",
+			NaivePassword:    "secret",
 		},
 		Inbounds: []model.Inbound{{
 			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
@@ -202,10 +234,10 @@ func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "pending.example",
-			Email:         "admin@example.com",
-			NaiveUsername: "veil",
-			NaivePassword: "secret",
+			Domain:           "pending.example",
+			DefaultAcmeEmail: "admin@example.com",
+			NaiveUsername:    "veil",
+			NaivePassword:    "secret",
 		},
 		Inbounds: []model.Inbound{{
 			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,

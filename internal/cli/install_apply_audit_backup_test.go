@@ -44,7 +44,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Written files:", "Caddyfile", "index.html", "veil.service", "veil-caddy@.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
+	for _, want := range []string{"Written files:", "config.json", "index.html", "veil.service", "veil-caddy.service", "Panel port: 2096 (user selected)", "Panel URL: https://example.com/"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -54,14 +54,14 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 			t.Fatalf("Panel Caddy install should not write %q:\n%s", unwanted, got)
 		}
 	}
-	// Caddyfile must include reverse_proxy to panel port
-	caddyPath := filepath.Join(dir, "etc/veil/generated/caddy/panel.Caddyfile")
+	// Caddy JSON must include reverse_proxy to panel port
+	caddyPath := filepath.Join(dir, "etc/veil/generated/caddy/config.json")
 	body, err := os.ReadFile(caddyPath)
 	if err != nil {
-		t.Fatalf("read Caddyfile: %v", err)
+		t.Fatalf("read Caddy JSON: %v", err)
 	}
-	if !strings.Contains(string(body), "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("Caddyfile missing reverse_proxy:\n%s", string(body))
+	if !strings.Contains(string(body), `"dial": "127.0.0.1:2096"`) {
+		t.Fatalf("Caddy JSON missing reverse_proxy:\n%s", string(body))
 	}
 }
 

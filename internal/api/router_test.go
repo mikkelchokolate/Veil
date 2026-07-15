@@ -62,11 +62,11 @@ func stringSlicesEqual(left []string, right []string) bool {
 
 func writeRenderableManagementState(path string, inboundSet string) error {
 	inbounds := `[
-			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
+			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
 		]`
 	if inboundSet == "naive-only" {
-		inbounds = `[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}]`
+		inbounds = `[{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}}]`
 	}
 	return os.WriteFile(path, []byte(`{
 		"settings":{
@@ -74,6 +74,7 @@ func writeRenderableManagementState(path string, inboundSet string) error {
 			"mode":"dev",
 			"domain":"vpn.example.com",
 			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret",

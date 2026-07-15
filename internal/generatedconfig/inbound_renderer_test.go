@@ -46,7 +46,15 @@ func TestInboundRendererRendersHysteria2WithManagedCertWhenCaddyAccess(t *testin
 		PanelAccess: "caddy",
 		Email:       "admin@example.com",
 	}, NewPaths("/etc/veil"), WarpConfig{})
-	body, err := renderer.RenderHysteria2(Inbound{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, Password: "pass"})
+	body, err := renderer.RenderHysteria2(Inbound{
+		Name:           "hy2",
+		Protocol:       "hysteria2",
+		Transport:      "udp",
+		Port:           8443,
+		Enabled:        true,
+		Password:       "pass",
+		ProtocolFields: map[string]any{"domain": "vpn.example.com"},
+	})
 	if err != nil {
 		t.Fatalf("RenderHysteria2: %v", err)
 	}

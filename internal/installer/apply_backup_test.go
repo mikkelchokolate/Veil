@@ -32,9 +32,9 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	oldCaddyPath := filepath.Join(caddyfileDir, "panel.Caddyfile")
+	oldCaddyPath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(oldCaddyPath, []byte("old caddy content"), 0o600); err != nil {
-		t.Fatalf("write old caddy: %v", err)
+		t.Fatalf("write old caddy json: %v", err)
 	}
 
 	result, err := ApplyRURecommendedProfile(profile, ApplyPaths{
@@ -51,18 +51,18 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 		t.Fatalf("expected BackupID to be set when BackupDir is provided")
 	}
 
-	// Verify backup contains old Caddyfile
-	backupPath := filepath.Join(backupDir, result.BackupID, "panel.Caddyfile")
+	// Verify backup contains old Caddy JSON
+	backupPath := filepath.Join(backupDir, result.BackupID, "config.json")
 	body, err := os.ReadFile(backupPath)
 	if err != nil {
-		t.Fatalf("read backup caddyfile: %v", err)
+		t.Fatalf("read backup caddy json: %v", err)
 	}
 	if string(body) != "old caddy content" {
 		t.Fatalf("backup has wrong content: %q", string(body))
 	}
 
-	// Verify current Caddyfile has new content
-	assertFileContains(t, oldCaddyPath, "reverse_proxy")
+	// Verify current Caddy JSON has new content
+	assertFileContains(t, oldCaddyPath, `"dial"`)
 }
 
 func TestApplyWithoutBackupDirDoesNotBackup(t *testing.T) {
@@ -115,9 +115,9 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	if err := os.MkdirAll(caddyfileDir, 0o755); err != nil {
 		t.Fatalf("mkdir caddy dir: %v", err)
 	}
-	oldCaddyPath := filepath.Join(caddyfileDir, "panel.Caddyfile")
+	oldCaddyPath := filepath.Join(caddyfileDir, "config.json")
 	if err := os.WriteFile(oldCaddyPath, []byte("pre-apply content"), 0o600); err != nil {
-		t.Fatalf("write old caddy: %v", err)
+		t.Fatalf("write old caddy json: %v", err)
 	}
 
 	veilEnvPath := filepath.Join(etcDir, "veil.env")
@@ -142,9 +142,9 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 	// Verify files were overwritten
 	body, _ := os.ReadFile(oldCaddyPath)
 	if string(body) == "pre-apply content" {
-		t.Fatalf("Caddyfile should have been overwritten")
+		t.Fatalf("Caddy JSON should have been overwritten")
 	}
-	assertFileContains(t, oldCaddyPath, "reverse_proxy")
+	assertFileContains(t, oldCaddyPath, `"dial"`)
 
 	body, _ = os.ReadFile(veilEnvPath)
 	if string(body) == "VEIL_API_TOKEN=old-token\n" {
@@ -167,7 +167,7 @@ func TestApplyBackupThenRestoreRollback(t *testing.T) {
 		t.Fatalf("read restored caddy: %v", err)
 	}
 	if string(body) != "pre-apply content" {
-		t.Fatalf("restored Caddyfile has wrong content: %q", string(body))
+		t.Fatalf("restored Caddy JSON has wrong content: %q", string(body))
 	}
 
 	body, err = os.ReadFile(veilEnvPath)

@@ -21,7 +21,7 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 		t.Fatalf("install dry-run: %v\n%s", err, out.String())
 	}
 	got := out.String()
-	for _, want := range []string{"Install scope: Panel", "Panel URL: https://panel.example.com/", "Generated Caddyfile", "reverse_proxy 127.0.0.1:2096"} {
+	for _, want := range []string{"Install scope: Panel", "Panel URL: https://panel.example.com/", "Generated Caddy JSON", `"dial": "127.0.0.1:2096"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -65,7 +65,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	var gotPaths installer.ApplyPaths
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
 		gotPaths = paths
-		return installer.ApplyResult{WrittenFiles: []string{"/etc/systemd/system/veil-caddy@.service"}}, nil
+		return installer.ApplyResult{WrittenFiles: []string{"/etc/systemd/system/veil-caddy.service"}}, nil
 	}
 	commandLookPath = func(name string) (string, error) {
 		if name == "caddy" {

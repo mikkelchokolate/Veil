@@ -61,8 +61,8 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 
 func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 	root := t.TempDir()
-	source := filepath.Join(root, "staging", "edge.Caddyfile")
-	destination := filepath.Join(root, "generated", "edge.Caddyfile")
+	source := filepath.Join(root, "staging", "caddy", "config.json")
+	destination := filepath.Join(root, "generated", "caddy", "config.json")
 	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 		Now:                 func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	})
 	promoted, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{ID: "caddy/edge.Caddyfile", Source: source, Destination: destination}},
+		Artifacts: []ResolvedArtifact{{ID: "caddy/config.json", Source: source, Destination: destination}},
 	})
 	if err != nil {
 		t.Fatalf("promote: %v", err)

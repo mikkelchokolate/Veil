@@ -23,8 +23,8 @@ func DefaultPolicy() Policy {
 		ManagedUnitPrefixes:  defaultManagedUnitPrefixes(),
 		Artifacts: map[string]ArtifactPath{
 			"caddy-panel": {
-				Staged:    filepath.FromSlash("caddy/panel.Caddyfile"),
-				Generated: filepath.FromSlash("caddy/panel.Caddyfile"),
+				Staged:    filepath.FromSlash("caddy/config.json"),
+				Generated: filepath.FromSlash("caddy/config.json"),
 			},
 		},
 		UpdateArtifacts: map[string]string{
@@ -58,8 +58,10 @@ func defaultManagedUnits() map[string]struct{} {
 }
 
 func defaultManagedUnitPrefixes() []string {
-	prefixes := []string{}
-	seen := map[string]bool{}
+	// Keep the retired per-inbound Caddy template manageable so migration,
+	// orphan cleanup and rollback can stop/disable old instances safely.
+	prefixes := []string{"veil-caddy@"}
+	seen := map[string]bool{"veil-caddy@": true}
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		rp, ok := protocols.AsRuntimeProvider(plugin)

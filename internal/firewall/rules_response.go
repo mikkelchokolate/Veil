@@ -6,6 +6,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/naiveproxy"
 )
 
 type Settings = model.Settings
@@ -27,15 +28,29 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 			continue
 		}
 		if service, ok := registry.FirewallService(inbound.Protocol); ok {
-			builder.Add(inbound.Port, inbound.Transport, service)
+			port := inbound.Port
+			if inbound.Protocol == "naiveproxy" {
+				port = naiveproxy.NaivePublicPort(settings, inbound)
+			}
+			builder.Add(port, inbound.Transport, service)
 		}
 	}
 	if settings.PanelAccess == "caddy" {
-		builder.Add(443, "tcp", "Veil panel HTTPS")
+		panelPublicPort := settings.PanelPublicPort
+		if panelPublicPort == 0 {
+			panelPublicPort = 443
+		}
+		builder.Add(panelPublicPort, "tcp", "Veil panel HTTPS")
 	} else if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
 		if port, err := strconv.Atoi(portStr); err == nil {
 			builder.Add(port, "tcp", "Veil panel")
 		}
+	}
+	if settings.AcmeChallengeMode == "http-01" {
+		builder.Add(80, "tcp", "Veil ACME HTTP-01")
+	}
+	if settings.AcmeChallengeMode == "tls-alpn-01" {
+		builder.Add(443, "tcp", "Veil ACME TLS-ALPN-01")
 	}
 	return builder.Rules()
 }

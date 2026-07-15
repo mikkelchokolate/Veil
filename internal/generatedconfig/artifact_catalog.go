@@ -6,7 +6,10 @@ import (
 )
 
 const (
-	CaddyfileSubpath       = "caddy/panel.Caddyfile"
+	CaddyJSONConfigSubpath = "caddy/config.json"
+	// CaddyfileSubpath is retained as a compatibility alias while callers migrate
+	// to the consolidated JSON artifact.
+	CaddyfileSubpath       = CaddyJSONConfigSubpath
 	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
 	MieruConfigSubpath     = "mieru/server_config.json"
 	WarpConfigSubpath      = "sing-box/warp.json"
@@ -91,7 +94,7 @@ func NewArtifactCatalog(artifacts []ArtifactSpec) ArtifactCatalog {
 // automatically.
 func NewDefaultArtifactCatalog() ArtifactCatalog {
 	return NewArtifactCatalog([]ArtifactSpec{
-		{Subpath: CaddyfileSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
+		{Subpath: CaddyJSONConfigSubpath, ValidationName: "caddy", ValidationCommand: func(path string) []string { return []string{"caddy", "validate", "--config", path} }},
 		// Hysteria2 (hysteria), Mieru (mita) and olcRTC have no standalone config
 		// check command, so they get no pre-stage syntax validation; a bad config
 		// is caught by the post-restart service health check, which rolls back.

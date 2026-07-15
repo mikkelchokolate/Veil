@@ -248,9 +248,9 @@ func TestServiceActionVerbsIgnoresInvalidActions(t *testing.T) {
 
 func TestServiceVerbForUnit(t *testing.T) {
 	verbs := map[string]string{
-		"veil-mieru.service":  "restart",
-		"veil-caddy@.service": "reload",
-		"veil-other@.service": "not-a-verb",
+		"veil-mieru.service":      "restart",
+		"veil-hysteria2@.service": "reload",
+		"veil-other@.service":     "not-a-verb",
 	}
 
 	tests := []struct {
@@ -258,8 +258,8 @@ func TestServiceVerbForUnit(t *testing.T) {
 		want string
 	}{
 		{"veil-mieru.service", "restart"},
-		{"veil-caddy@edge.service", "reload"},
-		{"veil-caddy@panel.service", "reload"},
+		{"veil-hysteria2@edge.service", "reload"},
+		{"veil-hysteria2@panel.service", "reload"},
 		{"veil-unknown.service", ""},
 		{"veil-other@foo.service", "not-a-verb"},
 	}

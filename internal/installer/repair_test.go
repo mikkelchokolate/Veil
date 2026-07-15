@@ -16,7 +16,7 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 	profile := RURecommendedProfile{
 		Domain:            "vpn.example.com",
 		InstallPanelCaddy: true,
-		Caddyfile:         "caddy content",
+		CaddyJSON:         `{"apps":{"http":{"servers":{}}}}`,
 	}
 
 	paths := ApplyPaths{
@@ -67,7 +67,7 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 	profile := RURecommendedProfile{
 		Domain:            "vpn.example.com",
 		InstallPanelCaddy: true,
-		Caddyfile:         "expected caddy content",
+		CaddyJSON:         `{"apps":{"http":{"servers":{}}}}`,
 	}
 
 	paths := ApplyPaths{
@@ -76,8 +76,8 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 		SystemdDir: systemdDir,
 	}
 
-	// Pre-create Caddyfile with stale content
-	caddyPath := filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")
+	// Pre-create Caddy JSON with stale content
+	caddyPath := filepath.Join(etcDir, "generated", "caddy", "config.json")
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -100,14 +100,14 @@ func TestBuildRepairPlanDetectsDriftedFiles(t *testing.T) {
 			if action.Reason != RepairReasonDrifted {
 				t.Fatalf("expected caddy to be 'drifted', got %q", action.Reason)
 			}
-			if action.Content != "expected caddy content" {
-				t.Fatalf("expected caddy repair content to be 'expected caddy content', got %q", action.Content)
+			if action.Content != `{"apps":{"http":{"servers":{}}}}` {
+				t.Fatalf("expected caddy repair content to be '{\"apps\":{\"http\":{\"servers\":{}}}}', got %q", action.Content)
 			}
 			foundDrift = true
 		}
 	}
 	if !foundDrift {
-		t.Fatalf("expected drift action for Caddyfile, actions: %+v", plan.Actions)
+		t.Fatalf("expected drift action for Caddy JSON, actions: %+v", plan.Actions)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 	profile := RURecommendedProfile{
 		Domain:            "vpn.example.com",
 		InstallPanelCaddy: true,
-		Caddyfile:         "caddy content",
+		CaddyJSON:         `{"apps":{"http":{"servers":{}}}}`,
 	}
 
 	paths := ApplyPaths{
@@ -135,12 +135,12 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 		VarDir: varDir,
 	}
 
-	// Pre-create Caddyfile with matching content
-	caddyPath := filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")
+	// Pre-create Caddy JSON with matching content
+	caddyPath := filepath.Join(etcDir, "generated", "caddy", "config.json")
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(caddyPath, []byte("caddy content"), 0o600); err != nil {
+	if err := os.WriteFile(caddyPath, []byte(`{"apps":{"http":{"servers":{}}}}`), 0o600); err != nil {
 		t.Fatalf("write caddy: %v", err)
 	}
 

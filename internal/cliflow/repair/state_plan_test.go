@@ -60,7 +60,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	state := `{
-  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","email":"admin@example.com"},
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","defaultAcmeEmail":"admin@example.com"},
   "inbounds": [],
   "routingRules": [],
   "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
@@ -74,14 +74,14 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateCaddyAccess(t *testing.T) {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
 	summary := plan.Summary()
-	for _, want := range []string{"generated/caddy/panel.Caddyfile", "veil-caddy@.service"} {
+	for _, want := range []string{"generated/caddy/config.json", "veil-caddy.service"} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("Panel state Caddy access repair missing %q:\n%s", want, summary)
 		}
 	}
-	caddyfile := repairActionContent(plan, "panel.Caddyfile")
-	if !strings.Contains(caddyfile, "handle /panel-secret/*") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("Panel state Caddyfile not repaired from settings:\n%s", caddyfile)
+	caddyJSON := repairActionContent(plan, "config.json")
+	if !strings.Contains(caddyJSON, `"handler": "reverse_proxy"`) || !strings.Contains(caddyJSON, `"dial": "127.0.0.1:2096"`) {
+		t.Fatalf("Panel state Caddy JSON not repaired from settings:\n%s", caddyJSON)
 	}
 	env := repairActionContent(plan, "veil.env")
 	if !strings.Contains(env, "VEIL_PANEL_ACCESS=caddy") || strings.Contains(env, "VEIL_TLS_CERT") {
@@ -106,7 +106,7 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	state := `{
-  "settings": {"panelListen":"127.0.0.1:2096","mode":"server","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret"},
+  "settings": {"panelListen":"127.0.0.1:2096","mode":"server","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret"},
   "inbounds": [
     {"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}
   ],
@@ -121,9 +121,9 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
-	unit := repairActionContent(plan, "veil-caddy@.service")
+	unit := repairActionContent(plan, "veil-caddy.service")
 	if !strings.Contains(unit, "ExecStart=/usr/sbin/caddy run --config") {
-		t.Fatalf("repair should render veil-caddy@.service with resolved caddy path:\n%s", unit)
+		t.Fatalf("repair should render veil-caddy.service with resolved caddy path:\n%s", unit)
 	}
 }
 
@@ -157,7 +157,7 @@ func TestBuildRepairPlanFromOptionsUsesPanelStateMieruInbounds(t *testing.T) {
 			t.Fatalf("repair summary missing %q:\n%s", want, summary)
 		}
 	}
-	for _, unwanted := range []string{"generated/caddy/Caddyfile", "shared proxy port"} {
+	for _, unwanted := range []string{"generated/caddy/config.json", "shared proxy port"} {
 		if strings.Contains(summary, unwanted) {
 			t.Fatalf("repair summary should not include %q:\n%s", unwanted, summary)
 		}

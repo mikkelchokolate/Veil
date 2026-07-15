@@ -200,6 +200,13 @@ func liveConfigOrphanDirs() []liveConfigOrphanDir {
 		seen[d] = true
 		dirs = append(dirs, d)
 	}
+	// The redesign no longer advertises the old per-inbound Caddy template,
+	// so discover its artifacts explicitly during migration/cleanup.
+	legacyCaddy := liveConfigOrphanDir{subpath: "caddy", ext: ".Caddyfile"}
+	if !seen[legacyCaddy] {
+		seen[legacyCaddy] = true
+		dirs = append(dirs, legacyCaddy)
+	}
 	sort.SliceStable(dirs, func(i, j int) bool {
 		if dirs[i].subpath == dirs[j].subpath {
 			return dirs[i].ext < dirs[j].ext
@@ -231,6 +238,12 @@ func UnitForLiveConfig(livePath string) (string, bool) {
 }
 
 func unitForPath(slashPath string) (string, bool) {
+	if strings.HasSuffix(slashPath, ".Caddyfile") {
+		name := strings.TrimSuffix(filepath.Base(slashPath), ".Caddyfile")
+		if name != "" && inbounds.IsSafeName(name) {
+			return "veil-caddy@" + name + ".service", true
+		}
+	}
 	registry := protocols.NewRegistry()
 
 	// Exact match covers aggregated units (mieru) and any artifact whose path
