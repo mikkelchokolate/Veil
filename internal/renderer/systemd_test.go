@@ -169,7 +169,6 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 	for _, want := range []string{
 		"User=root",
 		"ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation",
-		"PrivateNetwork=true",
 		"RestrictAddressFamilies=AF_UNIX AF_NETLINK",
 		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n",
 		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW",

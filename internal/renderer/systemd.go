@@ -124,7 +124,6 @@ User=root
 Group=root
 ExecStart=` + cfg.VeilBinary + ` helper serve --systemd-socket-activation
 NoNewPrivileges=true
-PrivateNetwork=true
 PrivateDevices=true
 PrivateTmp=true
 ProtectSystem=strict

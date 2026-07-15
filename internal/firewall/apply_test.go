@@ -41,6 +41,7 @@ func TestUFWApplierEnablesFirewallAndAppliesRules(t *testing.T) {
 		{"ufw", "--force", "enable"},
 		{"ufw", "allow", "4315/udp", "comment", "Veil Hysteria2"},
 		{"ufw", "allow", "443/tcp", "comment", "Veil panel HTTPS"},
+		{"ufw", "reload"},
 	}
 	if len(runner.calls) != len(want) {
 		t.Fatalf("calls = %v, want %v", runner.calls, want)
@@ -88,6 +89,37 @@ func TestUFWApplierRejectsUnsupportedCommand(t *testing.T) {
 	}
 }
 
+func TestUFWApplierSkipsReloadWhenRulesEmpty(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	applier := NewUFWApplierWithRunner(runner)
+	if err := applier.ApplyRules(nil); err != nil {
+		t.Fatalf("ApplyRules: %v", err)
+	}
+	for _, call := range runner.calls {
+		if len(call) >= 2 && call[0] == "ufw" && call[1] == "reload" {
+			t.Fatalf("expected no ufw reload when no rules applied, got %v", runner.calls)
+		}
+	}
+}
+
+func TestUFWApplierReloadsAfterDuplicateRules(t *testing.T) {
+	runner := &duplicateRuleRunner{}
+	applier := NewUFWApplierWithRunner(runner)
+	if err := applier.ApplyRules([]Rule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}}); err != nil {
+		t.Fatalf("ApplyRules: %v", err)
+	}
+	foundReload := false
+	for _, call := range runner.calls {
+		if len(call) >= 2 && call[0] == "ufw" && call[1] == "reload" {
+			foundReload = true
+			break
+		}
+	}
+	if !foundReload {
+		t.Fatalf("expected ufw reload after duplicate rules, got %v", runner.calls)
+	}
+}
+
 type activeStatusRunner struct {
 	fake *fakeCommandRunner
 }
@@ -100,9 +132,15 @@ func (r *activeStatusRunner) Run(input veilruntime.RuntimeCommandInput) veilrunt
 	return out
 }
 
-type duplicateRuleRunner struct{}
+type duplicateRuleRunner struct {
+	calls [][]string
+}
 
-func (duplicateRuleRunner) Run(input veilruntime.RuntimeCommandInput) veilruntime.RuntimeCommandOutput {
+func (r *duplicateRuleRunner) Run(input veilruntime.RuntimeCommandInput) veilruntime.RuntimeCommandOutput {
+	r.calls = append(r.calls, append([]string(nil), input.Command...))
+	if len(input.Command) >= 2 && input.Command[0] == "ufw" && input.Command[1] == "reload" {
+		return veilruntime.RuntimeCommandOutput{}
+	}
 	return veilruntime.RuntimeCommandOutput{
 		Err:    errors.New("exit status 1"),
 		Output: "Skipping adding existing rule",

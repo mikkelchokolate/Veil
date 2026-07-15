@@ -46,8 +46,10 @@ func (a UFWApplier) EnsureActive() error {
 	return nil
 }
 
-// ApplyRules adds the requested ufw allow rules, skipping duplicates.
+// ApplyRules adds the requested ufw allow rules, skipping duplicates, and
+// reloads ufw so the on-disk rules are synced into the live kernel ruleset.
 func (a UFWApplier) ApplyRules(rules []Rule) error {
+	applied := false
 	for _, rule := range rules {
 		if rule.Command != "ufw" {
 			return fmt.Errorf("unsupported firewall command %q", rule.Command)
@@ -59,6 +61,16 @@ func (a UFWApplier) ApplyRules(rules []Rule) error {
 		// ufw returns exit code 1 when the rule already exists; treat that as success.
 		if out.Err != nil && !isUFWDuplicateRule(out.Output) {
 			return fmt.Errorf("ufw %v: %w (output: %s)", rule.Args, out.Err, out.Output)
+		}
+		applied = true
+	}
+	if applied {
+		out := a.runner.Run(veilruntime.RuntimeCommandInput{
+			Command: []string{"ufw", "reload"},
+			Timeout: 15 * time.Second,
+		})
+		if out.Err != nil {
+			return fmt.Errorf("reload ufw: %w (output: %s)", out.Err, out.Output)
 		}
 	}
 	return nil

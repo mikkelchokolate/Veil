@@ -191,6 +191,11 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				return FirewallResult{}, err
 			}
 			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rulesResult.AppliedRuleIDs...)
+			if len(result.AppliedRuleIDs) > 0 {
+				if _, err := config.RunCommand(ctx, []string{"ufw", "reload"}, 30*time.Second); err != nil {
+					return FirewallResult{}, fmt.Errorf("reload ufw: %w", err)
+				}
+			}
 			return result, nil
 		},
 		Update: config.UpdateWorkflow,
