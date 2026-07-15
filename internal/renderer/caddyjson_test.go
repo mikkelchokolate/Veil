@@ -53,6 +53,7 @@ func TestRenderCaddyJSONPanelOnly(t *testing.T) {
 				Kind:        caddyassembly.CaddyOwnerPanel,
 				Domain:      "panel.example.com",
 				BackendPort: 2096,
+				WebBasePath: "/panel/",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -102,6 +103,7 @@ func TestRenderCaddyJSONAcmeChallengeKeys(t *testing.T) {
 						Kind:        caddyassembly.CaddyOwnerPanel,
 						Domain:      "panel.example.com",
 						BackendPort: 2096,
+						WebBasePath: "/panel/",
 					},
 				},
 				Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -147,7 +149,7 @@ func TestRenderCaddyJSONRejectsNaiveWithoutForwardProxy(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing forward_proxy module")
 	}
-	want := "Caddy binary does not include the forward_proxy module required for NaiveProxy"
+	want := "caddy binary does not include the forward_proxy module required for NaiveProxy"
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
@@ -318,6 +320,7 @@ func TestRenderCaddyJSONUsesAutomaticHTTPS(t *testing.T) {
 				Kind:        caddyassembly.CaddyOwnerPanel,
 				Domain:      "panel.example.com",
 				BackendPort: 2096,
+				WebBasePath: "/panel/",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -384,6 +387,7 @@ func TestRenderCaddyJSONAdminEndpoint(t *testing.T) {
 				Kind:        caddyassembly.CaddyOwnerPanel,
 				Domain:      "panel.example.com",
 				BackendPort: 2096,
+				WebBasePath: "/panel/",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -533,6 +537,7 @@ func TestRenderCaddyJSONValidatesWithCaddy(t *testing.T) {
 				Kind:        caddyassembly.CaddyOwnerPanel,
 				Domain:      "panel.example.com",
 				BackendPort: 2096,
+				WebBasePath: "/panel/",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{

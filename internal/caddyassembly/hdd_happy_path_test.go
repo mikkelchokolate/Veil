@@ -92,6 +92,8 @@ func TestBuildFinalRenderPlan_NaiveTCP443ConflictsWithPanelCaddy(t *testing.T) {
 		PanelDomain:       "panel.hy.flow2go.ru",
 		PanelPublicPort:   443,
 		PanelEmail:        "admin@hy.flow2go.ru",
+		PanelListen:       "127.0.0.1:2096",
+		WebBasePath:       "/panel/",
 		DefaultAcmeEmail:  "admin@hy.flow2go.ru",
 		AcmeChallengeMode: "tls-alpn-01",
 	}
