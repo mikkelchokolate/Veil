@@ -75,16 +75,17 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			if inbound.Protocol == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].protocol is required")
 			}
-			if inbound.Transport == "" {
+			transport := effectiveInboundTransport(inbound)
+			if transport == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].transport is required")
 			}
-			if inbound.Protocol != "" && inbound.Transport != "" && !protocolCatalog.SupportsTransport(inbound.Protocol, inbound.Transport) {
-				errs = append(errs, "inbounds["+itoa(i)+"].protocol/transport is unsupported: "+inbound.Protocol+"/"+inbound.Transport)
+			if inbound.Protocol != "" && transport != "" && !protocolCatalog.SupportsTransport(inbound.Protocol, transport) {
+				errs = append(errs, "inbounds["+itoa(i)+"].protocol/transport is unsupported: "+inbound.Protocol+"/"+transport)
 			}
 			if inbound.Port <= 0 || inbound.Port > 65535 {
 				errs = append(errs, "inbounds["+itoa(i)+"].port must be 1-65535, got: "+itoa(inbound.Port))
 			}
-			key := inbound.Transport + ":" + itoa(inbound.Port)
+			key := transport + ":" + itoa(inbound.Port)
 			if owner, exists := seenPorts[key]; exists {
 				if owner == "panel" || owner == "warp" {
 					errs = append(errs, fmt.Sprintf("inbounds[%d]: port %d conflicts with %s", i, inbound.Port, owner))
@@ -109,6 +110,25 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		}
 	}
 	return errs
+}
+
+func effectiveInboundTransport(inbound model.Inbound) string {
+	if inbound.Transport != "" {
+		return inbound.Transport
+	}
+	if inbound.ProtocolFields != nil {
+		if value, ok := inbound.ProtocolFields["transport"].(string); ok && value != "" {
+			return value
+		}
+	}
+	switch inbound.Protocol {
+	case "naiveproxy":
+		return "tcp"
+	case "hysteria2", "olcrtc":
+		return "udp"
+	default:
+		return ""
+	}
 }
 
 func itoa(value int) string {
