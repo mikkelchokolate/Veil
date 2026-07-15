@@ -1,0 +1,1 @@
+Run focused, full, and E2E Caddy gates in parallel.
