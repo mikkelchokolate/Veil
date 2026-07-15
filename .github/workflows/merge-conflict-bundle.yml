@@ -1,0 +1,51 @@
+name: merge-conflict-bundle
+
+on:
+  push:
+    branches:
+      - agent/inbound-caddy-main-sync
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Build merge conflict checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Veil Integration Bot"
+          git config user.email "integration@users.noreply.github.com"
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_rc=$?
+          set -e
+          {
+            echo "merge_exit_code=${merge_rc}"
+            echo "feature_tip=$(git rev-parse HEAD)"
+            echo "main_tip=$(git rev-parse origin/main)"
+            echo "merge_base=$(git merge-base HEAD origin/main)"
+            echo
+            echo "conflicted_files:"
+            git diff --name-only --diff-filter=U
+            echo
+            echo "status:"
+            git status --short
+          } | tee conflict-report.txt
+          tar --exclude='./merge-bundle.tar.gz' -czf merge-bundle.tar.gz .
+      - name: Upload merge checkout
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: inbound-caddy-main-merge-bundle
+          path: |
+            merge-bundle.tar.gz
+            conflict-report.txt
+          if-no-files-found: error
+          retention-days: 3
