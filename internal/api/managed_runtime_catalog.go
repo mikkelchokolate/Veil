@@ -72,16 +72,6 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 	return sortManagedRuntimes(runtimes)
 }
 
-func replaceOrAppendRuntime(runtimes []ManagedRuntime, runtime ManagedRuntime) []ManagedRuntime {
-	for i, r := range runtimes {
-		if r.Unit == runtime.Unit {
-			runtimes[i] = runtime
-			return runtimes
-		}
-	}
-	return append(runtimes, runtime)
-}
-
 func hasCaddyRuntime(runtimes []ManagedRuntime) bool {
 	for _, rt := range runtimes {
 		if rt.Unit == unitCaddy {

@@ -35,6 +35,12 @@ jobs:
       - name: Verify generated Go SDK
         run: make verify-sdk
       - run: make build
+      - name: Install Caddy runtime for unit tests
+        run: |
+          mkdir -p /tmp/veil-runtime
+          ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
+          echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
+          /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
       - name: Test generated SDK with race detector
         run: go test ./sdk/go -race -count=1
       - name: Test product code with race detector and coverage

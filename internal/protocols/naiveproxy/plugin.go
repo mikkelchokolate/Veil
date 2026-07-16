@@ -65,20 +65,6 @@ func naivePassword(settings model.Settings, inbound model.Inbound) string {
 	return password
 }
 
-func fallbackRoot(settings model.Settings, inbound model.Inbound) string {
-	root := protocolString(inbound.ProtocolFields, "fallbackRoot", "")
-	if root == "" {
-		root = inbound.FallbackRoot
-	}
-	if root == "" {
-		root = protocolString(settings.ProtocolFields, "fallbackRoot", "")
-	}
-	if root == "" {
-		root = settings.FallbackRoot
-	}
-	return root
-}
-
 // NaiveDomain returns the public domain for the inbound, preferring the inbound
 // ProtocolFields and falling back to the global settings domain. The result is
 // trimmed and lowercased.
