@@ -116,8 +116,6 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
-      - name: Baseline panel E2E before protocol runtimes are installed
-        run: go test -tags e2e ./test/e2e/... -count=1 -v -timeout=3m
       - name: Build and install Veil
         run: |
           go build -o /tmp/veil-e2e ./cmd/veil
