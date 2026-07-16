@@ -283,14 +283,23 @@ func testNaiveProxyDataPath(t *testing.T, caddyPath, naivePath string) {
 	if err := generateSelfSignedCert(certPath, keyPath); err != nil {
 		t.Fatalf("generate trusted test certificate: %v", err)
 	}
-	caPath := "/usr/local/share/ca-certificates/veil-naive-e2e.crt"
+	// The standalone naive binary (C++) has no flag to skip TLS verification or
+	// point at a custom CA bundle, so the only way to make it trust our
+	// self-signed server cert is the system trust store. Scope the damage: use a
+	// unique per-run CA filename, register removal via t.Cleanup (runs even on
+	// Fatal/panic), refresh the store on cleanup, and assert the file is gone.
+	caName := "veil-naive-e2e-" + strings.NewReplacer("-", "", ".", "", "/", "").Replace(t.Name()) + ".crt"
+	caPath := "/usr/local/share/ca-certificates/" + caName
 	if output, err := exec.Command("sudo", "install", "-m", "0644", certPath, caPath).CombinedOutput(); err != nil {
 		t.Fatalf("install test certificate: %v: %s", err, output)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = exec.Command("sudo", "rm", "-f", caPath).Run()
-		_ = exec.Command("sudo", "update-ca-certificates").Run()
-	}()
+		_ = exec.Command("sudo", "update-ca-certificates", "--fresh").Run()
+		if _, err := os.Lstat(caPath); !os.IsNotExist(err) {
+			t.Errorf("test CA %s was not removed from the system trust store", caPath)
+		}
+	})
 	if output, err := exec.Command("sudo", "update-ca-certificates").CombinedOutput(); err != nil {
 		t.Fatalf("refresh test trust store: %v: %s", err, output)
 	}
@@ -490,11 +499,14 @@ func caddyServerHandler(server map[string]any, handlerName string) map[string]an
 
 func registerLoopbackHostname(t *testing.T, hostname string) {
 	t.Helper()
-	if hostname == "" || strings.ContainsAny(hostname, " \t\r\n") {
+	if hostname == "" || strings.ContainsAny(hostname, " 	\r\n") {
 		t.Fatalf("invalid E2E hostname %q", hostname)
 	}
+	// Unique marker so cleanup removes only the exact line this invocation
+	// appended, never a pre-existing entry that merely shares the hostname.
+	marker := "veil-e2e-" + strings.NewReplacer("-", "", ".", "").Replace(t.Name()) + "-" + hostname
 	cmd := exec.Command("sudo", "tee", "-a", "/etc/hosts")
-	cmd.Stdin = strings.NewReader("127.0.0.1 " + hostname + "\n")
+	cmd.Stdin = strings.NewReader("127.0.0.1 " + hostname + " # " + marker + "\n")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("register local E2E hostname: %v: %s", err, output)
 	}
@@ -503,11 +515,11 @@ func registerLoopbackHostname(t *testing.T, hostname string) {
 from pathlib import Path
 import sys
 p = Path("/etc/hosts")
-hostname = sys.argv[1]
-lines = [line for line in p.read_text().splitlines() if hostname not in line.split()]
+marker = sys.argv[1]
+lines = [line for line in p.read_text().splitlines() if marker not in line]
 p.write_text("\n".join(lines) + "\n")
 `
-		if output, err := exec.Command("sudo", "python3", "-c", cleanup, hostname).CombinedOutput(); err != nil {
+		if output, err := exec.Command("sudo", "python3", "-c", cleanup, marker).CombinedOutput(); err != nil {
 			t.Errorf("remove local E2E hostname: %v: %s", err, output)
 		}
 	})
