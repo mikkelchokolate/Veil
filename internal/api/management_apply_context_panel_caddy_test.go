@@ -9,6 +9,10 @@ import (
 )
 
 func TestReloadPromotedServicesReloadsPanelCaddyWithoutNaiveInbound(t *testing.T) {
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
+
 	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
 	state.applyRoot = t.TempDir()
 	state.liveRoot = filepath.Join(state.applyRoot, "live")

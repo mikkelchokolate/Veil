@@ -162,7 +162,7 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "tok"})
 
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
 	drain(resp)
 
 	// First NaiveProxy inbound on port 20001

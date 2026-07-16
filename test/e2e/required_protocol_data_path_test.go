@@ -247,7 +247,7 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
 	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"test@example.com"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"test@example.com"}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}

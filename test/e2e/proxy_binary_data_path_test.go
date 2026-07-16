@@ -491,7 +491,7 @@ func TestNaiveProxyDataPath(t *testing.T) {
 
 	// Configure settings and inbound
 	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"test@example.com","naiveUsername":"test-user","naivePassword":"test-pass"}`)
+	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"test@example.com","naiveUsername":"test-user","naivePassword":"test-pass"}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}

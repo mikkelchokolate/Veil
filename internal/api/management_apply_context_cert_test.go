@@ -10,6 +10,10 @@ import (
 )
 
 func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
+
 	client := &recordingPrivilegedClient{}
 	applyRoot := t.TempDir()
 	statePath := filepath.Join(applyRoot, "state.json")
