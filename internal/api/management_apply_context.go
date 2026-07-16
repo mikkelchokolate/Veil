@@ -13,6 +13,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -348,7 +349,7 @@ func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
 		if !inb.Enabled || inb.Protocol != "hysteria2" {
 			continue
 		}
-		domain := inboundDomain(inb)
+		domain := model.InboundDomain(inb)
 		if domain == "" {
 			continue
 		}

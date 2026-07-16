@@ -2,7 +2,6 @@ package hysteria2
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -45,7 +44,7 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		return "", err
 	}
 	url := masqueradeURL(settings, inbound)
-	domain := hysteria2Domain(settings, inbound)
+	domain := model.ResolveInboundDomain(inbound, settings)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
 		Domain:        domain,
@@ -70,13 +69,3 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 	return renderer.RenderHysteria2(hystConfig)
 }
 
-func hysteria2Domain(settings model.Settings, inbound model.Inbound) string {
-	if inbound.ProtocolFields != nil {
-		if d, ok := inbound.ProtocolFields["domain"].(string); ok {
-			if v := strings.TrimSpace(d); v != "" {
-				return v
-			}
-		}
-	}
-	return strings.TrimSpace(settings.Domain)
-}

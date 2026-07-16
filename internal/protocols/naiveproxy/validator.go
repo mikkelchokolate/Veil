@@ -3,6 +3,7 @@ package naiveproxy
 import (
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -26,6 +27,31 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 			Severity: "error",
 			Field:    "domain",
 			Message:  "Naive inbound requires a public domain.",
+			Source:   "naiveproxy",
+		})
+	} else if err := hostenv.ValidateDomain(domain); err != nil {
+		issues = append(issues, model.ValidationIssue{
+			Code:     "naive_domain_invalid",
+			Severity: "error",
+			Field:    "domain",
+			Message:  "Naive inbound domain is invalid: " + err.Error(),
+			Source:   "naiveproxy",
+		})
+	}
+	if email := model.ResolveInboundEmail(inbound, settings); email == "" {
+		issues = append(issues, model.ValidationIssue{
+			Code:     "naive_email_required",
+			Severity: "error",
+			Field:    "email",
+			Message:  "Naive inbound requires an ACME email.",
+			Source:   "naiveproxy",
+		})
+	} else if err := hostenv.ValidateEmail(email); err != nil {
+		issues = append(issues, model.ValidationIssue{
+			Code:     "naive_email_invalid",
+			Severity: "error",
+			Field:    "email",
+			Message:  "Naive inbound email is invalid: " + err.Error(),
 			Source:   "naiveproxy",
 		})
 	}

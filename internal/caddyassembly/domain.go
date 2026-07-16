@@ -37,7 +37,7 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 
 	for _, inb := range inbounds {
 		if inb.Protocol == "naiveproxy" {
-			domain := strings.ToLower(naiveDomainWithFallback(inb, settings))
+			domain := naiveDomainWithFallback(inb, settings)
 			if domain == "" {
 				continue
 			}
@@ -45,12 +45,12 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 			addEmail(emails, domain, naiveEmailWithFallback(inb, settings))
 		}
 		if inb.Protocol == "hysteria2" {
-			domain := strings.ToLower(stringField(inb.ProtocolFields, "domain"))
+			domain := model.InboundDomain(inb)
 			if domain == "" {
 				continue
 			}
 			ensureOwner(owners, domain).HysteriaInboundNames = append(ensureOwner(owners, domain).HysteriaInboundNames, inb.Name)
-			addEmail(emails, domain, stringField(inb.ProtocolFields, "email"))
+			addEmail(emails, domain, model.InboundEmail(inb))
 		}
 	}
 
@@ -118,12 +118,9 @@ func stringField(m map[string]any, key string) string {
 }
 
 func naiveDomainWithFallback(inb model.Inbound, settings model.Settings) string {
-	if d := stringField(inb.ProtocolFields, "domain"); d != "" {
-		return d
-	}
-	return settings.Domain
+	return model.ResolveInboundDomain(inb, settings)
 }
 
-func naiveEmailWithFallback(inb model.Inbound, settings model.Settings) string {
-	return stringField(inb.ProtocolFields, "email")
+func naiveEmailWithFallback(inb model.Inbound, _ model.Settings) string {
+	return model.InboundEmail(inb)
 }

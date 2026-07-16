@@ -195,6 +195,71 @@ func TestRenderConfigWithCaddyPanelAccess(t *testing.T) {
 	}
 }
 
+func TestRenderConfigWithInboundDomain(t *testing.T) {
+	p := New()
+	paths := generatedconfig.NewPaths("/tmp/veil")
+	artifacts, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{
+			Domain:            "example.com",
+			PanelAccess:       "caddy",
+			Hysteria2Password: "secret",
+		},
+		Paths: paths,
+		Inbounds: []model.Inbound{
+			{
+				Name:      "h2-1",
+				Protocol:  "hysteria2",
+				Transport: "udp",
+				Port:      8443,
+				Enabled:   true,
+				ProtocolFields: map[string]any{
+					"domain": "inbound.example.com",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(artifacts[0].Body, "cert: "+paths.CertPath("inbound.example.com")) {
+		t.Errorf("expected inbound caddy cert path, got:\n%s", artifacts[0].Body)
+	}
+	if !strings.Contains(artifacts[0].Body, "key: "+paths.KeyPath("inbound.example.com")) {
+		t.Errorf("expected inbound caddy key path, got:\n%s", artifacts[0].Body)
+	}
+}
+
+func TestRenderConfigWithInboundDomainLowercases(t *testing.T) {
+	p := New()
+	paths := generatedconfig.NewPaths("/tmp/veil")
+	artifacts, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{
+			Domain:            "example.com",
+			PanelAccess:       "caddy",
+			Hysteria2Password: "secret",
+		},
+		Paths: paths,
+		Inbounds: []model.Inbound{
+			{
+				Name:      "h2-1",
+				Protocol:  "hysteria2",
+				Transport: "udp",
+				Port:      8443,
+				Enabled:   true,
+				ProtocolFields: map[string]any{
+					"domain": "  Inbound.Example.COM  ",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(artifacts[0].Body, "cert: "+paths.CertPath("inbound.example.com")) {
+		t.Errorf("expected lowercased inbound caddy cert path, got:\n%s", artifacts[0].Body)
+	}
+}
+
 func TestRenderConfigWithWarpUpstream(t *testing.T) {
 	p := New()
 	paths := generatedconfig.NewPaths("/tmp/veil")
@@ -441,9 +506,21 @@ func TestValidateSettings(t *testing.T) {
 
 func TestValidateInbound(t *testing.T) {
 	p := New()
-	issues := p.ValidateInbound(model.Settings{}, model.Inbound{})
+	valid := model.Inbound{
+		Protocol: "hysteria2",
+		ProtocolFields: map[string]any{
+			"domain": "x.com",
+			"email":  "admin@x.com",
+		},
+	}
+	issues := p.ValidateInbound(model.Settings{Domain: "x.com"}, valid)
 	if len(issues) != 0 {
 		t.Errorf("ValidateInbound returned issues: %v", issues)
+	}
+
+	missing := p.ValidateInbound(model.Settings{}, model.Inbound{Protocol: "hysteria2"})
+	if len(missing) == 0 {
+		t.Error("expected issues for missing domain")
 	}
 }
 
@@ -734,6 +811,35 @@ func TestBuildLinksUsesInboundDomainWithFallback(t *testing.T) {
 	wantPrefix = "hysteria2://" + url.QueryEscape("secret-pass") + "@example.com:8443/"
 	if !strings.HasPrefix(links[0].URI, wantPrefix) {
 		t.Errorf("fallback URI prefix mismatch: got %q", links[0].URI)
+	}
+}
+
+func TestBuildLinksProfileUsesInboundDomain(t *testing.T) {
+	p := New()
+	settings := model.Settings{Domain: "example.com"}
+	inbound := model.Inbound{
+		Name:      "h2",
+		Protocol:  "hysteria2",
+		Transport: "udp",
+		Port:      8443,
+		Profiles: []model.ClientProfile{
+			{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true},
+		},
+		ProtocolFields: map[string]any{"domain": "inbound.example.com"},
+	}
+	links, err := p.BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	wantPrefix := "hysteria2://alice:alice-pass@inbound.example.com:8443/"
+	if !strings.HasPrefix(links[0].URI, wantPrefix) {
+		t.Errorf("URI prefix mismatch: got %q", links[0].URI)
+	}
+	if !strings.Contains(links[0].URI, "sni=inbound.example.com") {
+		t.Errorf("URI missing inbound sni: %q", links[0].URI)
 	}
 }
 

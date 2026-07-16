@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -242,41 +243,15 @@ func caddyRequired(settings Settings, inbounds []Inbound) bool {
 }
 
 func inboundDomain(inb Inbound) string {
-	if inb.ProtocolFields == nil {
-		return ""
-	}
-	v, ok := inb.ProtocolFields["domain"].(string)
-	if !ok {
-		return ""
-	}
-	return v
+	return model.InboundDomain(inb)
 }
 
 func resolveNaiveDomain(inb Inbound, settings Settings) string {
-	if inb.ProtocolFields != nil {
-		if d, ok := inb.ProtocolFields["domain"].(string); ok {
-			if v := strings.TrimSpace(d); v != "" {
-				return v
-			}
-		}
-	}
-	return strings.TrimSpace(settings.Domain)
+	return model.ResolveInboundDomain(inb, settings)
 }
 
 func resolveNaiveEmail(inb Inbound, settings Settings) string {
-	candidates := []string{}
-	if inb.ProtocolFields != nil {
-		if e, ok := inb.ProtocolFields["email"].(string); ok {
-			candidates = append(candidates, e)
-		}
-	}
-	candidates = append(candidates, settings.DefaultAcmeEmail, settings.PanelEmail, settings.Email)
-	for _, c := range candidates {
-		if v := strings.TrimSpace(c); v != "" {
-			return v
-		}
-	}
-	return ""
+	return model.ResolveInboundEmail(inb, settings)
 }
 
 func naiveHasCredential(inb Inbound, settings Settings) bool {
@@ -375,10 +350,10 @@ func protocolInboundValidationReady(settings Settings, inbound Inbound) bool {
 	if !ok {
 		return false
 	}
-	if validator.NeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
+	if validator.NeedsDomain(settings, inbound) && model.ResolveInboundDomain(inbound, settings) == "" {
 		return false
 	}
-	if validator.NeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
+	if validator.NeedsEmail(settings, inbound) && model.ResolveInboundEmail(inbound, settings) == "" {
 		return false
 	}
 	return true

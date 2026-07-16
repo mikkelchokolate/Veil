@@ -3,6 +3,8 @@ package clientaccess
 import (
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func TestProtocolStringBranches(t *testing.T) {
@@ -142,7 +144,7 @@ func TestMieruClientConfigLinkRequiresDomain(t *testing.T) {
 	}
 }
 
-func TestClientEndpointForUsesInboundDomainWithFallback(t *testing.T) {
+func TestResolveInboundDomainViaModelHelper(t *testing.T) {
 	cases := []struct {
 		name     string
 		settings Settings
@@ -176,8 +178,8 @@ func TestClientEndpointForUsesInboundDomainWithFallback(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			input := ClientAccessLinkInput{Settings: tc.settings, Inbound: tc.inbound}
-			if got := clientEndpointFor(input); got != tc.want {
+			got := model.ResolveInboundDomain(tc.inbound, tc.settings)
+			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
@@ -211,6 +213,36 @@ func TestHysteria2ProfileLinkUsesInboundDomain(t *testing.T) {
 		t.Fatal("expected link")
 	}
 	wantPrefix := "hysteria2://alice:pass@inbound.example.com:8443/"
+	if !strings.HasPrefix(link.URI, wantPrefix) {
+		t.Fatalf("URI = %q, want prefix %q", link.URI, wantPrefix)
+	}
+}
+
+func TestNaiveFallbackLinkUsesInboundDomain(t *testing.T) {
+	link, ok := naiveFallbackClientLink(ClientAccessLinkInput{
+		Settings: Settings{Domain: "global.example.com", NaiveUsername: "veil", NaivePassword: "global"},
+		Inbound:  Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+		LinkName: "naive",
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	want := "naive+https://veil:global@inbound.example.com:8443"
+	if link.URI != want {
+		t.Fatalf("URI = %q, want %q", link.URI, want)
+	}
+}
+
+func TestHysteria2FallbackLinkUsesInboundDomain(t *testing.T) {
+	link, ok := hysteria2FallbackClientLink(ClientAccessLinkInput{
+		Settings: Settings{Domain: "global.example.com", Hysteria2Password: "global"},
+		Inbound:  Inbound{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+		LinkName: "hy2",
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	wantPrefix := "hysteria2://global@inbound.example.com:8443/"
 	if !strings.HasPrefix(link.URI, wantPrefix) {
 		t.Fatalf("URI = %q, want prefix %q", link.URI, wantPrefix)
 	}

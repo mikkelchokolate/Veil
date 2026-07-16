@@ -7,7 +7,7 @@ import (
 
 // BuildLinks creates client links for a Hysteria2 inbound.
 func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
-	endpoint := hysteria2Domain(settings, inbound)
+	endpoint := model.ResolveInboundDomain(inbound, settings)
 	if endpoint == "" {
 		return nil, nil
 	}

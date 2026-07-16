@@ -80,19 +80,17 @@ func fallbackRoot(settings model.Settings, inbound model.Inbound) string {
 }
 
 // NaiveDomain returns the public domain for the inbound, preferring the inbound
-// ProtocolFields and falling back to the global settings domain.
+// ProtocolFields and falling back to the global settings domain. The result is
+// trimmed and lowercased.
 func NaiveDomain(settings model.Settings, inbound model.Inbound) string {
-	if d := stringField(inbound.ProtocolFields, "domain"); d != "" {
-		return d
-	}
-	return settings.Domain
+	return model.ResolveInboundDomain(inbound, settings)
 }
 
-// NaiveEmail returns the ACME contact email explicitly set on the inbound.
-// It does not fall back to global settings; callers that need the effective
-// email should resolve the domain-level chain themselves.
+// NaiveEmail returns the ACME contact email explicitly set on the inbound,
+// trimmed of whitespace. It does not fall back to global settings; callers that
+// need the effective email should resolve the domain-level chain themselves.
 func NaiveEmail(_ model.Settings, inbound model.Inbound) string {
-	return stringField(inbound.ProtocolFields, "email")
+	return model.InboundEmail(inbound)
 }
 
 // NaivePublicPort returns the public port for the inbound, falling back to the

@@ -440,6 +440,7 @@ func TestValidateInbound(t *testing.T) {
 		Protocol: "naiveproxy",
 		ProtocolFields: map[string]any{
 			"domain":        "x.com",
+			"email":         "admin@x.com",
 			"naiveUsername": "u",
 			"naivePassword": "p",
 		},

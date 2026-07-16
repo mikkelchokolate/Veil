@@ -1,6 +1,10 @@
 package clientaccess
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 func protocolString(m map[string]any, key, fallback string) string {
 	if m == nil {
@@ -148,7 +152,7 @@ func naiveProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = NaiveClientURI(clientEndpointFor(input), input.Inbound.Port, input.Credential.Username, input.Credential.Password)
+	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password)
 	return link, true
 }
 
@@ -168,7 +172,7 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if username == "" {
 		username = protocolString(input.Settings.ProtocolFields, "naiveUsername", input.Settings.NaiveUsername)
 	}
-	link.URI = NaiveClientURI(clientEndpointFor(input), input.Inbound.Port, username, password)
+	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, username, password)
 	return link, true
 }
 
@@ -190,7 +194,7 @@ func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) 
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = Hysteria2UserPassClientURI(clientEndpointFor(input), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, hysteria2Insecure(input))
+	link.URI = Hysteria2UserPassClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, hysteria2Insecure(input))
 	return link, true
 }
 
@@ -206,7 +210,7 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 			password = protocolString(input.Settings.ProtocolFields, "hysteria2Password", input.Settings.Hysteria2Password)
 		}
 	}
-	link.URI = Hysteria2ClientURI(clientEndpointFor(input), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
+	link.URI = Hysteria2ClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
 	return link, true
 }
 
@@ -229,18 +233,7 @@ func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 }
 
 func hasClientEndpoint(input ClientAccessLinkInput) bool {
-	return clientEndpointFor(input) != ""
-}
-
-func clientEndpointFor(input ClientAccessLinkInput) string {
-	if input.Inbound.ProtocolFields != nil {
-		if d, ok := input.Inbound.ProtocolFields["domain"].(string); ok {
-			if v := strings.TrimSpace(d); v != "" {
-				return v
-			}
-		}
-	}
-	return strings.TrimSpace(input.Settings.Domain)
+	return model.ResolveInboundDomain(input.Inbound, input.Settings) != ""
 }
 
 // clientEndpoint returns the global settings domain. Kept for callers that only

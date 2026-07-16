@@ -208,10 +208,7 @@ func naivePublicPort(settings model.Settings, inbound model.Inbound) int {
 // settings domain so existing state that stores the domain at the top level
 // continues to render.
 func naiveDomain(inbound model.Inbound, settings model.Settings) string {
-	if d := stringField(inbound.ProtocolFields, "domain"); d != "" {
-		return d
-	}
-	return settings.Domain
+	return model.ResolveInboundDomain(inbound, settings)
 }
 
 // naiveFallbackRoot mirrors the naiveproxy plugin helper to avoid an import
