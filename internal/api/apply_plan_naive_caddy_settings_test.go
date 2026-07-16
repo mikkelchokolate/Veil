@@ -36,6 +36,25 @@ func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T)
 	}
 }
 
+func TestBuildApplyPlanAcceptsLegacyPanelCaddyDomainEmail(t *testing.T) {
+	plan := BuildApplyPlan(ApplyPlanInput{
+		Settings: Settings{
+			PanelListen: "127.0.0.1:2096",
+			PanelAccess: "caddy",
+			WebBasePath: "/panel-secret/",
+			Mode:        "server",
+			Domain:      "panel.example.com",
+			Email:       "admin@example.com",
+		},
+	})
+	if !plan.Valid {
+		t.Fatalf("legacy Panel Caddy settings should remain valid after upgrade: %+v", plan)
+	}
+	if !containsString(plan.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("legacy Panel Caddy plan missing consolidated config: %+v", plan)
+	}
+}
+
 func TestBuildApplyPlanRequiresCaddySettingsForNaiveProxyInbound(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},

@@ -83,9 +83,22 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 	if !caddyRequired(settings, inbounds) {
 		return material
 	}
-	if settings.PanelAccess == "caddy" && (settings.PanelDomain == "" || settings.PanelEmail == "") {
-		material.Errors = append(material.Errors, "panelDomain and panelEmail are required for caddy Panel access")
-		return material
+	if settings.PanelAccess == "caddy" {
+		panelDomain := strings.TrimSpace(settings.PanelDomain)
+		if panelDomain == "" {
+			panelDomain = strings.TrimSpace(settings.Domain)
+		}
+		panelEmail := strings.TrimSpace(settings.PanelEmail)
+		if panelEmail == "" {
+			panelEmail = strings.TrimSpace(settings.DefaultAcmeEmail)
+		}
+		if panelEmail == "" {
+			panelEmail = strings.TrimSpace(settings.Email)
+		}
+		if panelDomain == "" || panelEmail == "" {
+			material.Errors = append(material.Errors, "panelDomain and panelEmail are required for caddy Panel access")
+			return material
+		}
 	}
 	if settings.PanelAccess == "caddy" && settings.PanelPublicPort == 0 {
 		settings.PanelPublicPort = 443
