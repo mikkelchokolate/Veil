@@ -221,7 +221,7 @@ func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	}
 }
 
-func TestReloadPromotedServicesStopsOrphansBeforeReloading(t *testing.T) {
+func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
 	state.liveRoot = filepath.Join(state.applyRoot, "live")
 	state.inbounds = []Inbound{{Name: "new", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
@@ -241,9 +241,9 @@ func TestReloadPromotedServicesStopsOrphansBeforeReloading(t *testing.T) {
 		got = append(got, a.Unit+":"+string(a.Action))
 	}
 	want := []string{
+		"veil-hysteria2@new.service:restart",
 		"veil-hysteria2@old.service:stop",
 		"veil-hysteria2@old.service:disable",
-		"veil-hysteria2@new.service:restart",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("service actions = %v, want %v", got, want)

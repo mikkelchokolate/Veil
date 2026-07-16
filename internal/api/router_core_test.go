@@ -213,7 +213,7 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 		switch unit {
 		case "veil.service":
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running"}
-		case "veil-caddy@panel.service":
+		case "veil-caddy.service":
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "inactive", SubState: "dead"}
 		default:
 			return ServiceRuntimeStatus{Unit: unit, LoadState: "not-found", ActiveState: "unknown", SubState: "unknown", Error: "unit not found"}
@@ -221,7 +221,13 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "state.json")
+	stateBody := []byte(`{"schemaVersion":4,"setup":{"completed":false},"settings":{"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel/","mode":"dev","domain":"panel.example.com","email":"admin@example.com"},"inbounds":[{"name":"edge","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],"routingRules":[],"routingPreset":"","routingSource":{"repository":"","files":null},"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"},"users":[]}`)
+	if err := os.WriteFile(statePath, stateBody, 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(stateDir, "state.key")})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -253,11 +259,11 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if services["veil"].Unit != "veil.service" || services["veil"].ActiveState != "active" || services["veil"].SubState != "running" {
 		t.Fatalf("veil runtime status not included: %+v", services["veil"])
 	}
-	if services["caddy-panel"].Unit != "veil-caddy@panel.service" || services["caddy-panel"].ActiveState != "inactive" || services["caddy-panel"].SubState != "dead" {
-		t.Fatalf("naive/caddy runtime status not included: %+v", services["caddy-panel"])
+	if services["caddy"].Unit != "veil-caddy.service" || services["caddy"].ActiveState != "inactive" || services["caddy"].SubState != "dead" {
+		t.Fatalf("caddy runtime status not included: %+v", services["caddy"])
 	}
-	if services["hysteria2"].Unit != "veil-hysteria2@.service" || services["hysteria2"].ActiveState != "unknown" || services["hysteria2"].Error == "" {
-		t.Fatalf("hysteria2 runtime status error not included: %+v", services["hysteria2"])
+	if services["hysteria2-edge"].Unit != "veil-hysteria2@edge.service" || services["hysteria2-edge"].ActiveState != "unknown" || services["hysteria2-edge"].Error == "" {
+		t.Fatalf("hysteria2 runtime status error not included: %+v", services["hysteria2-edge"])
 	}
 }
 

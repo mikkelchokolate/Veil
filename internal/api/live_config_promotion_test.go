@@ -29,8 +29,8 @@ func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
 
 func TestLiveConfigPromotionPromotesBacksUpAndRollsBack(t *testing.T) {
 	root := t.TempDir()
-	staged := filepath.Join(root, "generated", "caddy", "panel.Caddyfile")
-	live := filepath.Join(root, "live", "caddy", "panel.Caddyfile")
+	staged := filepath.Join(root, "generated", "caddy", "config.json")
+	live := filepath.Join(root, "live", "caddy", "config.json")
 	if err := atomicfile.Write(staged, []byte("new"), 0o600, 0o700); err != nil {
 		t.Fatalf("write staged: %v", err)
 	}
@@ -62,9 +62,9 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 		t.Fatalf("write staged: %v", err)
 	}
 
-	orphanCaddy := filepath.Join(root, "live", "caddy", "orphan.Caddyfile")
+	orphanCaddy := filepath.Join(root, "live", "caddy", "orphan.json")
 	orphanHysteria2 := filepath.Join(root, "live", "hysteria2", "orphan.yaml")
-	nonOrphanCaddy := filepath.Join(root, "live", "caddy", "panel.Caddyfile")
+	nonOrphanCaddy := filepath.Join(root, "live", "caddy", "config.json")
 	aggregateOnlyMieruSidecar := filepath.Join(root, "live", "mieru", "sidecar.json")
 
 	if err := atomicfile.Write(orphanCaddy, []byte("orphan caddy content"), 0o600, 0o700); err != nil {
@@ -127,7 +127,7 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *testing.T) {
 	got := liveConfigOrphanDirs()
 	want := []liveConfigOrphanDir{
-		{subpath: "caddy", ext: ".Caddyfile", exclude: "panel.Caddyfile"},
+		{subpath: "caddy", ext: ".json", exclude: "config.json"},
 		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
 		{subpath: "mieru", ext: ".json"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
@@ -155,8 +155,8 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 			ok:     true,
 		},
 		{
-			staged: filepath.Join(root, "generated", "caddy", "panel.Caddyfile"),
-			live:   filepath.Join(root, "live", "caddy", "panel.Caddyfile"),
+			staged: filepath.Join(root, "generated", "caddy", "config.json"),
+			live:   filepath.Join(root, "live", "caddy", "config.json"),
 			ok:     true,
 		},
 		{

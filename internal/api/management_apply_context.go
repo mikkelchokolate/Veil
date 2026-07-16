@@ -3,19 +3,26 @@ package api
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
-	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
+
+// caddyAdminLoader loads a Caddy JSON config through the Admin API. Tests
+// override this variable to assert the Admin API path or inject failures.
+var caddyAdminLoader = func(configJSON []byte) error {
+	return caddyadmin.NewClient("").LoadConfig(configJSON)
+}
 
 // firewallApplier is the UFW rule applier used by apply. Tests can override it
 // to avoid running real ufw commands.
@@ -147,32 +154,69 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
-	if ctx.state.settings.PanelAccess == "caddy" && ctx.state.settings.Domain != "" && ctx.caddyCertSyncNeeded(liveFiles) {
-		results = append(results, ctx.syncCaddyCert())
-		if !results[len(results)-1].Success {
+
+	// Phase 1: Load Caddy config first. This must happen before hysteria2
+	// certificate synchronization so that Caddy can begin (or complete) ACME
+	// issuance for newly referenced hysteria2 domains.
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.settings, ctx.state.inbounds, ctx.state.warp).Runtimes() {
+		if runtime.Unit != unitCaddy {
+			continue
+		}
+		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
+			continue
+		}
+		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
+		if !containsCleanPath(liveFiles, want) {
+			continue
+		}
+		// For the consolidated Caddy unit, prefer loading the runtime config
+		// through Caddy's Admin API and only fall back to systemctl reload when
+		// the Admin API is unavailable.
+		caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
+		if containsCleanPath(liveFiles, caddyLivePath) {
+			// Use a synthetic command for the Admin API load. There is no systemctl
+			// invocation here; the REST response contract still expects a Command
+			// array, so we report the Caddy admin endpoint that was used.
+			adminResult := ServiceActionResult{
+				Name:    unitCaddy,
+				Command: []string{"caddy", "admin", "load"},
+			}
+			configBytes, err := os.ReadFile(caddyLivePath)
+			if err == nil {
+				err = caddyAdminLoader(configBytes)
+			}
+			if err == nil {
+				adminResult.Success = true
+				results = append(results, adminResult)
+				continue
+			}
+			adminResult.Error = err.Error()
+			results = append(results, adminResult)
+			// Fall through to the systemctl reload below.
+		}
+		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
+		results = append(results, result)
+		if !result.Success {
 			return results
 		}
 	}
 
-	// Stop and disable units whose configs were removed before reloading the
-	// promoted services. This frees ports and other resources so the new
-	// configuration can bind them without conflicting with the previous state.
-	if len(ctx.state.orphanedUnits) > 0 {
-		for _, unit := range ctx.state.orphanedUnits {
-			stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
-			results = append(results, stop)
-			if !stop.Success {
-				return results
-			}
-			disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
-			results = append(results, disable)
-			if !disable.Success {
+	// Phase 2: Synchronize hysteria2 certificates after Caddy has reloaded so
+	// new domains have a chance to obtain a certificate before hysteria2 starts.
+	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {
+		for _, domain := range ctx.hysteria2DomainsLocked() {
+			results = append(results, ctx.syncCaddyCertForHysteria2(domain))
+			if !results[len(results)-1].Success {
 				return results
 			}
 		}
 	}
 
-	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
+	// Phase 3: Reload remaining services (including hysteria2).
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.settings, ctx.state.inbounds, ctx.state.warp).Runtimes() {
+		if runtime.Unit == unitCaddy {
+			continue
+		}
 		if runtime.PromotedSubpath == "" || runtime.PromotedVerb == "" {
 			continue
 		}
@@ -193,6 +237,24 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		results = append(results, result)
 		if !result.Success {
 			return results
+		}
+	}
+
+	// Stop and disable units whose configs were removed after the new
+	// configuration has taken their ports. This ordering prevents a brief
+	// window where an old service would rebind a port needed by the new config.
+	if len(ctx.state.orphanedUnits) > 0 {
+		for _, unit := range ctx.state.orphanedUnits {
+			stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
+			results = append(results, stop)
+			if !stop.Success {
+				return results
+			}
+			disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
+			results = append(results, disable)
+			if !disable.Success {
+				return results
+			}
 		}
 	}
 
@@ -263,9 +325,9 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 	return rollbackFiles, rollbackActions
 }
 
-func (ctx ManagementApplyContext) caddyCertSyncNeeded(liveFiles []string) bool {
-	for _, runtime := range ctx.managedRuntimeCatalogLocked().Runtimes() {
-		if !protocols.NeedsCaddyCertSync(runtime.Protocol) {
+func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
+	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.settings, ctx.state.inbounds, ctx.state.warp).Runtimes() {
+		if runtime.Protocol != "hysteria2" {
 			continue
 		}
 		if runtime.PromotedSubpath == "" {
@@ -279,17 +341,37 @@ func (ctx ManagementApplyContext) caddyCertSyncNeeded(liveFiles []string) bool {
 	return false
 }
 
-func (ctx ManagementApplyContext) syncCaddyCert() ServiceActionResult {
+func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
+	seen := make(map[string]struct{})
+	var domains []string
+	for _, inb := range ctx.state.inbounds {
+		if !inb.Enabled || inb.Protocol != "hysteria2" {
+			continue
+		}
+		domain := inboundDomain(inb)
+		if domain == "" {
+			continue
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		domains = append(domains, domain)
+	}
+	return domains
+}
+
+func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) ServiceActionResult {
 	result := ServiceActionResult{
 		Name:    "sync-caddy-cert",
-		Command: []string{"helper", "sync_caddy_cert", ctx.state.settings.Domain},
+		Command: []string{"helper", "sync_caddy_cert", domain},
 	}
 	if ctx.state.privileged == nil {
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
 	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
-		Domain: ctx.state.settings.Domain,
+		Domain: domain,
 		OutDir: "/etc/veil/certs",
 	})
 	if err != nil {
@@ -297,7 +379,7 @@ func (ctx ManagementApplyContext) syncCaddyCert() ServiceActionResult {
 		return result
 	}
 	if !syncResult.Found {
-		result.Error = "Caddy has not yet issued a certificate for " + ctx.state.settings.Domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
+		result.Error = "Caddy has not yet issued a certificate for " + domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
 		return result
 	}
 	result.Success = true
@@ -405,7 +487,8 @@ func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success
 	return ctx.state.applyHistoryLocked().Append(stage, success, response)
 }
 
-func filterHealthCheckableActions(actions []ServiceActionResult, catalog ManagedRuntimeCatalog) []ServiceActionResult {
+func filterHealthCheckableActions(actions []ServiceActionResult) []ServiceActionResult {
+	catalog := NewManagedRuntimeCatalog()
 	out := make([]ServiceActionResult, 0, len(actions))
 	for _, action := range actions {
 		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
@@ -416,15 +499,14 @@ func filterHealthCheckableActions(actions []ServiceActionResult, catalog Managed
 }
 
 func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
-	catalog := ctx.managedRuntimeCatalogLocked()
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
-		}).Check(filterHealthCheckableActions(actions, catalog))
+		}).Check(filterHealthCheckableActions(actions))
 	}
 	units := []string{}
 	for _, action := range actions {
-		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
+		if action.Success && action.Name != "" && NewManagedRuntimeCatalog().AllowsHealthUnit(action.Name) {
 			units = append(units, action.Name)
 		}
 	}

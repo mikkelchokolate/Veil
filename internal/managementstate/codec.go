@@ -8,35 +8,26 @@ import (
 	"io"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
-	"github.com/mikkelchokolate/Veil/internal/protocols"
-	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 )
 
 const CurrentSchemaVersion = 4
 
 // settingsProtocolFieldKeys are legacy flat settings fields that are now kept
-// inside settings.protocolFields for dynamic UI/validation. They are derived
-// from the registered protocol plugins so the migration stays consistent with
-// the plugin architecture.
-var settingsProtocolFieldKeys = protocolFieldKeys(protocols.NewRegistry().SettingsFieldSchemas())
+// inside settings.protocolFields for dynamic UI/validation.
+var settingsProtocolFieldKeys = []string{
+	"naiveUsername", "naivePassword",
+	"hysteria2Password", "hysteria2Insecure", "masqueradeURL",
+	"fallbackRoot",
+	"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID",
+}
 
 // inboundProtocolFieldKeys are legacy flat inbound fields that are now kept
-// inside inbound.protocolFields for dynamic UI/validation. They are derived
-// from the registered protocol plugins so the migration stays consistent with
-// the plugin architecture.
-var inboundProtocolFieldKeys = protocolFieldKeys(protocols.NewRegistry().InboundFieldSchemas())
-
-func protocolFieldKeys(schemas []schema.FieldSchema) []string {
-	keys := make([]string, 0, len(schemas))
-	seen := make(map[string]struct{}, len(schemas))
-	for _, f := range schemas {
-		if _, ok := seen[f.Key]; ok {
-			continue
-		}
-		seen[f.Key] = struct{}{}
-		keys = append(keys, f.Key)
-	}
-	return keys
+// inside inbound.protocolFields for dynamic UI/validation.
+var inboundProtocolFieldKeys = []string{
+	"naiveUsername", "naivePassword",
+	"hysteria2Password", "hysteria2Insecure", "masqueradeURL",
+	"fallbackRoot",
+	"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID",
 }
 
 func moveToProtocolFields(obj map[string]interface{}, keys []string) map[string]interface{} {

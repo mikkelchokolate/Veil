@@ -12,7 +12,7 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		requiresRenderSettings bool
 		settingsError          bool
 	}{
-		{"naiveproxy", "/etc/veil/generated/caddy/panel.Caddyfile", "reload veil-caddy@.service", true, false, true},
+		{"naiveproxy", "/etc/veil/generated/caddy/config.json", "reload veil-caddy.service", true, false, false},
 		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
 		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
 		{"olcrtc", "/etc/veil/generated/olcrtc/server.yaml", "restart veil-olcrtc@.service", true, false, false},

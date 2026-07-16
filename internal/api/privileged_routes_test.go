@@ -39,7 +39,7 @@ func (c *recordingPrivilegedClient) Promote(_ context.Context, request privilege
 
 func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 	root := t.TempDir()
-	staged := filepath.Join(root, "generated", "caddy", "edge.Caddyfile")
+	staged := filepath.Join(root, "generated", "caddy", "config.json")
 	if err := os.MkdirAll(filepath.Dir(staged), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		statusActiveState: "inactive", // WARP is not running in this caddy-only scenario
 		promoteResult: privileged.PromoteResult{
 			BackupID:         "20260605T120000.000000000Z",
-			WrittenArtifacts: []string{"caddy/edge.Caddyfile"},
+			WrittenArtifacts: []string{"caddy/config.json"},
 		},
 	}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, Privileged: client})
@@ -60,11 +60,11 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	if !reflect.DeepEqual(client.promotions, []privileged.PromoteRequest{{
-		ArtifactIDs: []string{"caddy/edge.Caddyfile"},
+		ArtifactIDs: []string{"caddy/config.json"},
 	}}) {
 		t.Fatalf("promotion requests=%+v", client.promotions)
 	}
-	if !reflect.DeepEqual(liveFiles, []string{filepath.Join(root, "live", "caddy", "edge.Caddyfile")}) {
+	if !reflect.DeepEqual(liveFiles, []string{filepath.Join(root, "live", "caddy", "config.json")}) {
 		t.Fatalf("live files=%+v", liveFiles)
 	}
 	if len(records) != 1 || records[0].BackupID != "20260605T120000.000000000Z" {
@@ -73,7 +73,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 
 	client.promoteResult = privileged.PromoteResult{
 		BackupID:         "20260605T120000.000000000Z",
-		WrittenArtifacts: []string{"caddy/edge.Caddyfile"},
+		WrittenArtifacts: []string{"caddy/config.json"},
 	}
 	rollbackFiles, _ := context.rollbackPromotedConfigsLocked(records, liveFiles)
 	if len(client.promotions) != 2 || client.promotions[1].RestoreBackupID != "20260605T120000.000000000Z" {
@@ -88,10 +88,10 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
 	results := NewManagementApplyContext(state).checkServiceHealthLocked([]ServiceActionResult{{
-		Name: "veil-caddy@panel.service", Success: true,
+		Name: "veil-caddy.service", Success: true,
 	}})
 	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{{
-		Units: []string{"veil-caddy@panel.service"},
+		Units: []string{"veil-caddy.service"},
 	}}) {
 		t.Fatalf("status requests=%+v", client.statusRequests)
 	}
@@ -190,7 +190,7 @@ func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
 
-	restart := httptest.NewRequest(http.MethodPost, "/api/services/caddy-panel/restart", strings.NewReader(`{"confirm":true}`))
+	restart := httptest.NewRequest(http.MethodPost, "/api/services/caddy/restart", strings.NewReader(`{"confirm":true}`))
 	restart.Header.Set("Content-Type", "application/json")
 	restartResponse := httptest.NewRecorder()
 	router.ServeHTTP(restartResponse, restart)
@@ -198,7 +198,7 @@ func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {
 		t.Fatalf("restart status=%d body=%s", restartResponse.Code, restartResponse.Body.String())
 	}
 	wantAction := privileged.ServiceActionRequest{
-		Unit: "veil-caddy@panel.service", Action: privileged.ServiceActionRestart,
+		Unit: "veil-caddy.service", Action: privileged.ServiceActionRestart,
 	}
 	if !reflect.DeepEqual(client.serviceActions, []privileged.ServiceActionRequest{wantAction}) {
 		t.Fatalf("service actions=%+v", client.serviceActions)
@@ -216,12 +216,12 @@ func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {
 	}
 
 	logResponse := httptest.NewRecorder()
-	router.ServeHTTP(logResponse, httptest.NewRequest(http.MethodGet, "/api/logs?unit=caddy-panel&lines=500", nil))
+	router.ServeHTTP(logResponse, httptest.NewRequest(http.MethodGet, "/api/logs?unit=caddy&lines=500", nil))
 	if logResponse.Code != http.StatusOK {
 		t.Fatalf("logs status=%d body=%s", logResponse.Code, logResponse.Body.String())
 	}
 	if !reflect.DeepEqual(client.journals, []privileged.JournalRequest{{
-		Unit: "veil-caddy@panel.service", Lines: 500,
+		Unit: "veil-caddy.service", Lines: 500,
 	}}) {
 		t.Fatalf("journal requests=%+v", client.journals)
 	}

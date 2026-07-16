@@ -114,14 +114,14 @@ func TestApplyIntentSelectsInboundOn443(t *testing.T) {
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive.Caddyfile") {
-		t.Fatalf("expected naive.Caddyfile config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
 	}
-	if !contains(intent.Actions, "reload veil-caddy@naive.service") {
-		t.Fatalf("expected naive service action, got %+v", intent.Actions)
+	if !contains(intent.Actions, "reload veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy service action, got %+v", intent.Actions)
 	}
-	if !contains(intent.Runtimes, "veil-caddy@naive.service") {
-		t.Fatalf("expected naive runtime, got %+v", intent.Runtimes)
+	if !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy runtime, got %+v", intent.Runtimes)
 	}
 	if len(intent.Errors) != 0 {
 		t.Fatalf("expected no errors, got %+v", intent.Errors)
@@ -137,8 +137,11 @@ func TestApplyIntentFallsBackToFirstCaddyProtocolInbound(t *testing.T) {
 		{Name: "naive2", Protocol: "naiveproxy", Transport: "tcp", Port: 8444, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive1.Caddyfile") {
-		t.Fatalf("expected naive1.Caddyfile config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
 	}
 	if len(intent.Errors) != 0 {
 		t.Fatalf("expected no errors, got %+v", intent.Errors)
@@ -152,8 +155,11 @@ func TestApplyIntentSkipsDisabledInbounds(t *testing.T) {
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: false},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") {
-		t.Fatalf("expected panel.Caddyfile fallback config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
 	}
 	if len(intent.Errors) != 0 {
 		t.Fatalf("expected no errors, got %+v", intent.Errors)
@@ -168,8 +174,11 @@ func TestApplyIntentPrefers443InboundOverFallback(t *testing.T) {
 		{Name: "naive-443", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/naive-443.Caddyfile") {
-		t.Fatalf("expected 443 inbound config, got %+v", intent.Configs)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
 	}
 }
 
@@ -180,9 +189,13 @@ func TestApplyIntentRequiresCaddyFuncNil(t *testing.T) {
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	// With nil requiresCaddy, no inbound requires caddy, so fallback panel config is used.
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") {
-		t.Fatalf("expected panel.Caddyfile fallback config, got %+v", intent.Configs)
+	// With nil requiresCaddy, no inbound requires caddy, so the consolidated panel
+	// Caddy config is still used.
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
+		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
+	}
+	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
 	}
 }
 

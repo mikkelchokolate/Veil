@@ -18,6 +18,8 @@ import (
 type ManagedRuntime = service.ManagedRuntime
 type ManagedRuntimeCatalog = service.ManagedRuntimeCatalog
 
+const unitCaddy = "veil-caddy.service"
+
 // NewManagedRuntimeCatalog returns the broad management catalog used for apply,
 // repair, privileged policy checks, and backward-compatible service commands. It
 // intentionally includes fallback/template runtimes so first-apply, recovery,
@@ -48,13 +50,8 @@ func NewManagedRuntimeCatalogFor(settings Settings, inbounds []Inbound, warp War
 		}
 	}
 
-	// Ensure the panel caddy runtime is present and uses the canonical empty
-	// Protocol. In the broad fallback catalog (nil inbounds) the naiveproxy
-	// plugin's fallback descriptor contributes the same unit with
-	// Protocol="naiveproxy"; replace it so panel caddy is consistently
-	// classified as a panel runtime, not a protocol runtime.
-	if settings.PanelAccess == "caddy" || len(inbounds) == 0 {
-		runtimes = replaceOrAppendRuntime(runtimes, panelCaddyRuntime())
+	if (caddyRequired(settings, inbounds) || len(inbounds) == 0) && !hasCaddyRuntime(runtimes) {
+		runtimes = append(runtimes, caddyManagedRuntime())
 	}
 
 	if warp.Enabled || len(inbounds) == 0 {
@@ -85,14 +82,23 @@ func replaceOrAppendRuntime(runtimes []ManagedRuntime, runtime ManagedRuntime) [
 	return append(runtimes, runtime)
 }
 
-func panelCaddyRuntime() ManagedRuntime {
+func hasCaddyRuntime(runtimes []ManagedRuntime) bool {
+	for _, rt := range runtimes {
+		if rt.Unit == unitCaddy {
+			return true
+		}
+	}
+	return false
+}
+
+func caddyManagedRuntime() ManagedRuntime {
 	return ManagedRuntime{
-		Name:             "caddy-panel",
-		ActionName:       "caddy-panel",
+		Name:             "caddy",
+		ActionName:       "caddy",
 		Transport:        "tcp",
-		Unit:             "veil-caddy@panel.service",
-		TemplateUnit:     renderer.UnitCaddy,
-		PromotedSubpath:  generatedconfig.CaddyfileSubpath,
+		Unit:             unitCaddy,
+		TemplateUnit:     unitCaddy,
+		PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
 		PromotedVerb:     "reload",
 		ManualRestart:    true,
 		HealthCheckAfter: true,
@@ -151,20 +157,6 @@ func stateFileExists(path string) bool {
 func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, warp WarpConfig) ManagedRuntimeCatalog {
 	runtimes := []ManagedRuntime{{Name: "veil", ActionName: "veil", Unit: renderer.UnitVeil, ManualRestart: true}}
 
-	if settings.PanelAccess == "caddy" {
-		runtimes = append(runtimes, ManagedRuntime{
-			Name:             "caddy-panel",
-			ActionName:       "caddy-panel",
-			Transport:        "tcp",
-			Unit:             "veil-caddy@panel.service",
-			TemplateUnit:     renderer.UnitCaddy,
-			PromotedSubpath:  generatedconfig.CaddyfileSubpath,
-			PromotedVerb:     "reload",
-			ManualRestart:    true,
-			HealthCheckAfter: true,
-		})
-	}
-
 	registry := protocols.NewRegistry()
 	for _, p := range registry.All() {
 		rp, ok := protocols.AsRuntimeProvider(p)
@@ -177,12 +169,16 @@ func NewManagedRuntimeCatalogForSnapshot(settings Settings, inbounds []Inbound, 
 		}
 	}
 
+	if caddyRequired(settings, inbounds) && !hasCaddyRuntime(runtimes) {
+		runtimes = append(runtimes, caddyManagedRuntime())
+	}
+
 	if warp.Enabled {
 		runtimes = append(runtimes, ManagedRuntime{
-			Name:             "sing-box",
-			ActionName:       "sing-box",
-			Unit:             renderer.UnitWarp,
-			PromotedSubpath:  generatedconfig.WarpConfigSubpath,
+			Name:            "sing-box",
+			ActionName:      "sing-box",
+			Unit:            renderer.UnitWarp,
+			PromotedSubpath: generatedconfig.WarpConfigSubpath,
 			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,

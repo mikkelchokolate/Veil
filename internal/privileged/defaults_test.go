@@ -10,7 +10,7 @@ func TestDefaultPolicyProvidesManagedPathsAndUnits(t *testing.T) {
 	if policy.StagingRoot == "" || policy.GeneratedRoot == "" || policy.StateRoot == "" {
 		t.Fatal("expected default roots to be set")
 	}
-	for _, unit := range []string{"veil.service", "veil-mieru.service", "veil-warp.service", "veil-caddy@.service", "veil-hysteria2@.service", "veil-olcrtc@.service"} {
+	for _, unit := range []string{"veil.service", "veil-mieru.service", "veil-warp.service", "veil-caddy.service", "veil-hysteria2@.service", "veil-olcrtc@.service"} {
 		if _, ok := policy.ManagedUnits[unit]; !ok {
 			t.Fatalf("expected %s to be managed in default policy", unit)
 		}

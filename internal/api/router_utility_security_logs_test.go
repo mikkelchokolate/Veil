@@ -78,7 +78,7 @@ func TestIsAllowedHealthService(t *testing.T) {
 		service string
 		want    bool
 	}{
-		{"veil-caddy@panel.service", true},
+		{"veil-caddy.service", true},
 		{"veil-hysteria2@default.service", true},
 		{"veil-hysteria2@.service", true},
 		{"veil-warp.service", true},
@@ -86,8 +86,8 @@ func TestIsAllowedHealthService(t *testing.T) {
 		{"caddy.service", false},
 		{"hysteria2.service", false},
 		{"", false},
-		{"veil-caddy@panel", false},
-		{"veil-caddy@panel.service.evil", false},
+		{"veil-caddy.service.evil", false},
+		{"veil-caddy@panel.service", false},
 	}
 	for _, tt := range tests {
 		got := service.NewCommandPolicy(NewManagedRuntimeCatalog()).AllowsHealth(tt.service)
@@ -104,13 +104,13 @@ func TestIsAllowedServiceCommand(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "reload caddy panel",
-			command: []string{"systemctl", "reload", "veil-caddy@panel.service"},
+			name:    "reload caddy",
+			command: []string{"systemctl", "reload", "veil-caddy.service"},
 			want:    true,
 		},
 		{
-			name:    "restart caddy panel disallowed",
-			command: []string{"systemctl", "restart", "veil-caddy@panel.service"},
+			name:    "restart caddy disallowed",
+			command: []string{"systemctl", "restart", "veil-caddy.service"},
 			want:    false,
 		},
 		{

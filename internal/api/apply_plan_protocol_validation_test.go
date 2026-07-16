@@ -1,14 +1,17 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildApplyPlanIncludesProtocolInboundValidationIssues(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{
-			PanelListen: "127.0.0.1:2096",
-			Mode:        "dev",
-			Domain:      "vpn.example.com",
-			Email:       "admin@example.com",
+			PanelListen:      "127.0.0.1:2096",
+			Mode:             "dev",
+			Domain:           "vpn.example.com",
+			DefaultAcmeEmail: "admin@example.com",
 		},
 		Inbounds: []Inbound{{
 			Name:      "naive",
@@ -27,7 +30,15 @@ func TestBuildApplyPlanIncludesProtocolInboundValidationIssues(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("plan is missing protocol-specific inbound validation issue: %+v", plan.Issues)
+	// The consolidated Caddy validation reports the missing credential as a plan
+	// error when the inbound/Caddy redesign validation runs before the legacy
+	// per-inbound validator.
+	for _, err := range plan.Errors {
+		if strings.Contains(err, "naive inbound \"naive\" is missing valid credentials") {
+			return
+		}
+	}
+	t.Fatalf("plan is missing protocol-specific inbound validation issue: %+v", plan)
 }
 
 func TestBuildApplyPlanDefersProtocolInboundIssuesUntilRequiredSettingsExist(t *testing.T) {

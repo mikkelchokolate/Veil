@@ -40,8 +40,11 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		}
 		record := livePromotionRecord{LivePath: livePath}
 		if existing, err := os.ReadFile(livePath); err == nil {
-			relPath := strings.TrimPrefix(livePath, filepath.VolumeName(livePath))
-			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
+			relPath, relErr := filepath.Rel(p.applyRoot, livePath)
+			if relErr != nil {
+				return nil, nil, nil, relErr
+			}
+			backupPath := filepath.Join(backupRoot, filepath.ToSlash(relPath))
 			if err := atomicfile.Write(backupPath, existing, 0o600, 0o700); err != nil {
 				return nil, nil, nil, err
 			}
@@ -67,8 +70,11 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		if err != nil {
 			continue
 		}
-		relPath := strings.TrimPrefix(orphanPath, filepath.VolumeName(orphanPath))
-		backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
+		relPath, relErr := filepath.Rel(p.applyRoot, orphanPath)
+		if relErr != nil {
+			return nil, nil, nil, relErr
+		}
+		backupPath := filepath.Join(backupRoot, filepath.ToSlash(relPath))
 		if err := atomicfile.Write(backupPath, body, 0o600, 0o700); err != nil {
 			return nil, nil, nil, err
 		}
@@ -311,6 +317,12 @@ func unitForPath(slashPath string) (string, bool) {
 		}
 		unit := template[:at+1] + name + template[at+1:]
 		return unit, true
+	}
+
+	// The consolidated Caddy JSON config is not a per-instance template; map it
+	// to the single veil-caddy.service unit explicitly.
+	if slashPath == generatedconfig.CaddyJSONConfigSubpath || strings.HasSuffix(slashPath, "/"+generatedconfig.CaddyJSONConfigSubpath) {
+		return unitCaddy, true
 	}
 
 	// WARP is not a protocol plugin; handle it explicitly.

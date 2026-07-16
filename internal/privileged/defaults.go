@@ -23,8 +23,8 @@ func DefaultPolicy() Policy {
 		ManagedUnitPrefixes:  defaultManagedUnitPrefixes(),
 		Artifacts: map[string]ArtifactPath{
 			"caddy-panel": {
-				Staged:    filepath.FromSlash("caddy/panel.Caddyfile"),
-				Generated: filepath.FromSlash("caddy/panel.Caddyfile"),
+				Staged:    filepath.FromSlash("caddy/config.json"),
+				Generated: filepath.FromSlash("caddy/config.json"),
 			},
 		},
 		UpdateArtifacts: map[string]string{
@@ -36,8 +36,9 @@ func DefaultPolicy() Policy {
 
 func defaultManagedUnits() map[string]struct{} {
 	units := map[string]struct{}{
-		"veil.service":      {},
-		"veil-warp.service": {},
+		"veil.service":       {},
+		"veil-warp.service":  {},
+		"veil-caddy.service": {},
 	}
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
@@ -60,6 +61,10 @@ func defaultManagedUnits() map[string]struct{} {
 func defaultManagedUnitPrefixes() []string {
 	prefixes := []string{}
 	seen := map[string]bool{}
+	// Legacy per-instance Caddy units may still exist on disk; allow the helper
+	// to stop/disable them during orphan cleanup and rollback.
+	seen["veil-caddy@"] = true
+	prefixes = append(prefixes, "veil-caddy@")
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		rp, ok := protocols.AsRuntimeProvider(plugin)

@@ -675,7 +675,7 @@ func TestArtifactCatalogFromRegistryIncludesProtocolSpecsAndWarp(t *testing.T) {
 	catalog := generatedconfig.NewArtifactCatalogFromRegistry(registry)
 
 	want := map[string]string{
-		generatedconfig.CaddyfileSubpath:       "caddy",
+		generatedconfig.CaddyJSONConfigSubpath: "caddy",
 		generatedconfig.Hysteria2ConfigSubpath: "hysteria2",
 		generatedconfig.MieruConfigSubpath:     "mieru",
 		generatedconfig.OlcrtcConfigSubpath:    "olcrtc",

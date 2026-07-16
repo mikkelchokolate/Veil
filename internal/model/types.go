@@ -12,10 +12,16 @@ type Settings struct {
 	Hysteria2Password string `json:"hysteria2Password,omitempty"`
 	Hysteria2Insecure bool   `json:"hysteria2Insecure,omitempty"`
 	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
-	FallbackRoot      string `json:"fallbackRoot,omitempty"`
-	OlcrtcAuth        string `json:"olcrtcAuth,omitempty"`
-	OlcrtcTransport   string `json:"olcrtcTransport,omitempty"`
-	OlcrtcRoomID      string `json:"olcrtcRoomID,omitempty"`
+	FallbackRoot             string `json:"fallbackRoot,omitempty"`
+	OlcrtcAuth               string `json:"olcrtcAuth,omitempty"`
+	OlcrtcTransport          string `json:"olcrtcTransport,omitempty"`
+	OlcrtcRoomID             string `json:"olcrtcRoomID,omitempty"`
+	PanelDomain              string `json:"panelDomain,omitempty"`
+	PanelEmail               string `json:"panelEmail,omitempty"`
+	PanelPublicPort          int    `json:"panelPublicPort,omitempty"`
+	DefaultAcmeEmail         string `json:"defaultAcmeEmail,omitempty"`
+	DefaultInboundPublicPort int    `json:"defaultInboundPublicPort,omitempty"`
+	AcmeChallengeMode        string `json:"acmeChallengeMode,omitempty"`
 	// ProtocolFields holds protocol-specific settings populated by the dynamic
 	// Panel UI. Legacy flat fields above are still supported for backward
 	// compatibility and are migrated into ProtocolFields on load.
