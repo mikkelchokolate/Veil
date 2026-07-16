@@ -197,6 +197,7 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		// through Caddy's Admin API and only fall back to systemctl reload when
 		// the Admin API is unavailable.
 		caddyLivePath := filepath.Join(ctx.state.liveRoot, "caddy", "config.json")
+		var adminLoadErr error
 		if containsCleanPath(liveFiles, caddyLivePath) {
 			// Use a synthetic command for the Admin API load. There is no systemctl
 			// invocation here; the REST response contract still expects a Command
@@ -214,11 +215,19 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 				results = append(results, adminResult)
 				continue
 			}
-			adminResult.Error = err.Error()
-			results = append(results, adminResult)
-			// Fall through to the systemctl reload below.
+			// An inactive singleton has no Admin API yet during the first migration
+			// from legacy template units. Defer reporting this miss until the
+			// systemd reload/start fallback has also failed.
+			adminLoadErr = err
 		}
 		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
+		if !result.Success && adminLoadErr != nil {
+			if result.Error == "" {
+				result.Error = fmt.Sprintf("caddy admin load failed: %v; systemd fallback failed", adminLoadErr)
+			} else {
+				result.Error = fmt.Sprintf("caddy admin load failed: %v; systemd fallback failed: %s", adminLoadErr, result.Error)
+			}
+		}
 		results = append(results, result)
 		if !result.Success {
 			return results

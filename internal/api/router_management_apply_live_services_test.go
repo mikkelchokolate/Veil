@@ -388,10 +388,11 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	// The Caddy admin API load fails and the systemctl reload fallback also fails,
-	// so the apply stops and rolls back. The local privileged helper probes is-active
-	// before each reload, adding two calls per reload attempt.
-	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 2 || len(serviceCalls) != 4 {
-		t.Fatalf("expected failed caddy reloads followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
+	// so the apply stops and rolls back. Each forward/rollback attempt reports one
+	// terminal Caddy result with both errors. The local privileged helper probes
+	// is-active before each reload, adding two calls per reload attempt.
+	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || len(serviceCalls) != 4 {
+		t.Fatalf("expected failed caddy fallback followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
 	}
 }
 
