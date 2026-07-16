@@ -1,7 +1,6 @@
 package caddyassembly_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
@@ -83,10 +82,10 @@ func TestBuildFinalRenderPlan_NaiveTCP443HappyPath(t *testing.T) {
 	}
 }
 
-// TestBuildFinalRenderPlan_NaiveTCP443ConflictsWithPanelCaddy verifies that a
-// naive inbound on TCP :443 conflicts with the Panel caddy endpoint on the same
-// bind key.
-func TestBuildFinalRenderPlan_NaiveTCP443ConflictsWithPanelCaddy(t *testing.T) {
+// TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy verifies that a
+// naive inbound on TCP :443 shares the Panel caddy listener: the naive inbound
+// owns the bind and Panel routes are merged into the same server.
+func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 	settings := model.Settings{
 		PanelAccess:       "caddy",
 		PanelDomain:       "panel.hy.flow2go.ru",
@@ -100,12 +99,22 @@ func TestBuildFinalRenderPlan_NaiveTCP443ConflictsWithPanelCaddy(t *testing.T) {
 			model.ClientProfile{Name: "default", Username: "user", Password: "pass", Enabled: true}),
 	}
 
-	_, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
-	if err == nil {
-		t.Fatal("expected bind conflict between Panel caddy and naive inbound on TCP :443")
+	plan, owners, _, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
+	if err != nil {
+		t.Fatalf("BuildFinalRenderPlan error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "already owned") {
-		t.Fatalf("expected ownership conflict error, got %v", err)
+
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}
+	owner := owners[key]
+	if owner.Kind != bindregistry.BindOwnerNaive || owner.InboundName != "test" {
+		t.Fatalf("expected naive owner on TCP :443, got %+v", owner)
+	}
+	server := plan.Servers[key]
+	if server.Kind != caddyassembly.CaddyOwnerNaive {
+		t.Fatalf("expected naive server, got %+v", server)
+	}
+	if server.PanelDomain != "panel.hy.flow2go.ru" {
+		t.Errorf("server.PanelDomain = %q, want panel.hy.flow2go.ru", server.PanelDomain)
 	}
 }
 

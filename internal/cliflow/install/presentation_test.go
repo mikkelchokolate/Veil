@@ -13,7 +13,7 @@ func TestInstallPresentationPrintsRedactedRURecommendedProfile(t *testing.T) {
 		Domain:            "example.com",
 		Email:             "admin@example.com",
 		InstallPanelCaddy: true,
-		Caddyfile:         "reverse_proxy 127.0.0.1:2096 # panel-secret",
+		CaddyJSON:         "{\"upstream\":\"127.0.0.1:2096\",\"token\":\"panel-secret\"}",
 		PanelAuthToken:    "panel-secret",
 	}
 	var out bytes.Buffer

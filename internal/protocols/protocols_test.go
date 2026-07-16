@@ -691,7 +691,7 @@ func TestArtifactCatalogFromRegistryIncludesProtocolSpecsAndWarp(t *testing.T) {
 }
 
 func TestGeneratedConfigRegistryConstants(t *testing.T) {
-	if UnitCaddy != "veil-caddy@.service" {
+	if UnitCaddy != "veil-caddy.service" {
 		t.Fatalf("UnitCaddy = %q", UnitCaddy)
 	}
 	if UnitHysteria2 != "veil-hysteria2@.service" {

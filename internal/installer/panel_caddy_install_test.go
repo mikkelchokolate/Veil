@@ -23,14 +23,14 @@ func TestPanelCaddyInstallRendersPanelOnlyCaddyfile(t *testing.T) {
 	if !profile.InstallPanelCaddy {
 		t.Fatalf("panel Caddy install should enable Panel Caddy access: %+v", profile)
 	}
-	for _, want := range []string{"panel.example.com", "handle ", "reverse_proxy 127.0.0.1:2096"} {
-		if !strings.Contains(profile.Caddyfile, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, profile.Caddyfile)
+	for _, want := range []string{"panel.example.com", profile.WebBasePath, "127.0.0.1:2096"} {
+		if !strings.Contains(profile.CaddyJSON, want) {
+			t.Fatalf("CaddyJSON missing %q:\n%s", want, profile.CaddyJSON)
 		}
 	}
 	for _, unwanted := range []string{"forward_proxy", "basic_auth", "probe_resistance"} {
-		if strings.Contains(profile.Caddyfile, unwanted) {
-			t.Fatalf("panel Caddyfile must not contain %q:\n%s", unwanted, profile.Caddyfile)
+		if strings.Contains(profile.CaddyJSON, unwanted) {
+			t.Fatalf("panel CaddyJSON must not contain %q:\n%s", unwanted, profile.CaddyJSON)
 		}
 	}
 }
@@ -40,7 +40,7 @@ func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-caddy@panel.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-caddy.service"}, PanelAccess: profile.PanelAccess, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("BuildInstallPlan: %v", err)
 	}
@@ -79,10 +79,10 @@ func TestPanelCaddyInstallWritesCaddyfileAndCaddyRuntimeUnit(t *testing.T) {
 	}
 	body, err := os.ReadFile(result.CaddyfilePath)
 	if err != nil {
-		t.Fatalf("panel Caddyfile should be written: %v", err)
+		t.Fatalf("panel Caddy JSON should be written: %v", err)
 	}
-	if !strings.Contains(string(body), "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("unexpected panel Caddyfile:\n%s", string(body))
+	if !strings.Contains(string(body), "127.0.0.1:2096") {
+		t.Fatalf("unexpected panel Caddy JSON:\n%s", string(body))
 	}
 	if _, err := os.Stat(filepath.Join(dir, "systemd", "veil-caddy.service")); err != nil {
 		t.Fatalf("Caddy runtime unit should be written for panel Caddy access: %v", err)

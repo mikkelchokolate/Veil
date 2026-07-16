@@ -56,7 +56,7 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 
 	specs := make(map[string]CaddyDomainCertSpec, len(owners))
 	for domain, o := range owners {
-		resolved, err := resolveEmail(domain, emails[domain], settings)
+		resolved, err := resolveEmail(domain, emails[domain], settings, o)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +83,7 @@ func addEmail(m map[string]map[string]struct{}, domain, email string) {
 	m[domain][email] = struct{}{}
 }
 
-func resolveEmail(domain string, explicit map[string]struct{}, settings model.Settings) (string, error) {
+func resolveEmail(domain string, explicit map[string]struct{}, settings model.Settings, owner *CaddyDomainOwners) (string, error) {
 	if len(explicit) > 1 {
 		return "", fmt.Errorf("domain %s has conflicting ACME emails", domain)
 	}
@@ -96,7 +96,11 @@ func resolveEmail(domain string, explicit map[string]struct{}, settings model.Se
 	if settings.PanelEmail != "" {
 		return settings.PanelEmail, nil
 	}
-	if settings.Email != "" {
+	// The legacy global settings.Email is only used as a last-resort fallback
+	// for the Panel's own domain. Inbound-specific domains must provide an
+	// explicit or default ACME email so a single stale email does not silently
+	// issue certificates for unrelated inbound domains.
+	if owner != nil && owner.Panel && settings.Email != "" {
 		return settings.Email, nil
 	}
 	return "", errors.New("no ACME email resolved for domain " + domain)

@@ -45,9 +45,9 @@ func (p Presentation) PrintRURecommended(profile installer.RURecommendedProfile,
 	fmt.Fprintln(p.out, "Install scope: Panel")
 	fmt.Fprintln(p.out, "")
 	if profile.InstallPanelCaddy {
-		fmt.Fprintln(p.out, "Generated Caddyfile")
+		fmt.Fprintln(p.out, "Generated Caddy JSON")
 		fmt.Fprintln(p.out, strings.Repeat("-", 24))
-		fmt.Fprintln(p.out, p.RedactProfileSecrets(profile, profile.Caddyfile))
+		fmt.Fprintln(p.out, p.RedactProfileSecrets(profile, profile.CaddyJSON))
 	}
 }
 

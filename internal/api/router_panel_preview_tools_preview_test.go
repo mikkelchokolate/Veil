@@ -53,7 +53,7 @@ func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Domain != "example.com" || response.Email != "admin@example.com" || response.Caddyfile != "" {
+	if response.Domain != "example.com" || response.Email != "admin@example.com" || response.CaddyJSON != "" {
 		t.Fatalf("preview should default to Panel-only: %+v", response)
 	}
 }
@@ -73,11 +73,11 @@ func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.PanelAccess != "caddy" || response.PanelURL == "" || response.Caddyfile == "" {
+	if response.PanelAccess != "caddy" || response.PanelURL == "" || response.CaddyJSON == "" {
 		t.Fatalf("expected Panel Caddy preview: %+v", response)
 	}
-	if strings.Contains(response.Caddyfile, "forward_proxy") || !strings.Contains(response.Caddyfile, "reverse_proxy 127.0.0.1:") {
-		t.Fatalf("unexpected Panel Caddyfile:\n%s", response.Caddyfile)
+	if !strings.Contains(response.CaddyJSON, "example.com") || !strings.Contains(response.CaddyJSON, "127.0.0.1:2096") {
+		t.Fatalf("unexpected Panel Caddy JSON:\n%s", response.CaddyJSON)
 	}
 }
 
