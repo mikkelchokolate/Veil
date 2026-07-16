@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -78,21 +77,35 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	drain(resp)
 
 	serverConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
-	serverLogPath := filepath.Join(t.TempDir(), "mita.log")
+	serverRuntime := t.TempDir()
+	serverSocket := filepath.Join(serverRuntime, "mita.sock")
+	serverPB := filepath.Join(serverRuntime, "server.conf.pb")
+	serverLogPath := filepath.Join(serverRuntime, "mita.log")
 	serverLog, err := os.Create(serverLogPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer serverLog.Close()
-
+	serverEnv := append(os.Environ(),
+		"MITA_CONFIG_FILE="+serverPB,
+		"MITA_UDS_PATH="+serverSocket,
+		"MITA_INSECURE_UDS=1",
+		"MITA_LOG_NO_TIMESTAMP=true",
+	)
 	cmdServer := exec.Command(mitaPath, "run")
-	cmdServer.Env = append(os.Environ(), "MITA_CONFIG_JSON_FILE="+serverConfig)
+	cmdServer.Env = serverEnv
 	cmdServer.Stdout = serverLog
 	cmdServer.Stderr = serverLog
 	if err := cmdServer.Start(); err != nil {
-		t.Fatalf("start mita: %v", err)
+		t.Fatalf("start mita daemon: %v", err)
 	}
 	defer func() { _ = cmdServer.Process.Kill() }()
+	if err := waitUnixSocket(serverSocket, 15*time.Second); err != nil {
+		logBytes, _ := os.ReadFile(serverLogPath)
+		t.Fatalf("mita control socket did not appear: %v\nlog:\n%s", err, logBytes)
+	}
+	runMieruControl(t, serverEnv, mitaPath, serverLogPath, "apply", "config", serverConfig)
+	runMieruControl(t, serverEnv, mitaPath, serverLogPath, "start")
 
 	resp = srv.do(http.MethodGet, "/api/client-links", "")
 	if resp.StatusCode != http.StatusOK {
@@ -150,24 +163,39 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientFile := filepath.Join(t.TempDir(), "client.json")
+	clientRuntime := t.TempDir()
+	clientFile := filepath.Join(clientRuntime, "client.json")
 	if err := os.WriteFile(clientFile, modifiedClientJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	clientLogPath := filepath.Join(t.TempDir(), "mieru.log")
+	clientSocket := filepath.Join(clientRuntime, "mieru.sock")
+	clientPB := filepath.Join(clientRuntime, "client.conf.pb")
+	clientLogPath := filepath.Join(clientRuntime, "mieru.log")
 	clientLog, err := os.Create(clientLogPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clientLog.Close()
+	clientEnv := append(os.Environ(),
+		"MIERU_CONFIG_FILE="+clientPB,
+		"MIERU_UDS_PATH="+clientSocket,
+		"MIERU_INSECURE_UDS=1",
+		"MIERU_LOG_NO_TIMESTAMP=true",
+	)
 	cmdClient := exec.Command(mieruPath, "run")
-	cmdClient.Env = append(os.Environ(), "MIERU_CONFIG_JSON_FILE="+clientFile)
+	cmdClient.Env = clientEnv
 	cmdClient.Stdout = clientLog
 	cmdClient.Stderr = clientLog
 	if err := cmdClient.Start(); err != nil {
-		t.Fatalf("start mieru: %v", err)
+		t.Fatalf("start mieru daemon: %v", err)
 	}
 	defer func() { _ = cmdClient.Process.Kill() }()
+	if err := waitUnixSocket(clientSocket, 15*time.Second); err != nil {
+		logBytes, _ := os.ReadFile(clientLogPath)
+		t.Fatalf("mieru control socket did not appear: %v\nlog:\n%s", err, logBytes)
+	}
+	runMieruControl(t, clientEnv, mieruPath, clientLogPath, "apply", "config", clientFile)
+	runMieruControl(t, clientEnv, mieruPath, clientLogPath, "start")
 
 	socksAddr := fmt.Sprintf("127.0.0.1:%d", socksPort)
 	if err := waitListen(socksAddr, 15*time.Second); err != nil {
@@ -176,6 +204,29 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 		t.Fatalf("Mieru %s client did not listen: %v\nserver log:\n%s\nclient log:\n%s\nclient config:\n%s", transport, err, serverBytes, clientBytes, modifiedClientJSON)
 	}
 	assertHTTPThroughSOCKS(t, socksAddr, backend.URL, expectedResponse)
+}
+
+func runMieruControl(t *testing.T, env []string, binary, logPath string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(binary, args...)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		logBytes, _ := os.ReadFile(logPath)
+		t.Fatalf("%s %s failed: %v\noutput:\n%s\ndaemon log:\n%s", binary, strings.Join(args, " "), err, output, logBytes)
+	}
+}
+
+func waitUnixSocket(path string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		info, err := os.Stat(path)
+		if err == nil && info.Mode()&os.ModeSocket != 0 {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("Unix socket %s did not appear within %v", path, timeout)
 }
 
 func TestRequiredNaiveProxyDataPath(t *testing.T) {
@@ -218,11 +269,10 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("127.0.0.1:%d", inboundPort), 1)
-	// The data-path test runs on loopback without public DNS. Remove only the
-	// generated TLS block; renderer tests separately require public ACME and
-	// reject the production-incompatible internal issuer.
-	tlsBlock := regexp.MustCompile(`(?ms)^\s*tls\s*\{.*?^\s*\}\s*$`)
-	caddyfile = tlsBlock.ReplaceAllString(caddyfile, "")
+	caddyfile, err = removeCaddyDirectiveBlock(caddyfile, "tls")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tempDir := t.TempDir()
 	caddyfilePath := filepath.Join(tempDir, "Caddyfile")
@@ -301,6 +351,29 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 		t.Fatalf("Naive client did not listen: %v\nclient log:\n%s\nconfig:\n%s", err, clientBytes, clientJSON)
 	}
 	assertHTTPThroughSOCKS(t, socksAddr, backend.URL, expectedResponse)
+}
+
+func removeCaddyDirectiveBlock(input, directive string) (string, error) {
+	lines := strings.Split(input, "\n")
+	start := -1
+	depth := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if start == -1 {
+			if strings.HasPrefix(trimmed, directive+" ") || trimmed == directive+"{" || trimmed == directive+" {" {
+				if strings.Contains(trimmed, "{") {
+					start = i
+					depth = strings.Count(line, "{") - strings.Count(line, "}")
+				}
+			}
+			continue
+		}
+		depth += strings.Count(line, "{") - strings.Count(line, "}")
+		if depth == 0 {
+			return strings.Join(append(lines[:start], lines[i+1:]...), "\n"), nil
+		}
+	}
+	return "", fmt.Errorf("Caddy directive block %q not found or unbalanced", directive)
 }
 
 func assertHTTPThroughSOCKS(t *testing.T, socksAddr, targetURL, expected string) {
