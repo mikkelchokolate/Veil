@@ -30,6 +30,10 @@ func requiredBinary(t *testing.T, name string) string {
 	return path
 }
 
+func TestRequiredHysteria2DataPath(t *testing.T) {
+	testHysteria2DataPath(t, requiredBinary(t, "hysteria"))
+}
+
 func TestRequiredMieruTCPDataPath(t *testing.T) {
 	testRequiredMieruDataPath(t, "tcp")
 }
@@ -50,10 +54,8 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	}))
 	defer backend.Close()
 
-	const backendHost = "veil-protocol-e2e.test"
-	if err := exec.Command("sudo", "sh", "-c", "printf '127.0.0.1 "+backendHost+"\\n' >> /etc/hosts").Run(); err != nil {
-		t.Fatalf("register local E2E hostname: %v", err)
-	}
+	backendHost := "veil-mieru-" + transport + "-e2e.test"
+	registerLoopbackHostname(t, backendHost)
 	backendURL := strings.Replace(backend.URL, "127.0.0.1", backendHost, 1)
 
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
@@ -238,12 +240,20 @@ func waitUnixSocket(path string, timeout time.Duration) error {
 func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	caddyPath := requiredBinary(t, "caddy")
 	naivePath := requiredBinary(t, "naive")
+	testNaiveProxyDataPath(t, caddyPath, naivePath)
+}
+
+func testNaiveProxyDataPath(t *testing.T, caddyPath, naivePath string) {
+	t.Helper()
 	expectedResponse := "hello from naiveproxy"
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(expectedResponse))
 	}))
 	defer backend.Close()
+	const backendHost = "veil-naive-e2e.test"
+	registerLoopbackHostname(t, backendHost)
+	backendURL := strings.Replace(backend.URL, "127.0.0.1", backendHost, 1)
 
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
 	inboundPort := freePort(t)
@@ -260,7 +270,7 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	drain(resp)
 	applyPanelConfiguration(t, srv)
 
-	generatedPath := filepath.Join(srv.applyRoot, "generated", "caddy", "naive-tcp.Caddyfile")
+	generatedPath := filepath.Join(srv.applyRoot, "generated", "caddy", "config.json")
 	generated, err := os.ReadFile(generatedPath)
 	if err != nil {
 		t.Fatal(err)
@@ -284,15 +294,19 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 		t.Fatalf("refresh test trust store: %v: %s", err, output)
 	}
 
-	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("https://localhost:%d", inboundPort), 1)
-	caddyfile, err = removeCaddyDirectiveBlock(caddyfile, "tls")
+	testConfig, err := configureNaiveCaddyJSONForLocalTLS(
+		generated,
+		fmt.Sprintf("127.0.0.1:%d", inboundPort),
+		fmt.Sprintf("127.0.0.1:%d", freePort(t)),
+		certPath,
+		keyPath,
+		backendHost,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	caddyfile = strings.Replace(caddyfile, "  encode", fmt.Sprintf("  tls %s %s\n  encode", certPath, keyPath), 1)
-
-	caddyfilePath := filepath.Join(tempDir, "Caddyfile")
-	if err := os.WriteFile(caddyfilePath, []byte(caddyfile), 0o600); err != nil {
+	caddyConfigPath := filepath.Join(tempDir, "caddy.json")
+	if err := os.WriteFile(caddyConfigPath, testConfig, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	serverLogPath := filepath.Join(tempDir, "caddy.log")
@@ -302,7 +316,7 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	}
 	defer serverLog.Close()
 
-	cmdServer := exec.Command(caddyPath, "run", "--config", caddyfilePath, "--adapter", "caddyfile")
+	cmdServer := exec.Command(caddyPath, "run", "--config", caddyConfigPath)
 	cmdServer.Stdout = serverLog
 	cmdServer.Stderr = serverLog
 	if err := cmdServer.Start(); err != nil {
@@ -312,7 +326,7 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	serverAddr := fmt.Sprintf("127.0.0.1:%d", inboundPort)
 	if err := waitListen(serverAddr, 15*time.Second); err != nil {
 		logBytes, _ := os.ReadFile(serverLogPath)
-		t.Fatalf("Caddy did not listen: %v\nCaddyfile:\n%s\nlog:\n%s", err, caddyfile, logBytes)
+		t.Fatalf("Caddy did not listen: %v\nCaddy JSON:\n%s\nlog:\n%s", err, testConfig, logBytes)
 	}
 
 	resp = srv.do(http.MethodGet, "/api/client-links", "")
@@ -379,34 +393,123 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 		clientBytes, _ := os.ReadFile(clientLogPath)
 		t.Fatalf("Naive client did not listen: %v\nclient log:\n%s\nconfig:\n%s", err, clientBytes, clientJSON)
 	}
-	if err := assertHTTPThroughSOCKSResult(socksAddr, backend.URL, expectedResponse); err != nil {
+	if err := assertHTTPThroughSOCKSResult(socksAddr, backendURL, expectedResponse); err != nil {
 		serverBytes, _ := os.ReadFile(serverLogPath)
 		clientBytes, _ := os.ReadFile(clientLogPath)
-		t.Fatalf("Naive HTTPS data path failed: %v\nCaddyfile:\n%s\nserver log:\n%s\nclient log:\n%s\nclient config:\n%s", err, caddyfile, serverBytes, clientBytes, clientJSON)
+		t.Fatalf("Naive HTTPS data path failed: %v\nCaddy JSON:\n%s\nserver log:\n%s\nclient log:\n%s\nclient config:\n%s", err, testConfig, serverBytes, clientBytes, clientJSON)
 	}
 }
 
-func removeCaddyDirectiveBlock(input, directive string) (string, error) {
-	lines := strings.Split(input, "\n")
-	start := -1
-	depth := 0
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if start == -1 {
-			if strings.HasPrefix(trimmed, directive+" ") || trimmed == directive+"{" || trimmed == directive+" {" {
-				if strings.Contains(trimmed, "{") {
-					start = i
-					depth = strings.Count(line, "{") - strings.Count(line, "}")
-				}
-			}
+func configureNaiveCaddyJSONForLocalTLS(input []byte, listenAddr, adminAddr, certPath, keyPath, allowedBackendHost string) ([]byte, error) {
+	var cfg map[string]any
+	if err := json.Unmarshal(input, &cfg); err != nil {
+		return nil, fmt.Errorf("decode generated Caddy JSON: %w", err)
+	}
+	admin, ok := cfg["admin"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("generated Caddy JSON has no admin object")
+	}
+	admin["listen"] = adminAddr
+	cfg["logging"] = map[string]any{
+		"logs": map[string]any{
+			"default": map[string]any{"level": "DEBUG"},
+		},
+	}
+	apps, ok := cfg["apps"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("generated Caddy JSON has no apps object")
+	}
+	httpApp, ok := apps["http"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("generated Caddy JSON has no http app")
+	}
+	servers, ok := httpApp["servers"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("generated Caddy JSON has no HTTP servers")
+	}
+	var naiveServer map[string]any
+	for _, rawServer := range servers {
+		server, ok := rawServer.(map[string]any)
+		if !ok || !caddyServerHasHandler(server, "forward_proxy") {
 			continue
 		}
-		depth += strings.Count(line, "{") - strings.Count(line, "}")
-		if depth == 0 {
-			return strings.Join(append(lines[:start], lines[i+1:]...), "\n"), nil
+		if naiveServer != nil {
+			return nil, fmt.Errorf("generated Caddy JSON contains multiple NaiveProxy servers")
+		}
+		naiveServer = server
+	}
+	if naiveServer == nil {
+		return nil, fmt.Errorf("generated Caddy JSON contains no NaiveProxy server")
+	}
+	if _, ok := naiveServer["tls_connection_policies"]; !ok {
+		return nil, fmt.Errorf("generated NaiveProxy server does not explicitly enable TLS")
+	}
+	forwardProxy := caddyServerHandler(naiveServer, "forward_proxy")
+	if forwardProxy == nil {
+		return nil, fmt.Errorf("generated NaiveProxy server has no forward_proxy handler")
+	}
+	// The module's secure default ACL denies loopback networks. Allow only the
+	// synthetic test hostname so the real proxy can reach the local HTTP backend
+	// without weakening production renderer defaults.
+	forwardProxy["acl"] = []map[string]any{{
+		"subjects": []string{allowedBackendHost},
+		"allow":    true,
+	}}
+	naiveServer["listen"] = []string{listenAddr}
+	httpApp["servers"] = map[string]any{"naive-e2e": naiveServer}
+	apps["tls"] = map[string]any{
+		"certificates": map[string]any{
+			"load_files": []map[string]any{{
+				"certificate": certPath,
+				"key":         keyPath,
+			}},
+		},
+	}
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+func caddyServerHasHandler(server map[string]any, handlerName string) bool {
+	return caddyServerHandler(server, handlerName) != nil
+}
+
+func caddyServerHandler(server map[string]any, handlerName string) map[string]any {
+	routes, _ := server["routes"].([]any)
+	for _, rawRoute := range routes {
+		route, _ := rawRoute.(map[string]any)
+		handlers, _ := route["handle"].([]any)
+		for _, rawHandler := range handlers {
+			handler, _ := rawHandler.(map[string]any)
+			if handler["handler"] == handlerName {
+				return handler
+			}
 		}
 	}
-	return "", fmt.Errorf("Caddy directive block %q not found or unbalanced", directive)
+	return nil
+}
+
+func registerLoopbackHostname(t *testing.T, hostname string) {
+	t.Helper()
+	if hostname == "" || strings.ContainsAny(hostname, " \t\r\n") {
+		t.Fatalf("invalid E2E hostname %q", hostname)
+	}
+	cmd := exec.Command("sudo", "tee", "-a", "/etc/hosts")
+	cmd.Stdin = strings.NewReader("127.0.0.1 " + hostname + "\n")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("register local E2E hostname: %v: %s", err, output)
+	}
+	t.Cleanup(func() {
+		const cleanup = `
+from pathlib import Path
+import sys
+p = Path("/etc/hosts")
+hostname = sys.argv[1]
+lines = [line for line in p.read_text().splitlines() if hostname not in line.split()]
+p.write_text("\n".join(lines) + "\n")
+`
+		if output, err := exec.Command("sudo", "python3", "-c", cleanup, hostname).CombinedOutput(); err != nil {
+			t.Errorf("remove local E2E hostname: %v: %s", err, output)
+		}
+	})
 }
 
 func assertHTTPThroughSOCKS(t *testing.T, socksAddr, targetURL, expected string) {

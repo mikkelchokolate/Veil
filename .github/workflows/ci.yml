@@ -168,6 +168,10 @@ jobs:
             command -v "$bin"
             test "$(readlink -f "$(command -v "$bin")")" != /usr/local/bin/veil
           done
+      - name: Hysteria2 through panel-generated configuration
+        run: |
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... -run '^TestRequiredHysteria2DataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/hysteria2.log
       - name: Mieru TCP through panel-generated configuration
         run: |
           set -o pipefail
@@ -186,6 +190,7 @@ jobs:
         with:
           name: real-protocol-e2e-diagnostics
           path: |
+            /tmp/hysteria2.log
             /tmp/mieru-tcp.log
             /tmp/mieru-udp.log
             /tmp/naiveproxy.log

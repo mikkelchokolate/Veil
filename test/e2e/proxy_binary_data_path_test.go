@@ -270,6 +270,11 @@ func TestHysteria2DataPath(t *testing.T) {
 	if err != nil {
 		t.Skip("hysteria binary not found in PATH, skipping data-path test")
 	}
+	testHysteria2DataPath(t, hysteriaPath)
+}
+
+func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
+	t.Helper()
 
 	// 1. Start backend HTTP server
 	expectedResponse := "hello from hysteria2"
@@ -467,7 +472,9 @@ socks5:
 	}
 }
 
-// TestNaiveProxyDataPath tests data flow through a real Caddy/NaiveProxy server/client if caddy and naive binaries are installed.
+// TestNaiveProxyDataPath tests data flow through a real Caddy/NaiveProxy
+// server/client when the optional client binary is installed. The strict CI
+// variant calls the same implementation but requires both binaries.
 func TestNaiveProxyDataPath(t *testing.T) {
 	caddyPath, err := exec.LookPath("caddy")
 	if err != nil {
@@ -477,187 +484,9 @@ func TestNaiveProxyDataPath(t *testing.T) {
 	if err != nil {
 		t.Skip("naive binary not found in PATH, skipping data-path test")
 	}
-
-	// 1. Start backend HTTP server
-	expectedResponse := "hello from naiveproxy"
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(expectedResponse))
-	}))
-	defer backend.Close()
-
-	// 2. Start Veil serving panel
-	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
-
-	// Configure settings and inbound
-	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"test@example.com","naiveUsername":"test-user","naivePassword":"test-pass"}`)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-tcp","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"password":"secret-pass","naiveUsername":"naive-user","naivePassword":"naive-pass"}`, inboundPort))
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("inbound expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	// Apply settings
-	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("apply plan expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("apply expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	// 3. Modify generated Caddyfile to run over HTTP (remove domain name and tls directives)
-	serverConfig := filepath.Join(srv.applyRoot, "generated", "caddy", "naive-tcp.Caddyfile")
-	caddyfileContent, err := os.ReadFile(serverConfig)
-	if err != nil {
-		t.Fatalf("read caddyfile: %v", err)
-	}
-
-	// Change format: ":port, vpn.example.com {" -> "127.0.0.1:port {"
-	caddyfile := string(caddyfileContent)
-	caddyfile = strings.Replace(caddyfile, fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("127.0.0.1:%d", inboundPort), 1)
-
-	// Remove tls directive
-	reTls := regexp.MustCompile(`(?m)^\s*tls\s+\S+\s*$`)
-	caddyfile = reTls.ReplaceAllString(caddyfile, "")
-
-	tempDir := t.TempDir()
-	tempCaddyfile := filepath.Join(tempDir, "Caddyfile")
-	if err := os.WriteFile(tempCaddyfile, []byte(caddyfile), 0o600); err != nil {
-		t.Fatalf("write modified caddyfile: %v", err)
-	}
-
-	// 4. Start Caddy server
-	cmdServer := exec.Command(caddyPath, "run", "--config", tempCaddyfile, "--adapter", "caddyfile")
-	if err := cmdServer.Start(); err != nil {
-		t.Fatalf("start caddy server: %v", err)
-	}
-	defer func() {
-		if cmdServer.Process != nil {
-			_ = cmdServer.Process.Kill()
-		}
-	}()
-
-	// Wait for Caddy server to listen
-	serverAddr := fmt.Sprintf("127.0.0.1:%d", inboundPort)
-	if err := waitListen(serverAddr, 5*time.Second); err != nil {
-		t.Fatalf("caddy server did not listen: %v", err)
-	}
-
-	// 5. Get client links
-	resp = srv.do(http.MethodGet, "/api/client-links", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
-	}
-	linksBody := readJSON(t, resp)
-	artifactsRaw, _ := json.Marshal(linksBody["links"])
-	var artifacts []struct {
-		Name     string `json:"name"`
-		Protocol string `json:"protocol"`
-		Kind     string `json:"kind"`
-		URI      string `json:"uri"`
-	}
-	if err := json.Unmarshal(artifactsRaw, &artifacts); err != nil {
-		t.Fatalf("decode artifacts: %v", err)
-	}
-
-	var uri string
-	for _, art := range artifacts {
-		if art.Protocol == "naiveproxy" {
-			uri = art.URI
-			break
-		}
-	}
-	if uri == "" {
-		t.Fatal("naiveproxy client URI not found")
-	}
-
-	// 6. Build client configuration JSON using HTTP
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		t.Fatalf("parse URI: %v", err)
-	}
-	username := parsed.User.Username()
-	password, _ := parsed.User.Password()
-	socksPort := freePort(t)
-
-	// Since we are running Caddy over plain HTTP to avoid cert validation,
-	// we configure the proxy using http://
-	clientConfig := map[string]any{
-		"listen":  fmt.Sprintf("socks://127.0.0.1:%d", socksPort),
-		"proxy":   fmt.Sprintf("http://%s:%s@127.0.0.1:%d", username, password, inboundPort),
-		"padding": true,
-	}
-
-	clientJSON, err := json.Marshal(clientConfig)
-	if err != nil {
-		t.Fatalf("marshal client config: %v", err)
-	}
-
-	tempClientJSON := filepath.Join(tempDir, "client.json")
-	if err := os.WriteFile(tempClientJSON, clientJSON, 0o600); err != nil {
-		t.Fatalf("write client JSON: %v", err)
-	}
-
-	// 7. Start naive client
-	cmdClient := exec.Command(naivePath, tempClientJSON)
-	if err := cmdClient.Start(); err != nil {
-		t.Fatalf("start naive client: %v", err)
-	}
-	defer func() {
-		if cmdClient.Process != nil {
-			_ = cmdClient.Process.Kill()
-		}
-	}()
-
-	// Wait for client SOCKS5 to start listening
-	socksAddr := fmt.Sprintf("127.0.0.1:%d", socksPort)
-	if err := waitListen(socksAddr, 5*time.Second); err != nil {
-		t.Fatalf("naive client SOCKS5 did not listen: %v", err)
-	}
-
-	// 8. Test proxying through client SOCKS5
-	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
-	if err != nil {
-		t.Fatalf("create SOCKS5 dialer: %v", err)
-	}
-
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.Dial(network, addr)
-			},
-		},
-		Timeout: 5 * time.Second,
-	}
-
-	res, err := httpClient.Get(backend.URL)
-	if err != nil {
-		t.Fatalf("GET request failed: %v", err)
-	}
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
-
-	if string(body) != expectedResponse {
-		t.Fatalf("expected response %q, got %q", expectedResponse, string(body))
-	}
+	testNaiveProxyDataPath(t, caddyPath, naivePath)
 }
 
-// waitListen helper checks if the port starts listening within the duration
 func waitListen(addr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
