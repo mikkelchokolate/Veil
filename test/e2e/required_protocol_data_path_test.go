@@ -168,34 +168,23 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	if err := os.WriteFile(clientFile, modifiedClientJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	clientSocket := filepath.Join(clientRuntime, "mieru.sock")
-	clientPB := filepath.Join(clientRuntime, "client.conf.pb")
 	clientLogPath := filepath.Join(clientRuntime, "mieru.log")
 	clientLog, err := os.Create(clientLogPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clientLog.Close()
-	clientEnv := append(os.Environ(),
-		"MIERU_CONFIG_FILE="+clientPB,
-		"MIERU_UDS_PATH="+clientSocket,
-		"MIERU_INSECURE_UDS=1",
+	cmdClient := exec.Command(mieruPath, "run")
+	cmdClient.Env = append(os.Environ(),
+		"MIERU_CONFIG_JSON_FILE="+clientFile,
 		"MIERU_LOG_NO_TIMESTAMP=true",
 	)
-	cmdClient := exec.Command(mieruPath, "run")
-	cmdClient.Env = clientEnv
 	cmdClient.Stdout = clientLog
 	cmdClient.Stderr = clientLog
 	if err := cmdClient.Start(); err != nil {
-		t.Fatalf("start mieru daemon: %v", err)
+		t.Fatalf("start mieru client: %v", err)
 	}
 	defer func() { _ = cmdClient.Process.Kill() }()
-	if err := waitUnixSocket(clientSocket, 15*time.Second); err != nil {
-		logBytes, _ := os.ReadFile(clientLogPath)
-		t.Fatalf("mieru control socket did not appear: %v\nlog:\n%s", err, logBytes)
-	}
-	runMieruControl(t, clientEnv, mieruPath, clientLogPath, "apply", "config", clientFile)
-	runMieruControl(t, clientEnv, mieruPath, clientLogPath, "start")
 
 	socksAddr := fmt.Sprintf("127.0.0.1:%d", socksPort)
 	if err := waitListen(socksAddr, 15*time.Second); err != nil {
@@ -208,7 +197,9 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 
 func runMieruControl(t *testing.T, env []string, binary, logPath string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -268,7 +259,7 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("127.0.0.1:%d", inboundPort), 1)
+	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("http://127.0.0.1:%d", inboundPort), 1)
 	caddyfile, err = removeCaddyDirectiveBlock(caddyfile, "tls")
 	if err != nil {
 		t.Fatal(err)
