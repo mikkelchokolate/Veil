@@ -116,6 +116,8 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - name: Baseline panel E2E before protocol runtimes are installed
+        run: go test -tags e2e ./test/e2e/... -count=1 -v -timeout=3m
       - name: Build and install Veil
         run: |
           go build -o /tmp/veil-e2e ./cmd/veil
@@ -162,10 +164,12 @@ jobs:
             command -v "$bin"
             test "$(readlink -f "$(command -v "$bin")")" != /usr/local/bin/veil
           done
-      - name: End-to-end tests with real protocol clients and servers
-        env:
-          VEIL_REQUIRE_PROTOCOL_BINARIES: '1'
-        run: go test -tags e2e ./test/e2e/... -count=1 -v
+      - name: Mieru TCP through panel-generated configuration
+        run: go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s
+      - name: Mieru UDP through panel-generated configuration
+        run: go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s
+      - name: NaiveProxy through panel-generated configuration
+        run: go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s
 
   browser-e2e:
     runs-on: ubuntu-latest
