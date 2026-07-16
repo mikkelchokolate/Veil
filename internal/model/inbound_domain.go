@@ -4,15 +4,23 @@ import (
 	"strings"
 )
 
+// Field keys used in inbound.ProtocolFields for per-inbound domain and ACME
+// email configuration. Centralized here so validators, UI schemas, and client
+// exporters share a single source of truth.
+const (
+	InboundDomainField = "domain"
+	InboundEmailField  = "email"
+)
+
 // InboundDomain returns the inbound-specific domain declared in
-// inbound.ProtocolFields["domain"], trimmed of whitespace and normalized to
-// lowercase. It does NOT fall back to settings.Domain. An empty string is
-// returned when the inbound has no valid per-inbound domain.
+// inbound.ProtocolFields[InboundDomainField], trimmed of whitespace and
+// normalized to lowercase. It does NOT fall back to settings.Domain. An empty
+// string is returned when the inbound has no valid per-inbound domain.
 func InboundDomain(inbound Inbound) string {
 	if inbound.ProtocolFields == nil {
 		return ""
 	}
-	v, ok := inbound.ProtocolFields["domain"].(string)
+	v, ok := inbound.ProtocolFields[InboundDomainField].(string)
 	if !ok {
 		return ""
 	}
@@ -24,7 +32,7 @@ func InboundDomain(inbound Inbound) string {
 }
 
 // ResolveInboundDomain returns the effective public domain for an inbound.
-// It prefers inbound.ProtocolFields["domain"] and falls back to
+// It prefers inbound.ProtocolFields[InboundDomainField] and falls back to
 // settings.Domain. The result is trimmed and lowercased.
 func ResolveInboundDomain(inbound Inbound, settings Settings) string {
 	if d := InboundDomain(inbound); d != "" {
@@ -34,13 +42,13 @@ func ResolveInboundDomain(inbound Inbound, settings Settings) string {
 }
 
 // InboundEmail returns the inbound-specific ACME email declared in
-// inbound.ProtocolFields["email"], trimmed of whitespace. It does NOT fall
-// back to settings-level emails.
+// inbound.ProtocolFields[InboundEmailField], trimmed of whitespace. It does NOT
+// fall back to settings-level emails.
 func InboundEmail(inbound Inbound) string {
 	if inbound.ProtocolFields == nil {
 		return ""
 	}
-	v, ok := inbound.ProtocolFields["email"].(string)
+	v, ok := inbound.ProtocolFields[InboundEmailField].(string)
 	if !ok {
 		return ""
 	}

@@ -58,7 +58,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 				response.Issues = append(response.Issues, issue(
 					"dns_unresolved",
 					SeverityWarning,
-					"domain",
+					model.InboundDomainField,
 					inbound.Name,
 					fmt.Sprintf("Configured domain %q does not resolve", domain),
 					"Create or correct the DNS record before applying this configuration.",

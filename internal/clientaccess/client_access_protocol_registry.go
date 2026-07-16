@@ -236,10 +236,11 @@ func hasClientEndpoint(input ClientAccessLinkInput) bool {
 	return model.ResolveInboundDomain(input.Inbound, input.Settings) != ""
 }
 
-// clientEndpoint returns the global settings domain. Kept for callers that only
-// have settings and no inbound context (e.g. mieru aggregation).
+// clientEndpoint returns the global settings domain, lowercased for
+// consistency with model.ResolveInboundDomain. Kept for callers that only have
+// settings and no inbound context (e.g. mieru aggregation).
 func clientEndpoint(settings Settings) string {
-	return strings.TrimSpace(settings.Domain)
+	return strings.ToLower(strings.TrimSpace(settings.Domain))
 }
 
 func olcrtcProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {

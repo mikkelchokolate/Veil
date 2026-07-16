@@ -25,7 +25,7 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_domain_required",
 			Severity: "error",
-			Field:    "domain",
+			Field:    model.InboundDomainField,
 			Message:  "Naive inbound requires a public domain.",
 			Source:   "naiveproxy",
 		})
@@ -33,7 +33,7 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_domain_invalid",
 			Severity: "error",
-			Field:    "domain",
+			Field:    model.InboundDomainField,
 			Message:  "Naive inbound domain is invalid: " + err.Error(),
 			Source:   "naiveproxy",
 		})
@@ -42,7 +42,7 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_email_required",
 			Severity: "error",
-			Field:    "email",
+			Field:    model.InboundEmailField,
 			Message:  "Naive inbound requires an ACME email.",
 			Source:   "naiveproxy",
 		})
@@ -50,7 +50,7 @@ func (p Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) 
 		issues = append(issues, model.ValidationIssue{
 			Code:     "naive_email_invalid",
 			Severity: "error",
-			Field:    "email",
+			Field:    model.InboundEmailField,
 			Message:  "Naive inbound email is invalid: " + err.Error(),
 			Source:   "naiveproxy",
 		})

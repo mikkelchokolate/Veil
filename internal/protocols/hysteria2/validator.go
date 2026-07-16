@@ -19,7 +19,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 		issues = append(issues, model.ValidationIssue{
 			Code:     "hysteria2_domain_required",
 			Severity: "error",
-			Field:    "domain",
+			Field:    model.InboundDomainField,
 			Message:  "Hysteria2 inbound requires a public domain.",
 			Source:   "hysteria2",
 		})
@@ -27,7 +27,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 		issues = append(issues, model.ValidationIssue{
 			Code:     "hysteria2_domain_invalid",
 			Severity: "error",
-			Field:    "domain",
+			Field:    model.InboundDomainField,
 			Message:  "Hysteria2 inbound domain is invalid: " + err.Error(),
 			Source:   "hysteria2",
 		})
@@ -37,7 +37,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 			issues = append(issues, model.ValidationIssue{
 				Code:     "hysteria2_email_required",
 				Severity: "error",
-				Field:    "email",
+				Field:    model.InboundEmailField,
 				Message:  "Hysteria2 inbound with a custom domain requires an ACME email.",
 				Source:   "hysteria2",
 			})
@@ -45,7 +45,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 			issues = append(issues, model.ValidationIssue{
 				Code:     "hysteria2_email_invalid",
 				Severity: "error",
-				Field:    "email",
+				Field:    model.InboundEmailField,
 				Message:  "Hysteria2 inbound email is invalid: " + err.Error(),
 				Source:   "hysteria2",
 			})
