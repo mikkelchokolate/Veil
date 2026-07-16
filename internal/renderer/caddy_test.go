@@ -24,7 +24,6 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		":443, example.com",
 		"issuer acme",
 		"email admin@example.com",
-		"issuer internal",
 		"basic_auth alice secret",
 		"hide_ip",
 		"hide_via",
@@ -34,6 +33,9 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("rendered Caddyfile missing %q:\n%s", want, cfg)
 		}
+	}
+	if strings.Contains(cfg, "issuer internal") {
+		t.Fatalf("rendered Caddyfile must not contain internal certificate fallback:\n%s", cfg)
 	}
 }
 

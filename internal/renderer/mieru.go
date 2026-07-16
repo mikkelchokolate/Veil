@@ -44,20 +44,37 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 		return "", errors.New("at least one mieru user is required")
 	}
 	out := mieruServerConfigJSON{LoggingLevel: "INFO"}
+	seenBindings := make(map[mieruPortBindingJSON]struct{}, len(cfg.PortBindings))
 	for _, binding := range cfg.PortBindings {
 		if binding.Port <= 0 {
 			return "", errors.New("mieru port is required")
+		}
+		if binding.Port > 65535 {
+			return "", errors.New("mieru port must be between 1 and 65535")
 		}
 		protocol := normalizeMieruProtocol(binding.Protocol)
 		if protocol != "TCP" && protocol != "UDP" {
 			return "", errors.New("mieru protocol must be TCP or UDP")
 		}
-		out.PortBindings = append(out.PortBindings, mieruPortBindingJSON{Port: binding.Port, Protocol: protocol})
+		candidate := mieruPortBindingJSON{Port: binding.Port, Protocol: protocol}
+		if _, exists := seenBindings[candidate]; exists {
+			continue
+		}
+		seenBindings[candidate] = struct{}{}
+		out.PortBindings = append(out.PortBindings, candidate)
 	}
+	seenUsers := make(map[string]string, len(cfg.Users))
 	for _, user := range cfg.Users {
 		if user.Name == "" || user.Password == "" {
 			return "", errors.New("mieru user name and password are required")
 		}
+		if password, exists := seenUsers[user.Name]; exists {
+			if password != user.Password {
+				return "", errors.New("mieru user name has conflicting passwords")
+			}
+			continue
+		}
+		seenUsers[user.Name] = user.Password
 		out.Users = append(out.Users, mieruUserJSON(user))
 	}
 	body, err := json.MarshalIndent(out, "", "  ")

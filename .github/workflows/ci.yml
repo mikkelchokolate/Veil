@@ -110,14 +110,80 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
-      - name: End-to-end tests (real binary over a socket)
-        run: go test -tags e2e ./test/e2e/... -count=1 -v
+      - name: Build and install Veil
+        run: |
+          go build -o /tmp/veil-e2e ./cmd/veil
+          sudo install -m 0755 /tmp/veil-e2e /usr/local/bin/veil
+      - name: Install real server protocol runtimes
+        run: |
+          set -euo pipefail
+          sudo veil runtime install --only hysteria2
+          sudo veil runtime install --only naiveproxy
+          sudo veil runtime install --only mieru
+          /usr/local/bin/caddy list-modules | grep -Fx http.handlers.forward_proxy
+          command -v hysteria
+          command -v caddy
+          command -v mita
+      - name: Install real Mieru client
+        run: |
+          set -euo pipefail
+          arch=amd64
+          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/enfein/mieru/releases/latest)"
+          asset_url="$(jq -er --arg arch "$arch" '.assets[] | select(.name | test("^mieru_.*_linux_" + $arch + "\\.tar\\.gz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
+          curl --fail --silent --show-error --location "$asset_url" -o /tmp/mieru-client.tar.gz
+          rm -rf /tmp/mieru-client && mkdir -p /tmp/mieru-client
+          tar -xzf /tmp/mieru-client.tar.gz -C /tmp/mieru-client
+          client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
+          test -n "$client_bin"
+          sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
+          mieru version
+      - name: Install real NaiveProxy client
+        run: |
+          set -euo pipefail
+          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/klzgrad/naiveproxy/releases/latest)"
+          asset_url="$(jq -er '.assets[] | select(.name | test("^naiveproxy-v.*-linux-x64\\.tar\\.xz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
+          curl --fail --silent --show-error --location "$asset_url" -o /tmp/naiveproxy.tar.xz
+          rm -rf /tmp/naiveproxy && mkdir -p /tmp/naiveproxy
+          tar -xJf /tmp/naiveproxy.tar.xz -C /tmp/naiveproxy
+          naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
+          test -n "$naive_bin"
+          sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
+          naive --version
+      - name: Assert protocol binaries are real
+        run: |
+          set -euo pipefail
+          for bin in caddy naive mita mieru hysteria; do
+            command -v "$bin"
+            test "$(readlink -f "$(command -v "$bin")")" != /usr/local/bin/veil
+          done
+      - name: Mieru TCP through panel-generated configuration
+        run: |
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-tcp.log
+      - name: Mieru UDP through panel-generated configuration
+        run: |
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-udp.log
+      - name: NaiveProxy through panel-generated configuration
+        run: |
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/naiveproxy.log
+      - name: Archive real protocol diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: real-protocol-e2e-diagnostics
+          path: |
+            /tmp/mieru-tcp.log
+            /tmp/mieru-udp.log
+            /tmp/naiveproxy.log
+          if-no-files-found: error
 
   browser-e2e:
     runs-on: ubuntu-latest
@@ -145,18 +211,11 @@ jobs:
           export VEIL_KEY_PATH="${browser_root}/etc/state.key"
           export VEIL_APPLY_ROOT="${browser_root}/apply"
           export VEIL_LIVE_ROOT="${browser_root}/live"
-          ./dist/veil admin set \
-            --username browser-admin \
-            --password 'Browser-E2E-Password-123!' \
-            --role admin \
-            --state "${VEIL_STATE_PATH}" \
-            --key-path "${VEIL_KEY_PATH}"
+          ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
           VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2096 >"${RUNNER_TEMP}/veil-browser.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/veil-browser.pid"
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then
-              exit 0
-            fi
+            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then exit 0; fi
             sleep 1
           done
           cat "${RUNNER_TEMP}/veil-browser.log" >&2
@@ -220,7 +279,6 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Docker image build and version verification
         run: |
-          # Baseline smoke command retained as a regression sentinel: docker build --pull --tag veil:ci .
           version="ci-${GITHUB_SHA}"
           docker build --pull --build-arg "VERSION=${version}" --tag veil:ci .
           docker run --rm veil:ci version | tee /tmp/veil-version.txt
