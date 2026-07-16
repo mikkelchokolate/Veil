@@ -135,6 +135,39 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	}
 }
 
+func TestPolicyAllowsLegacyCaddyfileOnlyForRemoval(t *testing.T) {
+	policy := testPolicy(t)
+	for _, root := range []string{policy.StagingRoot, policy.GeneratedRoot} {
+		if err := os.MkdirAll(filepath.Join(root, "caddy"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resolved, err := policy.ResolvePromotion(PromoteRequest{
+		RemoveArtifactIDs: []string{"caddy/legacy.Caddyfile"},
+	})
+	if err != nil {
+		t.Fatalf("resolve legacy Caddyfile removal: %v", err)
+	}
+	if len(resolved.RemoveArtifacts) != 1 || resolved.RemoveArtifacts[0].ID != "caddy/legacy.Caddyfile" {
+		t.Fatalf("resolved removal = %+v", resolved.RemoveArtifacts)
+	}
+
+	_, err = policy.ResolvePromotion(PromoteRequest{
+		ArtifactIDs: []string{"caddy/legacy.Caddyfile"},
+	})
+	assertOperationErrorCode(t, err, ErrorNotFound)
+
+	for _, id := range []string{
+		"caddy/bad.name.Caddyfile",
+		"caddy/../escape.Caddyfile",
+		"caddy/sub/escape.Caddyfile",
+	} {
+		_, err := policy.ResolvePromotion(PromoteRequest{RemoveArtifactIDs: []string{id}})
+		assertOperationErrorCode(t, err, ErrorNotFound)
+	}
+}
+
 func TestPolicyAllowsOpaquePromotionRestoreID(t *testing.T) {
 	policy := testPolicy(t)
 	resolved, err := policy.ResolvePromotion(PromoteRequest{RestoreBackupID: "20260605T120000.000000000Z"})

@@ -156,6 +156,29 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
 
+	// Retire legacy per-inbound Caddy instances before touching the singleton.
+	// All of those processes use SO_REUSEPORT and the same Admin API address, so
+	// an Admin API load performed first can be accepted by the wrong process and
+	// falsely report success while veil-caddy.service remains inactive.
+	remainingOrphans := make([]string, 0, len(ctx.state.orphanedUnits))
+	for _, unit := range ctx.state.orphanedUnits {
+		if !isTemplateCaddyUnit(unit) {
+			remainingOrphans = append(remainingOrphans, unit)
+			continue
+		}
+		stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
+		results = append(results, stop)
+		if !stop.Success {
+			return results
+		}
+		disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
+		results = append(results, disable)
+		if !disable.Success {
+			return results
+		}
+	}
+	ctx.state.orphanedUnits = remainingOrphans
+
 	// Phase 1: Load Caddy config first. This must happen before hysteria2
 	// certificate synchronization so that Caddy can begin (or complete) ACME
 	// issuance for newly referenced hysteria2 domains.
@@ -312,6 +335,28 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}
 	}
 	if len(restoredUnits) > 0 {
+		restoresLegacyCaddy := false
+		for _, unit := range restoredUnits {
+			if isTemplateCaddyUnit(unit) {
+				restoresLegacyCaddy = true
+				break
+			}
+		}
+		if restoresLegacyCaddy {
+			// A failed consolidated-Caddy migration must not restart the restored
+			// template instances while the singleton is still running; both use
+			// SO_REUSEPORT on the public listener and the shared Admin API.
+			stop := ctx.runPrivilegedServiceAction(renderer.UnitCaddy, privileged.ServiceActionStop)
+			rollbackActions = append(rollbackActions, stop)
+			if !stop.Success {
+				return rollbackFiles, rollbackActions
+			}
+			disable := ctx.runPrivilegedServiceAction(renderer.UnitCaddy, privileged.ServiceActionDisable)
+			rollbackActions = append(rollbackActions, disable)
+			if !disable.Success {
+				return rollbackFiles, rollbackActions
+			}
+		}
 		for _, unit := range restoredUnits {
 			rollbackActions = append(rollbackActions,
 				ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable),

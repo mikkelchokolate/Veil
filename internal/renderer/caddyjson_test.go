@@ -40,6 +40,38 @@ func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONEnablesTLSOnNonStandardNaivePort(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "p.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	apps := cfg["apps"].(map[string]any)
+	httpApp := apps["http"].(map[string]any)
+	servers := httpApp["servers"].(map[string]any)
+	server := servers["tcp-0.0.0.0-8443"].(map[string]any)
+	policies, ok := server["tls_connection_policies"].([]any)
+	if !ok || len(policies) != 1 {
+		t.Fatalf("non-standard Naive port must explicitly enable TLS, server=%+v", server)
+	}
+}
+
 func containsInOrder(s, a, b string) bool {
 	ia := strings.Index(s, a)
 	ib := strings.Index(s, b)
@@ -370,9 +402,10 @@ func TestRenderCaddyJSONNaiveForwardProxyAuthCredentials(t *testing.T) {
 		{"alice", "secret-a"},
 		{"bob", "secret-b"},
 	} {
-		want := base64.StdEncoding.EncodeToString([]byte(u.user + ":" + u.pass))
+		basicValue := base64.StdEncoding.EncodeToString([]byte(u.user + ":" + u.pass))
+		want := base64.StdEncoding.EncodeToString([]byte(basicValue))
 		if !strings.Contains(s, fmt.Sprintf("%q", want)) {
-			t.Errorf("expected base64 credential %q for %s", want, u.user)
+			t.Errorf("expected JSON-encoded forwardproxy credential %q for %s", want, u.user)
 		}
 	}
 }

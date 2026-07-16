@@ -149,11 +149,11 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 		}
 		return ResolvedPromotion{RestoreBackupID: request.RestoreBackupID}, nil
 	}
-	artifacts, err := p.resolveArtifacts(request.ArtifactIDs)
+	artifacts, err := p.resolveArtifacts(request.ArtifactIDs, false)
 	if err != nil {
 		return ResolvedPromotion{}, err
 	}
-	removeArtifacts, err := p.resolveArtifacts(request.RemoveArtifactIDs)
+	removeArtifacts, err := p.resolveArtifacts(request.RemoveArtifactIDs, true)
 	if err != nil {
 		return ResolvedPromotion{}, err
 	}
@@ -163,7 +163,7 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 	return ResolvedPromotion{Artifacts: artifacts, RemoveArtifacts: removeArtifacts}, nil
 }
 
-func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
+func (p Policy) resolveArtifacts(ids []string, allowLegacyCaddyRemoval bool) ([]ResolvedArtifact, error) {
 	resolved := make([]ResolvedArtifact, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
@@ -174,6 +174,9 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 		spec, ok := p.Artifacts[id]
 		if !ok {
 			spec, ok = p.managedArtifactPath(id)
+		}
+		if !ok && allowLegacyCaddyRemoval {
+			spec, ok = legacyCaddyArtifactPath(id)
 		}
 		if !ok {
 			return nil, newError(ErrorNotFound, "unknown artifact id")
@@ -189,6 +192,23 @@ func (p Policy) resolveArtifacts(ids []string) ([]ResolvedArtifact, error) {
 		resolved = append(resolved, ResolvedArtifact{ID: id, Source: source, Destination: destination})
 	}
 	return resolved, nil
+}
+
+func legacyCaddyArtifactPath(id string) (ArtifactPath, bool) {
+	clean := filepath.ToSlash(filepath.Clean(id))
+	if clean != id || strings.Contains(clean, `\`) || !strings.HasPrefix(clean, "caddy/") {
+		return ArtifactPath{}, false
+	}
+	rest := strings.TrimPrefix(clean, "caddy/")
+	if strings.Contains(rest, "/") || !strings.HasSuffix(rest, ".Caddyfile") {
+		return ArtifactPath{}, false
+	}
+	name := strings.TrimSuffix(rest, ".Caddyfile")
+	if !artifactNamePattern.MatchString(name) {
+		return ArtifactPath{}, false
+	}
+	path := filepath.FromSlash(clean)
+	return ArtifactPath{Staged: path, Generated: path}, true
 }
 
 var (

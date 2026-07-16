@@ -204,6 +204,45 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 	}
 }
 
+func TestRollbackStopsSingletonBeforeRestoringLegacyCaddy(t *testing.T) {
+	root := t.TempDir()
+	liveRoot := filepath.Join(root, "live")
+	legacyPath := filepath.Join(liveRoot, "caddy", "legacy.Caddyfile")
+	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive",
+		promoteResult: privileged.PromoteResult{
+			BackupID:         "20260716T120000.000000000Z",
+			WrittenArtifacts: []string{"caddy/legacy.Caddyfile"},
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: liveRoot, Privileged: client})
+	state.settings = Settings{PanelAccess: "caddy"}
+	ctx := NewManagementApplyContext(state)
+	records := []livePromotionRecord{{
+		LivePath:    legacyPath,
+		HadPrevious: true,
+		ArtifactID:  "caddy/legacy.Caddyfile",
+		BackupID:    "20260716T120000.000000000Z",
+	}}
+	newConfig := filepath.Join(liveRoot, "caddy", "config.json")
+
+	_, _ = ctx.rollbackPromotedConfigsLocked(records, []string{newConfig})
+
+	var got []string
+	for _, action := range client.serviceActions {
+		got = append(got, action.Unit+":"+string(action.Action))
+	}
+	want := []string{
+		"veil-caddy.service:stop",
+		"veil-caddy.service:disable",
+		"veil-caddy@legacy.service:enable",
+		"veil-caddy@legacy.service:start",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rollback service actions = %v, want %v", got, want)
+	}
+}
+
 func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
@@ -218,6 +257,44 @@ func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	}
 	if len(liveFiles) != 0 || len(backupFiles) != 0 || len(records) != 0 {
 		t.Fatalf("expected empty result, got live=%+v backup=%+v records=%+v", liveFiles, backupFiles, records)
+	}
+}
+
+func TestReloadPromotedServicesStopsLegacyCaddyBeforeStartingSingleton(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
+	state.liveRoot = filepath.Join(state.applyRoot, "live")
+	state.settings = Settings{PanelAccess: "caddy"}
+	state.orphanedUnits = []string{"veil-caddy@legacy.service"}
+	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
+	state.privileged = client
+	state.privilegedLocal = false
+
+	caddyPath := filepath.Join(state.liveRoot, "caddy", "config.json")
+	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caddyPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldLoader := caddyAdminLoader
+	caddyAdminLoader = func([]byte) error { return errors.New("admin unavailable") }
+	defer func() { caddyAdminLoader = oldLoader }()
+
+	ctx := NewManagementApplyContext(state)
+	ctx.reloadPromotedServicesLocked([]string{caddyPath})
+
+	var got []string
+	for _, action := range client.serviceActions {
+		got = append(got, action.Unit+":"+string(action.Action))
+	}
+	want := []string{
+		"veil-caddy@legacy.service:stop",
+		"veil-caddy@legacy.service:disable",
+		"veil-caddy.service:reload",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("service actions = %v, want %v", got, want)
 	}
 }
 

@@ -84,7 +84,8 @@ func TestRenderCaddyJSON_NaiveTCP443HappyPath(t *testing.T) {
 	}
 
 	authCreds := first["auth_credentials"].([]any)
-	wantCred := base64.StdEncoding.EncodeToString([]byte("user:pass"))
+	basicValue := base64.StdEncoding.EncodeToString([]byte("user:pass"))
+	wantCred := base64.StdEncoding.EncodeToString([]byte(basicValue))
 	if len(authCreds) != 1 || authCreds[0] != wantCred {
 		t.Errorf("auth_credentials = %v, want [%s]", authCreds, wantCred)
 	}

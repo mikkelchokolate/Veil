@@ -148,6 +148,13 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 func liveConfigOrphanDirs() []liveConfigOrphanDir {
 	dirs := []liveConfigOrphanDir{}
 	seen := map[liveConfigOrphanDir]bool{}
+	// The consolidated Caddy JSON migration replaced per-inbound Caddyfiles and
+	// veil-caddy@<name>.service instances. Keep scanning the legacy extension so
+	// the first Apply after an upgrade can remove those files and retire their
+	// units instead of leaving several Caddy processes sharing :443 and :2019.
+	legacyCaddy := liveConfigOrphanDir{subpath: "caddy", ext: ".Caddyfile"}
+	dirs = append(dirs, legacyCaddy)
+	seen[legacyCaddy] = true
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		cr, ok := protocols.AsConfigRenderer(plugin)
@@ -237,6 +244,9 @@ func UnitForLiveConfig(livePath string) (string, bool) {
 }
 
 func unitForPath(slashPath string) (string, bool) {
+	if unit, ok := legacyCaddyUnitForPath(slashPath); ok {
+		return unit, true
+	}
 	registry := protocols.NewRegistry()
 
 	// Exact match covers aggregated units (mieru) and any artifact whose path
@@ -330,6 +340,26 @@ func unitForPath(slashPath string) (string, bool) {
 		return renderer.UnitWarp, true
 	}
 	return "", false
+}
+
+func legacyCaddyUnitForPath(slashPath string) (string, bool) {
+	clean := filepath.ToSlash(filepath.Clean(slashPath))
+	marker := "caddy/"
+	if idx := strings.LastIndex(clean, "/"+marker); idx >= 0 {
+		clean = clean[idx+1:]
+	}
+	if !strings.HasPrefix(clean, marker) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(clean, marker)
+	if !strings.HasSuffix(rest, ".Caddyfile") {
+		return "", false
+	}
+	name := strings.TrimSuffix(rest, ".Caddyfile")
+	if name == "" || strings.Contains(name, "/") || !inbounds.IsSafeName(name) {
+		return "", false
+	}
+	return "veil-caddy@" + name + ".service", true
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {

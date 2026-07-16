@@ -102,8 +102,9 @@ func renderACMEIssuer(email, mode string) map[string]any {
 
 func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
 	server := map[string]any{
-		"listen":          []string{listenString(key)},
-		"automatic_https": map[string]any{"disable_redirects": true},
+		"listen":                  []string{listenString(key)},
+		"automatic_https":         map[string]any{"disable_redirects": true},
+		"tls_connection_policies": []map[string]any{{}},
 	}
 	if owner.Kind == caddyassembly.CaddyOwnerNaive {
 		protocols, err := protocolsForTransport(owner.Transport)
@@ -117,8 +118,13 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
 	case caddyassembly.CaddyOwnerNaive:
 		authCreds := make([]string, 0, len(owner.NaiveUsers))
-		for _, u := range owner.NaiveUsers {
-			authCreds = append(authCreds, base64.StdEncoding.EncodeToString([]byte(u.Username+":"+u.Password)))
+		for _, user := range owner.NaiveUsers {
+			// forwardproxy declares auth_credentials as [][]byte. Its Caddyfile
+			// adapter stores each HTTP Basic value (already base64-encoded) as a
+			// byte slice, so native JSON must base64-encode that byte slice once
+			// more to satisfy encoding/json's []byte contract.
+			basicValue := base64.StdEncoding.EncodeToString([]byte(user.Username + ":" + user.Password))
+			authCreds = append(authCreds, base64.StdEncoding.EncodeToString([]byte(basicValue)))
 		}
 		fallbackRoot, err := resolveNaiveFallbackRoot(owner.FallbackRoot)
 		if err != nil {
