@@ -115,7 +115,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	}
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
-		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath)
+		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
 	case caddyassembly.CaddyOwnerNaive:
 		authCreds := make([]string, 0, len(owner.NaiveUsers))
 		for _, user := range owner.NaiveUsers {
@@ -145,7 +145,9 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		}
 		routes := []map[string]any{}
 		if owner.PanelDomain != "" && owner.BackendPort > 0 && owner.WebBasePath != "" {
-			routes = append(routes, panelRoutes(owner.PanelDomain, owner.BackendPort, owner.WebBasePath)...)
+			// On a shared Panel/Naive bind, unmatched requests must reach
+			// forward_proxy. The panel-only catch-all 404 would intercept CONNECT.
+			routes = append(routes, panelRoutes(owner.PanelDomain, owner.BackendPort, owner.WebBasePath, false)...)
 		}
 		routes = append(routes, map[string]any{"handle": handlers})
 		server["routes"] = routes
@@ -187,20 +189,23 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 	}
 }
 
-func panelRoutes(domain string, backendPort int, webBasePath string) []map[string]any {
+func panelRoutes(domain string, backendPort int, webBasePath string, includeFallback bool) []map[string]any {
 	proxy := map[string]any{
 		"handler":   "reverse_proxy",
 		"upstreams": []map[string]any{{"dial": "127.0.0.1:" + portString(backendPort)}},
 	}
 	if webBasePath == "" || webBasePath == "/" {
-		return []map[string]any{
+		routes := []map[string]any{
 			{"match": []map[string]any{{"host": []string{domain}}}, "handle": []map[string]any{proxy}},
-			{"handle": []map[string]any{{"handler": "static_response", "status_code": 404}}},
 		}
+		if includeFallback {
+			routes = append(routes, map[string]any{"handle": []map[string]any{{"handler": "static_response", "status_code": 404}}})
+		}
+		return routes
 	}
 	webBasePath = strings.TrimRight(webBasePath, "/")
 	webBasePathSlash := webBasePath + "/"
-	return []map[string]any{
+	routes := []map[string]any{
 		{
 			"match": []map[string]any{{"host": []string{domain}, "path": []string{webBasePath}}},
 			"handle": []map[string]any{{
@@ -213,10 +218,11 @@ func panelRoutes(domain string, backendPort int, webBasePath string) []map[strin
 			"match":  []map[string]any{{"host": []string{domain}, "path": []string{webBasePathSlash + "*"}}},
 			"handle": []map[string]any{proxy},
 		},
-		{
-			"handle": []map[string]any{{"handler": "static_response", "status_code": 404}},
-		},
 	}
+	if includeFallback {
+		routes = append(routes, map[string]any{"handle": []map[string]any{{"handler": "static_response", "status_code": 404}}})
+	}
+	return routes
 }
 
 func serverNameFor(key bindregistry.BindKey) string {

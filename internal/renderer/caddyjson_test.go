@@ -40,6 +40,54 @@ func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:         caddyassembly.CaddyOwnerNaive,
+				Domain:       "vpn.example.com",
+				PanelDomain:  "vpn.example.com",
+				InboundName:  "naive",
+				Transport:    "tcp",
+				BackendPort:  2096,
+				WebBasePath:  "/panel/",
+				NaiveUsers:   []caddyassembly.CaddyNaiveUser{{Username: "veil", Password: "secret"}},
+				FallbackRoot: "/var/lib/veil/www",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"vpn.example.com": {Domain: "vpn.example.com", Email: "admin@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
+	seenForwardProxy := false
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		for _, rawHandler := range route["handle"].([]any) {
+			handler := rawHandler.(map[string]any)["handler"]
+			if handler == "forward_proxy" {
+				seenForwardProxy = true
+			}
+			if handler == "static_response" && !seenForwardProxy {
+				if match, ok := route["match"].([]any); !ok || len(match) == 0 {
+					t.Fatalf("unconditional static response blocks Naive CONNECT before forward_proxy: %+v", server["routes"])
+				}
+			}
+		}
+	}
+	if !seenForwardProxy {
+		t.Fatalf("shared Panel/Naive server has no forward_proxy route: %+v", server)
+	}
+}
+
 func TestRenderCaddyJSONEnablesTLSOnNonStandardNaivePort(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{

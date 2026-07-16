@@ -257,7 +257,8 @@ func testNaiveProxyDataPath(t *testing.T, caddyPath, naivePath string) {
 
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
 	inboundPort := freePort(t)
-	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"test@example.com"}`)
+	settingsBody := fmt.Sprintf(`{"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-e2e/","panelDomain":"vpn.example.com","panelEmail":"test@example.com","panelPublicPort":%d,"mode":"dev","domain":"vpn.example.com","email":"test@example.com","defaultAcmeEmail":"test@example.com"}`, inboundPort)
+	resp := srv.do(http.MethodPut, "/api/settings", settingsBody)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("settings expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
