@@ -325,4 +325,7 @@ func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("service actions = %v, want %v", got, want)
 	}
+	if len(state.orphanedUnits) != 0 {
+		t.Fatalf("successfully cleaned orphan units must not be retried: %v", state.orphanedUnits)
+	}
 }
