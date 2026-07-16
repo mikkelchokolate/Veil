@@ -19,7 +19,8 @@ func TestRenderNaiveCaddyfileUsesPublicTLSOnly(t *testing.T) {
 	}
 	for _, want := range []string{
 		":443, vpn.example.com {",
-		"tls admin@example.com",
+		"issuer acme",
+		"email admin@example.com",
 		"encode",
 		"forward_proxy",
 		"probe_resistance",
