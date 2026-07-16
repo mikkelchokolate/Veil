@@ -33,6 +33,9 @@ var (
 	caddyDataDir           = caddycert.DefaultCaddyDataDir
 	findCaddyCertPair      = caddycert.FindPair
 	osExecutable           = os.Executable
+	effectiveUID           = os.Geteuid
+	lookupUser             = user.Lookup
+	chownPath              = os.Chown
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
 )
@@ -337,12 +340,8 @@ func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request R
 		if err := atomicfile.Write(artifact.Destination, body, 0o600, 0o700); err != nil {
 			return PromoteResult{}, err
 		}
-		// Caddy config files are consumed by the root-running Caddy service; keep
-		// them root-owned. Protocol runtime configs are consumed by services that
-		// run as the veil user, so chown them to veil.
-		if !strings.Contains(filepath.Clean(artifact.Destination), "/generated/caddy/") {
-			_ = chownToVeilIfRoot(artifact.Destination)
-			_ = chownToVeilIfRoot(filepath.Dir(artifact.Destination))
+		if err := ensureRuntimeArtifactOwnership(artifact.ID, artifact.Destination); err != nil {
+			return PromoteResult{}, err
 		}
 		result.WrittenArtifacts = append(result.WrittenArtifacts, artifact.ID)
 		manifest.Records = append(manifest.Records, record)
@@ -432,6 +431,9 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 			if err := atomicfile.Write(record.Destination, previous, 0o600, 0o700); err != nil {
 				return PromoteResult{}, err
 			}
+			if err := ensureRuntimeArtifactOwnership(record.ArtifactID, record.Destination); err != nil {
+				return PromoteResult{}, err
+			}
 		} else if err := os.Remove(record.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return PromoteResult{}, err
 		}
@@ -442,25 +444,40 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 
 // chownToVeilIfRoot changes the owner of path to the veil user when the helper
 // is running as root. This keeps generated config files and certificates
-// readable by the protocol runtime services, which run as the veil user.
-// If the veil user cannot be resolved (e.g. in tests), the chown is skipped.
+// readable by the protocol runtime services, which run as the veil user. A
+// missing/invalid veil account or failed chown is fatal so Apply can roll back
+// instead of reporting success for an unreadable runtime artifact.
 func chownToVeilIfRoot(path string) error {
-	if os.Geteuid() != 0 {
+	if effectiveUID() != 0 {
 		return nil
 	}
-	u, err := user.Lookup("veil")
+	u, err := lookupUser("veil")
 	if err != nil {
-		return nil
+		return fmt.Errorf("resolve veil user: %w", err)
 	}
 	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
-		return nil
+		return fmt.Errorf("parse veil uid %q: %w", u.Uid, err)
 	}
 	gid, err := strconv.Atoi(u.Gid)
 	if err != nil {
+		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+	}
+	return chownPath(path, uid, gid)
+}
+
+func ensureRuntimeArtifactOwnership(artifactID, path string) error {
+	// Caddy runs as root; its config intentionally remains root-owned.
+	if strings.HasPrefix(filepath.ToSlash(filepath.Clean(artifactID)), "caddy/") {
 		return nil
 	}
-	return os.Chown(path, uid, gid)
+	if err := chownToVeilIfRoot(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("set protocol config directory ownership: %w", err)
+	}
+	if err := chownToVeilIfRoot(path); err != nil {
+		return fmt.Errorf("set protocol config ownership: %w", err)
+	}
+	return nil
 }
 
 func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
@@ -592,17 +609,23 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if err := os.MkdirAll(request.OutDir, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("create cert output directory: %w", err)
 	}
-	_ = chownToVeilIfRoot(request.OutDir)
+	if err := chownToVeilIfRoot(request.OutDir); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate directory ownership: %w", err)
+	}
 	certOut := filepath.Join(request.OutDir, request.Domain+".crt")
 	keyOut := filepath.Join(request.OutDir, request.Domain+".key")
 	if err := atomicfile.Write(certOut, certData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write certificate: %w", err)
 	}
-	_ = chownToVeilIfRoot(certOut)
+	if err := chownToVeilIfRoot(certOut); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate ownership: %w", err)
+	}
 	if err := atomicfile.Write(keyOut, keyData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write key: %w", err)
 	}
-	_ = chownToVeilIfRoot(keyOut)
+	if err := chownToVeilIfRoot(keyOut); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
+	}
 	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
 }
 

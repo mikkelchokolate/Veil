@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -56,6 +57,48 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 	}
 	if result.BackupID == "" || !reflect.DeepEqual(result.WrittenArtifacts, []string{"mieru"}) {
 		t.Fatalf("unexpected promote result: %+v", result)
+	}
+}
+
+func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testing.T) {
+	oldEffectiveUID := effectiveUID
+	oldLookupUser := lookupUser
+	oldChownPath := chownPath
+	defer func() {
+		effectiveUID = oldEffectiveUID
+		lookupUser = oldLookupUser
+		chownPath = oldChownPath
+	}()
+
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(string) (*user.User, error) {
+		return &user.User{Uid: "123", Gid: "456"}, nil
+	}
+	ownershipErr := errors.New("injected chown failure")
+	chownPath = func(string, int, int) error { return ownershipErr }
+
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "mieru", "server_config.json")
+	destination := filepath.Join(root, "generated", "mieru", "server_config.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte(`{"portBindings":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{
+		PromotionBackupRoot: filepath.Join(root, "backups"),
+	})
+	_, err := executor.Promote(context.Background(), ResolvedPromotion{
+		Artifacts: []ResolvedArtifact{{
+			ID:          "mieru/server_config.json",
+			Source:      source,
+			Destination: destination,
+		}},
+	})
+	if !errors.Is(err, ownershipErr) {
+		t.Fatalf("promote error = %v, want injected ownership error", err)
 	}
 }
 
