@@ -35,11 +35,35 @@ var (
 	osExecutable           = os.Executable
 	effectiveUID           = os.Geteuid
 	lookupUser             = user.Lookup
-	chownPath              = os.Chown
-	chmodPath              = os.Chmod
+	chownPath              = chownNoFollow
+	chmodPath              = chmodNoFollow
+	openNoFollow           = openRegularNoFollow
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
 )
+
+// chownNoFollow opens path with O_NOFOLLOW and applies fchown on the file
+// descriptor, so a symlink swapped in after policy resolution is rejected
+// rather than followed to an unintended target.
+func chownNoFollow(path string, uid, gid int) error {
+	f, err := openNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Chown(uid, gid)
+}
+
+// chmodNoFollow opens path with O_NOFOLLOW and applies fchmod on the file
+// descriptor, avoiding symlink-following chmod on a swapped path.
+func chmodNoFollow(path string, mode os.FileMode) error {
+	f, err := openNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Chmod(mode)
+}
 
 type Executor struct {
 	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
@@ -391,6 +415,14 @@ type promotionManifestRecord struct {
 
 func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
 	record := promotionManifestRecord{ArtifactID: artifact.ID, Destination: artifact.Destination}
+	// Lstat (not Stat/ReadFile) so a symlink swapped in after policy resolution
+	// is detected. Reading a symlink would copy the target's content — possibly
+	// outside the managed root — into the backup, which the caller could then
+	// retrieve via the returned backup ID (exfiltration). Skip the content
+	// backup for symlinks; the removal step deletes the link itself.
+	if info, statErr := os.Lstat(artifact.Destination); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return record, nil
+	}
 	body, err := os.ReadFile(artifact.Destination)
 	if errors.Is(err, os.ErrNotExist) {
 		return record, nil

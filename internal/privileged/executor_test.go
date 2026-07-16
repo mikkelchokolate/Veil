@@ -102,6 +102,53 @@ func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testin
 	}
 }
 
+// TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval covers the
+// exfiltration vector: if a managed artifact slated for removal is replaced by
+// a symlink pointing outside the managed root, backupPromotionDestination must
+// not read the symlink target into the promotion backup (which the caller could
+// then retrieve via the returned backup ID). The helper must detect the symlink
+// and skip the content backup instead of following it.
+func TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval(t *testing.T) {
+	root := t.TempDir()
+	backupRoot := filepath.Join(root, "backups")
+	destination := filepath.Join(root, "generated", "caddy", "legacy.Caddyfile")
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(root, "outside-secret")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET-OUTSIDE-ROOT"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, destination); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: backupRoot})
+	result, err := executor.Promote(context.Background(), ResolvedPromotion{
+		RemoveArtifacts: []ResolvedArtifact{{
+			ID:          "caddy/legacy.Caddyfile",
+			Destination: destination,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("promote removal: %v", err)
+	}
+	// The symlink itself is removed.
+	if _, statErr := os.Lstat(destination); !os.IsNotExist(statErr) {
+		t.Fatalf("expected symlink to be removed, stat err=%v", statErr)
+	}
+	// No backup artifact may contain the outside secret.
+	for _, backupPath := range result.BackupArtifacts {
+		body, readErr := os.ReadFile(backupPath)
+		if readErr != nil {
+			continue
+		}
+		if string(body) == "TOP-SECRET-OUTSIDE-ROOT" {
+			t.Fatalf("symlink target content was exfiltrated into backup %s", backupPath)
+		}
+	}
+}
+
 func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
 	oldEffectiveUID := effectiveUID
 	oldLookupUser := lookupUser
