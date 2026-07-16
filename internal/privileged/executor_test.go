@@ -102,6 +102,79 @@ func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testin
 	}
 }
 
+func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
+	oldEffectiveUID := effectiveUID
+	oldLookupUser := lookupUser
+	oldChownPath := chownPath
+	oldChmodPath := chmodPath
+	defer func() {
+		effectiveUID = oldEffectiveUID
+		lookupUser = oldLookupUser
+		chownPath = oldChownPath
+		chmodPath = oldChmodPath
+	}()
+
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(name string) (*user.User, error) {
+		if name != "veil" {
+			t.Fatalf("lookup user = %q, want veil", name)
+		}
+		return &user.User{Uid: "123", Gid: "456"}, nil
+	}
+	type chownCall struct {
+		path     string
+		uid, gid int
+	}
+	type chmodCall struct {
+		path string
+		mode os.FileMode
+	}
+	var chowns []chownCall
+	var chmods []chmodCall
+	chownPath = func(path string, uid, gid int) error {
+		chowns = append(chowns, chownCall{path: path, uid: uid, gid: gid})
+		return nil
+	}
+	chmodPath = func(path string, mode os.FileMode) error {
+		chmods = append(chmods, chmodCall{path: path, mode: mode})
+		return nil
+	}
+
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "caddy", "config.json")
+	destination := filepath.Join(root, "generated", "caddy", "config.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte(`{"apps":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: []ResolvedArtifact{{
+		ID:          "caddy/config.json",
+		Source:      source,
+		Destination: destination,
+	}}}); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+
+	wantChowns := []chownCall{
+		{path: filepath.Dir(destination), uid: 0, gid: 456},
+		{path: destination, uid: 0, gid: 456},
+	}
+	wantChmods := []chmodCall{
+		{path: filepath.Dir(destination), mode: 0o750},
+		{path: destination, mode: 0o640},
+	}
+	if !reflect.DeepEqual(chowns, wantChowns) {
+		t.Fatalf("chown calls = %+v, want %+v", chowns, wantChowns)
+	}
+	if !reflect.DeepEqual(chmods, wantChmods) {
+		t.Fatalf("chmod calls = %+v, want %+v", chmods, wantChmods)
+	}
+}
+
 func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "staging", "edge.Caddyfile")

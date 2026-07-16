@@ -36,6 +36,7 @@ var (
 	effectiveUID           = os.Geteuid
 	lookupUser             = user.Lookup
 	chownPath              = os.Chown
+	chmodPath              = os.Chmod
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
 )
@@ -467,15 +468,46 @@ func chownToVeilIfRoot(path string) error {
 }
 
 func ensureRuntimeArtifactOwnership(artifactID, path string) error {
-	// Caddy runs as root; its config intentionally remains root-owned.
 	if strings.HasPrefix(filepath.ToSlash(filepath.Clean(artifactID)), "caddy/") {
-		return nil
+		return grantPanelReadAccessToCaddyArtifact(path)
 	}
 	if err := chownToVeilIfRoot(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("set protocol config directory ownership: %w", err)
 	}
 	if err := chownToVeilIfRoot(path); err != nil {
 		return fmt.Errorf("set protocol config ownership: %w", err)
+	}
+	return nil
+}
+
+// grantPanelReadAccessToCaddyArtifact keeps the Caddy config owned by root for
+// the root Caddy service while making it readable by the veil group for the
+// unprivileged Panel's Caddy Admin API loader. The config contains credentials,
+// so it must not be world-readable.
+func grantPanelReadAccessToCaddyArtifact(path string) error {
+	if effectiveUID() != 0 {
+		return nil
+	}
+	u, err := lookupUser("veil")
+	if err != nil {
+		return fmt.Errorf("resolve veil user: %w", err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+	}
+	dir := filepath.Dir(path)
+	if err := chownPath(dir, 0, gid); err != nil {
+		return fmt.Errorf("set caddy config directory ownership: %w", err)
+	}
+	if err := chmodPath(dir, 0o750); err != nil {
+		return fmt.Errorf("set caddy config directory mode: %w", err)
+	}
+	if err := chownPath(path, 0, gid); err != nil {
+		return fmt.Errorf("set caddy config ownership: %w", err)
+	}
+	if err := chmodPath(path, 0o640); err != nil {
+		return fmt.Errorf("set caddy config mode: %w", err)
 	}
 	return nil
 }
