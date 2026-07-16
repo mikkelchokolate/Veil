@@ -2,6 +2,7 @@ package hysteria2
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -44,16 +45,17 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		return "", err
 	}
 	url := masqueradeURL(settings, inbound)
+	domain := hysteria2Domain(settings, inbound)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
-		Domain:        settings.Domain,
+		Domain:        domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if settings.PanelAccess == "caddy" && settings.Domain != "" {
-		hystConfig.CertPath = paths.CertPath(settings.Domain)
-		hystConfig.KeyPath = paths.KeyPath(settings.Domain)
+	if settings.PanelAccess == "caddy" && domain != "" {
+		hystConfig.CertPath = paths.CertPath(domain)
+		hystConfig.KeyPath = paths.KeyPath(domain)
 	} else {
 		hystConfig.CertPath = paths.PanelCertPath()
 		hystConfig.KeyPath = paths.PanelKeyPath()
@@ -66,4 +68,15 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		hystConfig.Upstream = "127.0.0.1:" + strconv.Itoa(socksPort)
 	}
 	return renderer.RenderHysteria2(hystConfig)
+}
+
+func hysteria2Domain(settings model.Settings, inbound model.Inbound) string {
+	if inbound.ProtocolFields != nil {
+		if d, ok := inbound.ProtocolFields["domain"].(string); ok {
+			if v := strings.TrimSpace(d); v != "" {
+				return v
+			}
+		}
+	}
+	return strings.TrimSpace(settings.Domain)
 }

@@ -144,16 +144,16 @@ func newProtocolClientLink(input ClientAccessLinkInput) ClientLink {
 }
 
 func naiveProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if !hasClientEndpoint(input.Settings) {
+	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = NaiveClientURI(clientEndpoint(input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password)
+	link.URI = NaiveClientURI(clientEndpointFor(input), input.Inbound.Port, input.Credential.Username, input.Credential.Password)
 	return link, true
 }
 
 func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if !hasClientEndpoint(input.Settings) {
+	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
@@ -168,7 +168,7 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if username == "" {
 		username = protocolString(input.Settings.ProtocolFields, "naiveUsername", input.Settings.NaiveUsername)
 	}
-	link.URI = NaiveClientURI(clientEndpoint(input.Settings), input.Inbound.Port, username, password)
+	link.URI = NaiveClientURI(clientEndpointFor(input), input.Inbound.Port, username, password)
 	return link, true
 }
 
@@ -186,16 +186,16 @@ func hysteria2Insecure(input ClientAccessLinkInput) bool {
 }
 
 func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if !hasClientEndpoint(input.Settings) {
+	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = Hysteria2UserPassClientURI(clientEndpoint(input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, hysteria2Insecure(input))
+	link.URI = Hysteria2UserPassClientURI(clientEndpointFor(input), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, hysteria2Insecure(input))
 	return link, true
 }
 
 func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if !hasClientEndpoint(input.Settings) {
+	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
@@ -206,12 +206,12 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 			password = protocolString(input.Settings.ProtocolFields, "hysteria2Password", input.Settings.Hysteria2Password)
 		}
 	}
-	link.URI = Hysteria2ClientURI(clientEndpoint(input.Settings), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
+	link.URI = Hysteria2ClientURI(clientEndpointFor(input), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
 	return link, true
 }
 
 func mieruClientConfigLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if !hasClientEndpoint(input.Settings) {
+	if clientEndpoint(input.Settings) == "" {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
@@ -228,10 +228,23 @@ func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	return mieruClientConfigLink(input)
 }
 
-func hasClientEndpoint(settings Settings) bool {
-	return clientEndpoint(settings) != ""
+func hasClientEndpoint(input ClientAccessLinkInput) bool {
+	return clientEndpointFor(input) != ""
 }
 
+func clientEndpointFor(input ClientAccessLinkInput) string {
+	if input.Inbound.ProtocolFields != nil {
+		if d, ok := input.Inbound.ProtocolFields["domain"].(string); ok {
+			if v := strings.TrimSpace(d); v != "" {
+				return v
+			}
+		}
+	}
+	return strings.TrimSpace(input.Settings.Domain)
+}
+
+// clientEndpoint returns the global settings domain. Kept for callers that only
+// have settings and no inbound context (e.g. mieru aggregation).
 func clientEndpoint(settings Settings) string {
 	return strings.TrimSpace(settings.Domain)
 }

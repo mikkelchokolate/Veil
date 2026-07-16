@@ -1,6 +1,9 @@
 package clientaccess
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestProtocolStringBranches(t *testing.T) {
 	cases := []struct {
@@ -136,5 +139,79 @@ func TestMieruClientConfigLinkRequiresDomain(t *testing.T) {
 	})
 	if ok {
 		t.Fatalf("expected no link without domain, got %+v", link)
+	}
+}
+
+func TestClientEndpointForUsesInboundDomainWithFallback(t *testing.T) {
+	cases := []struct {
+		name     string
+		settings Settings
+		inbound  Inbound
+		want     string
+	}{
+		{
+			name:     "inbound domain wins",
+			settings: Settings{Domain: "global.example.com"},
+			inbound:  Inbound{ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+			want:     "inbound.example.com",
+		},
+		{
+			name:     "fallback to settings domain",
+			settings: Settings{Domain: "global.example.com"},
+			inbound:  Inbound{},
+			want:     "global.example.com",
+		},
+		{
+			name:     "inbound domain works without global domain",
+			settings: Settings{},
+			inbound:  Inbound{ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+			want:     "inbound.example.com",
+		},
+		{
+			name:     "empty inbound domain falls back",
+			settings: Settings{Domain: "global.example.com"},
+			inbound:  Inbound{ProtocolFields: map[string]any{"domain": "  "}},
+			want:     "global.example.com",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := ClientAccessLinkInput{Settings: tc.settings, Inbound: tc.inbound}
+			if got := clientEndpointFor(input); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNaiveProfileLinkUsesInboundDomain(t *testing.T) {
+	link, ok := naiveProfileClientLink(ClientAccessLinkInput{
+		Settings:   Settings{Domain: "global.example.com"},
+		Inbound:    Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+		LinkName:   "naive/alice",
+		Credential: ClientCredential{Name: "alice", Username: "alice", Password: "pass"},
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	want := "naive+https://alice:pass@inbound.example.com:8443"
+	if link.URI != want {
+		t.Fatalf("URI = %q, want %q", link.URI, want)
+	}
+}
+
+func TestHysteria2ProfileLinkUsesInboundDomain(t *testing.T) {
+	link, ok := hysteria2ProfileClientLink(ClientAccessLinkInput{
+		Settings:   Settings{Domain: "global.example.com"},
+		Inbound:    Inbound{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+		LinkName:   "hy2/alice",
+		Credential: ClientCredential{Name: "alice", Username: "alice", Password: "pass"},
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	wantPrefix := "hysteria2://alice:pass@inbound.example.com:8443/"
+	if !strings.HasPrefix(link.URI, wantPrefix) {
+		t.Fatalf("URI = %q, want prefix %q", link.URI, wantPrefix)
 	}
 }

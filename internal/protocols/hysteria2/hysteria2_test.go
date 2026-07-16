@@ -697,6 +697,46 @@ func TestBuildLinksProfileRequiresPassword(t *testing.T) {
 	}
 }
 
+func TestBuildLinksUsesInboundDomainWithFallback(t *testing.T) {
+	p := New()
+
+	// Inbound-specific domain should override settings.Domain.
+	settings := model.Settings{Domain: "example.com"}
+	inbound := model.Inbound{
+		Name:           "h2",
+		Protocol:       "hysteria2",
+		Transport:      "udp",
+		Port:           8443,
+		Password:       "secret-pass",
+		ProtocolFields: map[string]any{"domain": "inbound.example.com"},
+	}
+	links, err := p.BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	wantPrefix := "hysteria2://" + url.QueryEscape("secret-pass") + "@inbound.example.com:8443/"
+	if !strings.HasPrefix(links[0].URI, wantPrefix) {
+		t.Errorf("URI prefix mismatch: got %q", links[0].URI)
+	}
+	if !strings.Contains(links[0].URI, "sni=inbound.example.com") {
+		t.Errorf("URI missing inbound sni: %q", links[0].URI)
+	}
+
+	// Falls back to settings.Domain when inbound-specific domain is absent.
+	inbound.ProtocolFields = nil
+	links, err = p.BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wantPrefix = "hysteria2://" + url.QueryEscape("secret-pass") + "@example.com:8443/"
+	if !strings.HasPrefix(links[0].URI, wantPrefix) {
+		t.Errorf("fallback URI prefix mismatch: got %q", links[0].URI)
+	}
+}
+
 func TestProtocolString(t *testing.T) {
 	if got := protocolString(nil, "k", "fallback"); got != "fallback" {
 		t.Errorf("nil map = %q, want fallback", got)
