@@ -20,6 +20,7 @@ func TestValidationAcceptsEnabledClientProfileCredentials(t *testing.T) {
 		Enabled:   true,
 		ProtocolFields: map[string]any{
 			"domain": "vpn.example.com",
+			"email":  "admin@example.com",
 		},
 		Profiles: []model.ClientProfile{{
 			Name:     "alice",
@@ -51,6 +52,7 @@ func TestValidationRejectsIncompleteClientProfileWithoutFallback(t *testing.T) {
 		Enabled:   true,
 		ProtocolFields: map[string]any{
 			"domain": "vpn.example.com",
+			"email":  "admin@example.com",
 		},
 		Profiles: []model.ClientProfile{{
 			Name:    "alice",

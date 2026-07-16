@@ -58,7 +58,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 				response.Issues = append(response.Issues, issue(
 					"dns_unresolved",
 					SeverityWarning,
-					"settings.domain",
+					"domain",
 					inbound.Name,
 					fmt.Sprintf("Configured domain %q does not resolve", domain),
 					"Create or correct the DNS record before applying this configuration.",
@@ -237,20 +237,9 @@ func unitForInbound(protocol string, inbound model.Inbound, descriptors []servic
 
 func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	issues := []model.ValidationIssue{}
-	if protocolNeedsDomain(settings, inbound) && model.ResolveInboundDomain(inbound, settings) == "" {
-		issues = append(issues, issue(
-			"domain_required", SeverityError, "settings.domain", inbound.Name,
-			"This protocol requires a public domain",
-			"Set the domain that resolves to this host.", "candidate",
-		))
-	}
-	if protocolNeedsEmail(settings, inbound) && model.ResolveInboundEmail(inbound, settings) == "" {
-		issues = append(issues, issue(
-			"email_required", SeverityError, "settings.email", inbound.Name,
-			"This protocol requires an email address",
-			"Set the ACME contact email.", "candidate",
-		))
-	}
+	// Domain/email presence and validity are now checked by protocol-specific
+	// ValidateInbound implementations, which can distinguish between inbound and
+	// global fields. Only the generic credential check remains here.
 	if !hasCredential(settings, inbound) {
 		issues = append(issues, issue(
 			"credential_required", SeverityError, "password", inbound.Name,
@@ -283,18 +272,6 @@ func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 		return false
 	}
 	return validator.NeedsDomain(settings, inbound)
-}
-
-func protocolNeedsEmail(settings model.Settings, inbound model.Inbound) bool {
-	p, ok := protocolRegistry().Get(inbound.Protocol)
-	if !ok {
-		return false
-	}
-	validator, ok := protocols.AsValidator(p)
-	if !ok {
-		return false
-	}
-	return validator.NeedsEmail(settings, inbound)
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {

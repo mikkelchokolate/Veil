@@ -346,17 +346,8 @@ func protocolInboundValidationReady(settings Settings, inbound Inbound) bool {
 	if !ok {
 		return false
 	}
-	validator, ok := protocols.AsValidator(p)
-	if !ok {
-		return false
-	}
-	if validator.NeedsDomain(settings, inbound) && model.ResolveInboundDomain(inbound, settings) == "" {
-		return false
-	}
-	if validator.NeedsEmail(settings, inbound) && model.ResolveInboundEmail(inbound, settings) == "" {
-		return false
-	}
-	return true
+	_, ok = protocols.AsValidator(p)
+	return ok
 }
 
 func appendUniqueApplyPlanError(errors []string, message string) []string {

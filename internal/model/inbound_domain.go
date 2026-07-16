@@ -51,14 +51,17 @@ func InboundEmail(inbound Inbound) string {
 	return v
 }
 
-// ResolveInboundEmail returns the effective ACME email for an inbound.
-// It prefers inbound.ProtocolFields["email"] and falls back to
-// settings.DefaultAcmeEmail, settings.PanelEmail, and finally settings.Email.
+// ResolveInboundEmail returns the effective ACME email for an inbound-specific
+// domain. It prefers inbound.ProtocolFields["email"] and falls back to
+// settings.DefaultAcmeEmail and settings.PanelEmail. It intentionally does NOT
+// fall back to the legacy settings.Email, because that global email is reserved
+// for the panel's own domain and should not silently issue certificates for
+// unrelated inbound domains.
 func ResolveInboundEmail(inbound Inbound, settings Settings) string {
 	if e := InboundEmail(inbound); e != "" {
 		return e
 	}
-	for _, e := range []string{settings.DefaultAcmeEmail, settings.PanelEmail, settings.Email} {
+	for _, e := range []string{settings.DefaultAcmeEmail, settings.PanelEmail} {
 		if v := strings.TrimSpace(e); v != "" {
 			return v
 		}

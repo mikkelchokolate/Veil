@@ -164,8 +164,9 @@ func TestValidatorReportsMissingDomainEmailCredentialBinaryAndUnit(t *testing.T)
 	})
 
 	for _, code := range []string{
-		"domain_required",
-		"email_required",
+		"naive_domain_required",
+		"naive_email_required",
+		"naive_credential_required",
 		"credential_required",
 		"runtime_binary_missing",
 		"runtime_unit_missing",
@@ -180,13 +181,19 @@ func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "missing.example",
-			Email:         "admin@example.com",
 			NaiveUsername: "veil",
 			NaivePassword: "secret",
 		},
 		Inbounds: []model.Inbound{{
-			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+			Name:      "public",
+			Protocol:  "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain": "missing.example",
+				"email":  "admin@example.com",
+			},
 		}},
 	})
 
@@ -202,13 +209,19 @@ func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T
 
 	response := validator.Validate(context.Background(), Request{
 		Settings: model.Settings{
-			Domain:        "pending.example",
-			Email:         "admin@example.com",
 			NaiveUsername: "veil",
 			NaivePassword: "secret",
 		},
 		Inbounds: []model.Inbound{{
-			Name: "public", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+			Name:     "public",
+			Protocol: "naiveproxy",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			ProtocolFields: map[string]any{
+				"domain": "pending.example",
+				"email":  "admin@example.com",
+			},
 		}},
 	})
 

@@ -76,8 +76,8 @@ func TestResolveInboundEmail(t *testing.T) {
 		{"inbound wins", Inbound{ProtocolFields: map[string]any{"email": "inbound@x.com"}}, Settings{Email: "global@x.com"}, "inbound@x.com"},
 		{"fallback default", Inbound{}, Settings{DefaultAcmeEmail: "default@x.com"}, "default@x.com"},
 		{"fallback panel", Inbound{}, Settings{PanelEmail: "panel@x.com"}, "panel@x.com"},
-		{"fallback global", Inbound{}, Settings{Email: "global@x.com"}, "global@x.com"},
-		{"empty inbound falls back", Inbound{ProtocolFields: map[string]any{"email": "   "}}, Settings{Email: "global@x.com"}, "global@x.com"},
+		{"no fallback to legacy global email", Inbound{}, Settings{Email: "global@x.com"}, ""},
+		{"empty inbound falls back to default", Inbound{ProtocolFields: map[string]any{"email": "   "}}, Settings{DefaultAcmeEmail: "default@x.com"}, "default@x.com"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

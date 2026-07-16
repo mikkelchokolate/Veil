@@ -54,8 +54,8 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	var response ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -64,8 +64,23 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	if response.Valid {
 		t.Fatalf("expected invalid plan: %+v", response)
 	}
-	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "positive port") {
+	foundPort := false
+	foundDomain := false
+	for _, err := range response.Errors {
+		if strings.Contains(err, "positive port") {
+			foundPort = true
+		}
+	}
+	for _, issue := range response.Issues {
+		if issue.Code == "hysteria2_domain_required" {
+			foundDomain = true
+		}
+	}
+	if !foundPort {
 		t.Fatalf("expected positive port validation error: %+v", response.Errors)
+	}
+	if !foundDomain {
+		t.Fatalf("expected hysteria2 domain required issue: %+v", response.Issues)
 	}
 }
 
@@ -123,15 +138,25 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	var response ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive inbound \"naive\" is missing") {
-		t.Fatalf("expected missing naive settings validation error: %+v", response)
+	if response.Valid {
+		t.Fatalf("expected invalid plan: %+v", response)
+	}
+	found := false
+	for _, issue := range response.Issues {
+		if issue.Code == "naive_email_required" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected naive_email_required issue: %+v", response)
 	}
 }
 
@@ -151,8 +176,8 @@ func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
 		t.Fatalf("invalid apply should not write files, stat err: %v", err)

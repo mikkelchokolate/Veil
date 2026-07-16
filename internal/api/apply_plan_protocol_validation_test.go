@@ -60,7 +60,18 @@ func TestBuildApplyPlanDefersProtocolInboundIssuesUntilRequiredSettingsExist(t *
 	if plan.Valid {
 		t.Fatalf("plan without required NaiveProxy settings should be invalid: %+v", plan)
 	}
-	if len(plan.Issues) != 0 {
-		t.Fatalf("dependent inbound issues should be deferred until required settings exist: %+v", plan.Issues)
+	// Protocol validators now run even when basic required settings are missing
+	// so the user sees the full set of blockers.
+	for _, code := range []string{"naive_email_required", "naive_credential_required"} {
+		found := false
+		for _, issue := range plan.Issues {
+			if issue.Code == code {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected issue %q, got: %+v", code, plan.Issues)
+		}
 	}
 }

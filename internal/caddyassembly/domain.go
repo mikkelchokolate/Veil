@@ -42,7 +42,7 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 				continue
 			}
 			ensureOwner(owners, domain).NaiveInboundNames = append(ensureOwner(owners, domain).NaiveInboundNames, inb.Name)
-			addEmail(emails, domain, naiveEmailWithFallback(inb, settings))
+			addEmail(emails, domain, naiveInboundEmail(inb))
 		}
 		if inb.Protocol == "hysteria2" {
 			domain := model.InboundDomain(inb)
@@ -121,6 +121,6 @@ func naiveDomainWithFallback(inb model.Inbound, settings model.Settings) string 
 	return model.ResolveInboundDomain(inb, settings)
 }
 
-func naiveEmailWithFallback(inb model.Inbound, _ model.Settings) string {
+func naiveInboundEmail(inb model.Inbound) string {
 	return model.InboundEmail(inb)
 }

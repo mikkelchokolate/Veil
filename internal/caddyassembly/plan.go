@@ -21,7 +21,7 @@ const (
 type CaddyBindOwner struct {
 	Kind         CaddyBindOwnerKind
 	Domain       string
-	PanelDomain  string           // Set when a naive inbound shares the bind with panel access
+	PanelDomain  string // Set when a naive inbound shares the bind with panel access
 	InboundName  string
 	Transport    string           // Inbound transport; used only for Naive owner
 	BackendPort  int              // Panel backend port parsed from PanelListen; used only for Panel owner (or merged naive owner)

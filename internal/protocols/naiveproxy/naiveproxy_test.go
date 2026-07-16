@@ -451,6 +451,65 @@ func TestValidateInbound(t *testing.T) {
 	}
 }
 
+func TestValidateInboundDomainAndEmailErrors(t *testing.T) {
+	p := New()
+
+	cases := []struct {
+		name    string
+		inbound model.Inbound
+		settings model.Settings
+		wantCodes []string
+	}{
+		{
+			name:      "missing domain",
+			inbound:   model.Inbound{Protocol: "naiveproxy", ProtocolFields: map[string]any{"email": "admin@x.com", "naiveUsername": "u", "naivePassword": "p"}},
+			settings:  model.Settings{},
+			wantCodes: []string{"naive_domain_required"},
+		},
+		{
+			name:      "invalid domain",
+			inbound:   model.Inbound{Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "not a domain", "email": "admin@x.com", "naiveUsername": "u", "naivePassword": "p"}},
+			settings:  model.Settings{},
+			wantCodes: []string{"naive_domain_invalid"},
+		},
+		{
+			name:      "missing email",
+			inbound:   model.Inbound{Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com", "naiveUsername": "u", "naivePassword": "p"}},
+			settings:  model.Settings{},
+			wantCodes: []string{"naive_email_required"},
+		},
+		{
+			name:      "invalid email",
+			inbound:   model.Inbound{Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com", "email": "not-an-email", "naiveUsername": "u", "naivePassword": "p"}},
+			settings:  model.Settings{},
+			wantCodes: []string{"naive_email_invalid"},
+		},
+		{
+			name:      "legacy settings.Email not accepted for inbound domain",
+			inbound:   model.Inbound{Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com", "naiveUsername": "u", "naivePassword": "p"}},
+			settings:  model.Settings{Email: "legacy@x.com"},
+			wantCodes: []string{"naive_email_required"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := p.ValidateInbound(tc.settings, tc.inbound)
+			got := make([]string, len(issues))
+			for i, issue := range issues {
+				got[i] = issue.Code
+			}
+			if len(got) != len(tc.wantCodes) {
+				t.Fatalf("got codes %v, want %v", got, tc.wantCodes)
+			}
+			for i, want := range tc.wantCodes {
+				if got[i] != want {
+					t.Fatalf("got code %q, want %q", got[i], want)
+				}
+			}
+		})
+	}
+}
+
 func TestNeedsDomain(t *testing.T) {
 	p := New()
 	if !p.NeedsDomain(model.Settings{}, model.Inbound{}) {

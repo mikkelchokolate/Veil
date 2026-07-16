@@ -50,6 +50,7 @@ func hasServiceActionFor(calls [][]string, unit string) bool {
 // seedInboundForAutoApplyTests creates a hysteria2 inbound so that subsequent
 // mutations have a concrete service action in the auto-apply plan.
 func seedInboundForAutoApplyTests(r http.Handler, calls *[][]string) {
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)))
 	if calls != nil {
 		*calls = (*calls)[:0]
@@ -64,7 +65,7 @@ func TestSettingsUpdateTriggersAutoApply(t *testing.T) {
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 
-	update := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:8080","mode":"dev","fallbackRoot":"/var/lib/veil/www"}`))
+	update := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:8080","mode":"dev","fallbackRoot":"/var/lib/veil/www","domain":"hy2.example.com"}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, update)
 

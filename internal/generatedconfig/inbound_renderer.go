@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
@@ -38,8 +39,8 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 	username := naiveUsername(r.settings, inbound)
 	root := fallbackRoot(r.settings, inbound)
 	naiveConfig := renderer.NaiveConfig{
-		Domain:       r.settings.Domain,
-		Email:        r.settings.Email,
+		Domain:       model.ResolveInboundDomain(inbound, r.settings),
+		Email:        model.ResolveInboundEmail(inbound, r.settings),
 		ListenPort:   inbound.Port,
 		Username:     username,
 		Password:     password,
@@ -105,16 +106,17 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 		return "", err
 	}
 	url := masqueradeURL(r.settings, inbound)
+	domain := model.ResolveInboundDomain(inbound, r.settings)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
-		Domain:        r.settings.Domain,
+		Domain:        domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if r.settings.PanelAccess == "caddy" && r.settings.Domain != "" {
-		hystConfig.CertPath = r.paths.CertPath(r.settings.Domain)
-		hystConfig.KeyPath = r.paths.KeyPath(r.settings.Domain)
+	if domain != "" && (r.settings.PanelAccess == "caddy" || model.InboundDomain(inbound) != "") {
+		hystConfig.CertPath = r.paths.CertPath(domain)
+		hystConfig.KeyPath = r.paths.KeyPath(domain)
 	} else {
 		hystConfig.CertPath = r.paths.PanelCertPath()
 		hystConfig.KeyPath = r.paths.PanelKeyPath()
