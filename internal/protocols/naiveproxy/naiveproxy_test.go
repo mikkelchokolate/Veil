@@ -455,9 +455,9 @@ func TestValidateInboundDomainAndEmailErrors(t *testing.T) {
 	p := New()
 
 	cases := []struct {
-		name    string
-		inbound model.Inbound
-		settings model.Settings
+		name      string
+		inbound   model.Inbound
+		settings  model.Settings
 		wantCodes []string
 	}{
 		{

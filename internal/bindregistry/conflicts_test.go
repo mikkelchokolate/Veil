@@ -4,7 +4,7 @@ import "testing"
 
 func TestValidateNoConflicts(t *testing.T) {
 	owners := map[BindKey]BindOwner{
-		{Address: "0.0.0.0", Port: 443, Network: ListenTCP}: {Kind: BindOwnerPanelCaddy},
+		{Address: "0.0.0.0", Port: 443, Network: ListenTCP}:      {Kind: BindOwnerPanelCaddy},
 		{Address: "192.168.1.10", Port: 443, Network: ListenTCP}: {Kind: BindOwnerNaive, InboundName: "naive-1"},
 	}
 	conflicts := ValidateNoConflicts(owners)

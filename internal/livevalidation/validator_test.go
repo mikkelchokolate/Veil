@@ -213,8 +213,8 @@ func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T
 			NaivePassword: "secret",
 		},
 		Inbounds: []model.Inbound{{
-			Name:     "public",
-			Protocol: "naiveproxy",
+			Name:      "public",
+			Protocol:  "naiveproxy",
 			Transport: "tcp",
 			Port:      443,
 			Enabled:   true,

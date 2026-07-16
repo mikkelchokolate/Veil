@@ -130,14 +130,14 @@ func TestBuildFinalRenderPlan_NaiveFlatCredentialFallback(t *testing.T) {
 		AcmeChallengeMode:        "tls-alpn-01",
 	}
 	inbounds := []model.Inbound{{
-		Name:         "test",
-		Protocol:     "naiveproxy",
-		Enabled:      true,
+		Name:          "test",
+		Protocol:      "naiveproxy",
+		Enabled:       true,
 		NaiveUsername: "flat-user",
 		NaivePassword: "flat-pass",
 		ProtocolFields: map[string]any{
-			"domain":    "hy.flow2go.ru",
-			"transport": "tcp",
+			"domain":     "hy.flow2go.ru",
+			"transport":  "tcp",
 			"publicPort": 443,
 		},
 	}}

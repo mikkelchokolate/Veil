@@ -21,11 +21,11 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	state.settings.PanelDomain = "vpn.example.com"
 	state.settings.PanelEmail = "admin@example.com"
 	state.inbounds = []Inbound{{
-		Name:     "hy2",
-		Protocol: "hysteria2",
-		Transport: "udp",
-		Port:     443,
-		Enabled:  true,
+		Name:           "hy2",
+		Protocol:       "hysteria2",
+		Transport:      "udp",
+		Port:           443,
+		Enabled:        true,
 		ProtocolFields: map[string]any{"domain": "hy2.example.com"},
 	}}
 

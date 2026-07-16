@@ -9,8 +9,8 @@ import (
 func TestBuildLinksDual(t *testing.T) {
 	settings := model.Settings{DefaultInboundPublicPort: 443}
 	inbound := model.Inbound{
-		Protocol: "naiveproxy",
-		Profiles: []model.ClientProfile{{Username: "u", Password: "p"}},
+		Protocol:       "naiveproxy",
+		Profiles:       []model.ClientProfile{{Username: "u", Password: "p"}},
 		ProtocolFields: map[string]any{"domain": "p.example.com", "transport": "dual"},
 	}
 	links, err := BuildLinks(settings, inbound)

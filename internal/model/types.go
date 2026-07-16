@@ -1,17 +1,17 @@
 package model
 
 type Settings struct {
-	PanelListen       string `json:"panelListen"`
-	PanelAccess       string `json:"panelAccess,omitempty"`
-	WebBasePath       string `json:"webBasePath,omitempty"`
-	Mode              string `json:"mode"`
-	Domain            string `json:"domain,omitempty"`
-	Email             string `json:"email,omitempty"`
-	NaiveUsername     string `json:"naiveUsername,omitempty"`
-	NaivePassword     string `json:"naivePassword,omitempty"`
-	Hysteria2Password string `json:"hysteria2Password,omitempty"`
-	Hysteria2Insecure bool   `json:"hysteria2Insecure,omitempty"`
-	MasqueradeURL     string `json:"masqueradeURL,omitempty"`
+	PanelListen              string `json:"panelListen"`
+	PanelAccess              string `json:"panelAccess,omitempty"`
+	WebBasePath              string `json:"webBasePath,omitempty"`
+	Mode                     string `json:"mode"`
+	Domain                   string `json:"domain,omitempty"`
+	Email                    string `json:"email,omitempty"`
+	NaiveUsername            string `json:"naiveUsername,omitempty"`
+	NaivePassword            string `json:"naivePassword,omitempty"`
+	Hysteria2Password        string `json:"hysteria2Password,omitempty"`
+	Hysteria2Insecure        bool   `json:"hysteria2Insecure,omitempty"`
+	MasqueradeURL            string `json:"masqueradeURL,omitempty"`
 	FallbackRoot             string `json:"fallbackRoot,omitempty"`
 	OlcrtcAuth               string `json:"olcrtcAuth,omitempty"`
 	OlcrtcTransport          string `json:"olcrtcTransport,omitempty"`
