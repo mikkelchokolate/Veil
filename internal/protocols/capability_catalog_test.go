@@ -1,6 +1,7 @@
 package protocols
 
 import (
+	"encoding/base64"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -70,10 +71,15 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 		t.Fatalf("missing caddy config at %s", naivePath)
 	}
 
-	if !strings.Contains(caddyContent, "dXNlcmE6cGFzc2E=") {
+	if !strings.Contains(caddyContent, forwardProxyJSONCredential("usera", "passa")) {
 		t.Errorf("Caddy JSON does not contain naive proxy credential for usera: %s", caddyContent)
 	}
-	if !strings.Contains(caddyContent, "dXNlcmI6cGFzc2I=") {
+	if !strings.Contains(caddyContent, forwardProxyJSONCredential("userb", "passb")) {
 		t.Errorf("Caddy JSON does not contain naive proxy credential for userb: %s", caddyContent)
 	}
+}
+
+func forwardProxyJSONCredential(username, password string) string {
+	basicValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	return base64.StdEncoding.EncodeToString([]byte(basicValue))
 }
