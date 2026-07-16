@@ -75,7 +75,7 @@ func TestCheckServiceHealthUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceHealthChecker = oldChecker })
 
-	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Success: true}})
+	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Command: []string{"systemctl", "restart", "veil-hysteria2@edge.service"}, Success: true}})
 	if len(results) != 1 || results[0].Name != "veil-hysteria2@edge.service" || !results[0].Healthy {
 		t.Fatalf("unexpected health results: %+v", results)
 	}

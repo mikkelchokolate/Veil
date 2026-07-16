@@ -540,26 +540,41 @@ func (ctx ManagementApplyContext) appendApplyHistoryLocked(stage string, success
 
 func filterHealthCheckableActions(actions []ServiceActionResult) []ServiceActionResult {
 	catalog := NewManagedRuntimeCatalog()
+	seen := make(map[string]struct{})
 	out := make([]ServiceActionResult, 0, len(actions))
 	for _, action := range actions {
-		if action.Success && action.Name != "" && catalog.AllowsHealthUnit(action.Name) {
-			out = append(out, action)
+		if !action.Success || action.Name == "" || !catalog.AllowsHealthUnit(action.Name) || !serviceActionRequiresActiveUnit(action) {
+			continue
 		}
+		if _, ok := seen[action.Name]; ok {
+			continue
+		}
+		seen[action.Name] = struct{}{}
+		out = append(out, action)
 	}
 	return out
 }
 
+func serviceActionRequiresActiveUnit(action ServiceActionResult) bool {
+	if len(action.Command) >= 2 && action.Command[0] == "systemctl" {
+		switch privileged.ServiceAction(action.Command[1]) {
+		case privileged.ServiceActionStart, privileged.ServiceActionRestart, privileged.ServiceActionReload:
+			return true
+		}
+	}
+	return len(action.Command) >= 3 && action.Command[0] == "caddy" && action.Command[1] == "admin" && action.Command[2] == "load"
+}
+
 func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
+	healthActions := filterHealthCheckableActions(actions)
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
 			return serviceHealthChecker(name)
-		}).Check(filterHealthCheckableActions(actions))
+		}).Check(healthActions)
 	}
-	units := []string{}
-	for _, action := range actions {
-		if action.Success && action.Name != "" && NewManagedRuntimeCatalog().AllowsHealthUnit(action.Name) {
-			units = append(units, action.Name)
-		}
+	units := make([]string, 0, len(healthActions))
+	for _, action := range healthActions {
+		units = append(units, action.Name)
 	}
 	if len(units) == 0 {
 		return nil

@@ -88,7 +88,7 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
 	results := NewManagementApplyContext(state).checkServiceHealthLocked([]ServiceActionResult{{
-		Name: "veil-caddy.service", Success: true,
+		Name: "veil-caddy.service", Command: []string{"systemctl", "reload", "veil-caddy.service"}, Success: true,
 	}})
 	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{{
 		Units: []string{"veil-caddy.service"},
@@ -96,6 +96,24 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 		t.Fatalf("status requests=%+v", client.statusRequests)
 	}
 	if len(results) != 1 || !results[0].Healthy {
+		t.Fatalf("health results=%+v", results)
+	}
+}
+
+func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
+	client := &recordingPrivilegedClient{}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealthLocked([]ServiceActionResult{
+		{Name: "veil-hysteria2@new.service", Command: []string{"systemctl", "restart", "veil-hysteria2@new.service"}, Success: true},
+		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "stop", "veil-hysteria2@old.service"}, Success: true},
+		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "disable", "veil-hysteria2@old.service"}, Success: true},
+	})
+	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{{
+		Units: []string{"veil-hysteria2@new.service"},
+	}}) {
+		t.Fatalf("status requests=%+v", client.statusRequests)
+	}
+	if len(results) != 1 || results[0].Name != "veil-hysteria2@new.service" || !results[0].Healthy {
 		t.Fatalf("health results=%+v", results)
 	}
 }
