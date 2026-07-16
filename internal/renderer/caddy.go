@@ -31,7 +31,10 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	if cfg.Domain == "" {
 		return "", errors.New("domain is required")
 	}
-	if cfg.ListenPort <= 0 || cfg.ListenPort > 65535 {
+	if cfg.ListenPort <= 0 {
+		return "", errors.New("listen port is required")
+	}
+	if cfg.ListenPort > 65535 {
 		return "", errors.New("listen port must be between 1 and 65535")
 	}
 	if len(cfg.Users) == 0 {
@@ -72,11 +75,11 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 }
 
 :{{ .ListenPort }}, {{ .Domain }} {
-{{- if .Email }}
-  tls {{ .Email }}
-{{- else }}
-  tls
-{{- end }}
+  tls {
+    issuer acme{{ if .Email }} {
+      email {{ .Email }}
+    }{{ end }}
+  }
   encode
 
   forward_proxy {
