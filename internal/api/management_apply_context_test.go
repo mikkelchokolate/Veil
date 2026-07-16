@@ -198,9 +198,79 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 		t.Fatalf("expected no rollback files for newly added inbound, got %+v", rollbackFiles)
 	}
 	for _, action := range rollbackActions {
-		if strings.Contains(action.Name, "hysteria2@edge") {
-			t.Fatalf("rollback should not restart a newly added inbound that was removed, got %+v", rollbackActions)
+		if strings.Contains(action.Name, "hysteria2@edge") && action.Success {
+			// A stop/disable of the removed unit is correct; a start is not.
+			cmd := strings.Join(action.Command, " ")
+			if strings.Contains(cmd, "start") || strings.Contains(cmd, "enable") {
+				t.Fatalf("rollback should not restart a newly added inbound that was removed, got %+v", rollbackActions)
+			}
 		}
+	}
+}
+
+// TestRollbackStopsUnitWhoseConfigWasNewlyAdded covers the health-failure
+// rollback path: a brand-new inbound was promoted and started, a later health
+// check failed, and restore removed its config (no previous version existed).
+// The rollback must stop+disable that unit rather than leaving it running
+// against a now-deleted config.
+func TestRollbackStopsUnitWhoseConfigWasNewlyAdded(t *testing.T) {
+	root := t.TempDir()
+	liveRoot := filepath.Join(root, "live")
+	livePath := filepath.Join(liveRoot, "hysteria2", "edge.yaml")
+	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive",
+		promoteResult: privileged.PromoteResult{
+			BackupID:         "20260716T120000.000000000Z",
+			WrittenArtifacts: []string{"hysteria2/edge.yaml"},
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: liveRoot, Privileged: client})
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	ctx := NewManagementApplyContext(state)
+
+	// Records mirror what promoteStagedConfigsLocked produced: the artifact was
+	// written live (so it is in liveFiles), and it had no previous version, so
+	// the restore below will NOT return it in WrittenArtifacts.
+	records := []livePromotionRecord{{
+		ArtifactID: "hysteria2/edge.yaml",
+		BackupID:   "20260716T120000.000000000Z",
+		LivePath:   livePath,
+	}}
+	liveFiles := []string{livePath}
+
+	// Restore returns nothing: the new config had no previous version to
+	// restore, so the helper deleted it.
+	client.promoteResult = privileged.PromoteResult{
+		BackupID:         "20260716T120000.000000000Z",
+		WrittenArtifacts: []string{},
+	}
+
+	_, _ = ctx.rollbackPromotedConfigsLocked(records, liveFiles)
+
+	var got []string
+	for _, a := range client.serviceActions {
+		got = append(got, a.Unit+":"+string(a.Action))
+	}
+	// The unit must be stopped and disabled, and never started/enabled.
+	stopped, disabled, startedOrEnabled := false, false, false
+	for _, a := range client.serviceActions {
+		if a.Unit != "veil-hysteria2@edge.service" {
+			continue
+		}
+		switch a.Action {
+		case privileged.ServiceActionStop:
+			stopped = true
+		case privileged.ServiceActionDisable:
+			disabled = true
+		case privileged.ServiceActionStart, privileged.ServiceActionEnable:
+			startedOrEnabled = true
+		}
+	}
+	if startedOrEnabled {
+		t.Fatalf("rollback must not start/enable a removed new inbound, actions=%v", got)
+	}
+	if !stopped || !disabled {
+		t.Fatalf("rollback must stop+disable the removed new inbound's unit, actions=%v", got)
 	}
 }
 

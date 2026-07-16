@@ -328,8 +328,20 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		rollbackFilesMap[filepath.Clean(rf)] = true
 	}
 	var restoredUnits []string
+	var removedNewUnits []string
 	for _, record := range records {
 		cleanPath := filepath.Clean(record.LivePath)
+		if liveFilesMap[cleanPath] && !rollbackFilesMap[cleanPath] {
+			// The file was promoted (so its unit may have been started) but the
+			// restore did not bring it back. This happens for a config that was
+			// newly added during the failed apply and had no previous version:
+			// restore deletes it. Stop+disable its unit so rollback does not
+			// leave a service running against a now-deleted config.
+			if unit, ok := UnitForArtifactID(record.ArtifactID); ok {
+				removedNewUnits = append(removedNewUnits, unit)
+			}
+			continue
+		}
 		if liveFilesMap[cleanPath] {
 			// File stayed live after the apply; it was only updated, so the
 			// service reload above already applied the restored config.
@@ -342,6 +354,20 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 		}
 		if unit, ok := UnitForLiveConfig(record.LivePath); ok {
 			restoredUnits = append(restoredUnits, unit)
+		}
+	}
+	// Stop newly-added units whose configs were removed by the restore before
+	// bringing restored units back up.
+	for _, unit := range removedNewUnits {
+		stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
+		rollbackActions = append(rollbackActions, stop)
+		if !stop.Success {
+			return rollbackFiles, rollbackActions
+		}
+		disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
+		rollbackActions = append(rollbackActions, disable)
+		if !disable.Success {
+			return rollbackFiles, rollbackActions
 		}
 	}
 	if len(restoredUnits) > 0 {
