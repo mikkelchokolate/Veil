@@ -163,20 +163,14 @@ jobs:
             test "$(readlink -f "$(command -v "$bin")")" != /usr/local/bin/veil
           done
       - name: Mieru TCP through panel-generated configuration
-        id: mieru_tcp
-        continue-on-error: true
         run: |
           set -o pipefail
           go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-tcp.log
       - name: Mieru UDP through panel-generated configuration
-        id: mieru_udp
-        continue-on-error: true
         run: |
           set -o pipefail
           go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-udp.log
       - name: NaiveProxy through panel-generated configuration
-        id: naive
-        continue-on-error: true
         run: |
           set -o pipefail
           go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/naiveproxy.log
@@ -190,12 +184,6 @@ jobs:
             /tmp/mieru-udp.log
             /tmp/naiveproxy.log
           if-no-files-found: error
-      - name: Enforce all real protocol data paths
-        if: always()
-        run: |
-          test '${{ steps.mieru_tcp.outcome }}' = success
-          test '${{ steps.mieru_udp.outcome }}' = success
-          test '${{ steps.naive.outcome }}' = success
 
   browser-e2e:
     runs-on: ubuntu-latest
@@ -223,18 +211,11 @@ jobs:
           export VEIL_KEY_PATH="${browser_root}/etc/state.key"
           export VEIL_APPLY_ROOT="${browser_root}/apply"
           export VEIL_LIVE_ROOT="${browser_root}/live"
-          ./dist/veil admin set \
-            --username browser-admin \
-            --password 'Browser-E2E-Password-123!' \
-            --role admin \
-            --state "${VEIL_STATE_PATH}" \
-            --key-path "${VEIL_KEY_PATH}"
+          ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
           VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2096 >"${RUNNER_TEMP}/veil-browser.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/veil-browser.pid"
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then
-              exit 0
-            fi
+            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then exit 0; fi
             sleep 1
           done
           cat "${RUNNER_TEMP}/veil-browser.log" >&2
@@ -298,7 +279,6 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Docker image build and version verification
         run: |
-          # Baseline smoke command retained as a regression sentinel: docker build --pull --tag veil:ci .
           version="ci-${GITHUB_SHA}"
           docker build --pull --build-arg "VERSION=${version}" --tag veil:ci .
           docker run --rm veil:ci version | tee /tmp/veil-version.txt
