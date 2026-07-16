@@ -265,13 +265,32 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("http://127.0.0.1:%d", inboundPort), 1)
+
+	tempDir := t.TempDir()
+	certPath := filepath.Join(tempDir, "localhost.crt")
+	keyPath := filepath.Join(tempDir, "localhost.key")
+	if err := generateSelfSignedCert(certPath, keyPath); err != nil {
+		t.Fatalf("generate trusted test certificate: %v", err)
+	}
+	caPath := "/usr/local/share/ca-certificates/veil-naive-e2e.crt"
+	if output, err := exec.Command("sudo", "install", "-m", "0644", certPath, caPath).CombinedOutput(); err != nil {
+		t.Fatalf("install test certificate: %v: %s", err, output)
+	}
+	defer func() {
+		_ = exec.Command("sudo", "rm", "-f", caPath).Run()
+		_ = exec.Command("sudo", "update-ca-certificates").Run()
+	}()
+	if output, err := exec.Command("sudo", "update-ca-certificates").CombinedOutput(); err != nil {
+		t.Fatalf("refresh test trust store: %v: %s", err, output)
+	}
+
+	caddyfile := strings.Replace(string(generated), fmt.Sprintf(":%d, vpn.example.com", inboundPort), fmt.Sprintf("https://localhost:%d", inboundPort), 1)
 	caddyfile, err = removeCaddyDirectiveBlock(caddyfile, "tls")
 	if err != nil {
 		t.Fatal(err)
 	}
+	caddyfile = strings.Replace(caddyfile, "  encode", fmt.Sprintf("  tls %s %s\n  encode", certPath, keyPath), 1)
 
-	tempDir := t.TempDir()
 	caddyfilePath := filepath.Join(tempDir, "Caddyfile")
 	if err := os.WriteFile(caddyfilePath, []byte(caddyfile), 0o600); err != nil {
 		t.Fatal(err)
@@ -329,8 +348,9 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 	socksPort := freePort(t)
 	clientConfig := map[string]any{
 		"listen":  fmt.Sprintf("socks://127.0.0.1:%d", socksPort),
-		"proxy":   fmt.Sprintf("http://%s:%s@127.0.0.1:%d", url.QueryEscape(username), url.QueryEscape(password), inboundPort),
+		"proxy":   fmt.Sprintf("https://%s:%s@localhost:%d", url.QueryEscape(username), url.QueryEscape(password), inboundPort),
 		"padding": true,
+		"log":     "",
 	}
 	clientJSON, err := json.Marshal(clientConfig)
 	if err != nil {
@@ -359,7 +379,11 @@ func TestRequiredNaiveProxyDataPath(t *testing.T) {
 		clientBytes, _ := os.ReadFile(clientLogPath)
 		t.Fatalf("Naive client did not listen: %v\nclient log:\n%s\nconfig:\n%s", err, clientBytes, clientJSON)
 	}
-	assertHTTPThroughSOCKS(t, socksAddr, backend.URL, expectedResponse)
+	if err := assertHTTPThroughSOCKSResult(socksAddr, backend.URL, expectedResponse); err != nil {
+		serverBytes, _ := os.ReadFile(serverLogPath)
+		clientBytes, _ := os.ReadFile(clientLogPath)
+		t.Fatalf("Naive HTTPS data path failed: %v\nCaddyfile:\n%s\nserver log:\n%s\nclient log:\n%s\nclient config:\n%s", err, caddyfile, serverBytes, clientBytes, clientJSON)
+	}
 }
 
 func removeCaddyDirectiveBlock(input, directive string) (string, error) {
@@ -387,9 +411,15 @@ func removeCaddyDirectiveBlock(input, directive string) (string, error) {
 
 func assertHTTPThroughSOCKS(t *testing.T, socksAddr, targetURL, expected string) {
 	t.Helper()
+	if err := assertHTTPThroughSOCKSResult(socksAddr, targetURL, expected); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertHTTPThroughSOCKSResult(socksAddr, targetURL, expected string) error {
 	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -401,14 +431,15 @@ func assertHTTPThroughSOCKS(t *testing.T, socksAddr, targetURL, expected string)
 	}
 	resp, err := client.Get(targetURL)
 	if err != nil {
-		t.Fatalf("GET through SOCKS failed: %v", err)
+		return fmt.Errorf("GET through SOCKS failed: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if string(body) != expected {
-		t.Fatalf("response = %q, want %q", body, expected)
+		return fmt.Errorf("response = %q, want %q", body, expected)
 	}
+	return nil
 }
