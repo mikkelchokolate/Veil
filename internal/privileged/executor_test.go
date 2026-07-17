@@ -924,6 +924,30 @@ func TestPromoteResolvedArtifactsSourceReadError(t *testing.T) {
 	}
 }
 
+// TestPromoteResolvedArtifactsRejectsSymlinkedSource covers the promote-time
+// exfiltration vector: a staging source swapped for a symlink after policy
+// resolution must not be read into the generated root.
+func TestPromoteResolvedArtifactsRejectsSymlinkedSource(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "staging", "cfg.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, source); err != nil {
+		t.Fatal(err)
+	}
+	_, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), time.Now, ResolvedPromotion{
+		Artifacts: []ResolvedArtifact{{ID: "cfg", Source: source, Destination: filepath.Join(root, "gen", "cfg.json")}},
+	})
+	if err == nil {
+		t.Fatal("expected symlinked source to be rejected")
+	}
+}
+
 func TestBackupPromotionDestinationReadError(t *testing.T) {
 	artifact := ResolvedArtifact{ID: "x", Source: "", Destination: filepath.Join(t.TempDir(), "dir")}
 	if err := os.MkdirAll(artifact.Destination, 0o755); err != nil {

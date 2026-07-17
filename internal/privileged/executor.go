@@ -292,6 +292,27 @@ func readBoundedRegularFile(path string, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
+// readManagedConfigFile reads a promotion source/backup/destination config
+// without following symlinks. A symlink swapped in after policy resolution
+// would otherwise let the caller read a file outside the managed root (either
+// directly into the promotion, or into a backup retrievable via the backup ID).
+// Opening with O_NOFOLLOW closes the resolve-time-to-read TOCTOU window.
+func readManagedConfigFile(path string) ([]byte, error) {
+	file, err := openRegularNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("managed config is not a regular file")
+	}
+	return io.ReadAll(file)
+}
+
 func runProductionCommand(ctx context.Context, command []string, timeout time.Duration) (string, error) {
 	if len(command) == 0 {
 		return "", errors.New("command is empty")
@@ -354,7 +375,7 @@ func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request R
 	backupID := now().UTC().Format("20060102T150405.000000000Z")
 	manifest := promotionManifest{BackupID: backupID}
 	for _, artifact := range request.Artifacts {
-		body, err := os.ReadFile(artifact.Source)
+		body, err := readManagedConfigFile(artifact.Source)
 		if err != nil {
 			return PromoteResult{}, err
 		}
@@ -423,7 +444,7 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 	if info, statErr := os.Lstat(artifact.Destination); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
 		return record, nil
 	}
-	body, err := os.ReadFile(artifact.Destination)
+	body, err := readManagedConfigFile(artifact.Destination)
 	if errors.Is(err, os.ErrNotExist) {
 		return record, nil
 	}
@@ -457,7 +478,7 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	result := PromoteResult{BackupID: backupID}
 	for _, record := range manifest.Records {
 		if record.HadPrevious {
-			previous, err := os.ReadFile(record.BackupPath)
+			previous, err := readManagedConfigFile(record.BackupPath)
 			if err != nil {
 				return PromoteResult{}, err
 			}
