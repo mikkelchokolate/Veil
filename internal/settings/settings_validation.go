@@ -138,10 +138,17 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 }
 
 func protocolFieldUpdateValue(settings *Settings, f schema.FieldSchema) (any, bool) {
+	// A schema key that is also a dedicated top-level Settings field (e.g.
+	// panelAccess) must prefer the explicit top-level value. Echoing back a
+	// redacted GET response leaves a stale ProtocolFields[key] that would
+	// otherwise silently override the top-level change the user requested.
+	if v, ok := flatFieldValue(*settings, f.Key); ok {
+		return v, true
+	}
 	if v, ok := settings.ProtocolFields[f.Key]; ok {
 		return v, true
 	}
-	return flatFieldValue(*settings, f.Key)
+	return nil, false
 }
 
 func flatFieldValue(settings Settings, key string) (any, bool) {
