@@ -51,10 +51,14 @@ func NewNaiveCaddySettingsRequirement() NaiveCaddySettingsRequirement {
 	return NaiveCaddySettingsRequirement{}
 }
 
+func hasAcmeEmail(settings model.Settings) bool {
+	return strings.TrimSpace(settings.Email) != "" || strings.TrimSpace(settings.DefaultAcmeEmail) != "" || strings.TrimSpace(settings.PanelEmail) != ""
+}
+
 func (NaiveCaddySettingsRequirement) Validate(settings model.Settings) error {
 	username := protocolString(settings.ProtocolFields, "naiveUsername", settings.NaiveUsername)
 	password := protocolString(settings.ProtocolFields, "naivePassword", settings.NaivePassword)
-	if strings.TrimSpace(settings.Domain) == "" || strings.TrimSpace(settings.Email) == "" || strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
+	if strings.TrimSpace(settings.Domain) == "" || !hasAcmeEmail(settings) || strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
 		return errNaiveCaddySettingsRequired{}
 	}
 	return nil

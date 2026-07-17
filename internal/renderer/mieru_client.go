@@ -1,6 +1,10 @@
 package renderer
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"net"
+	"strings"
+)
 
 type MieruClientConfig struct {
 	ProfileName   string
@@ -16,7 +20,7 @@ type mieruClientConfigJSON struct {
 	ActiveProfile string                   `json:"activeProfile"`
 	Profiles      []mieruClientProfileJSON `json:"profiles"`
 	Socks5Port    int                      `json:"socks5Port"`
-	HTTPProxyPort int                      `json:"httpProxyPort"`
+	HTTPProxyPort int                      `json:"httpProxyPort,omitempty"`
 	RPCPort       int                      `json:"rpcPort"`
 }
 
@@ -27,20 +31,25 @@ type mieruClientProfileJSON struct {
 }
 
 type mieruClientServer struct {
-	DomainName   string                 `json:"domainName"`
+	IPAddress    string                 `json:"ipAddress,omitempty"`
+	DomainName   string                 `json:"domainName,omitempty"`
 	PortBindings []mieruPortBindingJSON `json:"portBindings"`
 }
 
 func RenderMieruClient(cfg MieruClientConfig) (string, error) {
+	server := mieruClientServer{PortBindings: mieruClientPortBindings(cfg.PortBindings)}
+	endpoint := strings.TrimSpace(cfg.DomainName)
+	if ip := net.ParseIP(strings.Trim(endpoint, "[]")); ip != nil {
+		server.IPAddress = ip.String()
+	} else {
+		server.DomainName = endpoint
+	}
 	body := mieruClientConfigJSON{
 		ActiveProfile: cfg.ProfileName,
 		Profiles: []mieruClientProfileJSON{{
 			ProfileName: cfg.ProfileName,
 			User:        mieruUserJSON{Name: cfg.User.Name, Password: cfg.User.Password},
-			Servers: []mieruClientServer{{
-				DomainName:   cfg.DomainName,
-				PortBindings: mieruClientPortBindings(cfg.PortBindings),
-			}},
+			Servers:     []mieruClientServer{server},
 		}},
 		Socks5Port:    cfg.Socks5Port,
 		HTTPProxyPort: cfg.HTTPProxyPort,

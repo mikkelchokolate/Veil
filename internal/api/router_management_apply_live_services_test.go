@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -45,7 +46,7 @@ func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *t
 	if len(response.LiveFiles) != 0 || len(response.BackupFiles) != 0 {
 		t.Fatalf("staged-only apply should not report live files/backups: %+v", response)
 	}
-	if _, err := os.Stat(filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(applyRoot, "live", "caddy", "config.json")); !os.IsNotExist(err) {
 		t.Fatalf("staged-only apply should not write live caddy config, stat err: %v", err)
 	}
 }
@@ -56,7 +57,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	existingCaddy := filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")
+	existingCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
 	if err := atomicfile.Write(existingCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
 	liveHysteria := filepath.Join(applyRoot, "live", "hysteria2", "hysteria2.yaml")
 	if !response.LiveApplied || !containsString(response.LiveFiles, liveCaddy) || !containsString(response.LiveFiles, liveHysteria) {
 		t.Fatalf("expected live files in response: %+v", response)
@@ -100,7 +101,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 	if err != nil {
 		t.Fatalf("read live caddy: %v", err)
 	}
-	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "basic_auth veil naive-secret") {
+	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "forward_proxy") || !strings.Contains(string(caddyBody), "auth_credentials") {
 		t.Fatalf("unexpected live caddy config: %s", string(caddyBody))
 	}
 	if _, err := os.Stat(liveHysteria); err != nil {
@@ -114,7 +115,7 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
 	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
@@ -315,6 +316,9 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -327,13 +331,15 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	expectedNaiveProbe := []string{"systemctl", "is-active", "veil-caddy@naive.service"}
-	expectedNaiveReload := []string{"systemctl", "reload", "veil-caddy@naive.service"}
+	expectedCaddyAdminLoad := []string{"caddy", "admin", "load"}
 	expectedHy2 := []string{"systemctl", "restart", "veil-hysteria2@hysteria2.service"}
-	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 3 {
-		t.Fatalf("expected two service actions and three calls (is-active probe + reload + restart): response=%+v calls=%+v", response, serviceCalls)
+	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 1 {
+		t.Fatalf("expected caddy admin load + hysteria2 restart and one systemctl call: response=%+v calls=%+v", response, serviceCalls)
 	}
-	if !stringSlicesEqual(serviceCalls[0], expectedNaiveProbe) || !stringSlicesEqual(serviceCalls[1], expectedNaiveReload) || !stringSlicesEqual(serviceCalls[2], expectedHy2) {
+	if !stringSlicesEqual(response.ServiceActions[0].Command, expectedCaddyAdminLoad) {
+		t.Fatalf("expected caddy admin load action: %+v", response.ServiceActions)
+	}
+	if !stringSlicesEqual(serviceCalls[0], expectedHy2) {
 		t.Fatalf("unexpected service calls: %+v", serviceCalls)
 	}
 	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success {
@@ -364,11 +370,11 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	serviceCalls := [][]string{}
 	serviceActionRunner = func(command []string) ServiceActionResult {
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
-		if len(command) >= 2 && command[0] == "systemctl" && command[1] == "is-active" {
-			return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: true, Output: "active"}
-		}
 		return ServiceActionResult{Name: command[len(command)-1], Command: command, Success: false, Error: "reload failed"}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return fmt.Errorf("caddy admin api unavailable") }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
@@ -381,10 +387,12 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	// With the inactive-unit fallback, reload first probes is-active (success), then fails.
-	// Rollback repeats the same probe + reload sequence.
-	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || response.ServiceActions[0].Error != "reload failed" || len(serviceCalls) != 4 {
-		t.Fatalf("expected failed service action followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
+	// The Caddy admin API load fails and the systemctl reload fallback also fails,
+	// so the apply stops and rolls back. Each forward/rollback attempt reports one
+	// terminal Caddy result with both errors. The local privileged helper probes
+	// is-active before each reload, adding two calls per reload attempt.
+	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || len(serviceCalls) != 4 {
+		t.Fatalf("expected failed caddy fallback followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
 	}
 }
 
@@ -412,6 +420,9 @@ func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 		healthCalls = append(healthCalls, []string{"systemctl", "is-active", "--quiet", service})
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
@@ -427,7 +438,7 @@ func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 	if len(response.HealthChecks) != 1 || !response.HealthChecks[0].Healthy || len(healthCalls) != 1 {
 		t.Fatalf("expected one successful health check: response=%+v calls=%+v", response.HealthChecks, healthCalls)
 	}
-	if !stringSlicesEqual(healthCalls[0], []string{"systemctl", "is-active", "--quiet", "veil-caddy@naive.service"}) {
+	if !stringSlicesEqual(healthCalls[0], []string{"systemctl", "is-active", "--quiet", "veil-caddy.service"}) {
 		t.Fatalf("unexpected health command: %+v", healthCalls)
 	}
 }
@@ -438,7 +449,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
 	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write existing live caddy: %v", err)
 	}
@@ -461,6 +472,9 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -483,19 +497,8 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	if string(body) != "old caddy\n" {
 		t.Fatalf("expected rollback to restore old live config, got %q", string(body))
 	}
-	expected := [][]string{
-		{"systemctl", "is-active", "veil-caddy@naive.service"},
-		{"systemctl", "reload", "veil-caddy@naive.service"},
-		{"systemctl", "is-active", "veil-caddy@naive.service"},
-		{"systemctl", "reload", "veil-caddy@naive.service"},
-	}
-	if len(serviceCalls) != len(expected) {
-		t.Fatalf("expected %d calls, got %d: %+v", len(expected), len(serviceCalls), serviceCalls)
-	}
-	for i := range expected {
-		if !stringSlicesEqual(serviceCalls[i], expected[i]) {
-			t.Fatalf("expected reload before and after rollback: %+v", serviceCalls)
-		}
+	if len(serviceCalls) != 0 {
+		t.Fatalf("expected no systemctl service calls when caddy admin api succeeds: %+v", serviceCalls)
 	}
 }
 
@@ -522,6 +525,9 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -560,7 +566,7 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "naive.Caddyfile")
+	liveCaddy := filepath.Join(applyRoot, "live", "caddy", "config.json")
 	if err := atomicfile.Write(liveCaddy, []byte("old caddy\n"), 0o600, 0o700); err != nil {
 		t.Fatalf("write live caddy: %v", err)
 	}
@@ -581,6 +587,9 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	serviceHealthChecker = func(service string) ServiceHealthResult {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "service unhealthy"}
 	}
+	oldCaddyLoader := caddyAdminLoader
+	defer func() { caddyAdminLoader = oldCaddyLoader }()
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -610,7 +619,7 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 	applyRoot := t.TempDir()
 
 	// Write the orphan config files to the live directories
-	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.Caddyfile")
+	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.json")
 	orphanHysteria2 := filepath.Join(applyRoot, "live", "hysteria2", "orphan.yaml")
 	if err := atomicfile.Write(orphanCaddy, []byte("caddy config"), 0o600, 0o700); err != nil {
 		t.Fatalf("write orphan caddy: %v", err)
@@ -622,10 +631,12 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 	oldValidator := stagedConfigValidator
 	oldRunner := serviceActionRunner
 	oldHealth := serviceHealthChecker
+	oldCaddyLoader := caddyAdminLoader
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
 		serviceHealthChecker = oldHealth
+		caddyAdminLoader = oldCaddyLoader
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -646,6 +657,8 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
 
+	caddyAdminLoader = func(_ []byte) error { return nil }
+
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -663,10 +676,10 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 		t.Fatalf("orphan hysteria2 config should be deleted, stat err: %v", err)
 	}
 
-	// Verify the service actions (stop/disable for orphans)
+	// Verify the service actions (stop/disable for hysteria2 orphan only; caddy is
+	// now a single consolidated unit, so leftover caddy configs have no per-instance
+	// service to stop).
 	expectedStopDisableCalls := [][]string{
-		{"systemctl", "stop", "veil-caddy@orphan.service"},
-		{"systemctl", "disable", "veil-caddy@orphan.service"},
 		{"systemctl", "stop", "veil-hysteria2@orphan.service"},
 		{"systemctl", "disable", "veil-hysteria2@orphan.service"},
 	}
@@ -693,7 +706,7 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	applyRoot := t.TempDir()
 
 	// Write the orphan config files to the live directories
-	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.Caddyfile")
+	orphanCaddy := filepath.Join(applyRoot, "live", "caddy", "orphan.json")
 	orphanHysteria2 := filepath.Join(applyRoot, "live", "hysteria2", "orphan.yaml")
 	if err := atomicfile.Write(orphanCaddy, []byte("caddy config"), 0o600, 0o700); err != nil {
 		t.Fatalf("write orphan caddy: %v", err)
@@ -705,10 +718,12 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	oldValidator := stagedConfigValidator
 	oldRunner := serviceActionRunner
 	oldHealth := serviceHealthChecker
+	oldCaddyLoader := caddyAdminLoader
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
 		serviceHealthChecker = oldHealth
+		caddyAdminLoader = oldCaddyLoader
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -730,6 +745,8 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: false, Error: "forced reload failure"}
 	}
 
+	caddyAdminLoader = func(_ []byte) error { return nil }
+
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -743,10 +760,9 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	assertFileBody(t, orphanCaddy, "caddy config")
 	assertFileBody(t, orphanHysteria2, "hysteria2 config")
 
-	// Verify the service actions on rollback (enable/start for orphans)
+	// Verify the service actions on rollback (enable/start for hysteria2 orphan only;
+	// caddy is a single consolidated unit with no per-instance orphan service).
 	expectedEnableStartCalls := [][]string{
-		{"systemctl", "enable", "veil-caddy@orphan.service"},
-		{"systemctl", "start", "veil-caddy@orphan.service"},
 		{"systemctl", "enable", "veil-hysteria2@orphan.service"},
 		{"systemctl", "start", "veil-hysteria2@orphan.service"},
 	}

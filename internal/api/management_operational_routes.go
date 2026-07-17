@@ -123,8 +123,8 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		defer s.serviceActionMu.Unlock()
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
+	s.mu.Unlock()
 	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
 		status = http.StatusUnprocessableEntity
 	}

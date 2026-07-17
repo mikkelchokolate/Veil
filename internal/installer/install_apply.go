@@ -3,11 +3,21 @@ package installer
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/managedfiles"
+)
+
+var (
+	effectiveUID = os.Geteuid
+	lookupUser   = user.Lookup
+	chownPath    = os.Chown
+	chmodPath    = os.Chmod
 )
 
 type ApplyPaths struct {
@@ -52,7 +62,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	result := ApplyResult{
-		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "panel.Caddyfile"),
+		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "config.json"),
 		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2", "server.yaml"),
 		FallbackIndexPath: filepath.Join(a.paths.VarDir, "www", "index.html"),
 	}
@@ -72,6 +82,9 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 			return ApplyResult{}, err
 		}
 		result.WrittenFiles = append(result.WrittenFiles, file.Path)
+	}
+	if err := chownSecretsForVeilGroup(result.WrittenFiles); err != nil {
+		return result, err
 	}
 
 	if len(a.firewallActions) > 0 {
@@ -94,6 +107,38 @@ func ApplyRURecommendedProfile(profile RURecommendedProfile, paths ApplyPaths) (
 // ApplyRURecommendedProfileWithPlan applies the install profile and executes the firewall rules from the install plan.
 func ApplyRURecommendedProfileWithPlan(profile RURecommendedProfile, paths ApplyPaths, plan InstallPlan) (ApplyResult, error) {
 	return NewInstallApplyWithPlan(profile, paths, plan).Apply()
+}
+
+func chownSecretsForVeilGroup(paths []string) error {
+	if effectiveUID() != 0 {
+		return nil
+	}
+	u, err := lookupUser("veil")
+	if err != nil {
+		return fmt.Errorf("resolve veil user: %w", err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("parse veil uid %q: %w", u.Uid, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+	}
+	_ = uid // uid not needed; we keep root ownership and only grant group read
+	for _, path := range paths {
+		base := filepath.Base(path)
+		if base != "veil.env" && !strings.HasSuffix(base, ".key") && !strings.HasSuffix(base, ".crt") {
+			continue
+		}
+		if err := chownPath(path, 0, gid); err != nil {
+			return fmt.Errorf("chown %s for veil group: %w", path, err)
+		}
+		if err := chmodPath(path, 0o640); err != nil {
+			return fmt.Errorf("chmod %s for veil group: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {

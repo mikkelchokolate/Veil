@@ -1,7 +1,6 @@
 package api
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -34,12 +33,8 @@ func TestApplyProtocolCapabilityShouldValidateRender(t *testing.T) {
 
 func TestApplyProtocolCapabilityValidateSettingsUsesProtocolValidator(t *testing.T) {
 	cap := ApplyProtocolCapability{Protocol: "naiveproxy"}
-	err := cap.ValidateSettings(Settings{}, Inbound{})
-	if err == nil {
-		t.Fatal("expected naiveproxy settings validation error")
-	}
-	if !strings.Contains(err.Error(), "domain, email, naive username, and naive password") {
-		t.Fatalf("unexpected error: %v", err)
+	if err := cap.ValidateSettings(Settings{}, Inbound{}); err != nil {
+		t.Fatalf("naiveproxy ValidateSettings should be a no-op: %v", err)
 	}
 
 	cap = ApplyProtocolCapability{Protocol: "hysteria2"}

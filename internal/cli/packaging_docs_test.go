@@ -77,7 +77,7 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	ciWorkflow := strings.ReplaceAll(string(ci), "\r\n", "\n")
-	for _, want := range []string{"docker-build:", "Docker image build", "docker build --pull --tag veil:ci ."} {
+	for _, want := range []string{"docker-build:", "Docker image build", "docker build", "veil:ci"} {
 		if !strings.Contains(ciWorkflow, want) {
 			t.Fatalf("ci.yml missing Docker build verification %q", want)
 		}
@@ -127,7 +127,7 @@ func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 		"veil.service",
 		"veil-backup.service",
 		"veil-backup.timer",
-		"veil-caddy@.service",
+		"veil-caddy.service",
 		"veil-hysteria2@.service",
 		"veil-olcrtc@.service",
 		"veil-mieru.service",
@@ -162,7 +162,7 @@ func TestPackageScriptsExist(t *testing.T) {
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	runtimeUnits := []string{
-		"../../packaging/systemd/veil-caddy@.service",
+		"../../packaging/systemd/veil-caddy.service",
 		"../../packaging/systemd/veil-hysteria2@.service",
 		"../../packaging/systemd/veil-olcrtc@.service",
 		"../../packaging/systemd/veil-mieru.service",

@@ -43,7 +43,7 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		PanelTLSCertPEM:   profile.PanelTLSCertPEM,
 		PanelTLSKeyPEM:    profile.PanelTLSKeyPEM,
 		InstallPanelCaddy: profile.InstallPanelCaddy,
-		Caddyfile:         profile.Caddyfile,
+		CaddyJSON:         profile.CaddyJSON,
 	}).Files()
 	if err != nil {
 		return nil, err

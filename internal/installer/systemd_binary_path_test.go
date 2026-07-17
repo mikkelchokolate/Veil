@@ -23,16 +23,16 @@ func TestInstallApplyRendersVeilUnitWithSelectedBinaryPath(t *testing.T) {
 
 func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
 	dir := t.TempDir()
-	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", Caddyfile: "example.com { respond ok }"}
+	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", CaddyJSON: "{}"}
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil"), SystemdDir: filepath.Join(dir, "systemd"), CaddyBinary: "/usr/bin/caddy"}
 
 	files, err := desiredManagedFiles(profile, paths)
 	if err != nil {
 		t.Fatalf("desiredFiles: %v", err)
 	}
-	unit := managedFileContent(files, "veil-caddy@.service")
+	unit := managedFileContent(files, "veil-caddy.service")
 	if !strings.Contains(unit, "ExecStart=/usr/bin/caddy run --config") || !strings.Contains(unit, "ExecReload=/usr/bin/caddy reload --config") {
-		t.Fatalf("veil-caddy@.service should use resolved Caddy binary path:\n%s", unit)
+		t.Fatalf("veil-caddy.service should use resolved Caddy binary path:\n%s", unit)
 	}
 }
 

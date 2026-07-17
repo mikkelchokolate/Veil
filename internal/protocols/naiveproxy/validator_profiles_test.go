@@ -18,8 +18,13 @@ func TestValidationAcceptsEnabledClientProfileCredentials(t *testing.T) {
 		Transport: "tcp",
 		Port:      443,
 		Enabled:   true,
+		ProtocolFields: map[string]any{
+			"domain": "vpn.example.com",
+			"email":  "admin@example.com",
+		},
 		Profiles: []model.ClientProfile{{
 			Name:     "alice",
+			Username: "alice",
 			Password: "secret",
 			Enabled:  true,
 		}},
@@ -45,15 +50,16 @@ func TestValidationRejectsIncompleteClientProfileWithoutFallback(t *testing.T) {
 		Transport: "tcp",
 		Port:      443,
 		Enabled:   true,
+		ProtocolFields: map[string]any{
+			"domain": "vpn.example.com",
+			"email":  "admin@example.com",
+		},
 		Profiles: []model.ClientProfile{{
 			Name:    "alice",
 			Enabled: true,
 		}},
 	}
 
-	if err := plugin.ValidateSettings(settings, inbound); err == nil {
-		t.Fatal("ValidateSettings accepted an incomplete profile without fallback credentials")
-	}
 	issues := plugin.ValidateInbound(settings, inbound)
 	if len(issues) != 1 || issues[0].Code != "naive_credential_required" {
 		t.Fatalf("ValidateInbound issues = %+v, want naive_credential_required", issues)

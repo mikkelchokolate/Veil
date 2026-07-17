@@ -75,7 +75,7 @@ func TestCheckServiceHealthUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceHealthChecker = oldChecker })
 
-	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Success: true}})
+	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Command: []string{"systemctl", "restart", "veil-hysteria2@edge.service"}, Success: true}})
 	if len(results) != 1 || results[0].Name != "veil-hysteria2@edge.service" || !results[0].Healthy {
 		t.Fatalf("unexpected health results: %+v", results)
 	}
@@ -198,9 +198,118 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 		t.Fatalf("expected no rollback files for newly added inbound, got %+v", rollbackFiles)
 	}
 	for _, action := range rollbackActions {
-		if strings.Contains(action.Name, "hysteria2@edge") {
-			t.Fatalf("rollback should not restart a newly added inbound that was removed, got %+v", rollbackActions)
+		if strings.Contains(action.Name, "hysteria2@edge") && action.Success {
+			// A stop/disable of the removed unit is correct; a start is not.
+			cmd := strings.Join(action.Command, " ")
+			if strings.Contains(cmd, "start") || strings.Contains(cmd, "enable") {
+				t.Fatalf("rollback should not restart a newly added inbound that was removed, got %+v", rollbackActions)
+			}
 		}
+	}
+}
+
+// TestRollbackStopsUnitWhoseConfigWasNewlyAdded covers the health-failure
+// rollback path: a brand-new inbound was promoted and started, a later health
+// check failed, and restore removed its config (no previous version existed).
+// The rollback must stop+disable that unit rather than leaving it running
+// against a now-deleted config.
+func TestRollbackStopsUnitWhoseConfigWasNewlyAdded(t *testing.T) {
+	root := t.TempDir()
+	liveRoot := filepath.Join(root, "live")
+	livePath := filepath.Join(liveRoot, "hysteria2", "edge.yaml")
+	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive",
+		promoteResult: privileged.PromoteResult{
+			BackupID:         "20260716T120000.000000000Z",
+			WrittenArtifacts: []string{"hysteria2/edge.yaml"},
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: liveRoot, Privileged: client})
+	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	ctx := NewManagementApplyContext(state)
+
+	// Records mirror what promoteStagedConfigsLocked produced: the artifact was
+	// written live (so it is in liveFiles), and it had no previous version, so
+	// the restore below will NOT return it in WrittenArtifacts.
+	records := []livePromotionRecord{{
+		ArtifactID: "hysteria2/edge.yaml",
+		BackupID:   "20260716T120000.000000000Z",
+		LivePath:   livePath,
+	}}
+	liveFiles := []string{livePath}
+
+	// Restore returns nothing: the new config had no previous version to
+	// restore, so the helper deleted it.
+	client.promoteResult = privileged.PromoteResult{
+		BackupID:         "20260716T120000.000000000Z",
+		WrittenArtifacts: []string{},
+	}
+
+	_, _ = ctx.rollbackPromotedConfigsLocked(records, liveFiles)
+
+	var got []string
+	for _, a := range client.serviceActions {
+		got = append(got, a.Unit+":"+string(a.Action))
+	}
+	// The unit must be stopped and disabled, and never started/enabled.
+	stopped, disabled, startedOrEnabled := false, false, false
+	for _, a := range client.serviceActions {
+		if a.Unit != "veil-hysteria2@edge.service" {
+			continue
+		}
+		switch a.Action {
+		case privileged.ServiceActionStop:
+			stopped = true
+		case privileged.ServiceActionDisable:
+			disabled = true
+		case privileged.ServiceActionStart, privileged.ServiceActionEnable:
+			startedOrEnabled = true
+		}
+	}
+	if startedOrEnabled {
+		t.Fatalf("rollback must not start/enable a removed new inbound, actions=%v", got)
+	}
+	if !stopped || !disabled {
+		t.Fatalf("rollback must stop+disable the removed new inbound's unit, actions=%v", got)
+	}
+}
+
+func TestRollbackStopsSingletonBeforeRestoringLegacyCaddy(t *testing.T) {
+	root := t.TempDir()
+	liveRoot := filepath.Join(root, "live")
+	legacyPath := filepath.Join(liveRoot, "caddy", "legacy.Caddyfile")
+	client := &recordingPrivilegedClient{
+		statusActiveState: "inactive",
+		promoteResult: privileged.PromoteResult{
+			BackupID:         "20260716T120000.000000000Z",
+			WrittenArtifacts: []string{"caddy/legacy.Caddyfile"},
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: liveRoot, Privileged: client})
+	state.settings = Settings{PanelAccess: "caddy"}
+	ctx := NewManagementApplyContext(state)
+	records := []livePromotionRecord{{
+		LivePath:    legacyPath,
+		HadPrevious: true,
+		ArtifactID:  "caddy/legacy.Caddyfile",
+		BackupID:    "20260716T120000.000000000Z",
+	}}
+	newConfig := filepath.Join(liveRoot, "caddy", "config.json")
+
+	_, _ = ctx.rollbackPromotedConfigsLocked(records, []string{newConfig})
+
+	var got []string
+	for _, action := range client.serviceActions {
+		got = append(got, action.Unit+":"+string(action.Action))
+	}
+	want := []string{
+		"veil-caddy.service:stop",
+		"veil-caddy.service:disable",
+		"veil-caddy@legacy.service:enable",
+		"veil-caddy@legacy.service:start",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rollback service actions = %v, want %v", got, want)
 	}
 }
 
@@ -221,7 +330,45 @@ func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	}
 }
 
-func TestReloadPromotedServicesStopsOrphansBeforeReloading(t *testing.T) {
+func TestReloadPromotedServicesStopsLegacyCaddyBeforeStartingSingleton(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
+	state.liveRoot = filepath.Join(state.applyRoot, "live")
+	state.settings = Settings{PanelAccess: "caddy"}
+	state.orphanedUnits = []string{"veil-caddy@legacy.service"}
+	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
+	state.privileged = client
+	state.privilegedLocal = false
+
+	caddyPath := filepath.Join(state.liveRoot, "caddy", "config.json")
+	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caddyPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldLoader := caddyAdminLoader
+	caddyAdminLoader = func([]byte) error { return errors.New("admin unavailable") }
+	defer func() { caddyAdminLoader = oldLoader }()
+
+	ctx := NewManagementApplyContext(state)
+	ctx.reloadPromotedServicesLocked([]string{caddyPath})
+
+	var got []string
+	for _, action := range client.serviceActions {
+		got = append(got, action.Unit+":"+string(action.Action))
+	}
+	want := []string{
+		"veil-caddy@legacy.service:stop",
+		"veil-caddy@legacy.service:disable",
+		"veil-caddy.service:reload",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("service actions = %v, want %v", got, want)
+	}
+}
+
+func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
 	state.liveRoot = filepath.Join(state.applyRoot, "live")
 	state.inbounds = []Inbound{{Name: "new", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
@@ -241,11 +388,14 @@ func TestReloadPromotedServicesStopsOrphansBeforeReloading(t *testing.T) {
 		got = append(got, a.Unit+":"+string(a.Action))
 	}
 	want := []string{
+		"veil-hysteria2@new.service:restart",
 		"veil-hysteria2@old.service:stop",
 		"veil-hysteria2@old.service:disable",
-		"veil-hysteria2@new.service:restart",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("service actions = %v, want %v", got, want)
+	}
+	if len(state.orphanedUnits) != 0 {
+		t.Fatalf("successfully cleaned orphan units must not be retried: %v", state.orphanedUnits)
 	}
 }

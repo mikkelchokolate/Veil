@@ -120,7 +120,7 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	policy := testPolicy(t)
 	resolved, err := policy.ResolvePromotion(PromoteRequest{
 		ArtifactIDs: []string{
-			"caddy/edge.Caddyfile",
+			"caddy/edge.json",
 			"hysteria2/udp-edge.yaml",
 			"olcrtc/rtc-edge.yaml",
 			"mieru/server_config.json",
@@ -132,6 +132,39 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	}
 	if len(resolved.Artifacts) != 5 {
 		t.Fatalf("resolved artifacts=%+v", resolved.Artifacts)
+	}
+}
+
+func TestPolicyAllowsLegacyCaddyfileOnlyForRemoval(t *testing.T) {
+	policy := testPolicy(t)
+	for _, root := range []string{policy.StagingRoot, policy.GeneratedRoot} {
+		if err := os.MkdirAll(filepath.Join(root, "caddy"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resolved, err := policy.ResolvePromotion(PromoteRequest{
+		RemoveArtifactIDs: []string{"caddy/legacy.Caddyfile"},
+	})
+	if err != nil {
+		t.Fatalf("resolve legacy Caddyfile removal: %v", err)
+	}
+	if len(resolved.RemoveArtifacts) != 1 || resolved.RemoveArtifacts[0].ID != "caddy/legacy.Caddyfile" {
+		t.Fatalf("resolved removal = %+v", resolved.RemoveArtifacts)
+	}
+
+	_, err = policy.ResolvePromotion(PromoteRequest{
+		ArtifactIDs: []string{"caddy/legacy.Caddyfile"},
+	})
+	assertOperationErrorCode(t, err, ErrorNotFound)
+
+	for _, id := range []string{
+		"caddy/bad.name.Caddyfile",
+		"caddy/../escape.Caddyfile",
+		"caddy/sub/escape.Caddyfile",
+	} {
+		_, err := policy.ResolvePromotion(PromoteRequest{RemoveArtifactIDs: []string{id}})
+		assertOperationErrorCode(t, err, ErrorNotFound)
 	}
 }
 
@@ -256,14 +289,14 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		id      string
 		allowed bool
 	}{
-		{"caddy/edge.Caddyfile", true},
+		{"caddy/edge.json", true},
 		{"hysteria2/udp.yaml", true},
 		{"olcrtc/rtc.yaml", true},
 		{"mieru/server_config.json", true},
 		{"sing-box/warp.json", true},
 		{"caddy/edge.yaml", false},
-		{"hysteria2/udp.Caddyfile", false},
-		{"caddy/bad!.Caddyfile", false},
+		{"hysteria2/udp.json", false},
+		{"caddy/bad!.json", false},
 		{"unknown/file.yaml", false},
 		{"single.yaml", false},
 		{"caddy/../escape.Caddyfile", false},

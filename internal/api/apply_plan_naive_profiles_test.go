@@ -9,10 +9,10 @@ import (
 func TestBuildApplyPlanAcceptsNaiveProxyWithProfileCredentials(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{
-			PanelListen: "127.0.0.1:2096",
-			Mode:        "dev",
-			Domain:      "vpn.example.com",
-			Email:       "admin@example.com",
+			PanelListen:      "127.0.0.1:2096",
+			Mode:             "dev",
+			Domain:           "vpn.example.com",
+			DefaultAcmeEmail: "admin@example.com",
 		},
 		Inbounds: []Inbound{{
 			Name:      "naive",
@@ -22,6 +22,7 @@ func TestBuildApplyPlanAcceptsNaiveProxyWithProfileCredentials(t *testing.T) {
 			Enabled:   true,
 			Profiles: []model.ClientProfile{{
 				Name:     "alice",
+				Username: "alice",
 				Password: "secret",
 				Enabled:  true,
 			}},

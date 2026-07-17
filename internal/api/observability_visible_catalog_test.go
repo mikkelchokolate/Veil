@@ -22,7 +22,7 @@ func TestVisibleRuntimeCatalogUsesActiveStateScope(t *testing.T) {
 	if !hasString(units, "veil.service") || !hasString(units, "veil-hysteria2@edge.service") {
 		t.Fatalf("visible catalog missing active-state units: %v", units)
 	}
-	for _, broadUnit := range []string{"veil-hysteria2@.service", "veil-caddy@panel.service", "veil-mieru.service", "veil-warp.service"} {
+	for _, broadUnit := range []string{"veil-hysteria2@.service", "veil-caddy.service", "veil-mieru.service", "veil-warp.service"} {
 		if hasString(units, broadUnit) {
 			t.Fatalf("visible catalog leaked broad fallback unit %s: %v", broadUnit, units)
 		}
@@ -104,19 +104,19 @@ func TestLogsEndpointReturnsResolvedUnit(t *testing.T) {
 
 	routes := LogRoutes{State: state}
 	w := httptest.NewRecorder()
-	routes.handleLogs(w, httptest.NewRequest(http.MethodGet, "/api/logs?unit=caddy-panel&lines=25", nil))
+	routes.handleLogs(w, httptest.NewRequest(http.MethodGet, "/api/logs?unit=caddy&lines=25", nil))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("logs status=%d body=%s", w.Code, w.Body.String())
 	}
-	if len(client.journals) != 1 || client.journals[0] != (privileged.JournalRequest{Unit: "veil-caddy@panel.service", Lines: 25}) {
+	if len(client.journals) != 1 || client.journals[0] != (privileged.JournalRequest{Unit: "veil-caddy.service", Lines: 25}) {
 		t.Fatalf("journal requests=%+v", client.journals)
 	}
 	var result map[string]string
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("decode logs response: %v", err)
 	}
-	if result["unit"] != "veil-caddy@panel.service" {
+	if result["unit"] != "veil-caddy.service" {
 		t.Fatalf("logs response should expose resolved unit, got %+v", result)
 	}
 }

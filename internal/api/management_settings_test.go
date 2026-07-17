@@ -12,6 +12,10 @@ import (
 )
 
 func TestHandleSettingsRejectsInvalidDomain(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	defer func() { autoApplyAfterMutation = origAutoApply }()
+
 	tmpDir := t.TempDir()
 	keyPath := filepath.Join(tmpDir, "state.key")
 	cipher := newTestCipher(t)
@@ -49,6 +53,10 @@ func TestHandleSettingsRejectsInvalidDomain(t *testing.T) {
 }
 
 func TestHandleSettingsRejectsInvalidEmail(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	defer func() { autoApplyAfterMutation = origAutoApply }()
+
 	tmpDir := t.TempDir()
 	keyPath := filepath.Join(tmpDir, "state.key")
 	cipher := newTestCipher(t)
@@ -84,6 +92,10 @@ func TestHandleSettingsRejectsInvalidEmail(t *testing.T) {
 }
 
 func TestHandleSettingsRejectsInvalidPanelListen(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	defer func() { autoApplyAfterMutation = origAutoApply }()
+
 	tmpDir := t.TempDir()
 	keyPath := filepath.Join(tmpDir, "state.key")
 	cipher := newTestCipher(t)
@@ -119,6 +131,10 @@ func TestHandleSettingsRejectsInvalidPanelListen(t *testing.T) {
 }
 
 func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	defer func() { autoApplyAfterMutation = origAutoApply }()
+
 	tmpDir := t.TempDir()
 
 	// Create a key file so newManagementState can load it

@@ -15,7 +15,7 @@ func NewMieruClientAccessAggregator() MieruClientAccessAggregator {
 }
 
 func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) ([]ClientLink, error) {
-	if !hasClientEndpoint(settings) {
+	if clientEndpoint(settings) == "" {
 		return nil, nil
 	}
 	groups := map[string]*mieruClientAccessGroup{}

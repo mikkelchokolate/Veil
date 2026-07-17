@@ -120,7 +120,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret",
@@ -149,7 +149,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "config.json")
 	hy2Path := filepath.Join(applyRoot, "generated", "hysteria2", "hysteria2.yaml")
 	if !containsString(response.WrittenFiles, caddyPath) || !containsString(response.WrittenFiles, hy2Path) {
 		t.Fatalf("apply response missing rendered configs: %+v", response.WrittenFiles)
@@ -158,7 +158,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read caddy config: %v", err)
 	}
-	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "basic_auth veil naive-secret") || !strings.Contains(string(caddyBody), "protocols h1 h2") {
+	if !strings.Contains(string(caddyBody), "vpn.example.com") || !strings.Contains(string(caddyBody), "forward_proxy") || !strings.Contains(string(caddyBody), "auth_credentials") || !strings.Contains(string(caddyBody), "h1") || !strings.Contains(string(caddyBody), "h2") {
 		t.Fatalf("unexpected caddy config: %s", string(caddyBody))
 	}
 	hy2Body, err := os.ReadFile(hy2Path)
@@ -238,7 +238,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret"
@@ -257,7 +257,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 	defer func() { stagedConfigValidator = old }()
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{
-			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")}, Valid: true},
+			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "config.json"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "config.json")}, Valid: true},
 		}
 	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
@@ -287,7 +287,7 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret"
 		},

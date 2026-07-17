@@ -61,7 +61,7 @@ func NeedsCaddyCertSync(protocol string) bool {
 
 // Legacy unit constants remain here until all callers migrate to the registry.
 const (
-	UnitCaddy     = "veil-caddy@.service"
+	UnitCaddy     = "veil-caddy.service"
 	UnitHysteria2 = "veil-hysteria2@.service"
 	UnitOlcrtc    = "veil-olcrtc@.service"
 	UnitMieru     = "veil-mieru.service"

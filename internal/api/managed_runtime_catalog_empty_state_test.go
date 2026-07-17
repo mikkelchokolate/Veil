@@ -34,12 +34,12 @@ func TestVisibleManagedRuntimeCatalogDoesNotExposeUnconfiguredProtocolRuntimes(t
 
 func TestVisibleManagedRuntimeCatalogIncludesCaddyPanelOnlyForCaddyPanelAccess(t *testing.T) {
 	withoutCaddy := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "local"}, nil, WarpConfig{})
-	if _, ok := withoutCaddy.ServiceActionCommand("caddy-panel", "restart"); ok {
-		t.Fatalf("did not expect caddy-panel restart action without caddy panel access: %+v", withoutCaddy.Runtimes())
+	if _, ok := withoutCaddy.ServiceActionCommand("caddy", "restart"); ok {
+		t.Fatalf("did not expect caddy restart action without caddy panel access: %+v", withoutCaddy.Runtimes())
 	}
 
 	withCaddy := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "caddy"}, nil, WarpConfig{})
-	if _, ok := withCaddy.ServiceActionCommand("caddy-panel", "restart"); !ok {
-		t.Fatalf("expected caddy-panel restart action when panel access is caddy: %+v", withCaddy.Runtimes())
+	if _, ok := withCaddy.ServiceActionCommand("caddy", "restart"); !ok {
+		t.Fatalf("expected caddy restart action when panel access is caddy: %+v", withCaddy.Runtimes())
 	}
 }

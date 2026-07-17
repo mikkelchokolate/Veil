@@ -33,9 +33,37 @@ var (
 	caddyDataDir           = caddycert.DefaultCaddyDataDir
 	findCaddyCertPair      = caddycert.FindPair
 	osExecutable           = os.Executable
+	effectiveUID           = os.Geteuid
+	lookupUser             = user.Lookup
+	chownPath              = chownNoFollow
+	chmodPath              = chmodNoFollow
+	openNoFollow           = openRegularNoFollow
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
 )
+
+// chownNoFollow opens path with O_NOFOLLOW and applies fchown on the file
+// descriptor, so a symlink swapped in after policy resolution is rejected
+// rather than followed to an unintended target.
+func chownNoFollow(path string, uid, gid int) error {
+	f, err := openNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Chown(uid, gid)
+}
+
+// chmodNoFollow opens path with O_NOFOLLOW and applies fchmod on the file
+// descriptor, avoiding symlink-following chmod on a swapped path.
+func chmodNoFollow(path string, mode os.FileMode) error {
+	f, err := openNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Chmod(mode)
+}
 
 type Executor struct {
 	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
@@ -264,6 +292,27 @@ func readBoundedRegularFile(path string, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
+// readManagedConfigFile reads a promotion source/backup/destination config
+// without following symlinks. A symlink swapped in after policy resolution
+// would otherwise let the caller read a file outside the managed root (either
+// directly into the promotion, or into a backup retrievable via the backup ID).
+// Opening with O_NOFOLLOW closes the resolve-time-to-read TOCTOU window.
+func readManagedConfigFile(path string) ([]byte, error) {
+	file, err := openRegularNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("managed config is not a regular file")
+	}
+	return io.ReadAll(file)
+}
+
 func runProductionCommand(ctx context.Context, command []string, timeout time.Duration) (string, error) {
 	if len(command) == 0 {
 		return "", errors.New("command is empty")
@@ -326,7 +375,7 @@ func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request R
 	backupID := now().UTC().Format("20060102T150405.000000000Z")
 	manifest := promotionManifest{BackupID: backupID}
 	for _, artifact := range request.Artifacts {
-		body, err := os.ReadFile(artifact.Source)
+		body, err := readManagedConfigFile(artifact.Source)
 		if err != nil {
 			return PromoteResult{}, err
 		}
@@ -337,12 +386,8 @@ func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request R
 		if err := atomicfile.Write(artifact.Destination, body, 0o600, 0o700); err != nil {
 			return PromoteResult{}, err
 		}
-		// Caddy config files are consumed by the root-running Caddy service; keep
-		// them root-owned. Protocol runtime configs are consumed by services that
-		// run as the veil user, so chown them to veil.
-		if !strings.Contains(filepath.Clean(artifact.Destination), "/generated/caddy/") {
-			_ = chownToVeilIfRoot(artifact.Destination)
-			_ = chownToVeilIfRoot(filepath.Dir(artifact.Destination))
+		if err := ensureRuntimeArtifactOwnership(artifact.ID, artifact.Destination); err != nil {
+			return PromoteResult{}, err
 		}
 		result.WrittenArtifacts = append(result.WrittenArtifacts, artifact.ID)
 		manifest.Records = append(manifest.Records, record)
@@ -391,7 +436,15 @@ type promotionManifestRecord struct {
 
 func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
 	record := promotionManifestRecord{ArtifactID: artifact.ID, Destination: artifact.Destination}
-	body, err := os.ReadFile(artifact.Destination)
+	// Lstat (not Stat/ReadFile) so a symlink swapped in after policy resolution
+	// is detected. Reading a symlink would copy the target's content — possibly
+	// outside the managed root — into the backup, which the caller could then
+	// retrieve via the returned backup ID (exfiltration). Skip the content
+	// backup for symlinks; the removal step deletes the link itself.
+	if info, statErr := os.Lstat(artifact.Destination); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return record, nil
+	}
+	body, err := readManagedConfigFile(artifact.Destination)
 	if errors.Is(err, os.ErrNotExist) {
 		return record, nil
 	}
@@ -425,11 +478,14 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	result := PromoteResult{BackupID: backupID}
 	for _, record := range manifest.Records {
 		if record.HadPrevious {
-			previous, err := os.ReadFile(record.BackupPath)
+			previous, err := readManagedConfigFile(record.BackupPath)
 			if err != nil {
 				return PromoteResult{}, err
 			}
 			if err := atomicfile.Write(record.Destination, previous, 0o600, 0o700); err != nil {
+				return PromoteResult{}, err
+			}
+			if err := ensureRuntimeArtifactOwnership(record.ArtifactID, record.Destination); err != nil {
 				return PromoteResult{}, err
 			}
 		} else if err := os.Remove(record.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -442,25 +498,71 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 
 // chownToVeilIfRoot changes the owner of path to the veil user when the helper
 // is running as root. This keeps generated config files and certificates
-// readable by the protocol runtime services, which run as the veil user.
-// If the veil user cannot be resolved (e.g. in tests), the chown is skipped.
+// readable by the protocol runtime services, which run as the veil user. A
+// missing/invalid veil account or failed chown is fatal so Apply can roll back
+// instead of reporting success for an unreadable runtime artifact.
 func chownToVeilIfRoot(path string) error {
-	if os.Geteuid() != 0 {
+	if effectiveUID() != 0 {
 		return nil
 	}
-	u, err := user.Lookup("veil")
+	u, err := lookupUser("veil")
 	if err != nil {
-		return nil
+		return fmt.Errorf("resolve veil user: %w", err)
 	}
 	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
-		return nil
+		return fmt.Errorf("parse veil uid %q: %w", u.Uid, err)
 	}
 	gid, err := strconv.Atoi(u.Gid)
 	if err != nil {
+		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+	}
+	return chownPath(path, uid, gid)
+}
+
+func ensureRuntimeArtifactOwnership(artifactID, path string) error {
+	if strings.HasPrefix(filepath.ToSlash(filepath.Clean(artifactID)), "caddy/") {
+		return grantPanelReadAccessToCaddyArtifact(path)
+	}
+	if err := chownToVeilIfRoot(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("set protocol config directory ownership: %w", err)
+	}
+	if err := chownToVeilIfRoot(path); err != nil {
+		return fmt.Errorf("set protocol config ownership: %w", err)
+	}
+	return nil
+}
+
+// grantPanelReadAccessToCaddyArtifact keeps the Caddy config owned by root for
+// the root Caddy service while making it readable by the veil group for the
+// unprivileged Panel's Caddy Admin API loader. The config contains credentials,
+// so it must not be world-readable.
+func grantPanelReadAccessToCaddyArtifact(path string) error {
+	if effectiveUID() != 0 {
 		return nil
 	}
-	return os.Chown(path, uid, gid)
+	u, err := lookupUser("veil")
+	if err != nil {
+		return fmt.Errorf("resolve veil user: %w", err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+	}
+	dir := filepath.Dir(path)
+	if err := chownPath(dir, 0, gid); err != nil {
+		return fmt.Errorf("set caddy config directory ownership: %w", err)
+	}
+	if err := chmodPath(dir, 0o750); err != nil {
+		return fmt.Errorf("set caddy config directory mode: %w", err)
+	}
+	if err := chownPath(path, 0, gid); err != nil {
+		return fmt.Errorf("set caddy config ownership: %w", err)
+	}
+	if err := chmodPath(path, 0o640); err != nil {
+		return fmt.Errorf("set caddy config mode: %w", err)
+	}
+	return nil
 }
 
 func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
@@ -574,8 +676,21 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if request.Domain == "" {
 		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain is required")
 	}
+	if !dnsLabelPattern.MatchString(request.Domain) {
+		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain must be a valid DNS label")
+	}
 	if request.OutDir == "" {
 		request.OutDir = defaultCaddyCertOutDir
+	}
+	if filepath.IsAbs(request.OutDir) && !strings.HasPrefix(filepath.Clean(request.OutDir), caddyCertRoot) {
+		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
+	}
+	if strings.Contains(request.OutDir, "..") {
+		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "certificate output directory must not contain '..'")
+	}
+	request.OutDir = filepath.Clean(request.OutDir)
+	if !strings.HasPrefix(request.OutDir, caddyCertRoot) {
+		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
 	}
 	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
 	if err != nil {
@@ -592,17 +707,23 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if err := os.MkdirAll(request.OutDir, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("create cert output directory: %w", err)
 	}
-	_ = chownToVeilIfRoot(request.OutDir)
+	if err := chownToVeilIfRoot(request.OutDir); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate directory ownership: %w", err)
+	}
 	certOut := filepath.Join(request.OutDir, request.Domain+".crt")
 	keyOut := filepath.Join(request.OutDir, request.Domain+".key")
 	if err := atomicfile.Write(certOut, certData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write certificate: %w", err)
 	}
-	_ = chownToVeilIfRoot(certOut)
+	if err := chownToVeilIfRoot(certOut); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate ownership: %w", err)
+	}
 	if err := atomicfile.Write(keyOut, keyData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write key: %w", err)
 	}
-	_ = chownToVeilIfRoot(keyOut)
+	if err := chownToVeilIfRoot(keyOut); err != nil {
+		return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
+	}
 	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
 }
 

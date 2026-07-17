@@ -26,7 +26,7 @@ func assertClientSubscriptionLines(t *testing.T, body string) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 subscription links, got %q", body)
 	}
-	if lines[0] != "naive+https://veil:naive-secret@vpn.example.com:443" {
+	if lines[0] != "https://veil:naive-secret@vpn.example.com" {
 		t.Fatalf("unexpected first subscription link: %q", lines[0])
 	}
 	if !strings.HasPrefix(lines[1], "hysteria2://hy2-secret@vpn.example.com:443/") || !strings.Contains(lines[1], "sni=vpn.example.com") {
@@ -73,7 +73,7 @@ func writeRenderableManagementState(path string, inboundSet string) error {
 			"panelListen":"127.0.0.1:2096",
 			"mode":"dev",
 			"domain":"vpn.example.com",
-			"email":"admin@example.com",
+			"defaultAcmeEmail":"admin@example.com",
 			"naiveUsername":"veil",
 			"naivePassword":"naive-secret",
 			"hysteria2Password":"hy2-secret",

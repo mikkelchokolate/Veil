@@ -22,7 +22,7 @@ func TestBuildRURecommendedInstallSelectsPanelPortBeforeProfile(t *testing.T) {
 	if result.PanelPort != 2096 || !result.PanelRandom {
 		t.Fatalf("panel selection = port %d random %v", result.PanelPort, result.PanelRandom)
 	}
-	if !strings.Contains(result.Profile.Caddyfile, "reverse_proxy 127.0.0.1:2096") {
-		t.Fatalf("profile Caddyfile did not receive selected panel port:\n%s", result.Profile.Caddyfile)
+	if !strings.Contains(result.Profile.CaddyJSON, "127.0.0.1:2096") {
+		t.Fatalf("profile CaddyJSON did not receive selected panel port:\n%s", result.Profile.CaddyJSON)
 	}
 }

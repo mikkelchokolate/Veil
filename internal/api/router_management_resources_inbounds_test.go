@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 func TestManagementAPICreatesInbound(t *testing.T) {
@@ -246,9 +248,9 @@ func TestManagementAPIInboundProtocolOverrides(t *testing.T) {
 	}
 
 	if response.NaiveUsername != "custom-naive-user" ||
-		response.NaivePassword != "custom-naive-password" ||
+		response.NaivePassword != veilsettings.RedactedSecret ||
 		response.FallbackRoot != "/custom/fallback/root" ||
-		response.Hysteria2Password != "custom-hy2-pass" ||
+		response.Hysteria2Password != veilsettings.RedactedSecret ||
 		response.MasqueradeURL != "https://custom-masquerade.com" ||
 		response.OlcrtcAuth != "livekit" ||
 		response.OlcrtcTransport != "websocket" ||
@@ -271,9 +273,9 @@ func TestManagementAPIInboundProtocolOverrides(t *testing.T) {
 	}
 
 	if reloaded.NaiveUsername != "custom-naive-user" ||
-		reloaded.NaivePassword != "custom-naive-password" ||
+		reloaded.NaivePassword != veilsettings.RedactedSecret ||
 		reloaded.FallbackRoot != "/custom/fallback/root" ||
-		reloaded.Hysteria2Password != "custom-hy2-pass" ||
+		reloaded.Hysteria2Password != veilsettings.RedactedSecret ||
 		reloaded.MasqueradeURL != "https://custom-masquerade.com" ||
 		reloaded.OlcrtcAuth != "livekit" ||
 		reloaded.OlcrtcTransport != "websocket" ||

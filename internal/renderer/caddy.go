@@ -34,6 +34,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	if cfg.ListenPort <= 0 {
 		return "", errors.New("listen port is required")
 	}
+	if cfg.ListenPort > 65535 {
+		return "", errors.New("listen port must be between 1 and 65535")
+	}
 	if len(cfg.Users) == 0 {
 		if cfg.Username == "" || cfg.Password == "" {
 			return "", errors.New("naive username and password are required")
@@ -48,9 +51,7 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	if cfg.FallbackRoot == "" {
 		cfg.FallbackRoot = "/var/lib/veil/www"
 	}
-	// Validate FallbackRoot is within /var/lib/veil to prevent path traversal.
 	cfg.FallbackRoot = filepath.Clean(cfg.FallbackRoot)
-	// Use ToSlash for platform-independent path manipulation.
 	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
 		cfg.FallbackRoot = filepath.Clean("/var/lib/veil/" + cfg.FallbackRoot)
 	}
@@ -58,8 +59,16 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", cfg.FallbackRoot)
 	}
 	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
+
+	// Keep this layout aligned with the NaiveProxy upstream server example.
+	// In particular, :port must be the first site address and production must
+	// never silently fall back to an internally-issued certificate: Chromium-
+	// based Naive clients require a publicly trusted TLS chain.
 	const tpl = `{
   order forward_proxy before file_server
+  log {
+    exclude http.log.error
+  }
   servers {
     protocols h1 h2
   }
@@ -70,8 +79,8 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
     issuer acme{{ if .Email }} {
       email {{ .Email }}
     }{{ end }}
-    issuer internal
   }
+  encode
 
   forward_proxy {
 {{- range .Users }}
@@ -85,15 +94,16 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 {{- end }}
   }
 
-  root * {{ .FallbackRoot }}
-  file_server
 {{- if .PanelPort }}
-{{ if .WebBasePath }}
+{{- if .WebBasePath }}
   handle {{ .WebBasePath }}* {
     reverse_proxy 127.0.0.1:{{ .PanelPort }}
   }
 {{- end }}
 {{- end }}
+
+  root * {{ .FallbackRoot }}
+  file_server
 }
 `
 	var out bytes.Buffer

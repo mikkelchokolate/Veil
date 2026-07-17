@@ -168,9 +168,9 @@ func TestFilesIncludesTLSAndOmitsSystemd(t *testing.T) {
 		}
 	}
 
-	notWant := filepath.Join(etcDir, "generated", "caddy", "panel.Caddyfile")
+	notWant := filepath.Join(etcDir, "generated", "caddy", "config.json")
 	if hasFile(files, notWant) {
-		t.Fatalf("did not expect Caddyfile when InstallPanelCaddy is false, found %q", notWant)
+		t.Fatalf("did not expect Caddy config when InstallPanelCaddy is false, found %q", notWant)
 	}
 }
 

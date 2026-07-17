@@ -44,16 +44,19 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		return "", err
 	}
 	url := masqueradeURL(settings, inbound)
+	domain := model.ResolveInboundDomain(inbound, settings)
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
-		Domain:        settings.Domain,
+		Domain:        domain,
 		Password:      password,
 		Users:         access.Hysteria2Users(),
 		MasqueradeURL: url,
 	}
-	if settings.PanelAccess == "caddy" && settings.Domain != "" {
-		hystConfig.CertPath = paths.CertPath(settings.Domain)
-		hystConfig.KeyPath = paths.KeyPath(settings.Domain)
+	// Use Caddy-managed certificates whenever the inbound has its own domain
+	// (Caddy is already required for it) or when the panel itself uses Caddy.
+	if domain != "" && (settings.PanelAccess == "caddy" || model.InboundDomain(inbound) != "") {
+		hystConfig.CertPath = paths.CertPath(domain)
+		hystConfig.KeyPath = paths.KeyPath(domain)
 	} else {
 		hystConfig.CertPath = paths.PanelCertPath()
 		hystConfig.KeyPath = paths.PanelKeyPath()

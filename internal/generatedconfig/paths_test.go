@@ -8,7 +8,7 @@ import (
 func TestGeneratedConfigPathsBuildsKnownGeneratedPaths(t *testing.T) {
 	paths := NewPaths("/apply")
 	cases := map[string]string{
-		paths.Caddyfile(): filepath.Join("/apply", "generated", "caddy", "panel.Caddyfile"),
+		paths.Caddyfile(): filepath.Join("/apply", "generated", "caddy", "config.json"),
 		paths.Hysteria2(): filepath.Join("/apply", "generated", "hysteria2", "server.yaml"),
 		paths.Warp():      filepath.Join("/apply", "generated", "sing-box", "warp.json"),
 	}

@@ -82,7 +82,7 @@ func (c ManagedRuntimeCatalog) AllowsPromotedAction(command []string) bool {
 	if len(command) != 3 || command[0] != "systemctl" {
 		return false
 	}
-	if isLifecycleAction(command[1]) && c.allowsLifecycleUnit(command[2]) {
+	if isLifecycleAction(command[1]) && (c.allowsLifecycleUnit(command[2]) || isLegacyCaddyLifecycleUnit(command[2])) {
 		return true
 	}
 	for _, runtime := range c.runtimes {
@@ -108,6 +108,13 @@ func (c ManagedRuntimeCatalog) LifecycleUnitPrefixes() []string {
 			seen[prefix] = true
 			prefixes = append(prefixes, prefix)
 		}
+	}
+	// Preserve the legacy per-instance Caddy template prefix so orphan cleanup
+	// and rollback can stop/disable old veil-caddy@*.service units after the
+	// redesign moves to a single veil-caddy.service.
+	if !seen["veil-caddy@"] {
+		seen["veil-caddy@"] = true
+		prefixes = append(prefixes, "veil-caddy@")
 	}
 	return prefixes
 }
@@ -135,6 +142,19 @@ func (c ManagedRuntimeCatalog) allowsLifecycleUnit(unit string) bool {
 
 func isLifecycleAction(action string) bool {
 	return action == "stop" || action == "disable" || action == "start" || action == "enable"
+}
+
+// isLegacyCaddyLifecycleUnit allows lifecycle actions on the consolidated
+// veil-caddy.service and on legacy per-instance veil-caddy@*.service units so
+// rollback and orphan cleanup can tear them down.
+func isLegacyCaddyLifecycleUnit(unit string) bool {
+	if !strings.HasSuffix(unit, ".service") {
+		return false
+	}
+	if unit == "veil-caddy.service" {
+		return true
+	}
+	return strings.HasPrefix(unit, "veil-caddy@") && !strings.ContainsAny(unit, `/\; "'`)
 }
 
 func lifecycleUnitPrefix(unit string) (string, bool) {

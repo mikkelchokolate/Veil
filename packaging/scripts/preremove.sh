@@ -31,7 +31,7 @@ if command -v systemctl >/dev/null 2>&1; then
     stop_disable_unit veil-mieru.service
     stop_disable_unit veil-warp.service
 
-    stop_disable_matching_units 'veil-caddy@*.service'
+    stop_disable_unit veil-caddy.service
     stop_disable_matching_units 'veil-hysteria2@*.service'
     stop_disable_matching_units 'veil-olcrtc@*.service'
 fi

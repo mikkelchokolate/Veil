@@ -49,7 +49,7 @@ run_deb_smoke() {
       apt-get install -y ca-certificates
       dpkg -i /packages/old/*.deb
       test -x /usr/local/bin/veil
-      for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy@.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
+      for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
         test -f "/lib/systemd/system/$unit"
       done
       id veil
