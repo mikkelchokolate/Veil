@@ -3,6 +3,7 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/systemdunits"
@@ -75,6 +76,42 @@ func TestApplyRURecommendedProfileRejectsMissingPaths(t *testing.T) {
 	_, err := ApplyRURecommendedProfile(RURecommendedProfile{}, ApplyPaths{})
 	if err == nil {
 		t.Fatalf("expected missing paths error")
+	}
+}
+
+func TestApplyRURecommendedProfileChownsSecretsForVeilGroup(t *testing.T) {
+	dir := t.TempDir()
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		PanelAccess: "caddy",
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		Secret:      func(label string) string { return "secret-" + label },
+		PanelPort:   2096,
+	})
+	if err != nil {
+		t.Fatalf("build profile: %v", err)
+	}
+
+	paths := ApplyPaths{
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
+	}
+	if _, err := ApplyRURecommendedProfile(profile, paths); err != nil {
+		t.Fatalf("apply profile: %v", err)
+	}
+
+	envPath := filepath.Join(paths.EtcDir, "veil.env")
+	info, err := os.Stat(envPath)
+	if err != nil {
+		t.Fatalf("stat veil.env: %v", err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("unexpected stat type for %s", envPath)
+	}
+	if stat.Mode&0o040 == 0 {
+		t.Fatalf("veil.env must be group-readable (mode %o)", stat.Mode)
 	}
 }
 
