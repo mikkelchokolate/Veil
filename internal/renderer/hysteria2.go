@@ -3,7 +3,8 @@ package renderer
 import (
 	"bytes"
 	"errors"
-	"text/template"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Hysteria2User struct {
@@ -25,6 +26,33 @@ type Hysteria2Config struct {
 	// just works" hold for Hysteria2.
 	CertPath string
 	KeyPath  string
+}
+
+type hysteria2YAML struct {
+	Listen string `yaml:"listen"`
+	TLS    struct {
+		Cert string `yaml:"cert"`
+		Key  string `yaml:"key"`
+	} `yaml:"tls"`
+	Auth struct {
+		Type     string            `yaml:"type"`
+		Password string            `yaml:"password,omitempty"`
+		UserPass map[string]string `yaml:"userpass,omitempty"`
+	} `yaml:"auth"`
+	Masquerade struct {
+		Type  string `yaml:"type"`
+		Proxy struct {
+			URL         string `yaml:"url"`
+			RewriteHost bool   `yaml:"rewriteHost"`
+		} `yaml:"proxy"`
+	} `yaml:"masquerade"`
+	Outbounds []struct {
+		Name   string `yaml:"name"`
+		Type   string `yaml:"type"`
+		Socks5 struct {
+			Addr string `yaml:"addr"`
+		} `yaml:"socks5"`
+	} `yaml:"outbounds,omitempty"`
 }
 
 func RenderHysteria2(cfg Hysteria2Config) (string, error) {
@@ -51,46 +79,68 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	if cfg.KeyPath == "" {
 		cfg.KeyPath = "/etc/veil/panel/tls.key"
 	}
-	const tpl = `listen: :{{ .ListenPort }}
 
-# TLS certificate served by Hysteria2. When Panel access is set to "caddy",
-# Veil copies Caddy's managed Let's Encrypt certificate here automatically.
-# Otherwise Veil's self-signed panel certificate is used and clients connect
-# with insecure + SNI (see the generated client link).
-tls:
-  cert: {{ .CertPath }}
-  key: {{ .KeyPath }}
+	var doc hysteria2YAML
+	doc.Listen = ":" + itoa(cfg.ListenPort)
+	doc.TLS.Cert = cfg.CertPath
+	doc.TLS.Key = cfg.KeyPath
+	if len(cfg.Users) > 0 {
+		doc.Auth.Type = "userpass"
+		doc.Auth.UserPass = make(map[string]string, len(cfg.Users))
+		for _, u := range cfg.Users {
+			doc.Auth.UserPass[u.Username] = u.Password
+		}
+	} else {
+		doc.Auth.Type = "password"
+		doc.Auth.Password = cfg.Password
+	}
+	doc.Masquerade.Type = "proxy"
+	doc.Masquerade.Proxy.URL = cfg.MasqueradeURL
+	doc.Masquerade.Proxy.RewriteHost = true
+	if cfg.Upstream != "" {
+		var ob struct {
+			Name   string `yaml:"name"`
+			Type   string `yaml:"type"`
+			Socks5 struct {
+				Addr string `yaml:"addr"`
+			} `yaml:"socks5"`
+		}
+		ob.Name = "veil-upstream"
+		ob.Type = "socks5"
+		ob.Socks5.Addr = cfg.Upstream
+		doc.Outbounds = append(doc.Outbounds, ob)
+	}
 
-# Password authentication is simple and broadly compatible with Hysteria2 clients.
-auth:
-{{- if .Users }}
-  type: userpass
-  userpass:
-{{- range .Users }}
-    {{ .Username }}: {{ .Password }}
-{{- end }}
-{{- else }}
-  type: password
-  password: {{ .Password }}
-{{- end }}
-
-masquerade:
-  type: proxy
-  proxy:
-    url: {{ .MasqueradeURL }}
-    rewriteHost: true
-
-{{- if .Upstream }}
-outbounds:
-  - name: veil-upstream
-    type: socks5
-    socks5:
-      addr: {{ .Upstream }}
-{{- end }}
-`
 	var out bytes.Buffer
-	if err := template.Must(template.New("hysteria2").Parse(tpl)).Execute(&out, cfg); err != nil {
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return "", err
+	}
+	if err := enc.Close(); err != nil {
 		return "", err
 	}
 	return out.String(), nil
+}
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	var buf [20]byte
+	pos := len(buf)
+	for i > 0 {
+		pos--
+		buf[pos] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
 }
