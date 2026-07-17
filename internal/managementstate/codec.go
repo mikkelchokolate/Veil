@@ -102,6 +102,13 @@ func (ManagementStateCodec) Decode(body []byte) (model.ManagementSnapshot, error
 			}
 		}
 
+		if schemaVersion > CurrentSchemaVersion {
+			// A state file from a newer build would be silently overwritten with
+			// CurrentSchemaVersion on the next Save, discarding future fields.
+			// Refuse to load it instead of downgrading.
+			return model.ManagementSnapshot{}, fmt.Errorf("state schema version %d is newer than supported version %d", schemaVersion, CurrentSchemaVersion)
+		}
+
 		migrated := false
 		for schemaVersion < CurrentSchemaVersion {
 			migrateFn, ok := migrations[schemaVersion]

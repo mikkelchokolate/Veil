@@ -66,11 +66,16 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 	}
 
 	if _, ok := fields["inbounds"]; ok {
+		seenInboundNames := map[string]int{}
 		for i, inbound := range snapshot.Inbounds {
 			if inbound.Name == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].name is required")
 			} else if !inbounds.IsSafeName(inbound.Name) {
 				errs = append(errs, "inbounds["+itoa(i)+"].name must contain only letters, digits, underscore, or hyphen")
+			} else if prev, dup := seenInboundNames[inbound.Name]; dup {
+				errs = append(errs, fmt.Sprintf("inbounds[%d]: duplicate name %q also used by inbounds[%d]", i, inbound.Name, prev))
+			} else {
+				seenInboundNames[inbound.Name] = i
 			}
 			if inbound.Protocol == "" {
 				errs = append(errs, "inbounds["+itoa(i)+"].protocol is required")
@@ -96,9 +101,14 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		}
 	}
 	if _, ok := fields["routingRules"]; ok {
+		seenRuleNames := map[string]int{}
 		for i, rule := range snapshot.Rules {
 			if rule.Name == "" {
 				errs = append(errs, "routingRules["+itoa(i)+"].name is required")
+			} else if prev, dup := seenRuleNames[rule.Name]; dup {
+				errs = append(errs, fmt.Sprintf("routingRules[%d]: duplicate name %q also used by routingRules[%d]", i, rule.Name, prev))
+			} else {
+				seenRuleNames[rule.Name] = i
 			}
 			if rule.Match == "" {
 				errs = append(errs, "routingRules["+itoa(i)+"].match is required")
