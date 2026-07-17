@@ -2,6 +2,7 @@ package installer
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -80,6 +81,13 @@ func TestApplyRURecommendedProfileRejectsMissingPaths(t *testing.T) {
 }
 
 func TestApplyRURecommendedProfileChownsSecretsForVeilGroup(t *testing.T) {
+	// Hermetic: run as if root so the chown path is exercised regardless of the
+	// CI runner's euid, and stub the user lookup so no real 'veil' account is needed.
+	oldUID, oldLookup := effectiveUID, lookupUser
+	defer func() { effectiveUID, lookupUser = oldUID, oldLookup }()
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+
 	dir := t.TempDir()
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
 		PanelAccess: "caddy",
