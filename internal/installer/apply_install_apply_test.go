@@ -87,6 +87,25 @@ func TestApplyRURecommendedProfileChownsSecretsForVeilGroup(t *testing.T) {
 	defer func() { effectiveUID, lookupUser = oldUID, oldLookup }()
 	effectiveUID = func() int { return 0 }
 	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+	// A non-root CI runner cannot os.Chown to another group (EPERM). Force the
+	// group-read bit directly; this is exactly the permission the production
+	// chown+chmod grants.
+	oldChown, oldChmod := chownPath, chmodPath
+	defer func() { chownPath, chmodPath = oldChown, oldChmod }()
+	chownPath = func(path string, _, _ int) error {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, info.Mode()|0o040)
+	}
+	chmodPath = func(path string, mode os.FileMode) error {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, info.Mode()|mode&0o040)
+	}
 
 	dir := t.TempDir()
 	profile, err := BuildRURecommendedProfile(RURecommendedInput{
