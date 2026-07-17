@@ -16,6 +16,35 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
+func TestRenderCaddyJSONDeterministicAcrossRuns(t *testing.T) {
+	// Multiple issuer groups + multiple domains force map iteration in
+	// renderTLSApp. Render repeatedly and require byte-identical output.
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"zeta.example.com":   {Domain: "zeta.example.com", Email: "b@example.com"},
+			"alpha.example.com":  {Domain: "alpha.example.com", Email: "a@example.com"},
+			"middle.example.com": {Domain: "middle.example.com", Email: "a@example.com"},
+			"beta.example.com":   {Domain: "beta.example.com", Email: "b@example.com"},
+			"gamma.example.com":  {Domain: "gamma.example.com", Email: "a@example.com"},
+		},
+	}
+	caps := caddycapabilities.CaddyCapabilities{ForwardProxy: true}
+	first, err := RenderCaddyJSON(plan, caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		got, err := RenderCaddyJSON(plan, caps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(first) {
+			t.Fatalf("render %d differs from first render:\nfirst: %s\ngot:   %s", i, first, got)
+		}
+	}
+}
+
 func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{

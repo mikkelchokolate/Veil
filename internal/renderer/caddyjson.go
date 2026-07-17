@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -69,7 +70,14 @@ func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
 		domains []string
 	}
 	groups := make(map[string]*issuerGroup)
+	// plan.Domains is a map; sort its specs so both the per-policy subjects
+	// slice and the policy list are byte-for-byte deterministic across renders.
+	specs := make([]caddyassembly.CaddyDomainCertSpec, 0, len(plan.Domains))
 	for _, spec := range plan.Domains {
+		specs = append(specs, spec)
+	}
+	sort.Slice(specs, func(i, j int) bool { return specs[i].Domain < specs[j].Domain })
+	for _, spec := range specs {
 		mode := challengeForDomain(plan, spec.Domain)
 		issuerKey := spec.Email + "/" + mode
 		g := groups[issuerKey]
@@ -80,7 +88,13 @@ func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
 		g.domains = append(g.domains, spec.Domain)
 	}
 	var policies []map[string]any
-	for _, g := range groups {
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		g := groups[k]
 		policies = append(policies, map[string]any{
 			"subjects": g.domains,
 			"issuers":  []map[string]any{renderACMEIssuer(g.email, g.mode)},
