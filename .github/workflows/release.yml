@@ -107,7 +107,9 @@ jobs:
           echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
           /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
       - run: go test ./... -race -count=1
-      - run: go test -tags e2e ./test/e2e/... -count=1 -v
+      # e2e data-path tests need root (mita creates /var/run/mita, protocols bind
+      # privileged paths). Run with sudo, preserving PATH/HOME like ci.yml does.
+      - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -count=1 -v
       - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
       - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install.sh --help >/dev/null
