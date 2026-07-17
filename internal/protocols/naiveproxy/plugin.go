@@ -45,6 +45,9 @@ func naiveUsername(settings model.Settings, inbound model.Inbound) string {
 	if username == "" {
 		username = settings.NaiveUsername
 	}
+	if username == "" {
+		username = model.DefaultNaiveUsername
+	}
 	return username
 }
 

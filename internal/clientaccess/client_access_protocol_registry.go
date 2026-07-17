@@ -172,6 +172,9 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if username == "" {
 		username = protocolString(input.Settings.ProtocolFields, "naiveUsername", input.Settings.NaiveUsername)
 	}
+	if username == "" {
+		username = model.DefaultNaiveUsername
+	}
 	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, username, password)
 	return link, true
 }

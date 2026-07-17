@@ -245,7 +245,10 @@ func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser
 		username = stringField(settings.ProtocolFields, "naiveUsername")
 	}
 	if username == "" {
-		username = settings.NaiveUsername
+		username = strings.TrimSpace(settings.NaiveUsername)
+	}
+	if username == "" {
+		username = model.DefaultNaiveUsername
 	}
 	password := strings.TrimSpace(inbound.Password)
 	if password == "" {
