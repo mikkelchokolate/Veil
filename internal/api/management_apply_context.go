@@ -426,7 +426,7 @@ func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
 		if !inb.Enabled || inb.Protocol != "hysteria2" {
 			continue
 		}
-		domain := model.InboundDomain(inb)
+		domain := model.ResolveInboundDomain(inb, ctx.state.settings)
 		if domain == "" {
 			continue
 		}
