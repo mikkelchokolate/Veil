@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,6 +177,41 @@ func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 	restarted.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
 	if !strings.Contains(read.Body.String(), "preset-all-except-russia") || !strings.Contains(read.Body.String(), "geosite:category-ru") {
 		t.Fatalf("persisted preset routing rules missing: %s", read.Body.String())
+	}
+}
+
+func TestManagementAPIRollsBackRoutingPresetOnSaveFailure(t *testing.T) {
+	dir := t.TempDir()
+	// Valid state path for startup; we break saves afterwards by replacing the
+	// state file's parent with a non-directory.
+	statePath := filepath.Join(dir, "state", "state.json")
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	// Baseline: no preset active.
+	get := httptest.NewRecorder()
+	r.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/api/routing/presets", nil))
+	before := get.Body.String()
+
+	// Break persistence: remove the state dir and put a file in its place.
+	stateDir := filepath.Dir(statePath)
+	if err := os.RemoveAll(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stateDir, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/all-except-Russia", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on save failure, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// In-memory state must be rolled back — not left holding the preset rules.
+	get2 := httptest.NewRecorder()
+	r.ServeHTTP(get2, httptest.NewRequest(http.MethodGet, "/api/routing/presets", nil))
+	if get2.Body.String() != before {
+		t.Fatalf("preset state not rolled back after save failure:\nbefore: %s\nafter:  %s", before, get2.Body.String())
 	}
 }
 
