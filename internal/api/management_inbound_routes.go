@@ -49,7 +49,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, mutation.Inbounds())
+			writeJSON(w, redactInboundList(mutation.Inbounds()))
 		case http.MethodPost:
 			var inbound Inbound
 			if !decodeJSONRequest(w, r, &inbound) {
@@ -79,7 +79,7 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			s.autoApplyLocked(r)
-			writeJSONStatus(w, http.StatusCreated, created)
+			writeJSONStatus(w, http.StatusCreated, redactInbound(created))
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
@@ -157,7 +157,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		}
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, inbound)
+			writeJSON(w, redactInbound(inbound))
 		case http.MethodPut:
 			var update Inbound
 			if !decodeJSONRequest(w, r, &update) {
@@ -181,7 +181,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				return nil
 			}
 			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			writeJSON(w, redactInbound(updated))
 		case http.MethodDelete:
 			err := mutation.DeleteInbound(name)
 			s.logUserAction(r, "delete_inbound", name, err == nil, "")
