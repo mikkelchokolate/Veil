@@ -100,8 +100,10 @@ jobs:
           # The systemd-unit validation step above symlinks /usr/local/bin/caddy to
           # the veil stub so `caddy list-modules` fails. Unit tests probe Caddy
           # capabilities, so install a real Caddy earlier in PATH (mirrors ci.yml).
-          mkdir -p /tmp/veil-runtime
-          ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
+          # Use sudo + a fresh dir: prior sudo steps may leave root-owned files
+          # under /tmp/veil-runtime that break the caddy build-dir cleanup.
+          sudo rm -rf /tmp/veil-runtime
+          sudo ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
           echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
           /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
       - run: go test ./... -race -count=1
