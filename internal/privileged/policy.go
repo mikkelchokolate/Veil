@@ -215,6 +215,8 @@ var (
 	opaquePromotionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	artifactNamePattern      = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
+	dnsLabelPattern          = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+	caddyCertRoot            = "/etc/veil/certs"
 )
 
 func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {

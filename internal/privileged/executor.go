@@ -655,8 +655,21 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if request.Domain == "" {
 		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain is required")
 	}
+	if !dnsLabelPattern.MatchString(request.Domain) {
+		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain must be a valid DNS label")
+	}
 	if request.OutDir == "" {
 		request.OutDir = defaultCaddyCertOutDir
+	}
+	if filepath.IsAbs(request.OutDir) && !strings.HasPrefix(filepath.Clean(request.OutDir), caddyCertRoot) {
+		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
+	}
+	if strings.Contains(request.OutDir, "..") {
+		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "certificate output directory must not contain '..'")
+	}
+	request.OutDir = filepath.Clean(request.OutDir)
+	if !strings.HasPrefix(request.OutDir, caddyCertRoot) {
+		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
 	}
 	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
 	if err != nil {
