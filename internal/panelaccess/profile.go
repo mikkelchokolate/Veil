@@ -13,7 +13,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -62,7 +65,7 @@ type ProfileMaterial struct {
 	PanelTLSKeyPEM    string
 	WebBasePath       string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 }
 
 type Profile struct {
@@ -90,11 +93,30 @@ func (p Profile) Build() (ProfileMaterial, error) {
 			return ProfileMaterial{}, err
 		}
 		material.InstallPanelCaddy = true
-		caddyfile, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort, WebBasePath: material.WebBasePath})
+		settings := model.Settings{
+			PanelAccess:       "caddy",
+			PanelListen:       material.PanelListen,
+			WebBasePath:       material.WebBasePath,
+			Domain:            input.Domain,
+			Email:             input.Email,
+			PanelDomain:       input.Domain,
+			PanelEmail:        input.Email,
+			PanelPublicPort:   443,
+			AcmeChallengeMode: "tls-alpn-01",
+		}
+		plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, nil)
 		if err != nil {
 			return ProfileMaterial{}, err
 		}
-		material.Caddyfile = caddyfile
+		caps, err := caddycapabilities.Probe("")
+		if err != nil {
+			return ProfileMaterial{}, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+		}
+		body, err := renderer.RenderCaddyJSON(plan, caps)
+		if err != nil {
+			return ProfileMaterial{}, err
+		}
+		material.CaddyJSON = string(body)
 		return material, nil
 	}
 	var extraIPs []net.IP

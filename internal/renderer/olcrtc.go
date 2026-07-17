@@ -3,7 +3,8 @@ package renderer
 import (
 	"bytes"
 	"errors"
-	"text/template"
+
+	"gopkg.in/yaml.v3"
 )
 
 type OlcrtcConfig struct {
@@ -12,6 +13,24 @@ type OlcrtcConfig struct {
 	Key       string
 	Transport string
 	DNS       string
+}
+
+type olcrtcYAML struct {
+	Mode string `yaml:"mode"`
+	Auth struct {
+		Provider string `yaml:"provider"`
+	} `yaml:"auth"`
+	Room struct {
+		ID string `yaml:"id"`
+	} `yaml:"room"`
+	Crypto struct {
+		Key string `yaml:"key"`
+	} `yaml:"crypto"`
+	Net struct {
+		Transport string `yaml:"transport"`
+		DNS       string `yaml:"dns"`
+	} `yaml:"net"`
+	Data string `yaml:"data"`
 }
 
 func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
@@ -24,24 +43,23 @@ func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
 	if cfg.DNS == "" {
 		cfg.DNS = "1.1.1.1:53"
 	}
-	const tpl = `mode: srv
-auth:
-  provider: {{ .Auth }}
-room:
-  id: "{{ .RoomID }}"
-crypto:
-  key: "{{ .Key }}"
-net:
-  transport: {{ .Transport }}
-  dns: "{{ .DNS }}"
-data: data
-`
+
+	var doc olcrtcYAML
+	doc.Mode = "srv"
+	doc.Auth.Provider = cfg.Auth
+	doc.Room.ID = cfg.RoomID
+	doc.Crypto.Key = cfg.Key
+	doc.Net.Transport = cfg.Transport
+	doc.Net.DNS = cfg.DNS
+	doc.Data = "data"
+
 	var out bytes.Buffer
-	t, err := template.New("olcrtc").Parse(tpl)
-	if err != nil {
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
 		return "", err
 	}
-	if err := t.Execute(&out, cfg); err != nil {
+	if err := enc.Close(); err != nil {
 		return "", err
 	}
 	return out.String(), nil

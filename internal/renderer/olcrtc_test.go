@@ -19,10 +19,10 @@ func TestRenderOlcrtcProducesValidServerYAML(t *testing.T) {
 	for _, want := range []string{
 		"mode: srv",
 		"provider: jitsi",
-		"id: \"https://meet.example.com/myroom\"",
-		"key: \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\"",
+		"id: https://meet.example.com/myroom",
+		"key: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		"transport: datachannel",
-		"dns: \"1.1.1.1:53\"",
+		"dns: 1.1.1.1:53",
 		"data: data",
 	} {
 		if !strings.Contains(body, want) {
@@ -52,7 +52,7 @@ func TestRenderOlcrtcDefaultsDNS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderOlcrtc: %v", err)
 	}
-	if !strings.Contains(body, `dns: "1.1.1.1:53"`) {
+	if !strings.Contains(body, "dns: 1.1.1.1:53") {
 		t.Fatalf("expected default DNS:\n%s", body)
 	}
 }

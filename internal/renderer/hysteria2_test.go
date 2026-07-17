@@ -101,6 +101,19 @@ func TestRenderHysteria2RejectsZeroListenPort(t *testing.T) {
 	}
 }
 
+func TestRenderHysteria2EscapesPasswordWithYAMLMetacharacters(t *testing.T) {
+	out, err := RenderHysteria2(Hysteria2Config{ListenPort: 443, Password: "p@ss \"w0rd\nnewline"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	// The password must be a single YAML scalar; yaml.v3 may use a literal block
+	// for multiline strings. Either form is valid as long as the value is not
+	// interpreted as YAML structure.
+	if !strings.Contains(out, "password: |-") && !strings.Contains(out, "password: \"") {
+		t.Fatalf("password not properly escaped as YAML scalar: %s", out)
+	}
+}
+
 func TestRenderHysteria2RejectsNegativeListenPort(t *testing.T) {
 	_, err := RenderHysteria2(Hysteria2Config{
 		ListenPort: -1,

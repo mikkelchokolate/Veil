@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 func TestInboundCreateThroughHTTPGeneratesPasswordWhenMissing(t *testing.T) {
@@ -28,8 +30,8 @@ func TestInboundCreateThroughHTTPGeneratesPasswordWhenMissing(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&inbound); err != nil {
 		t.Fatalf("decode inbound: %v", err)
 	}
-	if inbound.Password == "" {
-		t.Fatalf("expected generated password in response")
+	if inbound.Password != veilsettings.RedactedSecret {
+		t.Fatalf("expected redacted password in response, got %q", inbound.Password)
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
@@ -38,7 +40,9 @@ func TestInboundCreateThroughHTTPGeneratesPasswordWhenMissing(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
-	if !strings.Contains(w2.Body.String(), "hysteria2://"+inbound.Password+"@vpn.example.com:9443/") {
-		t.Fatalf("client links do not use generated inbound password: %s", w2.Body.String())
+	// The redacted response must not leak the generated password; client links
+	// should still contain the real value for the created inbound.
+	if !strings.Contains(w2.Body.String(), "hysteria2://") || !strings.Contains(w2.Body.String(), "@vpn.example.com:9443/") {
+		t.Fatalf("client links missing generated inbound: %s", w2.Body.String())
 	}
 }

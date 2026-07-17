@@ -1,15 +1,13 @@
 package hysteria2
 
 import (
-	"strings"
-
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // BuildLinks creates client links for a Hysteria2 inbound.
 func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
-	endpoint := strings.TrimSpace(settings.Domain)
+	endpoint := model.ResolveInboundDomain(inbound, settings)
 	if endpoint == "" {
 		return nil, nil
 	}

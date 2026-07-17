@@ -125,6 +125,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	prevPreset, prevSource, prevRules := s.routingPreset, s.routingSource, s.rules
 	state := routing.RoutingPresetState{ActivePreset: s.routingPreset, Source: s.routingSource, Rules: s.rules}
 	routing.NewRoutingPresetApplication(&state).Apply(preset)
 	if s.warp.Enabled {
@@ -142,6 +143,7 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 	err := s.saveLocked()
 	s.logUserAction(r, "apply_routing_preset", name, err == nil, "")
 	if err != nil {
+		s.routingPreset, s.routingSource, s.rules = prevPreset, prevSource, prevRules
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

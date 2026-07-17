@@ -61,7 +61,7 @@ func TestPresentationMore(t *testing.T) {
 				"Email: admin@app.example.com",
 				"Install scope: Panel",
 			},
-			notWant: []string{"Generated Caddyfile"},
+			notWant: []string{"Generated Caddy JSON"},
 		},
 	}
 

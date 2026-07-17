@@ -15,8 +15,8 @@ func TestPlannerBuildsStructuredOperationsDeterministically(t *testing.T) {
 		GeneratedRoot: "/var/lib/veil/staging",
 		LiveRoot:      "/etc/veil/generated",
 		PanelAccess: Material{
-			Configs: []string{"/etc/veil/generated/caddy/edge.Caddyfile"},
-			Actions: []string{"reload veil-caddy@edge.service"},
+			Configs: []string{"/etc/veil/generated/caddy/config.json"},
+			Actions: []string{"reload veil-caddy.service"},
 		},
 		Inbounds: []model.Inbound{{
 			Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true,
@@ -32,8 +32,8 @@ func TestPlannerBuildsStructuredOperationsDeterministically(t *testing.T) {
 	want := []model.ApplyOperation{
 		{
 			Type:              "promote_file",
-			Source:            "/var/lib/veil/staging/caddy/edge.Caddyfile",
-			Destination:       "/etc/veil/generated/caddy/edge.Caddyfile",
+			Source:            "/var/lib/veil/staging/caddy/config.json",
+			Destination:       "/etc/veil/generated/caddy/config.json",
 			InterruptionRisk:  "reload",
 			RollbackAvailable: true,
 			ValidationSource:  "render-and-live-host",
@@ -48,7 +48,7 @@ func TestPlannerBuildsStructuredOperationsDeterministically(t *testing.T) {
 		},
 		{
 			Type:              "reload_service",
-			Unit:              "veil-caddy@edge.service",
+			Unit:              "veil-caddy.service",
 			InterruptionRisk:  "reload",
 			RollbackAvailable: true,
 			ValidationSource:  "managed-unit-catalog",
@@ -96,7 +96,7 @@ func TestPlannerStructuredPreviewDoesNotContainSecrets(t *testing.T) {
 
 func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *testing.T) {
 	plan := Build(Input{
-		PanelAccess: Material{Configs: []string{"/etc/veil/generated/caddy/panel.Caddyfile"}, Actions: []string{"reload veil-caddy@panel.service"}, Runtimes: []string{"veil-caddy@panel.service"}},
+		PanelAccess: Material{Configs: []string{"/etc/veil/generated/caddy/config.json"}, Actions: []string{"reload veil-caddy.service"}, Runtimes: []string{"veil-caddy.service"}},
 		Settings:    model.Settings{Domain: "vpn.example.com"},
 		Inbounds: []model.Inbound{
 			{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true},
@@ -116,17 +116,17 @@ func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *t
 	if !plan.Valid {
 		t.Fatalf("plan errors = %+v", plan.Errors)
 	}
-	for _, want := range []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/etc/veil/generated/mieru/server_config.json", "/etc/veil/generated/sing-box/warp.json", "/etc/veil/generated/rules/geoip.dat"} {
+	for _, want := range []string{"/etc/veil/generated/caddy/config.json", "/etc/veil/generated/mieru/server_config.json", "/etc/veil/generated/sing-box/warp.json", "/etc/veil/generated/rules/geoip.dat"} {
 		if !contains(plan.Configs, want) {
 			t.Fatalf("configs missing %q: %+v", want, plan.Configs)
 		}
 	}
-	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-caddy@panel.service", "restart veil-mieru.service", "restart veil-warp.service"} {
+	for _, want := range []string{"validate management state", "stage generated configs", "reload veil-caddy.service", "restart veil-mieru.service", "restart veil-warp.service"} {
 		if !contains(plan.Actions, want) {
 			t.Fatalf("actions missing %q: %+v", want, plan.Actions)
 		}
 	}
-	for _, want := range []string{"veil-caddy@panel.service", "veil-mieru.service", "veil-warp.service"} {
+	for _, want := range []string{"veil-caddy.service", "veil-mieru.service", "veil-warp.service"} {
 		if !contains(plan.Runtimes, want) {
 			t.Fatalf("runtimes missing %q: %+v", want, plan.Runtimes)
 		}

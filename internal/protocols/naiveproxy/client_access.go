@@ -1,62 +1,68 @@
 package naiveproxy
 
 import (
-	"strings"
+	"errors"
+	"fmt"
 
-	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // BuildLinks creates client links for a naiveproxy inbound.
 func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
-	endpoint := clientEndpoint(settings)
-	if endpoint == "" {
+	return BuildLinks(settings, inbound)
+}
+
+// BuildLinks creates client links for a naiveproxy inbound based on its
+// configured transport. TCP yields an https:// URI, QUIC yields a quic:// URI,
+// and dual yields both. The port is omitted when it matches the default (443).
+func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
+	domain := NaiveDomain(settings, inbound)
+	if domain == "" {
 		return nil, nil
 	}
-	creds, err := clientaccess.BuildClientCredentials(inbound)
-	if err != nil {
-		return nil, err
-	}
-	links := make([]model.ClientLink, 0, len(creds))
+	port := NaivePublicPort(settings, inbound)
+	transport := NaiveTransport(inbound)
+	creds := inbound.Profiles
 	if len(creds) == 0 {
-		link := model.ClientLink{
-			Name:      inbound.Name,
-			Protocol:  inbound.Protocol,
-			Transport: inbound.Transport,
-			Port:      inbound.Port,
-			URI:       clientaccess.NaiveClientURI(endpoint, inbound.Port, p.naiveFallbackUsername(settings, inbound), p.naiveFallbackPassword(settings, inbound)),
+		username := naiveUsername(settings, inbound)
+		password := naivePassword(settings, inbound)
+		if username == "" || password == "" {
+			return nil, errors.New("no profiles")
 		}
-		return []model.ClientLink{link}, nil
+		creds = []model.ClientProfile{{Name: inbound.Name, Username: username, Password: password, Enabled: true}}
 	}
-	for _, cred := range creds {
-		link := model.ClientLink{
-			Name:      inbound.Name + "/" + cred.Name,
-			Protocol:  inbound.Protocol,
-			Transport: inbound.Transport,
-			Port:      inbound.Port,
-			URI:       clientaccess.NaiveClientURI(endpoint, inbound.Port, cred.Username, cred.Password),
+	var links []model.ClientLink
+	for _, profile := range creds {
+		name := inbound.Name
+		if profile.Name != "" && profile.Name != inbound.Name {
+			name = inbound.Name + "/" + profile.Name
 		}
-		links = append(links, link)
+		if transport == "tcp" || transport == "dual" {
+			links = append(links, model.ClientLink{
+				Name:      name,
+				Protocol:  "naiveproxy",
+				Transport: "tcp",
+				Port:      port,
+				URI:       naiveURI("https", profile.Username, profile.Password, domain, port, 443),
+			})
+		}
+		if transport == "quic" || transport == "dual" {
+			links = append(links, model.ClientLink{
+				Name:      name + "-quic",
+				Protocol:  "naiveproxy",
+				Transport: "quic",
+				Port:      port,
+				URI:       naiveURI("quic", profile.Username, profile.Password, domain, port, 443),
+			})
+		}
 	}
 	return links, nil
 }
 
-func (Plugin) naiveFallbackUsername(settings model.Settings, inbound model.Inbound) string {
-	username := naiveUsername(settings, inbound)
-	if username == "" {
-		username = settings.NaiveUsername
+func naiveURI(scheme, user, pass, domain string, port, defaultPort int) string {
+	host := domain
+	if port != defaultPort {
+		host = fmt.Sprintf("%s:%d", domain, port)
 	}
-	return username
-}
-
-func (Plugin) naiveFallbackPassword(settings model.Settings, inbound model.Inbound) string {
-	password := naivePassword(settings, inbound)
-	if password == "" {
-		password = settings.NaivePassword
-	}
-	return password
-}
-
-func clientEndpoint(settings model.Settings) string {
-	return strings.TrimSpace(settings.Domain)
+	return fmt.Sprintf("%s://%s:%s@%s", scheme, user, pass, host)
 }

@@ -560,7 +560,16 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				writeError(w, mErr.Error(), http.StatusInternalServerError)
 				return nil
 			}
-			_, _ = s.sessionRegistry().DeleteByUsername(username)
+			if _, dErr := s.sessionRegistry().DeleteUsernamePersisted(username); dErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.delete",
+					Target:  username,
+					Success: false,
+					Error:   dErr.Error(),
+				})
+				writeError(w, dErr.Error(), http.StatusInternalServerError)
+				return dErr
+			}
 			s.recordRequestAudit(r, audit.Record{
 				Action:  "user.delete",
 				Target:  username,

@@ -14,9 +14,14 @@ import (
 
 func TestRunSyncCaddyCertCopiesPairToOutDir(t *testing.T) {
 	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
 
 	root := t.TempDir()
+	caddyCertRoot = root
 	certPath := filepath.Join(root, "certs", "acme-v2", "example.com", "example.com.crt")
 	keyPath := filepath.Join(root, "certs", "acme-v2", "example.com", "example.com.key")
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
@@ -61,13 +66,16 @@ func TestRunSyncCaddyCertRequiresDomain(t *testing.T) {
 func TestRunSyncCaddyCertDefaultsOutDir(t *testing.T) {
 	originalFinder := findCaddyCertPair
 	originalOutDir := defaultCaddyCertOutDir
+	originalRoot := caddyCertRoot
 	defer func() {
 		findCaddyCertPair = originalFinder
 		defaultCaddyCertOutDir = originalOutDir
+		caddyCertRoot = originalRoot
 	}()
 
 	root := t.TempDir()
 	defaultCaddyCertOutDir = root
+	caddyCertRoot = root
 	certPath := filepath.Join(root, "example.com.crt")
 	keyPath := filepath.Join(root, "example.com.key")
 	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
@@ -92,13 +100,18 @@ func TestRunSyncCaddyCertDefaultsOutDir(t *testing.T) {
 
 func TestRunSyncCaddyCertReturnsNotFound(t *testing.T) {
 	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
 
+	caddyCertRoot = t.TempDir()
 	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
 		return caddycert.Pair{}, caddycert.ErrCertificateNotFound
 	}
 
-	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: t.TempDir()}, ProductionConfig{})
+	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: caddyCertRoot}, ProductionConfig{})
 	if err != nil {
 		t.Fatalf("expected no error for missing cert, got %v", err)
 	}
@@ -109,13 +122,18 @@ func TestRunSyncCaddyCertReturnsNotFound(t *testing.T) {
 
 func TestRunSyncCaddyCertPropagatesCertReadError(t *testing.T) {
 	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
 
+	caddyCertRoot = t.TempDir()
 	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
 		return caddycert.Pair{CertPath: "/does/not/exist.crt", KeyPath: "/does/not/exist.key"}, nil
 	}
 
-	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: t.TempDir()}, ProductionConfig{})
+	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: caddyCertRoot}, ProductionConfig{})
 	if err == nil {
 		t.Fatal("expected cert read error")
 	}
@@ -123,9 +141,14 @@ func TestRunSyncCaddyCertPropagatesCertReadError(t *testing.T) {
 
 func TestRunSyncCaddyCertPropagatesKeyReadError(t *testing.T) {
 	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
 
 	root := t.TempDir()
+	caddyCertRoot = root
 	certPath := filepath.Join(root, "cert.crt")
 	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
 		t.Fatal(err)
@@ -135,7 +158,7 @@ func TestRunSyncCaddyCertPropagatesKeyReadError(t *testing.T) {
 		return caddycert.Pair{CertPath: certPath, KeyPath: "/does/not/exist.key"}, nil
 	}
 
-	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: t.TempDir()}, ProductionConfig{})
+	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: caddyCertRoot}, ProductionConfig{})
 	if err == nil {
 		t.Fatal("expected key read error")
 	}
@@ -143,9 +166,14 @@ func TestRunSyncCaddyCertPropagatesKeyReadError(t *testing.T) {
 
 func TestRunSyncCaddyCertFailsToCreateOutDir(t *testing.T) {
 	original := findCaddyCertPair
-	defer func() { findCaddyCertPair = original }()
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
 
 	root := t.TempDir()
+	caddyCertRoot = root
 	certPath := filepath.Join(root, "cert.crt")
 	keyPath := filepath.Join(root, "cert.key")
 	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
@@ -168,6 +196,49 @@ func TestRunSyncCaddyCertFailsToCreateOutDir(t *testing.T) {
 	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: outDir}, ProductionConfig{})
 	if err == nil {
 		t.Fatal("expected mkdir error")
+	}
+}
+
+func TestRunSyncCaddyCertRejectsTraversalDomain(t *testing.T) {
+	original := findCaddyCertPair
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
+
+	caddyCertRoot = t.TempDir()
+	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "../../etc/cron.d/x", OutDir: caddyCertRoot}, ProductionConfig{})
+	if err == nil {
+		t.Fatal("expected traversal domain rejection")
+	}
+}
+
+func TestRunSyncCaddyCertRejectsTraversalOutDir(t *testing.T) {
+	original := findCaddyCertPair
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
+
+	root := t.TempDir()
+	caddyCertRoot = root
+	certPath := filepath.Join(root, "cert.crt")
+	keyPath := filepath.Join(root, "cert.key")
+	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
+		return caddycert.Pair{CertPath: certPath, KeyPath: keyPath}, nil
+	}
+
+	_, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: filepath.Join(root, "..", "escape")}, ProductionConfig{})
+	if err == nil {
+		t.Fatal("expected traversal OutDir rejection")
 	}
 }
 

@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	CaddyfileSubpath       = "caddy/panel.Caddyfile"
+	CaddyfileSubpath       = "caddy/config.json"
+	CaddyJSONConfigSubpath = "caddy/config.json"
 	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
 	MieruConfigSubpath     = "mieru/server_config.json"
 	WarpConfigSubpath      = "sing-box/warp.json"

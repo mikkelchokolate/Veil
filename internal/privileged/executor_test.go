@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -56,6 +57,168 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 	}
 	if result.BackupID == "" || !reflect.DeepEqual(result.WrittenArtifacts, []string{"mieru"}) {
 		t.Fatalf("unexpected promote result: %+v", result)
+	}
+}
+
+func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testing.T) {
+	oldEffectiveUID := effectiveUID
+	oldLookupUser := lookupUser
+	oldChownPath := chownPath
+	defer func() {
+		effectiveUID = oldEffectiveUID
+		lookupUser = oldLookupUser
+		chownPath = oldChownPath
+	}()
+
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(string) (*user.User, error) {
+		return &user.User{Uid: "123", Gid: "456"}, nil
+	}
+	ownershipErr := errors.New("injected chown failure")
+	chownPath = func(string, int, int) error { return ownershipErr }
+
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "mieru", "server_config.json")
+	destination := filepath.Join(root, "generated", "mieru", "server_config.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte(`{"portBindings":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{
+		PromotionBackupRoot: filepath.Join(root, "backups"),
+	})
+	_, err := executor.Promote(context.Background(), ResolvedPromotion{
+		Artifacts: []ResolvedArtifact{{
+			ID:          "mieru/server_config.json",
+			Source:      source,
+			Destination: destination,
+		}},
+	})
+	if !errors.Is(err, ownershipErr) {
+		t.Fatalf("promote error = %v, want injected ownership error", err)
+	}
+}
+
+// TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval covers the
+// exfiltration vector: if a managed artifact slated for removal is replaced by
+// a symlink pointing outside the managed root, backupPromotionDestination must
+// not read the symlink target into the promotion backup (which the caller could
+// then retrieve via the returned backup ID). The helper must detect the symlink
+// and skip the content backup instead of following it.
+func TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval(t *testing.T) {
+	root := t.TempDir()
+	backupRoot := filepath.Join(root, "backups")
+	destination := filepath.Join(root, "generated", "caddy", "legacy.Caddyfile")
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(root, "outside-secret")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET-OUTSIDE-ROOT"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, destination); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: backupRoot})
+	result, err := executor.Promote(context.Background(), ResolvedPromotion{
+		RemoveArtifacts: []ResolvedArtifact{{
+			ID:          "caddy/legacy.Caddyfile",
+			Destination: destination,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("promote removal: %v", err)
+	}
+	// The symlink itself is removed.
+	if _, statErr := os.Lstat(destination); !os.IsNotExist(statErr) {
+		t.Fatalf("expected symlink to be removed, stat err=%v", statErr)
+	}
+	// No backup artifact may contain the outside secret.
+	for _, backupPath := range result.BackupArtifacts {
+		body, readErr := os.ReadFile(backupPath)
+		if readErr != nil {
+			continue
+		}
+		if string(body) == "TOP-SECRET-OUTSIDE-ROOT" {
+			t.Fatalf("symlink target content was exfiltrated into backup %s", backupPath)
+		}
+	}
+}
+
+func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
+	oldEffectiveUID := effectiveUID
+	oldLookupUser := lookupUser
+	oldChownPath := chownPath
+	oldChmodPath := chmodPath
+	defer func() {
+		effectiveUID = oldEffectiveUID
+		lookupUser = oldLookupUser
+		chownPath = oldChownPath
+		chmodPath = oldChmodPath
+	}()
+
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(name string) (*user.User, error) {
+		if name != "veil" {
+			t.Fatalf("lookup user = %q, want veil", name)
+		}
+		return &user.User{Uid: "123", Gid: "456"}, nil
+	}
+	type chownCall struct {
+		path     string
+		uid, gid int
+	}
+	type chmodCall struct {
+		path string
+		mode os.FileMode
+	}
+	var chowns []chownCall
+	var chmods []chmodCall
+	chownPath = func(path string, uid, gid int) error {
+		chowns = append(chowns, chownCall{path: path, uid: uid, gid: gid})
+		return nil
+	}
+	chmodPath = func(path string, mode os.FileMode) error {
+		chmods = append(chmods, chmodCall{path: path, mode: mode})
+		return nil
+	}
+
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "caddy", "config.json")
+	destination := filepath.Join(root, "generated", "caddy", "config.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte(`{"apps":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: []ResolvedArtifact{{
+		ID:          "caddy/config.json",
+		Source:      source,
+		Destination: destination,
+	}}}); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+
+	wantChowns := []chownCall{
+		{path: filepath.Dir(destination), uid: 0, gid: 456},
+		{path: destination, uid: 0, gid: 456},
+	}
+	wantChmods := []chmodCall{
+		{path: filepath.Dir(destination), mode: 0o750},
+		{path: destination, mode: 0o640},
+	}
+	if !reflect.DeepEqual(chowns, wantChowns) {
+		t.Fatalf("chown calls = %+v, want %+v", chowns, wantChowns)
+	}
+	if !reflect.DeepEqual(chmods, wantChmods) {
+		t.Fatalf("chmod calls = %+v, want %+v", chmods, wantChmods)
 	}
 }
 
@@ -758,6 +921,30 @@ func TestPromoteResolvedArtifactsSourceReadError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected source read error")
+	}
+}
+
+// TestPromoteResolvedArtifactsRejectsSymlinkedSource covers the promote-time
+// exfiltration vector: a staging source swapped for a symlink after policy
+// resolution must not be read into the generated root.
+func TestPromoteResolvedArtifactsRejectsSymlinkedSource(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "staging", "cfg.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, source); err != nil {
+		t.Fatal(err)
+	}
+	_, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), time.Now, ResolvedPromotion{
+		Artifacts: []ResolvedArtifact{{ID: "cfg", Source: source, Destination: filepath.Join(root, "gen", "cfg.json")}},
+	})
+	if err == nil {
+		t.Fatal("expected symlinked source to be rejected")
 	}
 }
 

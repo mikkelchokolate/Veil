@@ -34,7 +34,7 @@ func (b SetBuilder) Build() (map[string]string, error) {
 		return nil, err
 	}
 	paths := NewPathsWithLiveRoot(input.ApplyRoot, input.LiveRoot)
-	if _, exists := configs[paths.Caddyfile()]; !exists && input.PanelAccess != nil {
+	if _, exists := configs[paths.CaddyJSON()]; !exists && input.PanelAccess != nil {
 		artifact, ok, err := input.PanelAccess(paths)
 		if err != nil {
 			return nil, err

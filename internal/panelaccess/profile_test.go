@@ -48,9 +48,9 @@ func TestProfileBuildsPanelCaddyAccessMaterial(t *testing.T) {
 	if material.WebBasePath == "" || !strings.HasPrefix(material.WebBasePath, "/") || !strings.HasSuffix(material.WebBasePath, "/") {
 		t.Fatalf("web base path = %q", material.WebBasePath)
 	}
-	for _, want := range []string{"panel.example.com", "reverse_proxy 127.0.0.1:2096", "handle " + strings.TrimRight(material.WebBasePath, "/") + "/*"} {
-		if !strings.Contains(material.Caddyfile, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, material.Caddyfile)
+	for _, want := range []string{"panel.example.com", "127.0.0.1:2096", material.WebBasePath} {
+		if !strings.Contains(material.CaddyJSON, want) {
+			t.Fatalf("CaddyJSON missing %q:\n%s", want, material.CaddyJSON)
 		}
 	}
 }

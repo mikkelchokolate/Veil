@@ -40,17 +40,31 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 		}
 	}
 
-	if needsDNS && strings.TrimSpace(request.Settings.Domain) != "" && v.DNS != nil {
-		if addresses, err := v.DNS.LookupHost(ctx, request.Settings.Domain); err != nil || len(addresses) == 0 {
-			response.Issues = append(response.Issues, issue(
-				"dns_unresolved",
-				SeverityWarning,
-				"settings.domain",
-				"",
-				"Configured domain does not resolve",
-				"Create or correct the DNS record before applying this configuration.",
-				"live-host",
-			))
+	if needsDNS && v.DNS != nil {
+		checked := map[string]struct{}{}
+		for _, inbound := range request.Inbounds {
+			if !inbound.Enabled || !protocolNeedsDomain(request.Settings, inbound) {
+				continue
+			}
+			domain := model.ResolveInboundDomain(inbound, request.Settings)
+			if domain == "" {
+				continue
+			}
+			if _, ok := checked[domain]; ok {
+				continue
+			}
+			checked[domain] = struct{}{}
+			if addresses, err := v.DNS.LookupHost(ctx, domain); err != nil || len(addresses) == 0 {
+				response.Issues = append(response.Issues, issue(
+					"dns_unresolved",
+					SeverityWarning,
+					model.InboundDomainField,
+					inbound.Name,
+					fmt.Sprintf("Configured domain %q does not resolve", domain),
+					"Create or correct the DNS record before applying this configuration.",
+					"live-host",
+				))
+			}
 		}
 	}
 
@@ -223,20 +237,9 @@ func unitForInbound(protocol string, inbound model.Inbound, descriptors []servic
 
 func requiredFieldIssues(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	issues := []model.ValidationIssue{}
-	if protocolNeedsDomain(settings, inbound) && strings.TrimSpace(settings.Domain) == "" {
-		issues = append(issues, issue(
-			"domain_required", SeverityError, "settings.domain", inbound.Name,
-			"This protocol requires a public domain",
-			"Set the domain that resolves to this host.", "candidate",
-		))
-	}
-	if protocolNeedsEmail(settings, inbound) && strings.TrimSpace(settings.Email) == "" {
-		issues = append(issues, issue(
-			"email_required", SeverityError, "settings.email", inbound.Name,
-			"This protocol requires an email address",
-			"Set the ACME contact email.", "candidate",
-		))
-	}
+	// Domain/email presence and validity are now checked by protocol-specific
+	// ValidateInbound implementations, which can distinguish between inbound and
+	// global fields. Only the generic credential check remains here.
 	if !hasCredential(settings, inbound) {
 		issues = append(issues, issue(
 			"credential_required", SeverityError, "password", inbound.Name,
@@ -269,18 +272,6 @@ func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {
 		return false
 	}
 	return validator.NeedsDomain(settings, inbound)
-}
-
-func protocolNeedsEmail(settings model.Settings, inbound model.Inbound) bool {
-	p, ok := protocolRegistry().Get(inbound.Protocol)
-	if !ok {
-		return false
-	}
-	validator, ok := protocols.AsValidator(p)
-	if !ok {
-		return false
-	}
-	return validator.NeedsEmail(settings, inbound)
 }
 
 func hasCredential(settings model.Settings, inbound model.Inbound) bool {

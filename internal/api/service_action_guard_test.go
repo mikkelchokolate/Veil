@@ -12,7 +12,7 @@ func TestServiceActionRejectsConcurrentMutation(t *testing.T) {
 	state.serviceActionMu.Lock()
 	defer state.serviceActionMu.Unlock()
 
-	request := httptest.NewRequest(http.MethodPost, "/api/services/caddy-panel/restart", strings.NewReader(`{"confirm":true}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/services/caddy/restart", strings.NewReader(`{"confirm":true}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 

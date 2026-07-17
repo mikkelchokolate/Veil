@@ -42,7 +42,7 @@ func TestPanelInstallWritesDormantManagedRuntimeUnitsWithoutProxyConfig(t *testi
 		t.Fatalf("Panel install should write dormant olcRTC unit template, stat err: %v", err)
 	}
 	if _, err := os.Stat(result.CaddyfilePath); !os.IsNotExist(err) {
-		t.Fatalf("Panel install should not write Caddyfile, stat err: %v", err)
+		t.Fatalf("Panel install should not write Caddy config, stat err: %v", err)
 	}
 	if _, err := os.Stat(result.Hysteria2Path); !os.IsNotExist(err) {
 		t.Fatalf("Panel install should not write Hysteria2 config, stat err: %v", err)

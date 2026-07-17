@@ -90,7 +90,7 @@ func TestRenderConfigWithInbounds(t *testing.T) {
 	if arts[0].Body == "" {
 		t.Fatal("expected non-empty rendered body")
 	}
-	for _, want := range []string{"provider: telemost", "transport: vp8channel", `id: "room-alpha"`, `key: "secret-key-used-for-render"`} {
+	for _, want := range []string{"provider: telemost", "transport: vp8channel", "id: room-alpha", "key: secret-key-used-for-render"} {
 		if !strings.Contains(arts[0].Body, want) {
 			t.Errorf("rendered body missing %q; body:\n%s", want, arts[0].Body)
 		}
@@ -194,7 +194,7 @@ func TestRenderConfigFieldPrecedence(t *testing.T) {
 			if !strings.Contains(body, "transport: "+tc.wantTransport) {
 				t.Errorf("transport mismatch: want %q, body:\n%s", tc.wantTransport, body)
 			}
-			if !strings.Contains(body, `id: "`+tc.wantRoom+`"`) {
+			if !strings.Contains(body, "id: "+tc.wantRoom) {
 				t.Errorf("room mismatch: want %q, body:\n%s", tc.wantRoom, body)
 			}
 		})

@@ -17,11 +17,10 @@ func TestManagedRuntimeCatalogCentralizesCanonicalUnits(t *testing.T) {
 		name, actionName string
 	}{
 		"veil.service":             {"veil", "veil"},
-		"veil-caddy@panel.service": {"caddy-panel", "caddy-panel"},
+		"veil-caddy.service":       {"veil-caddy.service", "caddy"},
 		"veil-hysteria2@h.service": {"hysteria2-h", "hysteria2-h"},
 		"veil-mieru.service":       {"mieru", "mieru"},
 		"veil-olcrtc@o.service":    {"olcrtc-o", "olcrtc-o"},
-		"veil-caddy@n.service":     {"caddy-n", "caddy-n"},
 		"veil-warp.service":        {"sing-box", "sing-box"},
 	}
 
@@ -48,7 +47,7 @@ func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T
 		{Name: "o", Protocol: "olcrtc", Enabled: true},
 	}, WarpConfig{Enabled: true})
 	for _, tc := range []struct{ key, action string }{
-		{"naiveproxy", "reload veil-caddy@n.service"},
+		{"naiveproxy", "reload veil-caddy.service"},
 		{"hysteria2", "restart veil-hysteria2@h.service"},
 		{"mieru", "restart veil-mieru.service"},
 		{"sing-box", "restart veil-warp.service"},
@@ -62,11 +61,11 @@ func TestManagedRuntimeCatalogBuildsApplyActionsForProtocolsAndWarp(t *testing.T
 }
 
 func TestManagedRuntimeCatalogBuildsServiceActionCommandsFromCanonicalUnits(t *testing.T) {
-	command, ok := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "caddy"}, nil, WarpConfig{}).ServiceActionCommand("caddy-panel", "restart")
+	command, ok := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "caddy"}, nil, WarpConfig{}).ServiceActionCommand("caddy", "restart")
 	if !ok {
-		t.Fatal("caddy-panel action name should map to managed panel Caddy runtime")
+		t.Fatal("caddy action name should map to managed panel Caddy runtime")
 	}
-	want := []string{"systemctl", "restart", "veil-caddy@panel.service"}
+	want := []string{"systemctl", "restart", "veil-caddy.service"}
 	if !equalStrings(command, want) {
 		t.Fatalf("command = %+v, want %+v", command, want)
 	}
@@ -76,11 +75,11 @@ func TestManagedRuntimeCatalogBuildsPromotedCommandsFromLiveFiles(t *testing.T) 
 	root := t.TempDir()
 	catalog := NewManagedRuntimeCatalogForSnapshot(Settings{PanelAccess: "caddy"}, []Inbound{{Name: "m", Protocol: "mieru", Enabled: true}}, WarpConfig{})
 	commands := catalog.PromotedCommands(root, []string{
-		filepath.Join(root, "live", "caddy", "panel.Caddyfile"),
+		filepath.Join(root, "live", "caddy", "config.json"),
 		filepath.Join(root, "live", "mieru", "server_config.json"),
 	})
 	want := [][]string{
-		{"systemctl", "reload", "veil-caddy@panel.service"},
+		{"systemctl", "reload", "veil-caddy.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
 	}
 	if len(commands) != len(want) {
@@ -100,7 +99,7 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 		{Name: "o", Protocol: "olcrtc", Enabled: true},
 	}, WarpConfig{Enabled: true})
 	for _, command := range [][]string{
-		{"systemctl", "reload", "veil-caddy@panel.service"},
+		{"systemctl", "reload", "veil-caddy.service"},
 		{"systemctl", "restart", "veil-hysteria2@h.service"},
 		{"systemctl", "restart", "veil-warp.service"},
 		{"systemctl", "restart", "veil-mieru.service"},
@@ -110,8 +109,8 @@ func TestManagedRuntimeCatalogAllowsOnlyPromotedApplyCommands(t *testing.T) {
 			t.Fatalf("expected promoted command allowed: %+v", command)
 		}
 	}
-	if catalog.AllowsPromotedAction([]string{"systemctl", "restart", "veil-caddy@panel.service"}) {
-		t.Fatal("Caddy panel has reload semantics, restart should not be promoted")
+	if catalog.AllowsPromotedAction([]string{"systemctl", "restart", "veil-caddy.service"}) {
+		t.Fatal("Caddy has reload semantics, restart should not be promoted")
 	}
 	if catalog.AllowsPromotedAction([]string{"systemctl", "reload", "veil-mieru.service"}) {
 		t.Fatal("Mieru has no reload semantics in its managed unit")
@@ -134,15 +133,14 @@ func TestNewManagedRuntimeCatalogForMultipleInbounds(t *testing.T) {
 	// Veil is always present
 	// hysteria2 has 2 named units
 	// olcrtc has 1 named unit
-	// naive proxy has one unit per enabled inbound
+	// naive proxy has a single consolidated Caddy unit
 	// sing-box is present because warp is enabled
 	expectedUnits := map[string]bool{
 		"veil.service":                  true,
 		"veil-hysteria2@vip.service":    true,
 		"veil-hysteria2@public.service": true,
 		"veil-olcrtc@rtc1.service":      true,
-		"veil-caddy@caddy-a.service":    true,
-		"veil-caddy@caddy-b.service":    true,
+		"veil-caddy.service":            true,
 		"veil-warp.service":             true,
 	}
 
@@ -188,7 +186,7 @@ func TestManagedRuntimeCatalogPanelCaddyHasEmptyProtocolInFallback(t *testing.T)
 	for _, settings := range []Settings{{}, {PanelAccess: "caddy"}} {
 		catalog := NewManagedRuntimeCatalogFor(settings, nil, WarpConfig{})
 		for _, rt := range catalog.Runtimes() {
-			if rt.Unit == "veil-caddy@panel.service" && rt.Protocol != "" {
+			if rt.Unit == unitCaddy && rt.Protocol != "" {
 				t.Fatalf("panel caddy runtime should have empty Protocol in fallback catalog, got %q", rt.Protocol)
 			}
 		}
@@ -199,11 +197,11 @@ func TestManagedRuntimeCatalogPanelCaddyReplacesNaiveProxyFallback(t *testing.T)
 	catalog := NewManagedRuntimeCatalogFor(Settings{PanelAccess: "caddy"}, nil, WarpConfig{})
 	found := false
 	for _, rt := range catalog.Runtimes() {
-		if rt.Unit != "veil-caddy@panel.service" {
+		if rt.Unit != unitCaddy {
 			continue
 		}
 		found = true
-		if rt.Name != "caddy-panel" || rt.ActionName != "caddy-panel" || rt.Protocol != "" {
+		if rt.Name != unitCaddy || rt.ActionName != "caddy" || rt.Protocol != "" {
 			t.Fatalf("panel caddy runtime has unexpected fields in fallback catalog: %+v", rt)
 		}
 	}

@@ -40,8 +40,11 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		}
 		record := livePromotionRecord{LivePath: livePath}
 		if existing, err := os.ReadFile(livePath); err == nil {
-			relPath := strings.TrimPrefix(livePath, filepath.VolumeName(livePath))
-			backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
+			relPath, relErr := filepath.Rel(p.applyRoot, livePath)
+			if relErr != nil {
+				return nil, nil, nil, relErr
+			}
+			backupPath := filepath.Join(backupRoot, filepath.ToSlash(relPath))
 			if err := atomicfile.Write(backupPath, existing, 0o600, 0o700); err != nil {
 				return nil, nil, nil, err
 			}
@@ -67,8 +70,11 @@ func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, 
 		if err != nil {
 			continue
 		}
-		relPath := strings.TrimPrefix(orphanPath, filepath.VolumeName(orphanPath))
-		backupPath := filepath.Join(backupRoot, strings.TrimPrefix(filepath.ToSlash(relPath), "/"))
+		relPath, relErr := filepath.Rel(p.applyRoot, orphanPath)
+		if relErr != nil {
+			return nil, nil, nil, relErr
+		}
+		backupPath := filepath.Join(backupRoot, filepath.ToSlash(relPath))
 		if err := atomicfile.Write(backupPath, body, 0o600, 0o700); err != nil {
 			return nil, nil, nil, err
 		}
@@ -142,6 +148,13 @@ func scanLiveConfigOrphans(liveRoot string, liveFiles []string) ([]string, error
 func liveConfigOrphanDirs() []liveConfigOrphanDir {
 	dirs := []liveConfigOrphanDir{}
 	seen := map[liveConfigOrphanDir]bool{}
+	// The consolidated Caddy JSON migration replaced per-inbound Caddyfiles and
+	// veil-caddy@<name>.service instances. Keep scanning the legacy extension so
+	// the first Apply after an upgrade can remove those files and retire their
+	// units instead of leaving several Caddy processes sharing :443 and :2019.
+	legacyCaddy := liveConfigOrphanDir{subpath: "caddy", ext: ".Caddyfile"}
+	dirs = append(dirs, legacyCaddy)
+	seen[legacyCaddy] = true
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		cr, ok := protocols.AsConfigRenderer(plugin)
@@ -231,6 +244,9 @@ func UnitForLiveConfig(livePath string) (string, bool) {
 }
 
 func unitForPath(slashPath string) (string, bool) {
+	if unit, ok := legacyCaddyUnitForPath(slashPath); ok {
+		return unit, true
+	}
 	registry := protocols.NewRegistry()
 
 	// Exact match covers aggregated units (mieru) and any artifact whose path
@@ -313,11 +329,37 @@ func unitForPath(slashPath string) (string, bool) {
 		return unit, true
 	}
 
+	// The consolidated Caddy JSON config is not a per-instance template; map it
+	// to the single veil-caddy.service unit explicitly.
+	if slashPath == generatedconfig.CaddyJSONConfigSubpath || strings.HasSuffix(slashPath, "/"+generatedconfig.CaddyJSONConfigSubpath) {
+		return unitCaddy, true
+	}
+
 	// WARP is not a protocol plugin; handle it explicitly.
 	if slashPath == generatedconfig.WarpConfigSubpath || strings.HasSuffix(slashPath, "/"+generatedconfig.WarpConfigSubpath) {
 		return renderer.UnitWarp, true
 	}
 	return "", false
+}
+
+func legacyCaddyUnitForPath(slashPath string) (string, bool) {
+	clean := filepath.ToSlash(filepath.Clean(slashPath))
+	marker := "caddy/"
+	if idx := strings.LastIndex(clean, "/"+marker); idx >= 0 {
+		clean = clean[idx+1:]
+	}
+	if !strings.HasPrefix(clean, marker) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(clean, marker)
+	if !strings.HasSuffix(rest, ".Caddyfile") {
+		return "", false
+	}
+	name := strings.TrimSuffix(rest, ".Caddyfile")
+	if name == "" || strings.Contains(name, "/") || !inbounds.IsSafeName(name) {
+		return "", false
+	}
+	return "veil-caddy@" + name + ".service", true
 }
 
 func (p LiveConfigPromotion) LivePathForStagedConfig(stagedPath string) (string, bool) {

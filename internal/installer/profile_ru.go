@@ -29,7 +29,7 @@ type RURecommendedProfile struct {
 	PanelTLSKeyPEM    string
 	WebBasePath       string
 	InstallPanelCaddy bool
-	Caddyfile         string
+	CaddyJSON         string
 	MasqueradeURL     string
 	FallbackRoot      string
 }
@@ -123,7 +123,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 		PanelTLSKeyPEM:    panelAccess.PanelTLSKeyPEM,
 		WebBasePath:       panelAccess.WebBasePath,
 		InstallPanelCaddy: panelAccess.InstallPanelCaddy,
-		Caddyfile:         panelAccess.Caddyfile,
+		CaddyJSON:         panelAccess.CaddyJSON,
 		MasqueradeURL:     masqueradeURL,
 		FallbackRoot:      fallbackRoot,
 	}, nil

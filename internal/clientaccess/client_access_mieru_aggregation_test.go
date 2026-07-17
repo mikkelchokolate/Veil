@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestBuildClientLinksMieruIgnoresInboundDomain(t *testing.T) {
+	response, err := BuildClientLinks(Settings{}, []Inbound{
+		{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "mieru-pass", ProtocolFields: map[string]any{"domain": "inbound.example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("BuildClientLinks: %v", err)
+	}
+	if response.Count != 0 {
+		t.Fatalf("expected no mieru links when only inbound domain is set, got %+v", response)
+	}
+}
+
 func TestBuildClientLinksAggregatesMieruTransportBindingsForClientProfile(t *testing.T) {
 	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{
 		{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: true}}},

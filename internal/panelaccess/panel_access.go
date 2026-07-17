@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
@@ -55,15 +58,28 @@ func (p PanelAccess) CaddyRoute() (CaddyRoute, bool, error) {
 }
 
 func (p PanelAccess) GeneratedConfig(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {
-	route, ok, err := p.CaddyRoute()
-	if err != nil || !ok {
+	if _, ok, err := p.CaddyRoute(); err != nil || !ok {
 		return generatedconfig.GeneratedConfigArtifact{}, ok, err
 	}
-	body, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{Domain: p.settings.Domain, Email: p.settings.Email, PanelPort: route.Port, WebBasePath: route.WebBasePath})
+	if strings.TrimSpace(p.settings.Domain) == "" {
+		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("domain is required for caddy Panel access")
+	}
+	if !hasAcmeEmail(p.settings) {
+		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("ACME email is required for caddy Panel access")
+	}
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(p.settings, nil)
 	if err != nil {
 		return generatedconfig.GeneratedConfigArtifact{}, false, err
 	}
-	return generatedconfig.GeneratedConfigArtifact{Path: paths.Caddyfile(), Body: body}, true, nil
+	caps, err := caddycapabilities.Probe("")
+	if err != nil {
+		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+	}
+	body, err := renderer.RenderCaddyJSON(plan, caps)
+	if err != nil {
+		return generatedconfig.GeneratedConfigArtifact{}, false, err
+	}
+	return generatedconfig.GeneratedConfigArtifact{Path: paths.CaddyJSON(), Body: string(body)}, true, nil
 }
 
 func (p PanelAccess) ApplyIntent(inbounds []model.Inbound) ApplyIntent {
@@ -71,42 +87,14 @@ func (p PanelAccess) ApplyIntent(inbounds []model.Inbound) ApplyIntent {
 	if p.settings.PanelAccess != "caddy" {
 		return intent
 	}
-	if p.settings.Domain == "" || p.settings.Email == "" {
+	if p.settings.Domain == "" || !hasAcmeEmail(p.settings) {
 		intent.Errors = append(intent.Errors, "--domain and --email are required for caddy Panel access")
 	} else if _, _, err := p.CaddyRoute(); err != nil {
 		intent.Errors = append(intent.Errors, err.Error())
 	} else {
-		var panelInbound *model.Inbound
-		hasInboundOn443 := false
-		for _, inbound := range inbounds {
-			if inbound.Enabled && p.protocolRequiresCaddy(inbound.Protocol) {
-				if inbound.Port == 443 {
-					hasInboundOn443 = true
-					break
-				}
-			}
-		}
-		for _, inbound := range inbounds {
-			if inbound.Enabled && p.protocolRequiresCaddy(inbound.Protocol) {
-				if inbound.Port == 443 || (!hasInboundOn443 && panelInbound == nil) {
-					copied := inbound
-					panelInbound = &copied
-					if inbound.Port == 443 {
-						break
-					}
-				}
-			}
-		}
-
-		if panelInbound != nil {
-			intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/"+panelInbound.Name+".Caddyfile")
-			intent.Actions = append(intent.Actions, "reload veil-caddy@"+panelInbound.Name+".service")
-			intent.Runtimes = append(intent.Runtimes, "veil-caddy@"+panelInbound.Name+".service")
-		} else {
-			intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/panel.Caddyfile")
-			intent.Actions = append(intent.Actions, "reload veil-caddy@panel.service")
-			intent.Runtimes = append(intent.Runtimes, "veil-caddy@panel.service")
-		}
+		intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/config.json")
+		intent.Actions = append(intent.Actions, "reload veil-caddy.service")
+		intent.Runtimes = append(intent.Runtimes, "veil-caddy.service")
 	}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled {

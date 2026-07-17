@@ -83,7 +83,7 @@ func TestPanelOnlyInstallDoesNotRequireDomainAndWritesNoProxyConfigs(t *testing.
 	if err != nil {
 		t.Fatalf("BuildRURecommendedProfile panel-only: %v", err)
 	}
-	if profile.InstallPanelCaddy || profile.Caddyfile != "" {
+	if profile.InstallPanelCaddy || profile.CaddyJSON != "" {
 		t.Fatalf("panel-only profile should not include proxy artifacts: %+v", profile)
 	}
 	dir := t.TempDir()
@@ -96,7 +96,7 @@ func TestPanelOnlyInstallDoesNotRequireDomainAndWritesNoProxyConfigs(t *testing.
 		t.Fatalf("ApplyRURecommendedProfile: %v", err)
 	}
 	if _, err := os.Stat(result.CaddyfilePath); !os.IsNotExist(err) {
-		t.Fatalf("panel-only install should not write Caddyfile, stat err: %v", err)
+		t.Fatalf("panel-only install should not write Caddy config, stat err: %v", err)
 	}
 	if _, err := os.Stat(result.Hysteria2Path); !os.IsNotExist(err) {
 		t.Fatalf("panel-only install should not write Hysteria2 config, stat err: %v", err)

@@ -43,13 +43,13 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 		PanelAuthToken:    "token",
 		PanelListen:       "127.0.0.1:2096",
 		InstallPanelCaddy: true,
-		Caddyfile:         "panel caddy",
+		CaddyJSON:         "{}",
 	})
 	files, err := material.Files()
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	wants := []string{"/etc/veil/generated/caddy/panel.Caddyfile", "/var/lib/veil/www/index.html", "/etc/veil/veil.env"}
+	wants := []string{"/etc/veil/generated/caddy/config.json", "/var/lib/veil/www/index.html", "/etc/veil/veil.env"}
 	for _, name := range systemdunits.Names() {
 		wants = append(wants, "/etc/systemd/system/"+name)
 	}

@@ -61,7 +61,9 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		if err != nil {
 			return model.ApplyResponse{}, http.StatusInternalServerError, err
 		}
-		response.LiveApplied = true
+		// Report LiveApplied only when at least one file was actually promoted;
+		// an idempotent no-op apply must not claim a live change happened.
+		response.LiveApplied = len(liveFiles) > 0
 		response.LiveFiles = liveFiles
 		response.BackupFiles = backupFiles
 		if req.ApplyServices {

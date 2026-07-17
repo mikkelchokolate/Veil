@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 		ApplyRoot: t.TempDir(),
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -34,7 +35,7 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -55,10 +56,14 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive.Caddyfile")]
-	for _, want := range []string{"basic_auth alice alice-pass", "basic_auth bob bob-pass"} {
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	for _, want := range []string{
+		"forward_proxy",
+		forwardProxyJSONCredential("alice", "alice-pass"),
+		forwardProxyJSONCredential("bob", "bob-pass"),
+	} {
 		if !strings.Contains(caddy, want) {
-			t.Fatalf("Caddyfile missing %q:\n%s", want, caddy)
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, caddy)
 		}
 	}
 	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2.yaml")]
@@ -75,7 +80,7 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
-			Email:             "admin@example.com",
+			DefaultAcmeEmail:  "admin@example.com",
 			NaiveUsername:     "veil",
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
@@ -90,12 +95,17 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGeneratedConfigSet: %v", err)
 	}
-	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "naive-vip.Caddyfile")]
-	if !strings.Contains(caddy, "basic_auth veil vip-naive") {
-		t.Fatalf("Caddyfile should use per-inbound naive password:\n%s", caddy)
+	caddy := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	if !strings.Contains(caddy, forwardProxyJSONCredential("veil", "vip-naive")) {
+		t.Fatalf("Caddy JSON should use per-inbound naive password:\n%s", caddy)
 	}
 	hy2 := configs[filepath.Join(applyRoot, "generated", "hysteria2", "hy2-vip.yaml")]
 	if !strings.Contains(hy2, "password: vip-hy2") {
 		t.Fatalf("Hysteria2 config should use per-inbound password:\n%s", hy2)
 	}
+}
+
+func forwardProxyJSONCredential(username, password string) string {
+	basicValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	return base64.StdEncoding.EncodeToString([]byte(basicValue))
 }

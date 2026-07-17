@@ -33,7 +33,7 @@ func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 	if len(response.Configs) != 0 {
 		t.Fatalf("fresh Panel without Inbounds should not plan generated proxy configs: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-caddy@panel.service") || containsString(response.Actions, "reload veil-hysteria2@.service") {
+	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-caddy.service") || containsString(response.Actions, "reload veil-hysteria2@.service") {
 		t.Fatalf("expected only management validation action for fresh Panel: %+v", response.Actions)
 	}
 }
@@ -54,8 +54,8 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	var response ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -64,15 +64,30 @@ func TestManagementApplyPlanRejectsInvalidEnabledInbound(t *testing.T) {
 	if response.Valid {
 		t.Fatalf("expected invalid plan: %+v", response)
 	}
-	if len(response.Errors) == 0 || !strings.Contains(response.Errors[0], "positive port") {
+	foundPort := false
+	foundDomain := false
+	for _, err := range response.Errors {
+		if strings.Contains(err, "positive port") {
+			foundPort = true
+		}
+	}
+	for _, issue := range response.Issues {
+		if issue.Code == "hysteria2_domain_required" {
+			foundDomain = true
+		}
+	}
+	if !foundPort {
 		t.Fatalf("expected positive port validation error: %+v", response.Errors)
+	}
+	if !foundDomain {
+		t.Fatalf("expected hysteria2 domain required issue: %+v", response.Issues)
 	}
 }
 
 func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
-		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"p","hysteria2Password":"hy2"},
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"p","hysteria2Password":"hy2"},
 		"inbounds":[
 			{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true},
 			{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}
@@ -94,13 +109,13 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/naive.Caddyfile") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/hysteria2.yaml") {
+	if !containsString(response.Configs, "/etc/veil/generated/caddy/config.json") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/hysteria2.yaml") {
 		t.Fatalf("expected all enabled Inbound configs in apply plan: %+v", response.Configs)
 	}
 	if containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
 		t.Fatalf("apply plan should not target fallback configs for enabled inbounds: %+v", response.Configs)
 	}
-	if !containsString(response.Actions, "reload veil-caddy@naive.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
+	if !containsString(response.Actions, "reload veil-caddy.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {
 		t.Fatalf("expected all enabled Inbound actions: %+v", response.Actions)
 	}
 	if containsString(response.Actions, "reload veil-caddy@.service") || containsString(response.Actions, "restart veil-hysteria2@.service") {
@@ -123,15 +138,25 @@ func TestManagementApplyPlanRejectsMissingRenderSettingsForEnabledInbound(t *tes
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	var response ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Valid || len(response.Errors) == 0 || !strings.Contains(strings.Join(response.Errors, ";"), "naive username and password are required") {
-		t.Fatalf("expected missing naive credentials validation error: %+v", response)
+	if response.Valid {
+		t.Fatalf("expected invalid plan: %+v", response)
+	}
+	found := false
+	for _, issue := range response.Issues {
+		if issue.Code == "naive_email_required" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected naive_email_required issue: %+v", response)
 	}
 }
 
@@ -151,8 +176,8 @@ func TestManagementApplyRejectsInvalidPlanWithoutWritingFiles(t *testing.T) {
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")); !os.IsNotExist(err) {
 		t.Fatalf("invalid apply should not write files, stat err: %v", err)

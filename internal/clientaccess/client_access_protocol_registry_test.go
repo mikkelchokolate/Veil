@@ -45,3 +45,10 @@ func TestClientAccessProtocolRegistrySkipsUnknownProtocols(t *testing.T) {
 		t.Fatalf("unknown protocol links = %+v", links)
 	}
 }
+
+func TestClientEndpointLowercasesGlobalDomain(t *testing.T) {
+	settings := Settings{Domain: "  VPN.EXAMPLE.COM  "}
+	if got := clientEndpoint(settings); got != "vpn.example.com" {
+		t.Fatalf("clientEndpoint(%q) = %q, want lowercased trimmed domain", settings.Domain, got)
+	}
+}

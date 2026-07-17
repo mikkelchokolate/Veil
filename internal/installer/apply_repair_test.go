@@ -64,5 +64,5 @@ func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
 	if len(repairResult.WrittenFiles) != 1 || repairResult.WrittenFiles[0] != result.CaddyfilePath {
 		t.Fatalf("unexpected repaired files: %+v", repairResult.WrittenFiles)
 	}
-	assertFileContains(t, result.CaddyfilePath, "reverse_proxy 127.0.0.1:2096")
+	assertFileContains(t, result.CaddyfilePath, "127.0.0.1:2096")
 }
