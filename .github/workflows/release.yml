@@ -65,6 +65,15 @@ jobs:
           # Replace the veil stubs with actual upstream binaries so data-path tests
           # exercise real protocol clients/servers instead of failing silently.
           veil runtime install --only hysteria2
+      - name: Install real Caddy runtime for unit tests
+        run: |
+          # The systemd-unit validation step above symlinks /usr/local/bin/caddy to
+          # the veil stub so `caddy list-modules` fails. Unit tests probe Caddy
+          # capabilities, so install a real Caddy earlier in PATH (mirrors ci.yml).
+          mkdir -p /tmp/veil-runtime
+          ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
+          echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
+          /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
       - run: go test ./... -race -count=1
       - run: go test -tags e2e ./test/e2e/... -count=1 -v
       - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
