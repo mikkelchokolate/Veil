@@ -293,6 +293,12 @@ func naiveHasCredential(inb Inbound, settings Settings) bool {
 	if password == "" {
 		password = strings.TrimSpace(inb.NaivePassword)
 	}
+	// InboundPasswordPolicy.ApplyCreate generates the top-level inbound.Password
+	// for fresh naiveproxy inbounds; the renderer (naiveUsers) honours it, so the
+	// validator must too, otherwise create-then-apply is wrongly rejected.
+	if password == "" {
+		password = strings.TrimSpace(inb.Password)
+	}
 	if username == "" && settings.ProtocolFields != nil {
 		if u, ok := settings.ProtocolFields["naiveUsername"].(string); ok {
 			username = strings.TrimSpace(u)
@@ -305,6 +311,9 @@ func naiveHasCredential(inb Inbound, settings Settings) bool {
 	}
 	if username == "" {
 		username = strings.TrimSpace(settings.NaiveUsername)
+	}
+	if username == "" {
+		username = model.DefaultNaiveUsername
 	}
 	if password == "" {
 		password = strings.TrimSpace(settings.NaivePassword)

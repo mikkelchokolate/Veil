@@ -12,6 +12,14 @@ const (
 	InboundEmailField  = "email"
 )
 
+// DefaultNaiveUsername is the single source of truth for the fallback naiveproxy
+// username when none is configured on the inbound or in global settings. The UI
+// schema, validators (apply-plan and protocol plugin), the caddy renderer, and
+// the client-access exporter all share it so that a freshly created naiveproxy
+// inbound (which only has a generated password) resolves a consistent, usable
+// credential instead of producing an empty username / broken client link.
+const DefaultNaiveUsername = "veil"
+
 // InboundDomain returns the inbound-specific domain declared in
 // inbound.ProtocolFields[InboundDomainField], trimmed of whitespace and
 // normalized to lowercase. It does NOT fall back to settings.Domain. An empty

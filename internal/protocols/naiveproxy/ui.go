@@ -12,7 +12,7 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 		{Key: model.InboundEmailField, Label: "ACME email", Type: schema.FieldText, Placeholder: "Optional explicit ACME contact for this domain.", Scope: "inbound"},
 		{Key: "publicPort", Label: "Public port", Type: schema.FieldNumber, Default: 443, Placeholder: "Port Caddy listens on for this inbound.", Scope: "inbound"},
 		{Key: "transport", Label: "Transport", Type: schema.FieldSelect, Required: true, Default: "tcp", Options: []schema.FieldOption{{Label: "tcp", Value: "tcp"}}, Placeholder: "tcp=HTTPS/H2.", Scope: "inbound"},
-		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "inbound"},
+		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "inbound"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, GenerateAction: "password", Scope: "inbound"},
 		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "inbound"},
 	}
@@ -21,7 +21,7 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 // SettingsFieldSchema returns the dynamic fields for global settings.
 func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
-		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "settings"},
+		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "settings"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, Scope: "settings"},
 		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "settings"},
 		{Key: "panelAccess", Label: "Panel Access", Type: schema.FieldSelect, Default: "local", Options: []schema.FieldOption{{Label: "local", Value: "local"}, {Label: "direct", Value: "direct"}, {Label: "caddy", Value: "caddy"}}, Scope: "settings"},
