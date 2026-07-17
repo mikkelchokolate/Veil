@@ -426,6 +426,16 @@ func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
 		if !inb.Enabled || inb.Protocol != "hysteria2" {
 			continue
 		}
+		// Only sync a Caddy cert when the hysteria2 inbound actually serves a
+		// Caddy-managed certificate. This must mirror the renderer's cert
+		// selection (inbound_renderer.go): the Caddy cert is used only when
+		// PanelAccess == "caddy" or the inbound has its own per-inbound domain.
+		// Otherwise the inbound serves the panel cert and requires no sync;
+		// syncing would block apply on cert polling and abort before the
+		// service restart (regression: auto-apply produced no service action).
+		if ctx.state.settings.PanelAccess != "caddy" && model.InboundDomain(inb) == "" {
+			continue
+		}
 		domain := model.ResolveInboundDomain(inb, ctx.state.settings)
 		if domain == "" {
 			continue
