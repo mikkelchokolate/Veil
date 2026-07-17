@@ -62,9 +62,39 @@ jobs:
           systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
       - name: Install real protocol runtime binaries for e2e tests
         run: |
+          set -euo pipefail
           # Replace the veil stubs with actual upstream binaries so data-path tests
           # exercise real protocol clients/servers instead of failing silently.
-          veil runtime install --only hysteria2
+          sudo veil runtime install --only hysteria2
+          sudo veil runtime install --only naiveproxy
+          sudo veil runtime install --only mieru
+          command -v hysteria
+          command -v mita
+      - name: Install real Mieru client
+        run: |
+          set -euo pipefail
+          arch=amd64
+          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/enfein/mieru/releases/latest)"
+          asset_url="$(jq -er --arg arch "$arch" '.assets[] | select(.name | test("^mieru_.*_linux_" + $arch + "\\.tar\\.gz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
+          curl --fail --silent --show-error --location "$asset_url" -o /tmp/mieru-client.tar.gz
+          rm -rf /tmp/mieru-client && mkdir -p /tmp/mieru-client
+          tar -xzf /tmp/mieru-client.tar.gz -C /tmp/mieru-client
+          client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
+          test -n "$client_bin"
+          sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
+          mieru version
+      - name: Install real NaiveProxy client
+        run: |
+          set -euo pipefail
+          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/klzgrad/naiveproxy/releases/latest)"
+          asset_url="$(jq -er '.assets[] | select(.name | test("^naiveproxy-v.*-linux-x64\\.tar\\.xz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
+          curl --fail --silent --show-error --location "$asset_url" -o /tmp/naiveproxy.tar.xz
+          rm -rf /tmp/naiveproxy && mkdir -p /tmp/naiveproxy
+          tar -xJf /tmp/naiveproxy.tar.xz -C /tmp/naiveproxy
+          naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
+          test -n "$naive_bin"
+          sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
+          naive --version
       - name: Install real Caddy runtime for unit tests
         run: |
           # The systemd-unit validation step above symlinks /usr/local/bin/caddy to
