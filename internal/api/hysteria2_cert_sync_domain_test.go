@@ -10,6 +10,9 @@ import "testing"
 func TestHysteria2DomainsLockedFallsBackToSettingsDomain(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev", Domain: "hy.example.com"})
 	state.settings.Domain = "hy.example.com"
+	// PanelAccess "caddy" makes the hysteria2 inbound serve a Caddy-managed cert,
+	// so the settings.Domain fallback must be picked up for Phase-2 cert sync.
+	state.settings.PanelAccess = "caddy"
 	state.inbounds = []Inbound{
 		{Name: "dshdst", Protocol: "hysteria2", Enabled: true, Port: 4236, ProtocolFields: map[string]any{}},
 	}
@@ -31,5 +34,23 @@ func TestHysteria2DomainsLockedPrefersInboundDomain(t *testing.T) {
 	domains := ctx.hysteria2DomainsLocked()
 	if len(domains) != 1 || domains[0] != "inbound.example.com" {
 		t.Fatalf("expected per-inbound domain [inbound.example.com], got %v", domains)
+	}
+}
+
+// A hysteria2 inbound that serves the panel cert (PanelAccess != "caddy" and no
+// per-inbound domain) must NOT trigger a Caddy cert sync, even when a domain
+// resolves via settings.Domain. Regression: syncing blocked apply on cert
+// polling and aborted before the service restart, so auto-apply produced no
+// service action (calls == []) and TestInbound*TriggersAutoApply timed out.
+func TestHysteria2DomainsLockedSkipsPanelCertInbounds(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev", Domain: "hy.example.com"})
+	state.settings.Domain = "hy.example.com"
+	// PanelAccess unset (not "caddy") and no per-inbound domain -> panel cert.
+	state.inbounds = []Inbound{
+		{Name: "dshdst", Protocol: "hysteria2", Enabled: true, Port: 4236, ProtocolFields: map[string]any{}},
+	}
+	ctx := NewManagementApplyContext(state)
+	if domains := ctx.hysteria2DomainsLocked(); len(domains) != 0 {
+		t.Fatalf("expected no cert-sync domains for panel-cert inbound, got %v", domains)
 	}
 }
