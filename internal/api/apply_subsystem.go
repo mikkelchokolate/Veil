@@ -51,6 +51,8 @@ func initClientSubsystem(s *managementState) {
 		defer s.mu.Unlock()
 		s.autoApplyResultLocked(nil, "system")
 	}))
+	s.tokenStore = client.NewTokenStore(s.db)
+	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 }
 
 // applyTrackingEnabled reports whether durable revisions/jobs are available.

@@ -1,0 +1,32 @@
+package client
+
+import "time"
+
+// SubscriptionToken is an unguessable, revocable, rotatable capability token
+// that grants read access to one client's subscription artifact. The database
+// stores only the SHA-256 hash of the token; the plaintext is shown exactly
+// once at creation and is never recoverable afterward.
+type SubscriptionToken struct {
+	ID         string `json:"id"`
+	ClientID   string `json:"clientId"`
+	TokenHash  string `json:"-"` // never serialized
+	Prefix     string `json:"prefix"`
+	Label      string `json:"label,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	ExpiresAt  *int64 `json:"expiresAt,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+	RotatedAt  *int64 `json:"rotatedAt,omitempty"`
+	RevokedAt  *int64 `json:"revokedAt,omitempty"`
+	LastUsedAt *int64 `json:"lastUsedAt,omitempty"`
+}
+
+// IsActive reports whether the token currently grants access.
+func (t SubscriptionToken) IsActive(now time.Time) bool {
+	if t.RevokedAt != nil || !t.Enabled {
+		return false
+	}
+	if t.ExpiresAt != nil && now.Unix() >= *t.ExpiresAt {
+		return false
+	}
+	return true
+}

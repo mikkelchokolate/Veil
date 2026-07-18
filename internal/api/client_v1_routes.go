@@ -334,6 +334,18 @@ func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *ht
 		s.handleV1ClientBindings(w, r, clientID, parts)
 	case "credentials":
 		s.handleV1ClientCredentials(w, r, clientID, parts)
+	case "tokens":
+		if len(parts) == 1 {
+			s.handleV1ClientTokens(w, r, clientID)
+			return
+		}
+		// /tokens/{tokenId} or /tokens/{tokenId}/rotate
+		tokenID := parts[1]
+		action := ""
+		if len(parts) > 2 {
+			action = parts[2]
+		}
+		s.handleV1ClientTokenByID(w, r, clientID, tokenID, action)
 	default:
 		writeNotFound(w)
 	}

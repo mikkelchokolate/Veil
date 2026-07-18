@@ -88,4 +88,6 @@ type managementState struct {
 	applyJobs      *apply.JobStore
 	applyRunner    *apply.Runner
 	clientService  *client.Service
+	tokenStore     *client.TokenStore
+	subRenderer    *client.SubscriptionRenderer
 }
