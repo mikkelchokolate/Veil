@@ -212,3 +212,59 @@ func TestPlanAcmeChallengeBindsPanelDomainPort80ConflictStaysError(t *testing.T)
 		t.Fatalf("expected a single error issue for panel domain, got %v", issues)
 	}
 }
+
+// A hysteria2 inbound reusing the Panel's own domain must NOT switch to
+// http-01: Caddy already serves that domain over TCP (tls-alpn-01 works) and
+// already holds its cert. Regression test for case "hysteria2 on panel domain".
+func TestPlanAcmeChallengeBindsHysteria2OnPanelDomainKeepsTLSALPN(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"panel.example.com": {
+			Domain: "panel.example.com",
+			Email:  "admin@example.com",
+			Owners: CaddyDomainOwners{Panel: true, HysteriaInboundNames: []string{"hy1"}},
+		},
+	}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{}
+	planned, issues := PlanAcmeChallengeBinds("tls-alpn-01", domains, owners)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %v", issues)
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}
+	owner, ok := planned[key]
+	if !ok {
+		t.Fatalf("expected TCP :443 challenge bind for panel domain, got %v", planned)
+	}
+	if owner.ChallengeMode != "tls-alpn-01" {
+		t.Fatalf("expected tls-alpn-01 kept for panel domain, got %q", owner.ChallengeMode)
+	}
+	httpKey := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	if _, ok := planned[httpKey]; ok {
+		t.Fatal("must not add an :80 http-01 bind for a panel-owned domain")
+	}
+}
+
+// A hysteria2 inbound reusing a Naive inbound's domain must NOT switch to
+// http-01 either: the naive Caddy listener answers the challenge. Regression
+// test for case "hysteria2 on naive domain".
+func TestPlanAcmeChallengeBindsHysteria2OnNaiveDomainKeepsTLSALPN(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"naive.example.com": {
+			Domain: "naive.example.com",
+			Email:  "admin@example.com",
+			Owners: CaddyDomainOwners{NaiveInboundNames: []string{"naive1"}, HysteriaInboundNames: []string{"hy1"}},
+		},
+	}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{}
+	planned, issues := PlanAcmeChallengeBinds("tls-alpn-01", domains, owners)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %v", issues)
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}
+	owner, ok := planned[key]
+	if !ok {
+		t.Fatalf("expected TCP :443 challenge bind for naive domain, got %v", planned)
+	}
+	if owner.ChallengeMode != "tls-alpn-01" {
+		t.Fatalf("expected tls-alpn-01 kept for naive domain, got %q", owner.ChallengeMode)
+	}
+}
