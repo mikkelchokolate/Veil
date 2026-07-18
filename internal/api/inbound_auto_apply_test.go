@@ -152,8 +152,12 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, del)
 
-	if w.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (delete envelope), got %d: %s", w.Code, w.Body.String())
+	}
+	// The delete mutation response must surface revision + apply info.
+	if !strings.Contains(w.Body.String(), `"revision"`) {
+		t.Fatalf("expected revision info in delete response: %s", w.Body.String())
 	}
 
 	// After delete the runtime should be stopped/disabled as an orphan.

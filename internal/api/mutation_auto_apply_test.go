@@ -133,8 +133,8 @@ func TestRoutingRuleDeleteTriggersAutoApply(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, del)
 
-	if w.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (delete envelope), got %d: %s", w.Code, w.Body.String())
 	}
 	if !hasServiceActionFor(*calls, "veil-hysteria2@hy2.service") {
 		t.Fatalf("expected routing rule delete to trigger auto-apply, calls=%v", *calls)

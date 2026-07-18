@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
@@ -163,4 +164,146 @@ func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool)
 	}
 	s.logUserAction(r, "auto_apply_configuration", "system", success, details)
 	return response, success
+}
+
+// autoApplyResultLocked is the rich variant of autoApplyLocked that records a
+// durable apply job and returns revision + job information for the HTTP
+// response. When revision tracking is disabled (no StatePath) it falls back to
+// the legacy synchronous auto-apply and reports only success. Caller holds s.mu.
+func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) autoApplyOutcome {
+	outcome := autoApplyOutcome{}
+	if !autoApplyAfterMutation {
+		return outcome
+	}
+	if !s.applyTrackingEnabled() {
+		_, ok := s.autoApplyLocked(r)
+		outcome.legacy = true
+		outcome.success = ok
+		return outcome
+	}
+	rev, err := s.applyRevisions.Get()
+	if err != nil {
+		s.logUserAction(r, "auto_apply_configuration", "system", false, "read revisions: "+err.Error())
+		outcome.success = false
+		return outcome
+	}
+	outcome.revision = rev
+	job, runErr := s.applyRunner.Run(rev.Desired, "mutation", actor)
+	outcome.job = &job
+	outcome.success = runErr == nil && job.Status == apply.StatusSucceeded
+	// Refresh revision state after the job so the response reflects the final
+	// applied revision.
+	if after, err := s.applyRevisions.Get(); err == nil {
+		outcome.revision = after
+	}
+	details := ""
+	if !outcome.success {
+		details = job.ErrorMessage
+	}
+	s.logUserAction(r, "auto_apply_configuration", "system", outcome.success, details)
+	return outcome
+}
+
+// autoApplyOutcome carries the apply result surfaced to the HTTP client.
+type autoApplyOutcome struct {
+	revision apply.Revisions
+	job      *apply.Job
+	success  bool
+	legacy   bool // true when the legacy (untracked) synchronous path was used
+}
+
+// applyStateView derives the public system state (synced/pending/applying/...)
+// from revisions and the latest job.
+func (s *managementState) applyStateViewLocked() applyStateResponse {
+	resp := applyStateResponse{State: apply.StateSynced}
+	if !s.applyTrackingEnabled() {
+		return resp
+	}
+	rev, err := s.applyRevisions.Get()
+	if err != nil {
+		return resp
+	}
+	resp.DesiredRevision = rev.Desired
+	resp.AppliedRevision = rev.Applied
+	resp.State = deriveSystemState(rev, nil)
+	jobs, err := s.applyJobs.List(1)
+	if err == nil && len(jobs) > 0 {
+		latest := jobs[0]
+		resp.State = deriveSystemState(rev, &latest)
+		if latest.Active() {
+			resp.ActiveJobID = latest.ID
+		}
+	}
+	if lastOK, ok, _ := s.latestJobWithStatus(apply.StatusSucceeded); ok {
+		resp.LastSuccessfulJobID = lastOK
+	}
+	if lastFail, ok, _ := s.latestFailedJob(); ok {
+		resp.LastFailedJobID = lastFail.ID
+		resp.LastError = &applyErrorView{Code: lastFail.ErrorCode, Message: lastFail.ErrorMessage}
+	}
+	return resp
+}
+
+func (s *managementState) latestJobWithStatus(status string) (string, bool, error) {
+	jobs, err := s.applyJobs.List(200)
+	if err != nil {
+		return "", false, err
+	}
+	for _, j := range jobs {
+		if j.Status == status {
+			return j.ID, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func (s *managementState) latestFailedJob() (apply.Job, bool, error) {
+	jobs, err := s.applyJobs.List(200)
+	if err != nil {
+		return apply.Job{}, false, err
+	}
+	for _, j := range jobs {
+		if j.Status == apply.StatusFailed || j.Status == apply.StatusRolledBack || j.Status == apply.StatusRollbackFailed {
+			return j, true, nil
+		}
+	}
+	return apply.Job{}, false, nil
+}
+
+// deriveSystemState maps revisions + latest job to the public system state.
+func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
+	if latest != nil {
+		switch latest.Status {
+		case apply.StatusPending, apply.StatusPlanning, apply.StatusValidating:
+			return apply.StatePending
+		case apply.StatusApplying, apply.StatusHealthCheck:
+			return apply.StateApplying
+		case apply.StatusRollingBack:
+			return apply.StateRollingBack
+		case apply.StatusRolledBack:
+			return apply.StateRolledBack
+		case apply.StatusFailed, apply.StatusRollbackFailed:
+			return apply.StateFailed
+		}
+	}
+	if rev.Desired > rev.Applied {
+		return apply.StatePending
+	}
+	return apply.StateSynced
+}
+
+// applyStateResponse is the JSON shape returned by GET /api/apply/state.
+type applyStateResponse struct {
+	DesiredRevision     uint64          `json:"desiredRevision"`
+	AppliedRevision     uint64          `json:"appliedRevision"`
+	State               string          `json:"state"`
+	ActiveJobID         string          `json:"activeJobId,omitempty"`
+	LastSuccessfulJobID string          `json:"lastSuccessfulJobId,omitempty"`
+	LastFailedJobID     string          `json:"lastFailedJobId,omitempty"`
+	LastError           *applyErrorView `json:"lastError,omitempty"`
+}
+
+type applyErrorView struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

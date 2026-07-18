@@ -36,8 +36,9 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut)
 		}
@@ -78,8 +79,9 @@ func (s *managementState) handleInbounds(w http.ResponseWriter, r *http.Request)
 				writeInboundManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSONStatus(w, http.StatusCreated, redactInbound(created))
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusCreated, redactInbound(created), outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
@@ -180,8 +182,9 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeInboundManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, redactInbound(updated))
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, redactInbound(updated), outcome)
 		case http.MethodDelete:
 			err := mutation.DeleteInbound(name)
 			s.logUserAction(r, "delete_inbound", name, err == nil, "")
@@ -189,8 +192,9 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeInboundManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			w.WriteHeader(http.StatusNoContent)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, map[string]string{"name": name}, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 		}

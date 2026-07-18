@@ -32,8 +32,9 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSONStatus(w, http.StatusCreated, created)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusCreated, created, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
@@ -67,8 +68,9 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 		case http.MethodDelete:
 			err := mutation.DeleteRoutingRule(name)
 			s.logUserAction(r, "delete_routing_rule", name, err == nil, "")
@@ -76,8 +78,9 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			w.WriteHeader(http.StatusNoContent)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, map[string]string{"name": name}, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 		}
@@ -224,8 +227,9 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut)
 		}

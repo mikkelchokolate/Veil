@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -76,4 +78,12 @@ type managementState struct {
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client
 	privilegedLocal                bool
+
+	// Architecture rework: normalized SQLite store, durable apply revisions and
+	// jobs. db may be nil when no StatePath is configured (pure in-memory/test
+	// servers); revision/apply tracking is then skipped gracefully.
+	db             *sql.DB
+	applyRevisions *apply.RevisionStore
+	applyJobs      *apply.JobStore
+	applyRunner    *apply.Runner
 }

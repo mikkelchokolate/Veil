@@ -113,6 +113,7 @@ func newManagementState(info ServerInfo) *managementState {
 		state.privileged = newLocalPrivilegedClient(state)
 		state.privilegedLocal = true
 	}
+	initApplySubsystem(state)
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadOrCreateCipher(); err != nil {
 		log.Printf("error loading encryption key from %s: %v", keyPath, err)
@@ -156,7 +157,13 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 }
 
 func (l ManagementStateLifecycle) SaveLocked() error {
-	return managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked())
+	if err := managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked()); err != nil {
+		return err
+	}
+	// The configuration mutation is committed; record a new desired revision so
+	// the system reports desired != applied until an apply job succeeds.
+	l.state.bumpDesiredRevisionLocked()
+	return nil
 }
 
 func (l ManagementStateLifecycle) Load() error {

@@ -52,6 +52,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
+	s.registerApplyRoutes(mux)
 	mux.HandleFunc("/api/auth/login", s.handleLoginWithRevalidation)
 	mux.HandleFunc("/api/auth/logout", s.handleLogoutWithSettingsSnapshot)
 	mux.HandleFunc("/api/auth/status", s.handleEffectiveAuthStatus)
