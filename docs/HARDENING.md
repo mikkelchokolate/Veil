@@ -20,7 +20,7 @@ Veil offers three Panel access modes, in increasing order of exposure:
 | Mode     | Binding            | TLS                | Recommended for |
 | -------- | ------------------ | ------------------ | --------------- |
 | `local`  | loopback only      | self-signed Panel  | default; reach over SSH tunnel |
-| `direct` | public interface   | self-signed Panel  | quick access where Caddy is not wanted |
+| `direct` | public interface   | ACME IP cert (Let's Encrypt `shortlived`, fallback self-signed) | quick access where Caddy is not wanted |
 | `caddy`  | Caddy reverse proxy| ACME (Let's Encrypt) | production, public domains |
 
 Guidance:
@@ -29,8 +29,11 @@ Guidance:
   the Panel off the public internet entirely.
 - **Use `caddy` for anything public.** It terminates real HTTPS and serves the
   Panel behind a random **Web base path** that acts as an unguessable prefix.
-- **Avoid `direct` on untrusted networks** — it exposes a self-signed endpoint
-  publicly, which trains operators to click through certificate warnings.
+- **`direct` now issues a trusted Let's Encrypt certificate for the public IP** by
+  default (the `shortlived` profile, SAN = IP address, auto-renewed via `acme.sh`
+  standalone on TCP `:80`). It still exposes the Panel port directly, so prefer
+  `local` or `caddy` on untrusted networks; only the legacy self-signed fallback
+  trains operators to click through certificate warnings.
 
 ## 2. API authentication
 

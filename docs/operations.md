@@ -12,6 +12,7 @@ The Inbound editor sends a debounced candidate snapshot to
 - required protocol, transport, port, domain, email, and credential fields;
 - duplicate enabled TCP or UDP bindings;
 - conflicts with the Panel listener;
+- ACME challenge binding per domain: a Hysteria2 Inbound reusing the Panel's or a NaiveProxy Inbound's domain keeps `tls-alpn-01`; a Hysteria2-only domain needs HTTP-01 and a challenge listener on TCP `:80` (a `:80` conflict there is reported as a warning, not a hard error);
 - live TCP and UDP port availability for new or changed Inbounds;
 - public DNS resolution for protocols that require a domain;
 - required runtime binaries and managed systemd units.
