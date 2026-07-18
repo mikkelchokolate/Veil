@@ -126,6 +126,9 @@ func newManagementState(info ServerInfo) *managementState {
 		state.startupStateLoadFailed = true
 		state.allowDevAnonymous = false
 	}
+	// Now that the cipher is available, wire the client domain subsystem
+	// (repository + encrypted credentials + service) onto the same SQLite store.
+	initClientSubsystem(state)
 
 	return state
 }

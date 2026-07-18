@@ -9,6 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -79,11 +80,12 @@ type managementState struct {
 	privileged                     privileged.Client
 	privilegedLocal                bool
 
-	// Architecture rework: normalized SQLite store, durable apply revisions and
-	// jobs. db may be nil when no StatePath is configured (pure in-memory/test
-	// servers); revision/apply tracking is then skipped gracefully.
+	// Architecture rework (durable apply + normalized store). db is nil when no
+	// StatePath is configured; the apply subsystem and revision/job tracking are
+	// then disabled and handlers fall back to legacy behavior.
 	db             *sql.DB
 	applyRevisions *apply.RevisionStore
 	applyJobs      *apply.JobStore
 	applyRunner    *apply.Runner
+	clientService  *client.Service
 }

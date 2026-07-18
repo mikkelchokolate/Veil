@@ -6,8 +6,14 @@ import (
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
+
+// applyNotifierFunc adapts a function to client.ApplyNotifier.
+type applyNotifierFunc func(kind, id string)
+
+func (f applyNotifierFunc) NotifyMutation(kind, id string) { f(kind, id) }
 
 // initApplySubsystem opens the normalized SQLite store next to the state file
 // and wires durable revisions and apply jobs. It is a no-op when no StatePath
@@ -26,9 +32,25 @@ func initApplySubsystem(s *managementState) {
 		return
 	}
 	s.db = db
-	s.applyRevisions = apply.NewRevisionStore(db)
-	s.applyJobs = apply.NewJobStore(db)
+	s.applyRevisions = apply.NewRevisionStore(s.db)
+	s.applyJobs = apply.NewJobStore(s.db)
 	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, s.executeApplyRevision)
+}
+
+// initClientSubsystem wires the normalized client domain (Stage 1) onto the
+// same SQLite store. It must run AFTER the secrets cipher is loaded because
+// the credential store encrypts at rest with it. No-op when no store/cipher.
+func initClientSubsystem(s *managementState) {
+	if s.db == nil || s.cipher == nil {
+		return
+	}
+	clientRepo := client.NewRepository(s.db)
+	clientCreds := client.NewCredentialStore(s.db, s.cipher)
+	s.clientService = client.NewService(clientRepo, clientCreds, applyNotifierFunc(func(kind, id string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.autoApplyResultLocked(nil, "system")
+	}))
 }
 
 // applyTrackingEnabled reports whether durable revisions/jobs are available.
