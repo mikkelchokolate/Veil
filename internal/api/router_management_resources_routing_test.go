@@ -78,8 +78,9 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 
 	deleteRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodDelete, "/api/routing/rules/non-ru", nil))
-	if deleteRecorder.Code != http.StatusNoContent {
-		t.Fatalf("delete routing rule expected 204, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
+	// DELETE returns 200 with the apply outcome (revision+job), not 204.
+	if deleteRecorder.Code != http.StatusOK {
+		t.Fatalf("delete routing rule expected 200, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
 
 	readAfterDelete := httptest.NewRecorder()

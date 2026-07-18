@@ -1067,8 +1067,8 @@ paths:
         - sessionCookie: []
           csrfToken: []
       responses:
-        "204":
-          description: Deleted.
+        "200":
+          description: Deletion applied; response carries the apply outcome (revision+job).
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -1165,8 +1165,8 @@ paths:
         - sessionCookie: []
           csrfToken: []
       responses:
-        "204":
-          description: Deleted.
+        "200":
+          description: Deletion applied; response carries the apply outcome (revision+job).
         "404":
           $ref: "#/components/responses/NotFound"
   /api/routing/presets:

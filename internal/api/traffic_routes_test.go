@@ -36,7 +36,12 @@ func sampleFor(bindingID string, up, down int64) client.Sample {
 }
 
 func cancelAfterFirst() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	// The timeout is a safety bound so the test never hangs; cancel when done.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	go func() {
+		<-ctx.Done()
+		cancel()
+	}()
 	return ctx
 }
 

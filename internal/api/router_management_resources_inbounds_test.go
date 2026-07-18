@@ -149,8 +149,10 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 
 	deleteRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodDelete, "/api/inbounds/hy2-alt", nil))
-	if deleteRecorder.Code != http.StatusNoContent {
-		t.Fatalf("delete inbound expected 204, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
+	// DELETE returns 200 with the apply outcome (revision+job), not 204: the
+	// apply workflow surfaces the mutation's effect on live state.
+	if deleteRecorder.Code != http.StatusOK {
+		t.Fatalf("delete inbound expected 200, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
 
 	readAfterDelete := httptest.NewRecorder()
