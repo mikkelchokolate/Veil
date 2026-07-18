@@ -87,7 +87,13 @@ sudo veil backup restore \
 ```
 
 The check decrypts the archive, validates checksums, validates the state/key
-pair, and rejects a state schema newer than the running Veil release.
+pair, and rejects a state schema newer than the running Veil release. You can
+also structurally validate any Management state file (for example a restored
+`state.json` before starting the Panel) without touching the live server:
+
+```bash
+veil config validate --state /path/to/state.json
+```
 
 ## Restore On The Current Host
 
@@ -120,7 +126,8 @@ job result.
 2. Transfer the encrypted archive and passphrase through separate channels.
 3. Run `veil backup restore --check-only`.
 4. Stop `veil.service` and perform the restore command shown above.
-5. Run `veil repair --yes` to regenerate managed files and units for the new
+5. Validate the restored state structurally (`veil config validate`), then run
+   `veil repair --yes` to regenerate managed files and units for the new
    host.
 6. Start Veil, inspect `veil status`, and test every enabled Inbound.
 7. Rotate the state key if the old host or its key may be compromised.

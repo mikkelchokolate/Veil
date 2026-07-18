@@ -32,7 +32,14 @@ Veil supports multiple Inbounds, with varying levels of isolation depending on t
 
 ---
 
-## 4. Go Module Path
+## 4. State Schema and Protocol Plugins
+
+- **Management state is versioned.** State persists at a specific schema version (currently v4); Veil migrates older schemas forward on load (for example, legacy flat protocol fields move into `protocolFields`) but **rejects a state schema newer than the running release**. Always match a restored `state.json` to a Veil release that supports that schema, and validate it with `veil config validate` before starting the Panel.
+- **Protocols are plugins.** NaiveProxy, Hysteria2, Mieru, and olcRTC are implemented as plugins under `internal/protocols/<protocol>` (config renderer, runtime descriptor, validator, UI field schema, client-link builder). Adding a protocol means adding a plugin; the Panel, firewall, generated-config, and apply wiring consume the central registry rather than per-protocol conditionals.
+
+---
+
+## 5. Go Module Path
 
 - **Path:** The module path is canonicalized to `github.com/mikkelchokolate/Veil`, matching the GitHub repository URL.
 - **Implication:** You can install the CLI tool directly from GitHub via `go install github.com/mikkelchokolate/Veil/cmd/veil@latest`.

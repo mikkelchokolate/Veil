@@ -6,7 +6,7 @@ truth for released behavior.
 
 ## Next
 
-- Additional protocols and transport integrations.
+- Additional protocols and transport integrations (delivered through the plugin architecture under `internal/protocols/<protocol>`).
 - Standardized multi-user profiles across every supported runtime.
 - Optional external session and audit stores for clustered deployments.
 - Additional backup destinations and hardware-backed key providers.

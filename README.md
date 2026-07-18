@@ -113,7 +113,11 @@ After panel-only install, Veil runs:
 
 | Service | What |
 |---|---|
-| `veil.service` | Web Panel + API |
+| `veil.service` | Web Panel + API (runs as the locked `veil` user) |
+| `veil-helper.socket` + `veil-helper.service` | Root privileged helper for host mutations the unprivileged Panel cannot perform |
+
+Enabling scheduled backups adds `veil-backup.timer` + `veil-backup.service`
+(daily encrypted archives with retention).
 
 When you add and apply Inbounds, Veil can also manage:
 
@@ -135,6 +139,24 @@ veil update --yes --staged
 veil uninstall --yes              # also removes config/state; reinstall starts fresh
 veil uninstall --yes --keep-data  # preserve credentials and config across a reinstall
 ```
+
+All CLI commands:
+
+| Command | Purpose |
+|---|---|
+| `veil install` | Install and configure Panel access, credentials, and runtimes. |
+| `veil serve` | Run the HTTP API and Web Panel. |
+| `veil status` | Show managed service status (`--json` for machine output). |
+| `veil doctor` | Run host readiness checks (required/optional commands). |
+| `veil admin` | Manage admin accounts (`reset`, `set`, `show`, `rotate-key`). |
+| `veil config validate` | Validate a Management state file without starting a server. |
+| `veil runtime install` | Download/verify protocol runtime binaries (`--only`, `--bin-dir`). |
+| `veil backup` | Encrypted backup lifecycle (`create`, `list`, `verify`, `restore`, `prune`, `schedule`). |
+| `veil repair` | Repair managed generated files without arbitrary side effects. |
+| `veil rollback` | List/restore/cleanup configuration backups. |
+| `veil update` | Download and install the latest Veil release. |
+| `veil uninstall` | Remove the Panel, services, configuration, and state. |
+| `veil version` | Print the Veil version (`--check` to compare with the latest release). |
 
 ### Panel UX controls
 
@@ -163,6 +185,8 @@ passphrase to the browser. The configured backup and audit directories must be
 writable by the process performing each operation.
 
 ```bash
+sudo veil backup create --passphrase-file /root/veil-backup-passphrase \
+  --output-dir /var/lib/veil/backups
 sudo veil backup schedule enable --passphrase-file /root/veil-backup-passphrase
 sudo veil backup list --dir /var/lib/veil/backups
 sudo veil backup prune --dir /var/lib/veil/backups \
@@ -287,4 +311,10 @@ make test    # unit + in-process integration tests
 make e2e     # end-to-end tests: real veil binary launched over a socket
 ```
 
-The end-to-end suite (`test/e2e/`, guarded by the `e2e` build tag) compiles the `veil` binary, runs `veil serve` as a subprocess bound to a real port, and drives it over HTTP — covering the readiness lifecycle, API auth gating, graceful shutdown, state persistence across restarts, the full inbound-to-apply flow, and the CLI subcommands.
+The end-to-end suite (`test/e2e/`, guarded by the `e2e` build tag) compiles the `veil` binary, runs `veil serve` as a subprocess bound to a real port, and drives it over HTTP — covering the readiness lifecycle, API auth gating, graceful shutdown, state persistence across restarts, the full inbound-to-apply flow, and the CLI subcommands. It requires a Linux systemd host with root access; do not run it against a live production install.
+
+A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. It needs Node.js 20+ and is separate from the Go test suites:
+
+```bash
+cd test/browser && npm install && npm test
+```
