@@ -172,10 +172,25 @@ const (
 	GetApiClientLinksSubscriptionParamsFormatRaw    GetApiClientLinksSubscriptionParamsFormat = "raw"
 )
 
+// Defines values for PostApiV1ClientsBulkJSONBodyAction.
+const (
+	Delete     PostApiV1ClientsBulkJSONBodyAction = "delete"
+	Disable    PostApiV1ClientsBulkJSONBodyAction = "disable"
+	Enable     PostApiV1ClientsBulkJSONBodyAction = "enable"
+	Extend     PostApiV1ClientsBulkJSONBodyAction = "extend"
+	ResetQuota PostApiV1ClientsBulkJSONBodyAction = "reset_quota"
+)
+
 // Defines values for GetSTokenParamsFormat.
 const (
 	GetSTokenParamsFormatBase64 GetSTokenParamsFormat = "base64"
 	GetSTokenParamsFormatRaw    GetSTokenParamsFormat = "raw"
+)
+
+// Defines values for HeadSTokenParamsFormat.
+const (
+	Base64 HeadSTokenParamsFormat = "base64"
+	Raw    HeadSTokenParamsFormat = "raw"
 )
 
 // ApplyHistoryEntry defines model for ApplyHistoryEntry.
@@ -1144,6 +1159,35 @@ type GetApiLogsParams struct {
 	Lines *int    `form:"lines,omitempty" json:"lines,omitempty"`
 }
 
+// PostApiV1ClientsBulkJSONBody defines parameters for PostApiV1ClientsBulk.
+type PostApiV1ClientsBulkJSONBody struct {
+	Action    PostApiV1ClientsBulkJSONBodyAction `json:"action"`
+	ClientIds []string                           `json:"clientIds"`
+	Days      *int                               `json:"days,omitempty"`
+}
+
+// PostApiV1ClientsBulkJSONBodyAction defines parameters for PostApiV1ClientsBulk.
+type PostApiV1ClientsBulkJSONBodyAction string
+
+// PostApiV1ClientsIdBindingsJSONBody defines parameters for PostApiV1ClientsIdBindings.
+type PostApiV1ClientsIdBindingsJSONBody struct {
+	Credential *string `json:"credential,omitempty"`
+	Enabled    *bool   `json:"enabled,omitempty"`
+	InboundId  *string `json:"inboundId,omitempty"`
+}
+
+// PostApiV1ClientsIdCredentialsBindingIdJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingId.
+type PostApiV1ClientsIdCredentialsBindingIdJSONBody struct {
+	Kind  *string `json:"kind,omitempty"`
+	Value *string `json:"value,omitempty"`
+}
+
+// PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingIdRotate.
+type PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody struct {
+	Kind  *string `json:"kind,omitempty"`
+	Value *string `json:"value,omitempty"`
+}
+
 // PostApiV1ClientsIdTokensJSONBody defines parameters for PostApiV1ClientsIdTokens.
 type PostApiV1ClientsIdTokensJSONBody struct {
 	ExpiresAt *int64  `json:"expiresAt,omitempty"`
@@ -1158,8 +1202,11 @@ type GetApiV1TrafficIdHistoryParams struct {
 	// To Unix end of the window (default now).
 	To *int64 `form:"to,omitempty" json:"to,omitempty"`
 
-	// Bucket Bucket width in seconds (default 60).
+	// Bucket Bucket width in seconds. NOTE handler currently reads limit, not bucket.
 	Bucket *int `form:"bucket,omitempty" json:"bucket,omitempty"`
+
+	// Limit Max buckets returned (default 500).
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetSTokenParams defines parameters for GetSToken.
@@ -1169,6 +1216,14 @@ type GetSTokenParams struct {
 
 // GetSTokenParamsFormat defines parameters for GetSToken.
 type GetSTokenParamsFormat string
+
+// HeadSTokenParams defines parameters for HeadSToken.
+type HeadSTokenParams struct {
+	Format *HeadSTokenParamsFormat `form:"format,omitempty" json:"format,omitempty"`
+}
+
+// HeadSTokenParamsFormat defines parameters for HeadSToken.
+type HeadSTokenParamsFormat string
 
 // PostApiAdminRotateKeyJSONRequestBody defines body for PostApiAdminRotateKey for application/json ContentType.
 type PostApiAdminRotateKeyJSONRequestBody = EmptyObject
@@ -1242,8 +1297,20 @@ type PutApiUsersUsernameJSONRequestBody = UserUpdateRequest
 // PostApiV1ClientsJSONRequestBody defines body for PostApiV1Clients for application/json ContentType.
 type PostApiV1ClientsJSONRequestBody = ClientUpsertRequest
 
-// PatchApiV1ClientsIdJSONRequestBody defines body for PatchApiV1ClientsId for application/json ContentType.
-type PatchApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
+// PostApiV1ClientsBulkJSONRequestBody defines body for PostApiV1ClientsBulk for application/json ContentType.
+type PostApiV1ClientsBulkJSONRequestBody PostApiV1ClientsBulkJSONBody
+
+// PutApiV1ClientsIdJSONRequestBody defines body for PutApiV1ClientsId for application/json ContentType.
+type PutApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
+
+// PostApiV1ClientsIdBindingsJSONRequestBody defines body for PostApiV1ClientsIdBindings for application/json ContentType.
+type PostApiV1ClientsIdBindingsJSONRequestBody PostApiV1ClientsIdBindingsJSONBody
+
+// PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody defines body for PostApiV1ClientsIdCredentialsBindingId for application/json ContentType.
+type PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody PostApiV1ClientsIdCredentialsBindingIdJSONBody
+
+// PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody defines body for PostApiV1ClientsIdCredentialsBindingIdRotate for application/json ContentType.
+type PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody
 
 // PostApiV1ClientsIdTokensJSONRequestBody defines body for PostApiV1ClientsIdTokens for application/json ContentType.
 type PostApiV1ClientsIdTokensJSONRequestBody PostApiV1ClientsIdTokensJSONBody
@@ -1343,8 +1410,23 @@ type ClientInterface interface {
 	// GetApiApplyHistory request
 	GetApiApplyHistory(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiApplyJobs request
+	GetApiApplyJobs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiApplyJobsId request
+	GetApiApplyJobsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiApplyJobsIdRetry request
+	PostApiApplyJobsIdRetry(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostApiApplyPlan request
 	PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiApplyReconcile request
+	PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiApplyState request
+	GetApiApplyState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiAudit request
 	GetApiAudit(ctx context.Context, params *GetApiAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1555,16 +1637,42 @@ type ClientInterface interface {
 
 	PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ClientsBulkWithBody request with any body
+	PostApiV1ClientsBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClientsBulk(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteApiV1ClientsId request
 	DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsId request
 	GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PatchApiV1ClientsIdWithBody request with any body
-	PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PutApiV1ClientsIdWithBody request with any body
+	PutApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiV1ClientsId(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClientsIdBindings request
+	GetApiV1ClientsIdBindings(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdBindingsWithBody request with any body
+	PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1ClientsIdBindingsBindingId request
+	DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdCredentialsBindingIdWithBody request with any body
+	PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdCredentialsBindingIdRotateWithBody request with any body
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsIdTokens request
 	GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1621,6 +1729,9 @@ type ClientInterface interface {
 
 	// GetSToken request
 	GetSToken(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadSToken request
+	HeadSToken(ctx context.Context, token string, params *HeadSTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1683,8 +1794,68 @@ func (c *Client) GetApiApplyHistory(ctx context.Context, reqEditors ...RequestEd
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiApplyJobs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiApplyJobsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiApplyJobsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiApplyJobsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiApplyJobsIdRetry(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyJobsIdRetryRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiApplyPlanRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyReconcileRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiApplyState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiApplyStateRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -2619,6 +2790,30 @@ func (c *Client) PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSON
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ClientsBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsBulkRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsBulk(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsBulkRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiV1ClientsIdRequest(c.Server, id)
 	if err != nil {
@@ -2643,8 +2838,8 @@ func (c *Client) GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors 
 	return c.Client.Do(req)
 }
 
-func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
+func (c *Client) PutApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2655,8 +2850,104 @@ func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, c
 	return c.Client.Do(req)
 }
 
-func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, body)
+func (c *Client) PutApiV1ClientsId(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiV1ClientsIdRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClientsIdBindings(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdBindingsRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdBindingsRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdBindingsRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(c.Server, id, bindingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequest(c.Server, id, bindingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(c.Server, id, bindingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(c.Server, id, bindingId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2907,6 +3198,18 @@ func (c *Client) GetSToken(ctx context.Context, token string, params *GetSTokenP
 	return c.Client.Do(req)
 }
 
+func (c *Client) HeadSToken(ctx context.Context, token string, params *HeadSTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadSTokenRequest(c.Server, token, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // NewPostApiAdminRotateKeyRequest calls the generic PostApiAdminRotateKey builder with application/json body
 func NewPostApiAdminRotateKeyRequest(server string, body PostApiAdminRotateKeyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3014,6 +3317,101 @@ func NewGetApiApplyHistoryRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetApiApplyJobsRequest generates requests for GetApiApplyJobs
+func NewGetApiApplyJobsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/jobs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiApplyJobsIdRequest generates requests for GetApiApplyJobsId
+func NewGetApiApplyJobsIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/jobs/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiApplyJobsIdRetryRequest generates requests for PostApiApplyJobsIdRetry
+func NewPostApiApplyJobsIdRetryRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/jobs/%s/retry", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostApiApplyPlanRequest generates requests for PostApiApplyPlan
 func NewPostApiApplyPlanRequest(server string) (*http.Request, error) {
 	var err error
@@ -3034,6 +3432,60 @@ func NewPostApiApplyPlanRequest(server string) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiApplyReconcileRequest generates requests for PostApiApplyReconcile
+func NewPostApiApplyReconcileRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/reconcile")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiApplyStateRequest generates requests for GetApiApplyState
+func NewGetApiApplyStateRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/state")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -5008,6 +5460,46 @@ func NewPostApiV1ClientsRequestWithBody(server string, contentType string, body 
 	return req, nil
 }
 
+// NewPostApiV1ClientsBulkRequest calls the generic PostApiV1ClientsBulk builder with application/json body
+func NewPostApiV1ClientsBulkRequest(server string, body PostApiV1ClientsBulkJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsBulkRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsBulkRequestWithBody generates requests for PostApiV1ClientsBulk with any type of body
+func NewPostApiV1ClientsBulkRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/bulk")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewDeleteApiV1ClientsIdRequest generates requests for DeleteApiV1ClientsId
 func NewDeleteApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, error) {
 	var err error
@@ -5076,19 +5568,19 @@ func NewGetApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, err
 	return req, nil
 }
 
-// NewPatchApiV1ClientsIdRequest calls the generic PatchApiV1ClientsId builder with application/json body
-func NewPatchApiV1ClientsIdRequest(server string, id ClientId, body PatchApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
+// NewPutApiV1ClientsIdRequest calls the generic PutApiV1ClientsId builder with application/json body
+func NewPutApiV1ClientsIdRequest(server string, id ClientId, body PutApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPatchApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
+	return NewPutApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
 }
 
-// NewPatchApiV1ClientsIdRequestWithBody generates requests for PatchApiV1ClientsId with any type of body
-func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+// NewPutApiV1ClientsIdRequestWithBody generates requests for PutApiV1ClientsId with any type of body
+func NewPutApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5113,7 +5605,237 @@ func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentTy
 		return nil, err
 	}
 
-	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetApiV1ClientsIdBindingsRequest generates requests for GetApiV1ClientsIdBindings
+func NewGetApiV1ClientsIdBindingsRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/bindings", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsIdBindingsRequest calls the generic PostApiV1ClientsIdBindings builder with application/json body
+func NewPostApiV1ClientsIdBindingsRequest(server string, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsIdBindingsRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsIdBindingsRequestWithBody generates requests for PostApiV1ClientsIdBindings with any type of body
+func NewPostApiV1ClientsIdBindingsRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/bindings", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1ClientsIdBindingsBindingIdRequest generates requests for DeleteApiV1ClientsIdBindingsBindingId
+func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "bindingId", runtime.ParamLocationPath, bindingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/bindings/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsIdCredentialsBindingIdRequest calls the generic PostApiV1ClientsIdCredentialsBindingId builder with application/json body
+func NewPostApiV1ClientsIdCredentialsBindingIdRequest(server string, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody generates requests for PostApiV1ClientsIdCredentialsBindingId with any type of body
+func NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "bindingId", runtime.ParamLocationPath, bindingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/credentials/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest calls the generic PostApiV1ClientsIdCredentialsBindingIdRotate builder with application/json body
+func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(server string, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody generates requests for PostApiV1ClientsIdCredentialsBindingIdRotate with any type of body
+func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "bindingId", runtime.ParamLocationPath, bindingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/credentials/%s/rotate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -5451,6 +6173,22 @@ func NewGetApiV1TrafficIdHistoryRequest(server string, id ClientId, params *GetA
 
 		}
 
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -5746,6 +6484,62 @@ func NewGetSTokenRequest(server string, token string, params *GetSTokenParams) (
 	return req, nil
 }
 
+// NewHeadSTokenRequest generates requests for HeadSToken
+func NewHeadSTokenRequest(server string, token string, params *HeadSTokenParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "token", runtime.ParamLocationPath, token)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/s/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Format != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "format", runtime.ParamLocationQuery, *params.Format); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -5802,8 +6596,23 @@ type ClientWithResponsesInterface interface {
 	// GetApiApplyHistoryWithResponse request
 	GetApiApplyHistoryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiApplyHistoryResponse, error)
 
+	// GetApiApplyJobsWithResponse request
+	GetApiApplyJobsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiApplyJobsResponse, error)
+
+	// GetApiApplyJobsIdWithResponse request
+	GetApiApplyJobsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetApiApplyJobsIdResponse, error)
+
+	// PostApiApplyJobsIdRetryWithResponse request
+	PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error)
+
 	// PostApiApplyPlanWithResponse request
 	PostApiApplyPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error)
+
+	// PostApiApplyReconcileWithResponse request
+	PostApiApplyReconcileWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error)
+
+	// GetApiApplyStateWithResponse request
+	GetApiApplyStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiApplyStateResponse, error)
 
 	// GetApiAuditWithResponse request
 	GetApiAuditWithResponse(ctx context.Context, params *GetApiAuditParams, reqEditors ...RequestEditorFn) (*GetApiAuditResponse, error)
@@ -6014,16 +6823,42 @@ type ClientWithResponsesInterface interface {
 
 	PostApiV1ClientsWithResponse(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
 
+	// PostApiV1ClientsBulkWithBodyWithResponse request with any body
+	PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
+
+	PostApiV1ClientsBulkWithResponse(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
+
 	// DeleteApiV1ClientsIdWithResponse request
 	DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error)
 
 	// GetApiV1ClientsIdWithResponse request
 	GetApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdResponse, error)
 
-	// PatchApiV1ClientsIdWithBodyWithResponse request with any body
-	PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+	// PutApiV1ClientsIdWithBodyWithResponse request with any body
+	PutApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error)
 
-	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+	PutApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error)
+
+	// GetApiV1ClientsIdBindingsWithResponse request
+	GetApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdBindingsResponse, error)
+
+	// PostApiV1ClientsIdBindingsWithBodyWithResponse request with any body
+	PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
+
+	PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
+
+	// DeleteApiV1ClientsIdBindingsBindingIdWithResponse request
+	DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error)
+
+	// PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse request with any body
+	PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
+
+	PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
+
+	// PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse request with any body
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
+
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
 
 	// GetApiV1ClientsIdTokensWithResponse request
 	GetApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdTokensResponse, error)
@@ -6080,6 +6915,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetSTokenWithResponse request
 	GetSTokenWithResponse(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*GetSTokenResponse, error)
+
+	// HeadSTokenWithResponse request
+	HeadSTokenWithResponse(ctx context.Context, token string, params *HeadSTokenParams, reqEditors ...RequestEditorFn) (*HeadSTokenResponse, error)
 }
 
 type PostApiAdminRotateKeyResponse struct {
@@ -6149,6 +6987,69 @@ func (r GetApiApplyHistoryResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiApplyJobsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiApplyJobsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiApplyJobsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiApplyJobsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiApplyJobsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiApplyJobsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiApplyJobsIdRetryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiApplyJobsIdRetryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiApplyJobsIdRetryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostApiApplyPlanResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6166,6 +7067,48 @@ func (r PostApiApplyPlanResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiApplyPlanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiApplyReconcileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiApplyReconcileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiApplyReconcileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiApplyStateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiApplyStateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiApplyStateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7377,6 +8320,27 @@ func (r PostApiV1ClientsResponse) StatusCode() int {
 	return 0
 }
 
+type PostApiV1ClientsBulkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsBulkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsBulkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type DeleteApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7420,14 +8384,14 @@ func (r GetApiV1ClientsIdResponse) StatusCode() int {
 	return 0
 }
 
-type PatchApiV1ClientsIdResponse struct {
+type PutApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ClientView
 }
 
 // Status returns HTTPResponse.Status
-func (r PatchApiV1ClientsIdResponse) Status() string {
+func (r PutApiV1ClientsIdResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -7435,7 +8399,112 @@ func (r PatchApiV1ClientsIdResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r PatchApiV1ClientsIdResponse) StatusCode() int {
+func (r PutApiV1ClientsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClientsIdBindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdBindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdBindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsIdBindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsIdBindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsIdBindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1ClientsIdBindingsBindingIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsIdCredentialsBindingIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsIdCredentialsBindingIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsIdCredentialsBindingIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsIdCredentialsBindingIdRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsIdCredentialsBindingIdRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsIdCredentialsBindingIdRotateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7791,6 +8860,27 @@ func (r GetSTokenResponse) StatusCode() int {
 	return 0
 }
 
+type HeadSTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadSTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadSTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // PostApiAdminRotateKeyWithBodyWithResponse request with arbitrary body returning *PostApiAdminRotateKeyResponse
 func (c *ClientWithResponses) PostApiAdminRotateKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error) {
 	rsp, err := c.PostApiAdminRotateKeyWithBody(ctx, contentType, body, reqEditors...)
@@ -7834,6 +8924,33 @@ func (c *ClientWithResponses) GetApiApplyHistoryWithResponse(ctx context.Context
 	return ParseGetApiApplyHistoryResponse(rsp)
 }
 
+// GetApiApplyJobsWithResponse request returning *GetApiApplyJobsResponse
+func (c *ClientWithResponses) GetApiApplyJobsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiApplyJobsResponse, error) {
+	rsp, err := c.GetApiApplyJobs(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiApplyJobsResponse(rsp)
+}
+
+// GetApiApplyJobsIdWithResponse request returning *GetApiApplyJobsIdResponse
+func (c *ClientWithResponses) GetApiApplyJobsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetApiApplyJobsIdResponse, error) {
+	rsp, err := c.GetApiApplyJobsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiApplyJobsIdResponse(rsp)
+}
+
+// PostApiApplyJobsIdRetryWithResponse request returning *PostApiApplyJobsIdRetryResponse
+func (c *ClientWithResponses) PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error) {
+	rsp, err := c.PostApiApplyJobsIdRetry(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiApplyJobsIdRetryResponse(rsp)
+}
+
 // PostApiApplyPlanWithResponse request returning *PostApiApplyPlanResponse
 func (c *ClientWithResponses) PostApiApplyPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error) {
 	rsp, err := c.PostApiApplyPlan(ctx, reqEditors...)
@@ -7841,6 +8958,24 @@ func (c *ClientWithResponses) PostApiApplyPlanWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePostApiApplyPlanResponse(rsp)
+}
+
+// PostApiApplyReconcileWithResponse request returning *PostApiApplyReconcileResponse
+func (c *ClientWithResponses) PostApiApplyReconcileWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error) {
+	rsp, err := c.PostApiApplyReconcile(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiApplyReconcileResponse(rsp)
+}
+
+// GetApiApplyStateWithResponse request returning *GetApiApplyStateResponse
+func (c *ClientWithResponses) GetApiApplyStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiApplyStateResponse, error) {
+	rsp, err := c.GetApiApplyState(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiApplyStateResponse(rsp)
 }
 
 // GetApiAuditWithResponse request returning *GetApiAuditResponse
@@ -8514,6 +9649,23 @@ func (c *ClientWithResponses) PostApiV1ClientsWithResponse(ctx context.Context, 
 	return ParsePostApiV1ClientsResponse(rsp)
 }
 
+// PostApiV1ClientsBulkWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsBulkResponse
+func (c *ClientWithResponses) PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
+	rsp, err := c.PostApiV1ClientsBulkWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsBulkResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClientsBulkWithResponse(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
+	rsp, err := c.PostApiV1ClientsBulk(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsBulkResponse(rsp)
+}
+
 // DeleteApiV1ClientsIdWithResponse request returning *DeleteApiV1ClientsIdResponse
 func (c *ClientWithResponses) DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error) {
 	rsp, err := c.DeleteApiV1ClientsId(ctx, id, reqEditors...)
@@ -8532,21 +9684,90 @@ func (c *ClientWithResponses) GetApiV1ClientsIdWithResponse(ctx context.Context,
 	return ParseGetApiV1ClientsIdResponse(rsp)
 }
 
-// PatchApiV1ClientsIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1ClientsIdResponse
-func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
+// PutApiV1ClientsIdWithBodyWithResponse request with arbitrary body returning *PutApiV1ClientsIdResponse
+func (c *ClientWithResponses) PutApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error) {
+	rsp, err := c.PutApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParsePatchApiV1ClientsIdResponse(rsp)
+	return ParsePutApiV1ClientsIdResponse(rsp)
 }
 
-func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsId(ctx, id, body, reqEditors...)
+func (c *ClientWithResponses) PutApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error) {
+	rsp, err := c.PutApiV1ClientsId(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParsePatchApiV1ClientsIdResponse(rsp)
+	return ParsePutApiV1ClientsIdResponse(rsp)
+}
+
+// GetApiV1ClientsIdBindingsWithResponse request returning *GetApiV1ClientsIdBindingsResponse
+func (c *ClientWithResponses) GetApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdBindingsResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdBindings(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdBindingsResponse(rsp)
+}
+
+// PostApiV1ClientsIdBindingsWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsIdBindingsResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdBindingsWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdBindingsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdBindings(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdBindingsResponse(rsp)
+}
+
+// DeleteApiV1ClientsIdBindingsBindingIdWithResponse request returning *DeleteApiV1ClientsIdBindingsBindingIdResponse
+func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp)
+}
+
+// PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsIdCredentialsBindingIdResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdCredentialsBindingIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingId(ctx, id, bindingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdCredentialsBindingIdResponse(rsp)
+}
+
+// PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsIdCredentialsBindingIdRotateResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotate(ctx, id, bindingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp)
 }
 
 // GetApiV1ClientsIdTokensWithResponse request returning *GetApiV1ClientsIdTokensResponse
@@ -8725,6 +9946,15 @@ func (c *ClientWithResponses) GetSTokenWithResponse(ctx context.Context, token s
 	return ParseGetSTokenResponse(rsp)
 }
 
+// HeadSTokenWithResponse request returning *HeadSTokenResponse
+func (c *ClientWithResponses) HeadSTokenWithResponse(ctx context.Context, token string, params *HeadSTokenParams, reqEditors ...RequestEditorFn) (*HeadSTokenResponse, error) {
+	rsp, err := c.HeadSToken(ctx, token, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadSTokenResponse(rsp)
+}
+
 // ParsePostApiAdminRotateKeyResponse parses an HTTP response from a PostApiAdminRotateKeyWithResponse call
 func ParsePostApiAdminRotateKeyResponse(rsp *http.Response) (*PostApiAdminRotateKeyResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8810,6 +10040,54 @@ func ParseGetApiApplyHistoryResponse(rsp *http.Response) (*GetApiApplyHistoryRes
 	return response, nil
 }
 
+// ParseGetApiApplyJobsResponse parses an HTTP response from a GetApiApplyJobsWithResponse call
+func ParseGetApiApplyJobsResponse(rsp *http.Response) (*GetApiApplyJobsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiApplyJobsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiApplyJobsIdResponse parses an HTTP response from a GetApiApplyJobsIdWithResponse call
+func ParseGetApiApplyJobsIdResponse(rsp *http.Response) (*GetApiApplyJobsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiApplyJobsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiApplyJobsIdRetryResponse parses an HTTP response from a PostApiApplyJobsIdRetryWithResponse call
+func ParsePostApiApplyJobsIdRetryResponse(rsp *http.Response) (*PostApiApplyJobsIdRetryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiApplyJobsIdRetryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParsePostApiApplyPlanResponse parses an HTTP response from a PostApiApplyPlanWithResponse call
 func ParsePostApiApplyPlanResponse(rsp *http.Response) (*PostApiApplyPlanResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8838,6 +10116,38 @@ func ParsePostApiApplyPlanResponse(rsp *http.Response) (*PostApiApplyPlanRespons
 		}
 		response.JSON422 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParsePostApiApplyReconcileResponse parses an HTTP response from a PostApiApplyReconcileWithResponse call
+func ParsePostApiApplyReconcileResponse(rsp *http.Response) (*PostApiApplyReconcileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiApplyReconcileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiApplyStateResponse parses an HTTP response from a GetApiApplyStateWithResponse call
+func ParseGetApiApplyStateResponse(rsp *http.Response) (*GetApiApplyStateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiApplyStateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -10220,6 +11530,22 @@ func ParsePostApiV1ClientsResponse(rsp *http.Response) (*PostApiV1ClientsRespons
 	return response, nil
 }
 
+// ParsePostApiV1ClientsBulkResponse parses an HTTP response from a PostApiV1ClientsBulkWithResponse call
+func ParsePostApiV1ClientsBulkResponse(rsp *http.Response) (*PostApiV1ClientsBulkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsBulkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseDeleteApiV1ClientsIdResponse parses an HTTP response from a DeleteApiV1ClientsIdWithResponse call
 func ParseDeleteApiV1ClientsIdResponse(rsp *http.Response) (*DeleteApiV1ClientsIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10262,15 +11588,15 @@ func ParseGetApiV1ClientsIdResponse(rsp *http.Response) (*GetApiV1ClientsIdRespo
 	return response, nil
 }
 
-// ParsePatchApiV1ClientsIdResponse parses an HTTP response from a PatchApiV1ClientsIdWithResponse call
-func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdResponse, error) {
+// ParsePutApiV1ClientsIdResponse parses an HTTP response from a PutApiV1ClientsIdWithResponse call
+func ParsePutApiV1ClientsIdResponse(rsp *http.Response) (*PutApiV1ClientsIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &PatchApiV1ClientsIdResponse{
+	response := &PutApiV1ClientsIdResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -10283,6 +11609,86 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClientsIdBindingsResponse parses an HTTP response from a GetApiV1ClientsIdBindingsWithResponse call
+func ParseGetApiV1ClientsIdBindingsResponse(rsp *http.Response) (*GetApiV1ClientsIdBindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdBindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsIdBindingsResponse parses an HTTP response from a PostApiV1ClientsIdBindingsWithResponse call
+func ParsePostApiV1ClientsIdBindingsResponse(rsp *http.Response) (*PostApiV1ClientsIdBindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsIdBindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1ClientsIdBindingsBindingIdResponse parses an HTTP response from a DeleteApiV1ClientsIdBindingsBindingIdWithResponse call
+func ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1ClientsIdBindingsBindingIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsIdCredentialsBindingIdResponse parses an HTTP response from a PostApiV1ClientsIdCredentialsBindingIdWithResponse call
+func ParsePostApiV1ClientsIdCredentialsBindingIdResponse(rsp *http.Response) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsIdCredentialsBindingIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse parses an HTTP response from a PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse call
+func ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp *http.Response) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsIdCredentialsBindingIdRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -10661,6 +12067,22 @@ func ParseGetSTokenResponse(rsp *http.Response) (*GetSTokenResponse, error) {
 	}
 
 	response := &GetSTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseHeadSTokenResponse parses an HTTP response from a HeadSTokenWithResponse call
+func ParseHeadSTokenResponse(rsp *http.Response) (*HeadSTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadSTokenResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

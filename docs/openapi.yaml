@@ -954,7 +954,6 @@ paths:
         - veilToken: []
         - bearerAuth: []
         - sessionCookie: []
-          csrfToken: []
       responses:
         "200":
           description: Protocol metadata list.
@@ -1318,6 +1317,83 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/FirewallRule"
+  /api/apply/state:
+    get:
+      tags: [apply]
+      summary: Desired/applied revisions and derived system state
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+        - veilToken: []
+      responses:
+        "200":
+          description: Revision and system state.
+  /api/apply/jobs:
+    get:
+      tags: [apply]
+      summary: List apply jobs (newest first)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+        - veilToken: []
+      responses:
+        "200":
+          description: '{"items": [...]}'
+  /api/apply/jobs/{id}:
+    get:
+      tags: [apply]
+      summary: Get one apply job
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Apply job.
+        "404":
+          description: Not found.
+  /api/apply/jobs/{id}/retry:
+    post:
+      tags: [apply]
+      summary: Create a NEW apply job for the same desired revision
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: '{"applyJob": ..., "revision": ...}'
+        "404":
+          description: Not found.
+        "409":
+          description: Another apply is active.
+  /api/apply/reconcile:
+    post:
+      tags: [apply]
+      summary: Apply current desired revision if ahead of applied (idempotent)
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      responses:
+        "200":
+          description: '{"reconciled": ..., "applyJob": ..., "revision": ..., "state": ...}'
+        "409":
+          description: Another apply is active.
   /api/apply:
     post:
       tags: [apply]
@@ -1725,7 +1801,6 @@ paths:
       summary: List clients with effective status
       security:
         - sessionCookie: []
-          csrfToken: []
       responses:
         "200":
           description: Clients and their computed effective status.
@@ -1754,13 +1829,159 @@ paths:
                 $ref: "#/components/schemas/ClientView"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/v1/clients/bulk:
+    post:
+      tags: [clients]
+      summary: Bulk action across clients; per-client results
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, clientIds]
+              properties:
+                action:
+                  type: string
+                  enum: [enable, disable, delete, extend, reset_quota]
+                clientIds:
+                  type: array
+                  items:
+                    type: string
+                days:
+                  type: integer
+      responses:
+        "200":
+          description: '{"action,total,succeeded,failed,results[]}'
+  /api/v1/clients/{id}/bindings:
+    get:
+      tags: [clients]
+      summary: List client bindings
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Bindings.
+    post:
+      tags: [clients]
+      summary: Add a binding (optional credential)
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inboundId:
+                  type: string
+                credential:
+                  type: string
+                enabled:
+                  type: boolean
+      responses:
+        "201":
+          description: Created binding.
+  /api/v1/clients/{id}/bindings/{bindingId}:
+    delete:
+      tags: [clients]
+      summary: Remove a binding
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: '{"id": ...}'
+  /api/v1/clients/{id}/credentials/{bindingId}:
+    post:
+      tags: [clients]
+      summary: Set a binding credential
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind:
+                  type: string
+                value:
+                  type: string
+      responses:
+        "201":
+          description: Set credential.
+  /api/v1/clients/{id}/credentials/{bindingId}/rotate:
+    post:
+      tags: [clients]
+      summary: Rotate a binding credential
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind:
+                  type: string
+                value:
+                  type: string
+      responses:
+        "200":
+          description: Rotated credential.
   /api/v1/clients/{id}:
     get:
       tags: [clients]
       summary: Get a client with bindings and effective status
       security:
         - sessionCookie: []
-          csrfToken: []
       parameters:
         - $ref: "#/components/parameters/ClientId"
       responses:
@@ -1772,7 +1993,7 @@ paths:
                 $ref: "#/components/schemas/ClientView"
         "404":
           description: Client not found.
-    patch:
+    put:
       tags: [clients]
       summary: Update a client (optimistic concurrency via version)
       security:
@@ -1804,15 +2025,16 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ClientId"
       responses:
-        "204":
-          description: Deleted.
+        "200":
+          description: 'Deleted (returns {"id": ...}).'
+        "404":
+          description: Client not found.
   /api/v1/clients/{id}/tokens:
     get:
       tags: [clients]
       summary: List a client's subscription tokens (redacted)
       security:
         - sessionCookie: []
-          csrfToken: []
       parameters:
         - $ref: "#/components/parameters/ClientId"
       responses:
@@ -1889,7 +2111,6 @@ paths:
       summary: Top talkers ranked by cumulative usage
       security:
         - sessionCookie: []
-          csrfToken: []
       responses:
         "200":
           description: Clients ranked by total bytes.
@@ -1903,7 +2124,6 @@ paths:
       summary: Per-client cumulative traffic totals
       security:
         - sessionCookie: []
-          csrfToken: []
       parameters:
         - $ref: "#/components/parameters/ClientId"
       responses:
@@ -1921,7 +2141,6 @@ paths:
       summary: Per-client bucketed traffic samples over a window
       security:
         - sessionCookie: []
-          csrfToken: []
       parameters:
         - $ref: "#/components/parameters/ClientId"
         - name: from
@@ -1940,7 +2159,12 @@ paths:
           in: query
           schema:
             type: integer
-          description: Bucket width in seconds (default 60).
+          description: Bucket width in seconds. NOTE handler currently reads limit, not bucket.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Max buckets returned (default 500).
       responses:
         "200":
           description: Time-ordered traffic buckets.
@@ -1955,7 +2179,6 @@ paths:
       description: Emits a JSON snapshot per client every ~5s as SSE data frames.
       security:
         - sessionCookie: []
-          csrfToken: []
       responses:
         "200":
           description: text/event-stream of per-client snapshots.
@@ -1986,11 +2209,34 @@ paths:
             enum: [base64, raw]
       responses:
         "200":
-          description: Subscription body (base64 or raw newline-separated links).
+          description: Subscription body (base64 or raw newline-separated links); HTML landing for browsers.
           content:
             text/plain:
               schema:
                 type: string
+            text/html:
+              schema:
+                type: string
+        "404":
+          description: Token unknown, disabled, revoked, or expired.
+    head:
+      tags: [subscription]
+      summary: HEAD variant of the public subscription endpoint (headers only)
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [base64, raw]
+      responses:
+        "200":
+          description: Headers only.
         "404":
           description: Token unknown, disabled, revoked, or expired.
 components:
