@@ -24,15 +24,28 @@ type InboundSnapshot struct {
 // and credentials, reusing the clientaccess per-protocol link builders so URI
 // formatting stays consistent with the rest of the panel.
 type SubscriptionRenderer struct {
-	repo  *Repository
-	creds *CredentialStore
+	repo     *Repository
+	creds    *CredentialStore
+	settings clientaccess.Settings
 }
 
+// NewSubscriptionRenderer builds a renderer with no global settings (per-client
+// protocols that need a domain will skip links until settings are provided via
+// WithSettings).
 func NewSubscriptionRenderer(repo *Repository, creds *CredentialStore) *SubscriptionRenderer {
 	return &SubscriptionRenderer{repo: repo, creds: creds}
 }
 
-// LinkForClient renders the client links for a client given a resolver that
+// WithSettings returns a copy of the renderer that renders against the given
+// global settings (domain etc.). Protocols like Mieru require a settings domain
+// to emit a client config; hysteria2/naiveproxy resolve the domain per-inbound.
+func (r *SubscriptionRenderer) WithSettings(s clientaccess.Settings) *SubscriptionRenderer {
+	cp := *r
+	cp.settings = s
+	return &cp
+}
+
+// LinksForClient renders client links for a client from its enabled bindings
 // maps binding.InboundID -> the live inbound snapshot. Bindings whose inbound
 // is missing, disabled, or whose credential cannot be revealed are skipped so
 // a single broken binding does not poison the whole subscription.
@@ -65,7 +78,7 @@ func (r *SubscriptionRenderer) LinksForClient(c Client, resolve func(inboundID s
 			Username: c.Name,
 			Password: plaintext,
 		}
-		links := registry.BuildLinks(model.Settings{}, inbound, []clientaccess.ClientCredential{cc})
+		links := registry.BuildLinks(r.settings, inbound, []clientaccess.ClientCredential{cc})
 		out = append(out, links...)
 	}
 	return out, nil

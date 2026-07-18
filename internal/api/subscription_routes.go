@@ -60,7 +60,8 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 	// access via the client record propagates cleanly.
 	links := []model.ClientLink{}
 	if cl.Status == client.StatusActive {
-		links, err = s.subRenderer.LinksForClient(cl.Client, s.resolveInboundSnapshot)
+		renderer := s.subRenderer.WithSettings(clientaccess.Settings{Domain: s.settings.Domain})
+		links, err = renderer.LinksForClient(cl.Client, s.resolveInboundSnapshot)
 		if err != nil {
 			writeError(w, "subscription render failed", http.StatusInternalServerError)
 			return
