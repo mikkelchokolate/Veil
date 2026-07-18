@@ -64,6 +64,25 @@ const (
 	N2 BackupVerificationReportEncryptionVersion = 2
 )
 
+// Defines values for ClientUpsertRequestQuotaResetPolicy.
+const (
+	Daily   ClientUpsertRequestQuotaResetPolicy = "daily"
+	Monthly ClientUpsertRequestQuotaResetPolicy = "monthly"
+	Never   ClientUpsertRequestQuotaResetPolicy = "never"
+	Weekly  ClientUpsertRequestQuotaResetPolicy = "weekly"
+)
+
+// Defines values for ClientViewStatus.
+const (
+	Active       ClientViewStatus = "active"
+	ApplyFailed  ClientViewStatus = "apply_failed"
+	Depleted     ClientViewStatus = "depleted"
+	Disabled     ClientViewStatus = "disabled"
+	Expired      ClientViewStatus = "expired"
+	Orphaned     ClientViewStatus = "orphaned"
+	PendingApply ClientViewStatus = "pending_apply"
+)
+
 // Defines values for FirewallRuleProtocol.
 const (
 	FirewallRuleProtocolTcp FirewallRuleProtocol = "tcp"
@@ -149,8 +168,14 @@ const (
 
 // Defines values for GetApiClientLinksSubscriptionParamsFormat.
 const (
-	Base64 GetApiClientLinksSubscriptionParamsFormat = "base64"
-	Raw    GetApiClientLinksSubscriptionParamsFormat = "raw"
+	GetApiClientLinksSubscriptionParamsFormatBase64 GetApiClientLinksSubscriptionParamsFormat = "base64"
+	GetApiClientLinksSubscriptionParamsFormatRaw    GetApiClientLinksSubscriptionParamsFormat = "raw"
+)
+
+// Defines values for GetSTokenParamsFormat.
+const (
+	GetSTokenParamsFormatBase64 GetSTokenParamsFormat = "base64"
+	GetSTokenParamsFormatRaw    GetSTokenParamsFormat = "raw"
 )
 
 // ApplyHistoryEntry defines model for ApplyHistoryEntry.
@@ -390,6 +415,12 @@ type ClientLinksResponse struct {
 	SubscriptionUrl            string            `json:"subscriptionUrl"`
 }
 
+// ClientListResponse defines model for ClientListResponse.
+type ClientListResponse struct {
+	Items []ClientView `json:"items"`
+	Total int          `json:"total"`
+}
+
 // ClientProfile defines model for ClientProfile.
 type ClientProfile struct {
 	Enabled  bool    `json:"enabled"`
@@ -397,6 +428,47 @@ type ClientProfile struct {
 	Password *string `json:"password,omitempty"`
 	Username *string `json:"username,omitempty"`
 }
+
+// ClientUpsertRequest defines model for ClientUpsertRequest.
+type ClientUpsertRequest struct {
+	DeviceLimit      *int                                 `json:"deviceLimit,omitempty"`
+	Email            *string                              `json:"email,omitempty"`
+	Enabled          *bool                                `json:"enabled,omitempty"`
+	ExpiresAt        *int64                               `json:"expiresAt,omitempty"`
+	Name             string                               `json:"name"`
+	Notes            *string                              `json:"notes,omitempty"`
+	QuotaBytes       *int64                               `json:"quotaBytes,omitempty"`
+	QuotaResetPolicy *ClientUpsertRequestQuotaResetPolicy `json:"quotaResetPolicy,omitempty"`
+
+	// Version Required on update for optimistic concurrency.
+	Version *int `json:"version,omitempty"`
+}
+
+// ClientUpsertRequestQuotaResetPolicy defines model for ClientUpsertRequest.QuotaResetPolicy.
+type ClientUpsertRequestQuotaResetPolicy string
+
+// ClientView defines model for ClientView.
+type ClientView struct {
+	CreatedAt        *int64    `json:"createdAt,omitempty"`
+	Depleted         *bool     `json:"depleted,omitempty"`
+	Email            *string   `json:"email,omitempty"`
+	Enabled          *bool     `json:"enabled,omitempty"`
+	ExpiresAt        *int64    `json:"expiresAt,omitempty"`
+	HasCreds         *bool     `json:"hasCreds,omitempty"`
+	Id               string    `json:"id"`
+	InboundIds       *[]string `json:"inboundIds,omitempty"`
+	Name             string    `json:"name"`
+	QuotaBytes       *int64    `json:"quotaBytes,omitempty"`
+	QuotaResetPolicy *string   `json:"quotaResetPolicy,omitempty"`
+
+	// Status Effective status.
+	Status    ClientViewStatus `json:"status"`
+	UpdatedAt *int64           `json:"updatedAt,omitempty"`
+	Version   *int             `json:"version,omitempty"`
+}
+
+// ClientViewStatus Effective status.
+type ClientViewStatus string
 
 // ConfigValidationResult defines model for ConfigValidationResult.
 type ConfigValidationResult struct {
@@ -851,6 +923,17 @@ type StatusResponse struct {
 	Version       string          `json:"version"`
 }
 
+// SubscriptionTokenResponse defines model for SubscriptionTokenResponse.
+type SubscriptionTokenResponse struct {
+	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+
+	// Prefix Public prefix used to identify the token.
+	Prefix string `json:"prefix"`
+
+	// Token Full plaintext token, returned only once at issuance.
+	Token string `json:"token"`
+}
+
 // SuccessResponse defines model for SuccessResponse.
 type SuccessResponse struct {
 	Success bool `json:"success"`
@@ -880,6 +963,47 @@ type TLSCertInfo struct {
 	Path          string    `json:"path"`
 	Subject       string    `json:"subject"`
 	Valid         bool      `json:"valid"`
+}
+
+// TrafficBucket defines model for TrafficBucket.
+type TrafficBucket struct {
+	At            int64 `json:"at"`
+	DownloadBytes int64 `json:"downloadBytes"`
+	UploadBytes   int64 `json:"uploadBytes"`
+}
+
+// TrafficHistoryResponse defines model for TrafficHistoryResponse.
+type TrafficHistoryResponse struct {
+	Bucket   int             `json:"bucket"`
+	ClientId string          `json:"clientId"`
+	From     int64           `json:"from"`
+	Items    []TrafficBucket `json:"items"`
+	To       int64           `json:"to"`
+}
+
+// TrafficTopEntry defines model for TrafficTopEntry.
+type TrafficTopEntry struct {
+	ClientId      string `json:"clientId"`
+	DownloadBytes *int64 `json:"downloadBytes,omitempty"`
+	Name          string `json:"name"`
+	TotalBytes    int64  `json:"totalBytes"`
+	UploadBytes   *int64 `json:"uploadBytes,omitempty"`
+}
+
+// TrafficTopResponse defines model for TrafficTopResponse.
+type TrafficTopResponse struct {
+	Items []TrafficTopEntry `json:"items"`
+}
+
+// TrafficTotals defines model for TrafficTotals.
+type TrafficTotals struct {
+	ClientId       string `json:"clientId"`
+	Depleted       bool   `json:"depleted"`
+	DownloadBytes  int64  `json:"downloadBytes"`
+	QuotaBytes     *int64 `json:"quotaBytes,omitempty"`
+	RemainingBytes *int64 `json:"remainingBytes,omitempty"`
+	TotalBytes     int64  `json:"totalBytes"`
+	UploadBytes    int64  `json:"uploadBytes"`
 }
 
 // UpdateResponse defines model for UpdateResponse.
@@ -980,6 +1104,9 @@ type WarpConfig struct {
 // BackupName defines model for BackupName.
 type BackupName = string
 
+// ClientId defines model for ClientId.
+type ClientId = string
+
 // Name defines model for Name.
 type Name = string
 
@@ -1016,6 +1143,26 @@ type GetApiLogsParams struct {
 	Unit  *string `form:"unit,omitempty" json:"unit,omitempty"`
 	Lines *int    `form:"lines,omitempty" json:"lines,omitempty"`
 }
+
+// GetApiV1TrafficIdHistoryParams defines parameters for GetApiV1TrafficIdHistory.
+type GetApiV1TrafficIdHistoryParams struct {
+	// From Unix start of the window (default 24h ago).
+	From *int64 `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Unix end of the window (default now).
+	To *int64 `form:"to,omitempty" json:"to,omitempty"`
+
+	// Bucket Bucket width in seconds (default 60).
+	Bucket *int `form:"bucket,omitempty" json:"bucket,omitempty"`
+}
+
+// GetSTokenParams defines parameters for GetSToken.
+type GetSTokenParams struct {
+	Format *GetSTokenParamsFormat `form:"format,omitempty" json:"format,omitempty"`
+}
+
+// GetSTokenParamsFormat defines parameters for GetSToken.
+type GetSTokenParamsFormat string
 
 // PostApiAdminRotateKeyJSONRequestBody defines body for PostApiAdminRotateKey for application/json ContentType.
 type PostApiAdminRotateKeyJSONRequestBody = EmptyObject
@@ -1085,6 +1232,12 @@ type PostApiUsersJSONRequestBody = UserCreateRequest
 
 // PutApiUsersUsernameJSONRequestBody defines body for PutApiUsersUsername for application/json ContentType.
 type PutApiUsersUsernameJSONRequestBody = UserUpdateRequest
+
+// PostApiV1ClientsJSONRequestBody defines body for PostApiV1Clients for application/json ContentType.
+type PostApiV1ClientsJSONRequestBody = ClientUpsertRequest
+
+// PatchApiV1ClientsIdJSONRequestBody defines body for PatchApiV1ClientsId for application/json ContentType.
+type PatchApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
 
 // PostApiValidationJSONRequestBody defines body for PostApiValidation for application/json ContentType.
 type PostApiValidationJSONRequestBody = ValidationRequest
@@ -1385,6 +1538,43 @@ type ClientInterface interface {
 
 	PutApiUsersUsername(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1Clients request
+	GetApiV1Clients(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsWithBody request with any body
+	PostApiV1ClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1ClientsId request
+	DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClientsId request
+	GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchApiV1ClientsIdWithBody request with any body
+	PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1ClientsIdSubscriptionToken request
+	DeleteApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdSubscriptionToken request
+	PostApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1Traffic request
+	GetApiV1Traffic(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficStream request
+	GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficId request
+	GetApiV1TrafficId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficIdHistory request
+	GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostApiValidationWithBody request with any body
 	PostApiValidationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1411,6 +1601,9 @@ type ClientInterface interface {
 
 	// GetMetrics request
 	GetMetrics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSToken request
+	GetSToken(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2373,6 +2566,162 @@ func (c *Client) PutApiUsersUsername(ctx context.Context, username Username, bod
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1Clients(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdSubscriptionTokenRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdSubscriptionTokenRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1Traffic(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficStreamRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1TrafficId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficIdHistoryRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostApiValidationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiValidationRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -2483,6 +2832,18 @@ func (c *Client) GetHealthz(ctx context.Context, reqEditors ...RequestEditorFn) 
 
 func (c *Client) GetMetrics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSToken(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSTokenRequest(c.Server, token, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4527,6 +4888,432 @@ func NewPutApiUsersUsernameRequestWithBody(server string, username Username, con
 	return req, nil
 }
 
+// NewGetApiV1ClientsRequest generates requests for GetApiV1Clients
+func NewGetApiV1ClientsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsRequest calls the generic PostApiV1Clients builder with application/json body
+func NewPostApiV1ClientsRequest(server string, body PostApiV1ClientsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsRequestWithBody generates requests for PostApiV1Clients with any type of body
+func NewPostApiV1ClientsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1ClientsIdRequest generates requests for DeleteApiV1ClientsId
+func NewDeleteApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClientsIdRequest generates requests for GetApiV1ClientsId
+func NewGetApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchApiV1ClientsIdRequest calls the generic PatchApiV1ClientsId builder with application/json body
+func NewPatchApiV1ClientsIdRequest(server string, id ClientId, body PatchApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchApiV1ClientsIdRequestWithBody generates requests for PatchApiV1ClientsId with any type of body
+func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1ClientsIdSubscriptionTokenRequest generates requests for DeleteApiV1ClientsIdSubscriptionToken
+func NewDeleteApiV1ClientsIdSubscriptionTokenRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/subscription-token", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsIdSubscriptionTokenRequest generates requests for PostApiV1ClientsIdSubscriptionToken
+func NewPostApiV1ClientsIdSubscriptionTokenRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/subscription-token", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficRequest generates requests for GetApiV1Traffic
+func NewGetApiV1TrafficRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficStreamRequest generates requests for GetApiV1TrafficStream
+func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/stream")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficIdRequest generates requests for GetApiV1TrafficId
+func NewGetApiV1TrafficIdRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficIdHistoryRequest generates requests for GetApiV1TrafficIdHistory
+func NewGetApiV1TrafficIdHistoryRequest(server string, id ClientId, params *GetApiV1TrafficIdHistoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/%s/history", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, *params.From); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, *params.To); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Bucket != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "bucket", runtime.ParamLocationQuery, *params.Bucket); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostApiValidationRequest calls the generic PostApiValidation builder with application/json body
 func NewPostApiValidationRequest(server string, body PostApiValidationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4745,6 +5532,62 @@ func NewGetMetricsRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSTokenRequest generates requests for GetSToken
+func NewGetSTokenRequest(server string, token string, params *GetSTokenParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "token", runtime.ParamLocationPath, token)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/s/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Format != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "format", runtime.ParamLocationQuery, *params.Format); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5015,6 +5858,43 @@ type ClientWithResponsesInterface interface {
 
 	PutApiUsersUsernameWithResponse(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
 
+	// GetApiV1ClientsWithResponse request
+	GetApiV1ClientsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ClientsResponse, error)
+
+	// PostApiV1ClientsWithBodyWithResponse request with any body
+	PostApiV1ClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
+
+	PostApiV1ClientsWithResponse(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
+
+	// DeleteApiV1ClientsIdWithResponse request
+	DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error)
+
+	// GetApiV1ClientsIdWithResponse request
+	GetApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdResponse, error)
+
+	// PatchApiV1ClientsIdWithBodyWithResponse request with any body
+	PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+
+	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+
+	// DeleteApiV1ClientsIdSubscriptionTokenWithResponse request
+	DeleteApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error)
+
+	// PostApiV1ClientsIdSubscriptionTokenWithResponse request
+	PostApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdSubscriptionTokenResponse, error)
+
+	// GetApiV1TrafficWithResponse request
+	GetApiV1TrafficWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficResponse, error)
+
+	// GetApiV1TrafficStreamWithResponse request
+	GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error)
+
+	// GetApiV1TrafficIdWithResponse request
+	GetApiV1TrafficIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdResponse, error)
+
+	// GetApiV1TrafficIdHistoryWithResponse request
+	GetApiV1TrafficIdHistoryWithResponse(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdHistoryResponse, error)
+
 	// PostApiValidationWithBodyWithResponse request with any body
 	PostApiValidationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error)
 
@@ -5041,6 +5921,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetMetricsWithResponse request
 	GetMetricsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// GetSTokenWithResponse request
+	GetSTokenWithResponse(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*GetSTokenResponse, error)
 }
 
 type PostApiAdminRotateKeyResponse struct {
@@ -6294,6 +7177,245 @@ func (r PutApiUsersUsernameResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiV1ClientsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClientListResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *ClientView
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1ClientsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1ClientsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1ClientsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClientsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClientView
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchApiV1ClientsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClientView
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchApiV1ClientsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchApiV1ClientsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1ClientsIdSubscriptionTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1ClientsIdSubscriptionTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1ClientsIdSubscriptionTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsIdSubscriptionTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SubscriptionTokenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsIdSubscriptionTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsIdSubscriptionTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrafficTopResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficStreamResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficStreamResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficStreamResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrafficTotals
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficIdHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrafficHistoryResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficIdHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficIdHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostApiValidationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6443,6 +7565,27 @@ func (r GetMetricsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetSTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSTokenResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7146,6 +8289,121 @@ func (c *ClientWithResponses) PutApiUsersUsernameWithResponse(ctx context.Contex
 	return ParsePutApiUsersUsernameResponse(rsp)
 }
 
+// GetApiV1ClientsWithResponse request returning *GetApiV1ClientsResponse
+func (c *ClientWithResponses) GetApiV1ClientsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ClientsResponse, error) {
+	rsp, err := c.GetApiV1Clients(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsResponse(rsp)
+}
+
+// PostApiV1ClientsWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsResponse
+func (c *ClientWithResponses) PostApiV1ClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
+	rsp, err := c.PostApiV1ClientsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClientsWithResponse(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
+	rsp, err := c.PostApiV1Clients(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsResponse(rsp)
+}
+
+// DeleteApiV1ClientsIdWithResponse request returning *DeleteApiV1ClientsIdResponse
+func (c *ClientWithResponses) DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1ClientsIdResponse(rsp)
+}
+
+// GetApiV1ClientsIdWithResponse request returning *GetApiV1ClientsIdResponse
+func (c *ClientWithResponses) GetApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdResponse, error) {
+	rsp, err := c.GetApiV1ClientsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdResponse(rsp)
+}
+
+// PatchApiV1ClientsIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1ClientsIdResponse
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1ClientsIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsId(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1ClientsIdResponse(rsp)
+}
+
+// DeleteApiV1ClientsIdSubscriptionTokenWithResponse request returning *DeleteApiV1ClientsIdSubscriptionTokenResponse
+func (c *ClientWithResponses) DeleteApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsIdSubscriptionToken(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1ClientsIdSubscriptionTokenResponse(rsp)
+}
+
+// PostApiV1ClientsIdSubscriptionTokenWithResponse request returning *PostApiV1ClientsIdSubscriptionTokenResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdSubscriptionTokenResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdSubscriptionToken(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdSubscriptionTokenResponse(rsp)
+}
+
+// GetApiV1TrafficWithResponse request returning *GetApiV1TrafficResponse
+func (c *ClientWithResponses) GetApiV1TrafficWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficResponse, error) {
+	rsp, err := c.GetApiV1Traffic(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficResponse(rsp)
+}
+
+// GetApiV1TrafficStreamWithResponse request returning *GetApiV1TrafficStreamResponse
+func (c *ClientWithResponses) GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error) {
+	rsp, err := c.GetApiV1TrafficStream(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficStreamResponse(rsp)
+}
+
+// GetApiV1TrafficIdWithResponse request returning *GetApiV1TrafficIdResponse
+func (c *ClientWithResponses) GetApiV1TrafficIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdResponse, error) {
+	rsp, err := c.GetApiV1TrafficId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficIdResponse(rsp)
+}
+
+// GetApiV1TrafficIdHistoryWithResponse request returning *GetApiV1TrafficIdHistoryResponse
+func (c *ClientWithResponses) GetApiV1TrafficIdHistoryWithResponse(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdHistoryResponse, error) {
+	rsp, err := c.GetApiV1TrafficIdHistory(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficIdHistoryResponse(rsp)
+}
+
 // PostApiValidationWithBodyWithResponse request with arbitrary body returning *PostApiValidationResponse
 func (c *ClientWithResponses) PostApiValidationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error) {
 	rsp, err := c.PostApiValidationWithBody(ctx, contentType, body, reqEditors...)
@@ -7231,6 +8489,15 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, reqEdi
 		return nil, err
 	}
 	return ParseGetMetricsResponse(rsp)
+}
+
+// GetSTokenWithResponse request returning *GetSTokenResponse
+func (c *ClientWithResponses) GetSTokenWithResponse(ctx context.Context, token string, params *GetSTokenParams, reqEditors ...RequestEditorFn) (*GetSTokenResponse, error) {
+	rsp, err := c.GetSToken(ctx, token, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSTokenResponse(rsp)
 }
 
 // ParsePostApiAdminRotateKeyResponse parses an HTTP response from a PostApiAdminRotateKeyWithResponse call
@@ -8676,6 +9943,262 @@ func ParsePutApiUsersUsernameResponse(rsp *http.Response) (*PutApiUsersUsernameR
 	return response, nil
 }
 
+// ParseGetApiV1ClientsResponse parses an HTTP response from a GetApiV1ClientsWithResponse call
+func ParseGetApiV1ClientsResponse(rsp *http.Response) (*GetApiV1ClientsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsResponse parses an HTTP response from a PostApiV1ClientsWithResponse call
+func ParsePostApiV1ClientsResponse(rsp *http.Response) (*PostApiV1ClientsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ClientView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1ClientsIdResponse parses an HTTP response from a DeleteApiV1ClientsIdWithResponse call
+func ParseDeleteApiV1ClientsIdResponse(rsp *http.Response) (*DeleteApiV1ClientsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1ClientsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClientsIdResponse parses an HTTP response from a GetApiV1ClientsIdWithResponse call
+func ParseGetApiV1ClientsIdResponse(rsp *http.Response) (*GetApiV1ClientsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchApiV1ClientsIdResponse parses an HTTP response from a PatchApiV1ClientsIdWithResponse call
+func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchApiV1ClientsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1ClientsIdSubscriptionTokenResponse parses an HTTP response from a DeleteApiV1ClientsIdSubscriptionTokenWithResponse call
+func ParseDeleteApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1ClientsIdSubscriptionTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsIdSubscriptionTokenResponse parses an HTTP response from a PostApiV1ClientsIdSubscriptionTokenWithResponse call
+func ParsePostApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*PostApiV1ClientsIdSubscriptionTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsIdSubscriptionTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SubscriptionTokenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficResponse parses an HTTP response from a GetApiV1TrafficWithResponse call
+func ParseGetApiV1TrafficResponse(rsp *http.Response) (*GetApiV1TrafficResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficTopResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficStreamResponse parses an HTTP response from a GetApiV1TrafficStreamWithResponse call
+func ParseGetApiV1TrafficStreamResponse(rsp *http.Response) (*GetApiV1TrafficStreamResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficStreamResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficIdResponse parses an HTTP response from a GetApiV1TrafficIdWithResponse call
+func ParseGetApiV1TrafficIdResponse(rsp *http.Response) (*GetApiV1TrafficIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficTotals
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficIdHistoryResponse parses an HTTP response from a GetApiV1TrafficIdHistoryWithResponse call
+func ParseGetApiV1TrafficIdHistoryResponse(rsp *http.Response) (*GetApiV1TrafficIdHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficIdHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficHistoryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostApiValidationResponse parses an HTTP response from a PostApiValidationWithResponse call
 func ParsePostApiValidationResponse(rsp *http.Response) (*PostApiValidationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8855,6 +10378,22 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	}
 
 	response := &GetMetricsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetSTokenResponse parses an HTTP response from a GetSTokenWithResponse call
+func ParseGetSTokenResponse(rsp *http.Response) (*GetSTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSTokenResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

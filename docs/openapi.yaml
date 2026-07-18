@@ -1719,6 +1719,230 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/clients:
+    get:
+      tags: [clients]
+      summary: List clients with effective status
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Clients and their computed effective status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientListResponse"
+    post:
+      tags: [clients]
+      summary: Create a client
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientUpsertRequest"
+      responses:
+        "201":
+          description: Created client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/clients/{id}:
+    get:
+      tags: [clients]
+      summary: Get a client with bindings and effective status
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Client view.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientView"
+        "404":
+          description: Client not found.
+    patch:
+      tags: [clients]
+      summary: Update a client (optimistic concurrency via version)
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientUpsertRequest"
+      responses:
+        "200":
+          description: Updated client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientView"
+        "409":
+          description: Version conflict.
+    delete:
+      tags: [clients]
+      summary: Delete a client
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "204":
+          description: Deleted.
+  /api/v1/clients/{id}/subscription-token:
+    post:
+      tags: [clients]
+      summary: Issue (rotate) a subscription token; plaintext returned once
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: New token. Plaintext is returned only in this response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTokenResponse"
+    delete:
+      tags: [clients]
+      summary: Revoke the active subscription token
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "204":
+          description: Token revoked.
+  /api/v1/traffic:
+    get:
+      tags: [traffic]
+      summary: Top talkers ranked by cumulative usage
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Clients ranked by total bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficTopResponse"
+  /api/v1/traffic/{id}:
+    get:
+      tags: [traffic]
+      summary: Per-client cumulative traffic totals
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Upload/download totals with quota and depleted flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficTotals"
+        "404":
+          description: Client not found.
+  /api/v1/traffic/{id}/history:
+    get:
+      tags: [traffic]
+      summary: Per-client bucketed traffic samples over a window
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: from
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Unix start of the window (default 24h ago).
+        - name: to
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Unix end of the window (default now).
+        - name: bucket
+          in: query
+          schema:
+            type: integer
+          description: Bucket width in seconds (default 60).
+      responses:
+        "200":
+          description: Time-ordered traffic buckets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficHistoryResponse"
+  /api/v1/traffic/stream:
+    get:
+      tags: [traffic]
+      summary: Server-sent stream of live traffic snapshots
+      description: Emits a JSON snapshot per client every ~5s as SSE data frames.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          description: text/event-stream of per-client snapshots.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /s/{token}:
+    get:
+      tags: [subscription]
+      summary: Public subscription endpoint (token is the capability)
+      description: |
+        Unauthenticated; the token itself grants read access to the client's
+        subscription. Unknown, disabled, revoked, or expired tokens all return
+        an identical 404 to avoid oracle attacks. Supports ?format=base64 (default)
+        or raw; HTML user agents receive a landing page.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [base64, raw]
+      responses:
+        "200":
+          description: Subscription body (base64 or raw newline-separated links).
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Token unknown, disabled, revoked, or expired.
 components:
   securitySchemes:
     veilToken:
@@ -1765,6 +1989,13 @@ components:
       schema:
         type: string
         pattern: '^[0-9a-f]{32}$'
+    ClientId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
   responses:
     BadRequest:
       description: Request body, query string, or path failed validation.
@@ -3210,3 +3441,171 @@ components:
           type: number
         raw:
           type: string
+    ClientUpsertRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        enabled:
+          type: boolean
+        quotaBytes:
+          type: integer
+          format: int64
+        quotaResetPolicy:
+          type: string
+          enum: [never, daily, weekly, monthly]
+        expiresAt:
+          type: integer
+          format: int64
+        deviceLimit:
+          type: integer
+        notes:
+          type: string
+        version:
+          type: integer
+          description: Required on update for optimistic concurrency.
+    ClientView:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        enabled:
+          type: boolean
+        quotaBytes:
+          type: integer
+          format: int64
+        quotaResetPolicy:
+          type: string
+        expiresAt:
+          type: integer
+          format: int64
+        depleted:
+          type: boolean
+        status:
+          type: string
+          description: Effective status.
+          enum: [active, disabled, expired, depleted, pending_apply, apply_failed, orphaned]
+        inboundIds:
+          type: array
+          items:
+            type: string
+        hasCreds:
+          type: boolean
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        version:
+          type: integer
+    ClientListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientView"
+        total:
+          type: integer
+    SubscriptionTokenResponse:
+      type: object
+      required: [token, prefix]
+      properties:
+        token:
+          type: string
+          description: Full plaintext token, returned only once at issuance.
+        prefix:
+          type: string
+          description: Public prefix used to identify the token.
+        expiresAt:
+          type: integer
+          format: int64
+    TrafficTotals:
+      type: object
+      required: [clientId, uploadBytes, downloadBytes, totalBytes, depleted]
+      properties:
+        clientId:
+          type: string
+        uploadBytes:
+          type: integer
+          format: int64
+        downloadBytes:
+          type: integer
+          format: int64
+        totalBytes:
+          type: integer
+          format: int64
+        quotaBytes:
+          type: integer
+          format: int64
+        remainingBytes:
+          type: integer
+          format: int64
+        depleted:
+          type: boolean
+    TrafficBucket:
+      type: object
+      required: [at, uploadBytes, downloadBytes]
+      properties:
+        at:
+          type: integer
+          format: int64
+        uploadBytes:
+          type: integer
+          format: int64
+        downloadBytes:
+          type: integer
+          format: int64
+    TrafficHistoryResponse:
+      type: object
+      required: [clientId, from, to, bucket, items]
+      properties:
+        clientId:
+          type: string
+        from:
+          type: integer
+          format: int64
+        to:
+          type: integer
+          format: int64
+        bucket:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrafficBucket"
+    TrafficTopEntry:
+      type: object
+      required: [clientId, name, totalBytes]
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        uploadBytes:
+          type: integer
+          format: int64
+        downloadBytes:
+          type: integer
+          format: int64
+        totalBytes:
+          type: integer
+          format: int64
+    TrafficTopResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrafficTopEntry"
