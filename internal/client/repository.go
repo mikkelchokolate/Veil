@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -95,6 +96,19 @@ func (r *Repository) Delete(id string) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetDepleted flips the depleted flag without a version check (reconciler use).
+func (r *Repository) SetDepleted(id string, depleted bool) error {
+	v := 0
+	if depleted {
+		v = 1
+	}
+	_, err := r.db.Exec(`UPDATE clients SET depleted=?, updated_at=? WHERE id=?`, v, time.Now().Unix(), id)
+	if err != nil {
+		return fmt.Errorf("client: set depleted: %w", err)
 	}
 	return nil
 }

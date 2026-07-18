@@ -53,6 +53,13 @@ func initClientSubsystem(s *managementState) {
 	}))
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
+	s.trafficStore = client.NewTrafficStore(s.db)
+	s.trafficCollector = client.NewCollector(s.trafficStore, 0, nil)
+	s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.autoApplyResultLocked(nil, "system")
+	})
 }
 
 // applyTrackingEnabled reports whether durable revisions/jobs are available.

@@ -83,11 +83,14 @@ type managementState struct {
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are
 	// then disabled and handlers fall back to legacy behavior.
-	db             *sql.DB
-	applyRevisions *apply.RevisionStore
-	applyJobs      *apply.JobStore
-	applyRunner    *apply.Runner
-	clientService  *client.Service
-	tokenStore     *client.TokenStore
-	subRenderer    *client.SubscriptionRenderer
+	db                *sql.DB
+	applyRevisions    *apply.RevisionStore
+	applyJobs         *apply.JobStore
+	applyRunner       *apply.Runner
+	clientService     *client.Service
+	tokenStore        *client.TokenStore
+	subRenderer       *client.SubscriptionRenderer
+	trafficStore      *client.TrafficStore
+	trafficCollector  *client.Collector
+	trafficReconciler *client.Reconciler
 }
