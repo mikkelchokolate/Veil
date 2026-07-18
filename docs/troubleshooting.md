@@ -114,6 +114,16 @@ This command restores the state file, stages the generated files, restarts the a
 - **Cause:** Public listeners are fail-closed and require both token auth and user/session auth.
 - **Resolution:** Set `VEIL_API_TOKEN` or pass `--auth-token`, then initialize a Panel admin user with `veil admin reset` or `veil admin set`.
 
+### Hysteria2 Connects With `insecure` Only (Self-Signed Certificate)
+- **Symptom:** A Hysteria2 Inbound assigned a domain works only when the client sets `insecure: true`; the served certificate is self-signed instead of a trusted Let's Encrypt one.
+- **Cause:** The domain is Hysteria2-only (not the Panel's or a NaiveProxy Inbound's domain), so its certificate uses the HTTP-01 challenge, and TCP `:80` was unavailable at apply time (or the domain did not resolve to the host). Veil logged a warning and kept the Inbound on a self-signed certificate.
+- **Resolution:** Confirm the domain's DNS points at this host and that TCP `:80` is free (`ss -tulpn | grep ':80 '`) or already served by Caddy, then re-apply. Reusing the Panel or a NaiveProxy Inbound's domain avoids `:80` entirely (shared `tls-alpn-01`). Check the challenge listener and issuance in the Caddy journal: `journalctl -u veil-caddy.service -n 100 --no-pager`.
+
+### Direct Panel Shows a Certificate Warning by IP
+- **Symptom:** In `direct` mode the browser warns about the certificate when opening `https://<server-ip>:<port>/`.
+- **Cause:** The trusted Let's Encrypt IP certificate was not issued — typically because port `80/tcp` was not reachable during the HTTP-01 challenge — so Veil fell back to the self-signed Panel certificate.
+- **Resolution:** Ensure port `80/tcp` is free and reachable from the internet, then re-issue via `veil repair --le-ip-cert --yes` (or reinstall). Verify the served certificate's SAN is the public IP (`openssl s_client -connect <ip>:<port> | openssl x509 -noout -ext subjectAltName`).
+
 ### "Apply Live" Failures on systemd Runtimes
 - **Symptom:** Staging works, but applying changes fails on systemd operations.
 - **Cause:** The non-root Panel could not reach the bare-metal privileged helper, the helper rejected a path/unit outside its allowlist, or the target runtime failed.

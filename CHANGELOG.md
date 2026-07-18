@@ -4,6 +4,20 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Hysteria2 Inbounds can now serve a real ACME certificate for a domain that
+  is not the Panel or a NaiveProxy Inbound. A Hysteria2-only domain switches
+  from `tls-alpn-01` to the HTTP-01 challenge and gets a dedicated ACME
+  challenge listener on TCP :80, so you can point any domain that resolves to
+  the host at a Hysteria2 Inbound and obtain a trusted certificate without
+  sharing the Panel/Naive Caddy listener. A Hysteria2 Inbound that reuses the
+  Panel's or a NaiveProxy Inbound's domain keeps `tls-alpn-01` and reuses the
+  certificate Caddy already manages for that domain. Requires TCP :80 to be
+  free (or already served by Caddy) and the domain to resolve to the host; a
+  Hysteria2-only domain conflicting on :80 produces a warning rather than
+  blocking the apply.
+
 ### Fixed
 
 - The privileged helper (`veil-helper.service`) can now write to `/etc/ufw`,

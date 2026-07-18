@@ -34,7 +34,7 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 | `--domain DOMAIN` | *(empty)* | Domain name to use (required if `--panel-access` is `caddy`). |
 | `--email EMAIL` | *(empty)* | ACME email for Let's Encrypt certificates (used for `caddy`; optional for `direct` IP certificates). |
 | `--panel-port PORT` | prompted interactively; `2096` with `--yes` | Port the Panel will listen on. Use `0` to select a random high port. |
-| `--le-ip-cert` | `true` for `direct`, otherwise ignored | Obtain a trusted Let's Encrypt IP certificate in `direct` mode. |
+| `--le-ip-cert` | `true` for `direct`, otherwise ignored | Obtain a trusted Let's Encrypt IP certificate in `direct` mode (short-lived; see Direct Mode). |
 | `--le-ip-cert-port PORT` | `80` | Port used for the Let's Encrypt HTTP-01 challenge listener. |
 | `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. Choices: `default` or `ru-recommended`. |
 | `--version TAG` | `latest` | Specify a targeted release tag to install (e.g. `v0.9.9`). |
@@ -85,11 +85,13 @@ Exposes the Panel publicly over automatic Let's Encrypt HTTPS on a custom domain
 ### Direct Mode
 Exposes the Panel directly on all interfaces on the configured port.
 
-By default, `direct` mode now obtains a trusted Let's Encrypt certificate for
-the server's public IP address (the `shortlived` profile, valid ~6 days and
-auto-renewed by `acme.sh`). This removes the browser certificate warning and
-prevents cached HSTS policies from causing redirect loops when accessing the
-panel by IP.
+By default, `direct` mode obtains a trusted Let's Encrypt certificate for the
+server's public IP address. Veil requests the `shortlived` certificate profile
+(3-day validity) through `acme.sh` in standalone mode and registers an `acme.sh`
+`reloadcmd` that restarts the Panel on renewal. This removes the browser
+certificate warning and prevents cached HSTS policies from causing redirect
+loops when accessing the panel by IP. The certificate's SAN is the public IP
+address (no `CN`).
 
 - **URL:** `https://your-server-ip:<panel-port>/`
 - **Requirements:** Port `80/tcp` must be free and reachable from the internet
@@ -107,7 +109,31 @@ panel by IP.
 
 ---
 
-## 3. Protocol Runtime Binaries
+## 3. Hysteria2 Inbound Certificates
+
+Hysteria2 requires TLS for its QUIC handshake (the client verifies a
+certificate for its SNI). When you give a Hysteria2 Inbound a domain, Veil
+obtains a real ACME certificate for it so clients connect without `insecure`:
+
+- **Reusing the Panel or a NaiveProxy Inbound's domain** — the Inbound reuses
+  the certificate Caddy already manages for that domain via `tls-alpn-01`. No
+  additional port or challenge listener is required.
+- **A Hysteria2-only domain** (any other domain resolving to the host) — Veil
+  switches that domain to the HTTP-01 challenge and adds a dedicated ACME
+  challenge listener on TCP `:80`, then syncs the issued certificate to the
+  Inbound. This needs TCP `:80` free (or already served by Caddy) and the
+  domain's DNS pointing at the host. If `:80` is unavailable the apply still
+  succeeds with a warning and the Inbound keeps running on a self-signed
+  certificate until `:80` is freed and re-applied.
+- **No domain** — the Inbound uses a self-signed certificate and clients must
+  use `insecure` (unchanged from before).
+
+Add the domain and email on the Hysteria2 Inbound in the Panel; no extra Caddy
+configuration is needed.
+
+---
+
+## 4. Protocol Runtime Binaries
 
 Veil's managed systemd units invoke external runtime binaries:
 
@@ -139,7 +165,7 @@ runtime is present.
 
 ---
 
-## 4. Manual Building from Source
+## 5. Manual Building from Source
 
 If you prefer to compile Veil from source, follow these instructions.
 
@@ -176,7 +202,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ---
 
-## 5. File and Directory Structure
+## 6. File and Directory Structure
 
 When installed natively on a Linux host, Veil manages the following directories and configurations:
 

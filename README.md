@@ -81,13 +81,31 @@ Open the Panel and add Inbounds for the protocols you need:
 | Protocol | Transports | Notes |
 |---|---:|---|
 | NaiveProxy | TCP | Requires Caddy, domain, email, username, and password |
-| Hysteria2 | UDP | Does not require Caddy |
+| Hysteria2 | UDP | Does not require Caddy; real ACME cert when given a domain |
 | olcRTC | UDP | Does not require Caddy |
 | Mieru | TCP or UDP | Does not require Caddy |
 
 TCP and UDP can use the same numeric port at the same time. For example, `mieru tcp 443` and `mieru udp 443` are different transport bindings and can coexist.
 
 Passwords are auto-generated when omitted. You can replace them in the Panel.
+
+### Hysteria2 TLS certificates
+
+Hysteria2 speaks QUIC and needs a TLS certificate for its SNI. When you assign a
+domain to a Hysteria2 Inbound, Veil obtains a real ACME certificate for it
+instead of a self-signed one, so clients connect without `insecure`:
+
+- **Domain already used by the Panel or a NaiveProxy Inbound** — the Hysteria2
+  Inbound reuses the certificate Caddy already manages for that domain
+  (`tls-alpn-01`). No extra port is needed.
+- **A Hysteria2-only domain** (any domain that resolves to the host) — Veil
+  switches it to the HTTP-01 challenge and adds a dedicated ACME challenge
+  listener on TCP `:80`, then syncs the issued certificate to the Inbound.
+  Requires TCP `:80` free (or already served by Caddy) and DNS pointing to the
+  host. If `:80` is unavailable the apply still succeeds with a warning, and
+  the Inbound runs on a self-signed certificate until `:80` is freed.
+- **No domain** — the Inbound uses a self-signed certificate and clients use
+  `insecure` (previous behavior, unchanged).
 
 ## What you get
 
@@ -172,7 +190,8 @@ restore, safety copies, key rotation, and recovery-drill procedures.
 - **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
 - **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
 - **Privilege separation** - the Panel runs as the locked `veil` user with no capabilities; root-only operations use the allowlisted, peer-credential-checked `veil-helper.socket`
-- **HTTPS Panel access** — generated self-signed Panel TLS without Caddy, or Caddy with random Web base path
+- **Direct public listen** — in `direct` mode Veil issues a trusted Let's Encrypt **IP certificate** (SAN = public IP, `shortlived` 3-day profile, auto-renewed via `acme.sh`) so the Panel serves valid HTTPS by IP without a domain
+- **Hysteria2 Inbound TLS** — a Hysteria2 Inbound assigned a domain uses a real ACME certificate: it reuses the Caddy-managed cert when the domain is the Panel's or a NaiveProxy Inbound's, and gets a dedicated HTTP-01 challenge on TCP `:80` for a Hysteria2-only domain
 - **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
 - **TLS 1.2+** — when HTTPS is enabled
 - **Rate limiting** — protects expensive endpoints
@@ -186,7 +205,7 @@ See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-ch
 |---|---|---|---|
 | Local + SSH tunnel | `127.0.0.1:<panel-port>` | Session user recommended; token optional | Recommended and safest. Use `ssh -L <panel-port>:127.0.0.1:<panel-port> host`. |
 | Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS, routes a random Web base path, and forces authenticated metrics. |
-| Direct public listen | `0.0.0.0:<panel-port>` or public IP | Session user and API token | `veil serve` refuses to start without TLS, both auth layers, and authenticated metrics. |
+| Direct public listen | `0.0.0.0:<panel-port>` or public IP | Session user and API token | `veil serve` refuses to start without TLS, both auth layers, and authenticated metrics. In `direct` mode Veil issues a trusted Let's Encrypt IP certificate for the public IP. |
 
 ## Documentation
 

@@ -24,7 +24,15 @@ Veil supports multiple Inbounds, with varying levels of isolation depending on t
 
 ---
 
-## 3. Go Module Path
+## 3. Certificate Issuance Boundaries
+
+- **Hysteria2-only domains need TCP :80.** A Hysteria2 Inbound using a domain not shared with the Panel or NaiveProxy requires the HTTP-01 challenge, which binds a dedicated challenge listener on TCP `:80`. If `:80` is unavailable (and not already served by Caddy), the apply succeeds with a warning but the certificate is not issued; the Inbound serves a self-signed certificate until `:80` is freed and the Inbound re-applied. Reusing the Panel's or a NaiveProxy Inbound's domain avoids this requirement (shared `tls-alpn-01`).
+- **Let's Encrypt IP certificates are short-lived and IPv4/IPv6-address-only.** The `direct`-mode IP certificate uses the `shortlived` profile (3-day validity) with the SAN set to the public IP address and no `CN`. Some clients or browsers do not accept IP-address SANs the same way as DNS SANs. Issuance requires port `80/tcp` reachable from the internet during the HTTP-01 challenge.
+- **Certificate issuance happens in install/repair, not in a routine apply.** Switching Panel access to `direct` through the API updates state, but the IP certificate is requested by `veil install` / `veil repair`; a normal `/api/apply` does not request the IP certificate on its own.
+
+---
+
+## 4. Go Module Path
 
 - **Path:** The module path is canonicalized to `github.com/mikkelchokolate/Veil`, matching the GitHub repository URL.
 - **Implication:** You can install the CLI tool directly from GitHub via `go install github.com/mikkelchokolate/Veil/cmd/veil@latest`.
