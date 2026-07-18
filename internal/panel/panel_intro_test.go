@@ -51,6 +51,27 @@ func TestPanelRoleResolutionFailsClosedAndValidatesStaticToken(t *testing.T) {
 	}
 }
 
+// The "Core Uptime" hero card must show the real veil process uptime loaded
+// from /api/processes, not a hardcoded placeholder percentage.
+func TestPanelCoreUptimeLoadsRealProcessUptime(t *testing.T) {
+	html := panelIntroCardsHTML()
+	for _, want := range []string{
+		`id="core-uptime-value"`,
+		`api/processes`,
+		`p.name === 'veil'`,
+		`formatDuration(core.uptimeSeconds)`,
+		`veil_api_token`,
+		`credentials: 'same-origin'`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("core uptime card missing %q", want)
+		}
+	}
+	if strings.Contains(html, "99.99%") {
+		t.Fatal("core uptime must not be a hardcoded placeholder percentage")
+	}
+}
+
 func TestPanelVersionPollingIsSequentialAndCannotOverwriteSuccessAtTimeout(t *testing.T) {
 	actions := panelIntroActionsJS()
 	for _, want := range []string{

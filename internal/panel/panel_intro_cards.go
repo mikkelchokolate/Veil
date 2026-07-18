@@ -448,7 +448,7 @@ func panelIntroCardsHTML() string {
       <!-- Uptime & System info -->
       <div class="veil-hero-card">
         <h4 class="veil-hero-card-title">Core Uptime</h4>
-        <p class="veil-hero-card-value">99.99%</p>
+        <p class="veil-hero-card-value" id="core-uptime-value">…</p>
         <p class="veil-hero-card-desc">Continuous service orchestration and connection monitoring</p>
       </div>
 
@@ -550,5 +550,50 @@ func panelIntroCardsHTML() string {
       </div>
     </section>
   </div>
-</div>`
+</div>
+<script>
+(function () {
+  function finiteNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  function formatDuration(seconds) {
+    const value = Math.max(0, finiteNumber(seconds, 0));
+    if (!value) return '0s';
+    const d = Math.floor(value / 86400);
+    const h = Math.floor((value % 86400) / 3600);
+    const m = Math.floor((value % 3600) / 60);
+    const s = Math.floor(value % 60);
+    const parts = [];
+    if (d > 0) parts.push(d + 'd');
+    if (h > 0) parts.push(h + 'h');
+    if (m > 0) parts.push(m + 'm');
+    if (s > 0 || parts.length === 0) parts.push(s + 's');
+    return parts.join(' ');
+  }
+  async function loadCoreUptime() {
+    const el = document.getElementById('core-uptime-value');
+    if (!el) return;
+    try {
+      const headers = {};
+      const token = (window.localStorage && window.localStorage.getItem('veil_api_token')) || '';
+      if (token) headers['X-Veil-Token'] = token;
+      const resp = await fetch('api/processes', { headers: headers, credentials: 'same-origin' });
+      if (!resp.ok) { el.textContent = 'unavailable'; return; }
+      const data = await resp.json();
+      const list = (data && data.processes) || [];
+      const core = list.find(function (p) { return p && p.name === 'veil'; });
+      if (!core) { el.textContent = 'not running'; return; }
+      el.textContent = formatDuration(core.uptimeSeconds);
+    } catch (err) {
+      el.textContent = 'unavailable';
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadCoreUptime);
+  } else {
+    loadCoreUptime();
+  }
+})();
+</script>`
 }
