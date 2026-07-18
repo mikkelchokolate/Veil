@@ -140,3 +140,75 @@ func TestPlanAcmeChallengeBindsTLSALPN01ReusesCaddyListener(t *testing.T) {
 		t.Fatal("expected no TCP :443 challenge bind when a compatible Caddy listener already owns the port")
 	}
 }
+
+// A hysteria2-only domain under tls-alpn-01 has no Caddy TCP listener, so the
+// ALPN challenge can never be answered for it. It must be switched to http-01
+// and get a challenge bind on :80.
+func TestPlanAcmeChallengeBindsHysteria2OnlyDomainSwitchesToHTTP01(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"hy.example.net": {
+			Domain: "hy.example.net",
+			Email:  "u@example.net",
+			Owners: CaddyDomainOwners{HysteriaInboundNames: []string{"hy1"}},
+		},
+	}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{}
+	planner, issues := PlanAcmeChallengeBinds("tls-alpn-01", domains, owners)
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %v", issues)
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	owner, ok := planner[key]
+	if !ok {
+		t.Fatalf("expected TCP :80 challenge bind for hysteria2-only domain, got %v", planner)
+	}
+	if owner.ChallengeMode != "http-01" {
+		t.Fatalf("expected http-01 challenge mode for hysteria2-only domain, got %q", owner.ChallengeMode)
+	}
+}
+
+// When :80 is owned by a non-Caddy service, a hysteria2-only domain produces a
+// warning (not a hard error) so apply still proceeds with a self-signed cert.
+func TestPlanAcmeChallengeBindsHysteria2Port80ConflictIsWarning(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"hy.example.net": {
+			Domain: "hy.example.net",
+			Email:  "u@example.net",
+			Owners: CaddyDomainOwners{HysteriaInboundNames: []string{"hy1"}},
+		},
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{
+		key: {Kind: bindregistry.BindOwnerPanelDirect},
+	}
+	_, issues := PlanAcmeChallengeBinds("tls-alpn-01", domains, owners)
+	if len(issues) != 1 {
+		t.Fatalf("expected one issue, got %v", issues)
+	}
+	if issues[0].Code != "acme_http01_port_in_use" {
+		t.Fatalf("expected acme_http01_port_in_use, got %v", issues[0])
+	}
+	if issues[0].Severity != "warning" {
+		t.Fatalf("expected warning severity for hysteria2-only domain, got %q", issues[0].Severity)
+	}
+}
+
+// A domain shared with a Panel/Naive owner keeps tls-alpn-01 and a busy :80
+// remains a hard error, since those rely on a working ACME cert over TCP.
+func TestPlanAcmeChallengeBindsPanelDomainPort80ConflictStaysError(t *testing.T) {
+	domains := map[string]CaddyDomainCertSpec{
+		"panel.example.net": {
+			Domain: "panel.example.net",
+			Email:  "u@example.net",
+			Owners: CaddyDomainOwners{Panel: true},
+		},
+	}
+	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
+	owners := map[bindregistry.BindKey]bindregistry.BindOwner{
+		key: {Kind: bindregistry.BindOwnerPanelDirect},
+	}
+	_, issues := PlanAcmeChallengeBinds("http-01", domains, owners)
+	if len(issues) != 1 || issues[0].Severity != "error" {
+		t.Fatalf("expected a single error issue for panel domain, got %v", issues)
+	}
+}
