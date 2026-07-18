@@ -51,6 +51,13 @@ func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	mountPath := strings.TrimSuffix(prefix, "/")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The public token-based subscription endpoint (/s/{token}) must stay
+		// reachable even when the panel is mounted under a secret base path:
+		// the unguessable token is the capability, not the panel path.
+		if strings.HasPrefix(r.URL.Path, "/s/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// Match either the mount itself or a child path. A raw HasPrefix check would
 		// incorrectly accept /secretary when the configured mount is /secret.
 		if r.URL.Path != mountPath && !strings.HasPrefix(r.URL.Path, mountPath+"/") {

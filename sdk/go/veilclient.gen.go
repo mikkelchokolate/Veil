@@ -1144,6 +1144,12 @@ type GetApiLogsParams struct {
 	Lines *int    `form:"lines,omitempty" json:"lines,omitempty"`
 }
 
+// PostApiV1ClientsIdTokensJSONBody defines parameters for PostApiV1ClientsIdTokens.
+type PostApiV1ClientsIdTokensJSONBody struct {
+	ExpiresAt *int64  `json:"expiresAt,omitempty"`
+	Label     *string `json:"label,omitempty"`
+}
+
 // GetApiV1TrafficIdHistoryParams defines parameters for GetApiV1TrafficIdHistory.
 type GetApiV1TrafficIdHistoryParams struct {
 	// From Unix start of the window (default 24h ago).
@@ -1238,6 +1244,9 @@ type PostApiV1ClientsJSONRequestBody = ClientUpsertRequest
 
 // PatchApiV1ClientsIdJSONRequestBody defines body for PatchApiV1ClientsId for application/json ContentType.
 type PatchApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
+
+// PostApiV1ClientsIdTokensJSONRequestBody defines body for PostApiV1ClientsIdTokens for application/json ContentType.
+type PostApiV1ClientsIdTokensJSONRequestBody PostApiV1ClientsIdTokensJSONBody
 
 // PostApiValidationJSONRequestBody defines body for PostApiValidation for application/json ContentType.
 type PostApiValidationJSONRequestBody = ValidationRequest
@@ -1557,17 +1566,25 @@ type ClientInterface interface {
 
 	PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteApiV1ClientsIdSubscriptionToken request
-	DeleteApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetApiV1ClientsIdTokens request
+	GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostApiV1ClientsIdSubscriptionToken request
-	PostApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PostApiV1ClientsIdTokensWithBody request with any body
+	PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetApiV1Traffic request
-	GetApiV1Traffic(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1ClientsIdTokensTokenId request
+	DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdTokensTokenIdRotate request
+	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1TrafficStream request
 	GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficTop request
+	GetApiV1TrafficTop(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1TrafficId request
 	GetApiV1TrafficId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2650,8 +2667,8 @@ func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, body Patc
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiV1ClientsIdSubscriptionTokenRequest(c.Server, id)
+func (c *Client) GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdTokensRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2662,8 +2679,8 @@ func (c *Client) DeleteApiV1ClientsIdSubscriptionToken(ctx context.Context, id C
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostApiV1ClientsIdSubscriptionToken(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdSubscriptionTokenRequest(c.Server, id)
+func (c *Client) PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2674,8 +2691,32 @@ func (c *Client) PostApiV1ClientsIdSubscriptionToken(ctx context.Context, id Cli
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetApiV1Traffic(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1TrafficRequest(c.Server)
+func (c *Client) PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdTokensTokenIdRequest(c.Server, id, tokenId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId)
 	if err != nil {
 		return nil, err
 	}
@@ -2688,6 +2729,18 @@ func (c *Client) GetApiV1Traffic(ctx context.Context, reqEditors ...RequestEdito
 
 func (c *Client) GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1TrafficStreamRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1TrafficTop(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficTopRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5070,8 +5123,8 @@ func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentTy
 	return req, nil
 }
 
-// NewDeleteApiV1ClientsIdSubscriptionTokenRequest generates requests for DeleteApiV1ClientsIdSubscriptionToken
-func NewDeleteApiV1ClientsIdSubscriptionTokenRequest(server string, id ClientId) (*http.Request, error) {
+// NewGetApiV1ClientsIdTokensRequest generates requests for GetApiV1ClientsIdTokens
+func NewGetApiV1ClientsIdTokensRequest(server string, id ClientId) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5086,68 +5139,7 @@ func NewDeleteApiV1ClientsIdSubscriptionTokenRequest(server string, id ClientId)
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/clients/%s/subscription-token", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1ClientsIdSubscriptionTokenRequest generates requests for PostApiV1ClientsIdSubscriptionToken
-func NewPostApiV1ClientsIdSubscriptionTokenRequest(server string, id ClientId) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clients/%s/subscription-token", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1TrafficRequest generates requests for GetApiV1Traffic
-func NewGetApiV1TrafficRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/traffic")
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/tokens", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5165,6 +5157,135 @@ func NewGetApiV1TrafficRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPostApiV1ClientsIdTokensRequest calls the generic PostApiV1ClientsIdTokens builder with application/json body
+func NewPostApiV1ClientsIdTokensRequest(server string, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsIdTokensRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsIdTokensRequestWithBody generates requests for PostApiV1ClientsIdTokens with any type of body
+func NewPostApiV1ClientsIdTokensRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/tokens", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1ClientsIdTokensTokenIdRequest generates requests for DeleteApiV1ClientsIdTokensTokenId
+func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tokenId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "tokenId", runtime.ParamLocationPath, tokenId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/tokens/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClientsIdTokensTokenIdRotateRequest generates requests for PostApiV1ClientsIdTokensTokenIdRotate
+func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId, tokenId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "tokenId", runtime.ParamLocationPath, tokenId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/tokens/%s/rotate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1TrafficStreamRequest generates requests for GetApiV1TrafficStream
 func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
 	var err error
@@ -5175,6 +5296,33 @@ func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/traffic/stream")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficTopRequest generates requests for GetApiV1TrafficTop
+func NewGetApiV1TrafficTopRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/top")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5877,17 +6025,25 @@ type ClientWithResponsesInterface interface {
 
 	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
-	// DeleteApiV1ClientsIdSubscriptionTokenWithResponse request
-	DeleteApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error)
+	// GetApiV1ClientsIdTokensWithResponse request
+	GetApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdTokensResponse, error)
 
-	// PostApiV1ClientsIdSubscriptionTokenWithResponse request
-	PostApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdSubscriptionTokenResponse, error)
+	// PostApiV1ClientsIdTokensWithBodyWithResponse request with any body
+	PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
 
-	// GetApiV1TrafficWithResponse request
-	GetApiV1TrafficWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficResponse, error)
+	PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
+
+	// DeleteApiV1ClientsIdTokensTokenIdWithResponse request
+	DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error)
+
+	// PostApiV1ClientsIdTokensTokenIdRotateWithResponse request
+	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
 
 	// GetApiV1TrafficStreamWithResponse request
 	GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error)
+
+	// GetApiV1TrafficTopWithResponse request
+	GetApiV1TrafficTopWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficTopResponse, error)
 
 	// GetApiV1TrafficIdWithResponse request
 	GetApiV1TrafficIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdResponse, error)
@@ -7286,13 +7442,13 @@ func (r PatchApiV1ClientsIdResponse) StatusCode() int {
 	return 0
 }
 
-type DeleteApiV1ClientsIdSubscriptionTokenResponse struct {
+type GetApiV1ClientsIdTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 }
 
 // Status returns HTTPResponse.Status
-func (r DeleteApiV1ClientsIdSubscriptionTokenResponse) Status() string {
+func (r GetApiV1ClientsIdTokensResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -7300,21 +7456,64 @@ func (r DeleteApiV1ClientsIdSubscriptionTokenResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DeleteApiV1ClientsIdSubscriptionTokenResponse) StatusCode() int {
+func (r GetApiV1ClientsIdTokensResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type PostApiV1ClientsIdSubscriptionTokenResponse struct {
+type PostApiV1ClientsIdTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *SubscriptionTokenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsIdTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsIdTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1ClientsIdTokensTokenIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1ClientsIdTokensTokenIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1ClientsIdTokensTokenIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClientsIdTokensTokenIdRotateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *SubscriptionTokenResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r PostApiV1ClientsIdSubscriptionTokenResponse) Status() string {
+func (r PostApiV1ClientsIdTokensTokenIdRotateResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -7322,29 +7521,7 @@ func (r PostApiV1ClientsIdSubscriptionTokenResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1ClientsIdSubscriptionTokenResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1TrafficResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TrafficTopResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1TrafficResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1TrafficResponse) StatusCode() int {
+func (r PostApiV1ClientsIdTokensTokenIdRotateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7366,6 +7543,28 @@ func (r GetApiV1TrafficStreamResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1TrafficStreamResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficTopResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrafficTopResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficTopResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficTopResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -8350,31 +8549,48 @@ func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Contex
 	return ParsePatchApiV1ClientsIdResponse(rsp)
 }
 
-// DeleteApiV1ClientsIdSubscriptionTokenWithResponse request returning *DeleteApiV1ClientsIdSubscriptionTokenResponse
-func (c *ClientWithResponses) DeleteApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error) {
-	rsp, err := c.DeleteApiV1ClientsIdSubscriptionToken(ctx, id, reqEditors...)
+// GetApiV1ClientsIdTokensWithResponse request returning *GetApiV1ClientsIdTokensResponse
+func (c *ClientWithResponses) GetApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdTokensResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdTokens(ctx, id, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDeleteApiV1ClientsIdSubscriptionTokenResponse(rsp)
+	return ParseGetApiV1ClientsIdTokensResponse(rsp)
 }
 
-// PostApiV1ClientsIdSubscriptionTokenWithResponse request returning *PostApiV1ClientsIdSubscriptionTokenResponse
-func (c *ClientWithResponses) PostApiV1ClientsIdSubscriptionTokenWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdSubscriptionTokenResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdSubscriptionToken(ctx, id, reqEditors...)
+// PostApiV1ClientsIdTokensWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsIdTokensResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensWithBody(ctx, id, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParsePostApiV1ClientsIdSubscriptionTokenResponse(rsp)
+	return ParsePostApiV1ClientsIdTokensResponse(rsp)
 }
 
-// GetApiV1TrafficWithResponse request returning *GetApiV1TrafficResponse
-func (c *ClientWithResponses) GetApiV1TrafficWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficResponse, error) {
-	rsp, err := c.GetApiV1Traffic(ctx, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokens(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetApiV1TrafficResponse(rsp)
+	return ParsePostApiV1ClientsIdTokensResponse(rsp)
+}
+
+// DeleteApiV1ClientsIdTokensTokenIdWithResponse request returning *DeleteApiV1ClientsIdTokensTokenIdResponse
+func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsIdTokensTokenId(ctx, id, tokenId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1ClientsIdTokensTokenIdResponse(rsp)
+}
+
+// PostApiV1ClientsIdTokensTokenIdRotateWithResponse request returning *PostApiV1ClientsIdTokensTokenIdRotateResponse
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotate(ctx, id, tokenId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdTokensTokenIdRotateResponse(rsp)
 }
 
 // GetApiV1TrafficStreamWithResponse request returning *GetApiV1TrafficStreamResponse
@@ -8384,6 +8600,15 @@ func (c *ClientWithResponses) GetApiV1TrafficStreamWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseGetApiV1TrafficStreamResponse(rsp)
+}
+
+// GetApiV1TrafficTopWithResponse request returning *GetApiV1TrafficTopResponse
+func (c *ClientWithResponses) GetApiV1TrafficTopWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficTopResponse, error) {
+	rsp, err := c.GetApiV1TrafficTop(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficTopResponse(rsp)
 }
 
 // GetApiV1TrafficIdWithResponse request returning *GetApiV1TrafficIdResponse
@@ -10063,15 +10288,15 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 	return response, nil
 }
 
-// ParseDeleteApiV1ClientsIdSubscriptionTokenResponse parses an HTTP response from a DeleteApiV1ClientsIdSubscriptionTokenWithResponse call
-func ParseDeleteApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*DeleteApiV1ClientsIdSubscriptionTokenResponse, error) {
+// ParseGetApiV1ClientsIdTokensResponse parses an HTTP response from a GetApiV1ClientsIdTokensWithResponse call
+func ParseGetApiV1ClientsIdTokensResponse(rsp *http.Response) (*GetApiV1ClientsIdTokensResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DeleteApiV1ClientsIdSubscriptionTokenResponse{
+	response := &GetApiV1ClientsIdTokensResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -10079,15 +10304,57 @@ func ParseDeleteApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*De
 	return response, nil
 }
 
-// ParsePostApiV1ClientsIdSubscriptionTokenResponse parses an HTTP response from a PostApiV1ClientsIdSubscriptionTokenWithResponse call
-func ParsePostApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*PostApiV1ClientsIdSubscriptionTokenResponse, error) {
+// ParsePostApiV1ClientsIdTokensResponse parses an HTTP response from a PostApiV1ClientsIdTokensWithResponse call
+func ParsePostApiV1ClientsIdTokensResponse(rsp *http.Response) (*PostApiV1ClientsIdTokensResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &PostApiV1ClientsIdSubscriptionTokenResponse{
+	response := &PostApiV1ClientsIdTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SubscriptionTokenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1ClientsIdTokensTokenIdResponse parses an HTTP response from a DeleteApiV1ClientsIdTokensTokenIdWithResponse call
+func ParseDeleteApiV1ClientsIdTokensTokenIdResponse(rsp *http.Response) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1ClientsIdTokensTokenIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClientsIdTokensTokenIdRotateResponse parses an HTTP response from a PostApiV1ClientsIdTokensTokenIdRotateWithResponse call
+func ParsePostApiV1ClientsIdTokensTokenIdRotateResponse(rsp *http.Response) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsIdTokensTokenIdRotateResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -10095,32 +10362,6 @@ func ParsePostApiV1ClientsIdSubscriptionTokenResponse(rsp *http.Response) (*Post
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SubscriptionTokenResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1TrafficResponse parses an HTTP response from a GetApiV1TrafficWithResponse call
-func ParseGetApiV1TrafficResponse(rsp *http.Response) (*GetApiV1TrafficResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1TrafficResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest TrafficTopResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -10142,6 +10383,32 @@ func ParseGetApiV1TrafficStreamResponse(rsp *http.Response) (*GetApiV1TrafficStr
 	response := &GetApiV1TrafficStreamResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficTopResponse parses an HTTP response from a GetApiV1TrafficTopWithResponse call
+func ParseGetApiV1TrafficTopResponse(rsp *http.Response) (*GetApiV1TrafficTopResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficTopResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficTopResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

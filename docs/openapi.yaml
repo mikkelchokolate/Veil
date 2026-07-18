@@ -1806,10 +1806,10 @@ paths:
       responses:
         "204":
           description: Deleted.
-  /api/v1/clients/{id}/subscription-token:
-    post:
+  /api/v1/clients/{id}/tokens:
+    get:
       tags: [clients]
-      summary: Issue (rotate) a subscription token; plaintext returned once
+      summary: List a client's subscription tokens (redacted)
       security:
         - sessionCookie: []
           csrfToken: []
@@ -1817,23 +1817,73 @@ paths:
         - $ref: "#/components/parameters/ClientId"
       responses:
         "200":
-          description: New token. Plaintext is returned only in this response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubscriptionTokenResponse"
-    delete:
+          description: Token metadata list (no plaintext).
+    post:
       tags: [clients]
-      summary: Revoke the active subscription token
+      summary: Issue a subscription token; plaintext returned once
       security:
         - sessionCookie: []
           csrfToken: []
       parameters:
         - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                expiresAt:
+                  type: integer
+                  format: int64
       responses:
-        "204":
+        "201":
+          description: New token. Plaintext is returned only in this response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTokenResponse"
+  /api/v1/clients/{id}/tokens/{tokenId}:
+    delete:
+      tags: [clients]
+      summary: Revoke a subscription token
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
           description: Token revoked.
-  /api/v1/traffic:
+  /api/v1/clients/{id}/tokens/{tokenId}/rotate:
+    post:
+      tags: [clients]
+      summary: Rotate a subscription token; new plaintext returned once
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rotated token. Plaintext is returned only in this response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTokenResponse"
+  /api/v1/traffic/top:
     get:
       tags: [traffic]
       summary: Top talkers ranked by cumulative usage
