@@ -95,6 +95,7 @@ export * from './getApiAuditParams.ts';
 export * from './getApiClientLinksSubscriptionFormat.ts';
 export * from './getApiClientLinksSubscriptionParams.ts';
 export * from './getApiLogsParams.ts';
+export * from './getApiV1EventsParams.ts';
 export * from './getApiV1TrafficIdHistoryParams.ts';
 export * from './getSTokenFormat.ts';
 export * from './getSTokenParams.ts';

@@ -2245,6 +2245,30 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/v1/events:
+    get:
+      tags: [traffic]
+      summary: Unified Server-Sent Events stream (A10)
+      description: |
+        Streams all panel events as SSE. Event types:
+          - traffic: periodic traffic snapshot (every 5s)
+          - apply: apply job state changes
+        Filter by event type via ?types=traffic,apply (comma-separated).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: types
+          in: query
+          schema:
+            type: string
+            description: Comma-separated event types to stream (traffic, apply). Default all.
+      responses:
+        "200":
+          description: text/event-stream of panel events.
+          content:
+            text/event-stream:
+              schema:
+                type: string
   /s/{token}:
     get:
       tags: [subscription]

@@ -41,6 +41,7 @@
  * OpenAPI spec version: 0.6.3
  */
 import type {
+  GetApiV1EventsParams,
   GetApiV1TrafficIdHistoryParams,
   TrafficHistoryResponse,
   TrafficTopResponse,
@@ -232,6 +233,52 @@ export const getGetApiV1TrafficStreamUrl = () => {
 export const getApiV1TrafficStream = async ( options?: RequestInit): Promise<getApiV1TrafficStreamResponse> => {
 
   return apiFetch<getApiV1TrafficStreamResponse>(getGetApiV1TrafficStreamUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+export type getApiV1EventsResponse200 = {
+  data: string
+  status: 200
+}
+
+export type getApiV1EventsResponseSuccess = (getApiV1EventsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess)
+
+export const getGetApiV1EventsUrl = (params?: GetApiV1EventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/events?${stringifiedParams}` : `/api/v1/events`
+}
+
+/**
+ * Streams all panel events as SSE. Event types:
+ *   - traffic: periodic traffic snapshot (every 5s)
+ *   - apply: apply job state changes
+ * Filter by event type via ?types=traffic,apply (comma-separated).
+ * @summary Unified Server-Sent Events stream (A10)
+ */
+export const getApiV1Events = async (params?: GetApiV1EventsParams, options?: RequestInit): Promise<getApiV1EventsResponse> => {
+
+  return apiFetch<getApiV1EventsResponse>(getGetApiV1EventsUrl(params),
   {
     ...options,
     method: 'GET'
