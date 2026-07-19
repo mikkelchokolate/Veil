@@ -176,6 +176,24 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) error {
 
 func nowUnixAPI() int64 { return time.Now().Unix() }
 
+// applyAfterClientMutation bumps the desired revision and runs the apply job
+// for a committed client mutation, returning the outcome so the handler can
+// surface an honest mutation envelope. The client store is separate from the
+// management state file, so the management mutation hooks are not triggered;
+// we record the revision explicitly. Caller must not hold s.mu.
+func (s *managementState) applyAfterClientMutation(r *http.Request, actor string) autoApplyOutcome {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bumpDesiredRevisionLocked()
+	return s.autoApplyResultLocked(r, actor)
+}
+
+// actorFromRequest extracts the authenticated username for audit/apply actor.
+func actorFromRequest(r *http.Request) string {
+	actor, _ := r.Context().Value(contextKeyUsername).(string)
+	return actor
+}
+
 func (s *managementState) handleV1ListClients(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := client.ListFilter{
@@ -250,7 +268,8 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 	}
 	s.logUserAction(r, "create_client", req.Name, true, "")
 	final, _ := s.clientService.Get(created.ID)
-	writeJSONStatus(w, http.StatusCreated, final)
+	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	s.writeMutationResponse(w, http.StatusCreated, final, outcome)
 }
 
 func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +304,8 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		s.logUserAction(r, "delete_client", id, true, "")
-		writeJSON(w, map[string]string{"id": id})
+		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": id}, outcome)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
@@ -325,7 +345,8 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.logUserAction(r, "update_client", id, true, "")
-	writeJSON(w, updated)
+	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 }
 
 func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
@@ -367,7 +388,8 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 				_, _ = s.clientService.SetCredential(b.ID, "password", req.Credential)
 			}
 			s.logUserAction(r, "add_binding", clientID, true, req.InboundID)
-			writeJSONStatus(w, http.StatusCreated, b)
+			outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+			s.writeMutationResponse(w, http.StatusCreated, b, outcome)
 			return
 		}
 		methodNotAllowed(w, http.MethodPost)
@@ -381,7 +403,8 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			return
 		}
 		s.logUserAction(r, "remove_binding", clientID, true, bindingID)
-		writeJSON(w, map[string]string{"id": bindingID})
+		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": bindingID}, outcome)
 		return
 	}
 	methodNotAllowed(w, http.MethodDelete)
@@ -411,7 +434,8 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 			return
 		}
 		s.logUserAction(r, "set_credential", clientID, true, bindingID)
-		writeJSONStatus(w, http.StatusCreated, cred)
+		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+		s.writeMutationResponse(w, http.StatusCreated, cred, outcome)
 		return
 	}
 	if r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "rotate" {
@@ -431,7 +455,8 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 			return
 		}
 		s.logUserAction(r, "rotate_credential", clientID, true, bindingID)
-		writeJSON(w, cred)
+		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+		s.writeMutationResponse(w, http.StatusOK, cred, outcome)
 		return
 	}
 	writeNotFound(w)
