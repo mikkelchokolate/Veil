@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 // The SPA is served both at "/" and under a secret WebBasePath ("/<secret>/").
@@ -7,7 +8,7 @@ import { defineConfig } from "vite";
 // server needing to know the secret at build time.
 export default defineConfig({
 	base: "./",
-	plugins: [react()],
+	plugins: [react(), tailwindcss()],
 	test: {
 		environment: "jsdom",
 		setupFiles: ["./src/test/setup.ts"],
