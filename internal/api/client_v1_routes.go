@@ -250,19 +250,35 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		s.writeV1ClientError(w, err)
 		return
 	}
-	// Create bindings (+ credentials) transactionally after the client.
+	// Create bindings (+ credentials) transactionally: if ANY requested binding
+	// or credential fails, the whole create is rolled back so the client never
+	// persists in a half-configured state, and we never return 201 for a
+	// partially-created client.
+	var createdBindingIDs []string
+	fail := func(cause error) {
+		for _, bid := range createdBindingIDs {
+			_ = s.clientService.RemoveBinding(bid, created.ID)
+		}
+		if derr := s.clientService.Delete(created.ID); derr != nil {
+			s.logUserAction(r, "create_client", req.Name, false, "rollback: "+derr.Error())
+		}
+		s.logUserAction(r, "create_client", req.Name, false, cause.Error())
+		s.writeV1ClientError(w, cause)
+	}
 	for _, b := range req.Bindings {
 		if b.InboundID == "" {
 			continue
 		}
 		bind, berr := s.clientService.AddBinding(created.ID, b.InboundID)
 		if berr != nil {
-			s.logUserAction(r, "create_client", req.Name, false, "bind: "+berr.Error())
-			continue
+			fail(berr)
+			return
 		}
+		createdBindingIDs = append(createdBindingIDs, bind.ID)
 		if b.Credential != "" {
 			if _, cerr := s.clientService.SetCredential(bind.ID, "password", b.Credential); cerr != nil {
-				s.logUserAction(r, "create_client", req.Name, false, "credential: "+cerr.Error())
+				fail(cerr)
+				return
 			}
 		}
 	}
