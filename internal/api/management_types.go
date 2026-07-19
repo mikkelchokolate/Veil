@@ -86,6 +86,7 @@ type managementState struct {
 	db                *sql.DB
 	applyRevisions    *apply.RevisionStore
 	applyJobs         *apply.JobStore
+	applySnapshots    *apply.SnapshotStore
 	applyRunner       *apply.Runner
 	clientService     *client.Service
 	tokenStore        *client.TokenStore

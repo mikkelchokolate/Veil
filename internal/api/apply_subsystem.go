@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -34,6 +35,7 @@ func initApplySubsystem(s *managementState) {
 	s.db = db
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
+	s.applySnapshots = apply.NewSnapshotStore(s.db)
 	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, s.executeApplyRevision)
 }
 
@@ -79,6 +81,20 @@ func (s *managementState) bumpDesiredRevisionLocked() uint64 {
 		log.Printf("apply subsystem: bump desired revision: %v", err)
 		return 0
 	}
+	// Record an immutable snapshot of the configuration committed as this
+	// revision. Apply jobs for this revision render from the snapshot, never
+	// from newer mutable state. Save is idempotent (first write wins). Secrets
+	// are encrypted before persistence so the snapshot never stores plaintext.
+	if s.applySnapshots != nil {
+		snap := s.snapshotLocked()
+		if err := s.encryptSnapshot(&snap); err != nil {
+			log.Printf("apply subsystem: encrypt revision %d snapshot: %v", rev, err)
+		} else if payload, serr := json.Marshal(snap); serr == nil {
+			if werr := s.applySnapshots.Save(rev, payload); werr != nil {
+				log.Printf("apply subsystem: save revision %d snapshot: %v", rev, werr)
+			}
+		}
+	}
 	return rev
 }
 
@@ -88,6 +104,14 @@ func (s *managementState) bumpDesiredRevisionLocked() uint64 {
 // function must NOT acquire s.mu again (the mutation that produced the
 // revision is already committed and the apply runner serializes execution).
 func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, error) {
+	// Pin the job to the immutable snapshot recorded for this revision. While
+	// s.mu is held by the caller no newer mutation can interleave, but a retry
+	// or reconcile may run for an OLDER revision after newer ones committed —
+	// in that case render from the pinned snapshot, not live state.
+	restore := s.pinStateToRevisionLocked(revision)
+	if restore != nil {
+		defer restore()
+	}
 	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).
 		RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
 	res := apply.Result{Success: err == nil && status == http.StatusOK, RolledBack: response.RolledBack}
@@ -101,6 +125,52 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 		res.ErrorMessage = applyFailureMessage(response, status)
 	}
 	return res, nil
+}
+
+// pinStateToRevisionLocked swaps the live mutable configuration for the
+// immutable snapshot recorded for the given revision and returns a restore
+// function. If no snapshot exists (legacy revision recorded before snapshots,
+// or the revision is the latest), it returns nil and the executor renders
+// current state. Caller must hold s.mu; the returned closure must run before
+// releasing it.
+func (s *managementState) pinStateToRevisionLocked(revision uint64) func() {
+	if s.applySnapshots == nil {
+		return nil
+	}
+	payload, err := s.applySnapshots.Load(revision)
+	if err != nil {
+		return nil // no pinned snapshot; render current (latest) state
+	}
+	var snap managementSnapshot
+	if err := json.Unmarshal(payload, &snap); err != nil {
+		log.Printf("apply subsystem: decode revision %d snapshot: %v", revision, err)
+		return nil
+	}
+	// Snapshots are stored encrypted; decrypt before rendering.
+	if err := s.decryptSnapshot(&snap); err != nil {
+		log.Printf("apply subsystem: decrypt revision %d snapshot: %v", revision, err)
+		return nil
+	}
+	// Capture live state so we can restore it after the pinned render.
+	prev := s.snapshotLocked()
+	applyRenderSnapshot(s, snap)
+	return func() { applyRenderSnapshot(s, prev) }
+}
+
+// applyRenderSnapshot overwrites the live mutable configuration with a
+// snapshot for rendering. Unlike managementstate.ApplySnapshot (which merges
+// defaults and skips empty fields for state-file load), this performs a full
+// field replacement: an apply job for revision N must render EXACTLY the
+// configuration committed as revision N, not a merge with newer state.
+func applyRenderSnapshot(s *managementState, snap managementSnapshot) {
+	s.setup = snap.Setup
+	s.settings = snap.Settings
+	s.inbounds = snap.Inbounds
+	s.rules = snap.Rules
+	s.routingPreset = snap.RoutingPreset
+	s.routingSource = snap.RoutingSource
+	s.warp = snap.Warp
+	s.users = snap.Users
 }
 
 // applyFailureCode maps an unsuccessful apply response to a stable error code.

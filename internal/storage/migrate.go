@@ -137,6 +137,17 @@ CREATE TABLE traffic_samples (
 CREATE INDEX idx_samples_client ON traffic_samples(client_id, bucket_start);
 `,
 	},
+	{
+		version: 2,
+		name:    "revision_snapshots",
+		sql: `
+CREATE TABLE revision_snapshots (
+  revision INTEGER PRIMARY KEY,
+  payload TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
