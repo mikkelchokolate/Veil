@@ -18,7 +18,8 @@
 		"noUncheckedSideEffectImports": true,
 		"exactOptionalPropertyTypes": true,
 		"noImplicitReturns": true,
-		"forceConsistentCasingInFileNames": true
+		"forceConsistentCasingInFileNames": true,
+		"types": ["vitest/globals", "@testing-library/jest-dom"]
 	},
 	"include": ["src"]
 }
