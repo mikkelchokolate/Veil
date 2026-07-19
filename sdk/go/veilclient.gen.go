@@ -174,11 +174,14 @@ const (
 
 // Defines values for PostApiV1ClientsBulkJSONBodyAction.
 const (
-	Delete     PostApiV1ClientsBulkJSONBodyAction = "delete"
-	Disable    PostApiV1ClientsBulkJSONBodyAction = "disable"
-	Enable     PostApiV1ClientsBulkJSONBodyAction = "enable"
-	Extend     PostApiV1ClientsBulkJSONBodyAction = "extend"
-	ResetQuota PostApiV1ClientsBulkJSONBodyAction = "reset_quota"
+	AttachInbound PostApiV1ClientsBulkJSONBodyAction = "attach_inbound"
+	Delete        PostApiV1ClientsBulkJSONBodyAction = "delete"
+	DetachInbound PostApiV1ClientsBulkJSONBodyAction = "detach_inbound"
+	Disable       PostApiV1ClientsBulkJSONBodyAction = "disable"
+	Enable        PostApiV1ClientsBulkJSONBodyAction = "enable"
+	ExtendExpiry  PostApiV1ClientsBulkJSONBodyAction = "extend_expiry"
+	ResetTraffic  PostApiV1ClientsBulkJSONBodyAction = "reset_traffic"
+	SetQuota      PostApiV1ClientsBulkJSONBodyAction = "set_quota"
 )
 
 // Defines values for GetSTokenParamsFormat.
@@ -1161,9 +1164,11 @@ type GetApiLogsParams struct {
 
 // PostApiV1ClientsBulkJSONBody defines parameters for PostApiV1ClientsBulk.
 type PostApiV1ClientsBulkJSONBody struct {
-	Action    PostApiV1ClientsBulkJSONBodyAction `json:"action"`
-	ClientIds []string                           `json:"clientIds"`
-	Days      *int                               `json:"days,omitempty"`
+	Action     PostApiV1ClientsBulkJSONBodyAction `json:"action"`
+	ClientIds  []string                           `json:"clientIds"`
+	Days       *int                               `json:"days,omitempty"`
+	InboundId  *string                            `json:"inboundId,omitempty"`
+	QuotaBytes *int64                             `json:"quotaBytes,omitempty"`
 }
 
 // PostApiV1ClientsBulkJSONBodyAction defines parameters for PostApiV1ClientsBulk.
@@ -1176,6 +1181,12 @@ type PostApiV1ClientsIdBindingsJSONBody struct {
 	InboundId  *string `json:"inboundId,omitempty"`
 }
 
+// PatchApiV1ClientsIdBindingsBindingIdJSONBody defines parameters for PatchApiV1ClientsIdBindingsBindingId.
+type PatchApiV1ClientsIdBindingsBindingIdJSONBody struct {
+	Enabled bool `json:"enabled"`
+	Version *int `json:"version,omitempty"`
+}
+
 // PostApiV1ClientsIdCredentialsBindingIdJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingId.
 type PostApiV1ClientsIdCredentialsBindingIdJSONBody struct {
 	Kind  *string `json:"kind,omitempty"`
@@ -1184,7 +1195,9 @@ type PostApiV1ClientsIdCredentialsBindingIdJSONBody struct {
 
 // PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingIdRotate.
 type PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody struct {
-	Kind  *string `json:"kind,omitempty"`
+	Kind *string `json:"kind,omitempty"`
+
+	// Value Optional; when empty the server generates a high-entropy secret returned once.
 	Value *string `json:"value,omitempty"`
 }
 
@@ -1305,6 +1318,9 @@ type PutApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
 
 // PostApiV1ClientsIdBindingsJSONRequestBody defines body for PostApiV1ClientsIdBindings for application/json ContentType.
 type PostApiV1ClientsIdBindingsJSONRequestBody PostApiV1ClientsIdBindingsJSONBody
+
+// PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody defines body for PatchApiV1ClientsIdBindingsBindingId for application/json ContentType.
+type PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody PatchApiV1ClientsIdBindingsBindingIdJSONBody
 
 // PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody defines body for PostApiV1ClientsIdCredentialsBindingId for application/json ContentType.
 type PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody PostApiV1ClientsIdCredentialsBindingIdJSONBody
@@ -1642,6 +1658,9 @@ type ClientInterface interface {
 
 	PostApiV1ClientsBulk(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ClientsMigrateLegacy request
+	PostApiV1ClientsMigrateLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteApiV1ClientsId request
 	DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1663,6 +1682,11 @@ type ClientInterface interface {
 
 	// DeleteApiV1ClientsIdBindingsBindingId request
 	DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchApiV1ClientsIdBindingsBindingIdWithBody request with any body
+	PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdWithBody request with any body
 	PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1690,6 +1714,9 @@ type ClientInterface interface {
 
 	// GetApiV1TrafficStream request
 	GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficSummary request
+	GetApiV1TrafficSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1TrafficTop request
 	GetApiV1TrafficTop(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2814,6 +2841,18 @@ func (c *Client) PostApiV1ClientsBulk(ctx context.Context, body PostApiV1Clients
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ClientsMigrateLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsMigrateLegacyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiV1ClientsIdRequest(c.Server, id)
 	if err != nil {
@@ -2900,6 +2939,30 @@ func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, bo
 
 func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(c.Server, id, bindingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3020,6 +3083,18 @@ func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id C
 
 func (c *Client) GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1TrafficStreamRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1TrafficSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficSummaryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5500,6 +5575,33 @@ func NewPostApiV1ClientsBulkRequestWithBody(server string, contentType string, b
 	return req, nil
 }
 
+// NewPostApiV1ClientsMigrateLegacyRequest generates requests for PostApiV1ClientsMigrateLegacy
+func NewPostApiV1ClientsMigrateLegacyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/migrate-legacy")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewDeleteApiV1ClientsIdRequest generates requests for DeleteApiV1ClientsId
 func NewDeleteApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, error) {
 	var err error
@@ -5733,6 +5835,60 @@ func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId,
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPatchApiV1ClientsIdBindingsBindingIdRequest calls the generic PatchApiV1ClientsIdBindingsBindingId builder with application/json body
+func NewPatchApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+}
+
+// NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody generates requests for PatchApiV1ClientsIdBindingsBindingId with any type of body
+func NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "bindingId", runtime.ParamLocationPath, bindingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/bindings/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -6018,6 +6174,33 @@ func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/traffic/stream")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1TrafficSummaryRequest generates requests for GetApiV1TrafficSummary
+func NewGetApiV1TrafficSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/summary")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6828,6 +7011,9 @@ type ClientWithResponsesInterface interface {
 
 	PostApiV1ClientsBulkWithResponse(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
 
+	// PostApiV1ClientsMigrateLegacyWithResponse request
+	PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error)
+
 	// DeleteApiV1ClientsIdWithResponse request
 	DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error)
 
@@ -6849,6 +7035,11 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteApiV1ClientsIdBindingsBindingIdWithResponse request
 	DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error)
+
+	// PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse request with any body
+	PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
+
+	PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse request with any body
 	PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
@@ -6876,6 +7067,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiV1TrafficStreamWithResponse request
 	GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error)
+
+	// GetApiV1TrafficSummaryWithResponse request
+	GetApiV1TrafficSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficSummaryResponse, error)
 
 	// GetApiV1TrafficTopWithResponse request
 	GetApiV1TrafficTopWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficTopResponse, error)
@@ -8341,6 +8535,27 @@ func (r PostApiV1ClientsBulkResponse) StatusCode() int {
 	return 0
 }
 
+type PostApiV1ClientsMigrateLegacyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClientsMigrateLegacyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClientsMigrateLegacyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type DeleteApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8463,6 +8678,27 @@ func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchApiV1ClientsIdBindingsBindingIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchApiV1ClientsIdBindingsBindingIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchApiV1ClientsIdBindingsBindingIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -8612,6 +8848,27 @@ func (r GetApiV1TrafficStreamResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1TrafficStreamResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1TrafficSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficSummaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -9666,6 +9923,15 @@ func (c *ClientWithResponses) PostApiV1ClientsBulkWithResponse(ctx context.Conte
 	return ParsePostApiV1ClientsBulkResponse(rsp)
 }
 
+// PostApiV1ClientsMigrateLegacyWithResponse request returning *PostApiV1ClientsMigrateLegacyResponse
+func (c *ClientWithResponses) PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error) {
+	rsp, err := c.PostApiV1ClientsMigrateLegacy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsMigrateLegacyResponse(rsp)
+}
+
 // DeleteApiV1ClientsIdWithResponse request returning *DeleteApiV1ClientsIdResponse
 func (c *ClientWithResponses) DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error) {
 	rsp, err := c.DeleteApiV1ClientsId(ctx, id, reqEditors...)
@@ -9734,6 +10000,23 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(
 		return nil, err
 	}
 	return ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp)
+}
+
+// PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1ClientsIdBindingsBindingIdResponse
+func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1ClientsIdBindingsBindingIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1ClientsIdBindingsBindingIdResponse(rsp)
 }
 
 // PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse request with arbitrary body returning *PostApiV1ClientsIdCredentialsBindingIdResponse
@@ -9821,6 +10104,15 @@ func (c *ClientWithResponses) GetApiV1TrafficStreamWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseGetApiV1TrafficStreamResponse(rsp)
+}
+
+// GetApiV1TrafficSummaryWithResponse request returning *GetApiV1TrafficSummaryResponse
+func (c *ClientWithResponses) GetApiV1TrafficSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficSummaryResponse, error) {
+	rsp, err := c.GetApiV1TrafficSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficSummaryResponse(rsp)
 }
 
 // GetApiV1TrafficTopWithResponse request returning *GetApiV1TrafficTopResponse
@@ -11546,6 +11838,22 @@ func ParsePostApiV1ClientsBulkResponse(rsp *http.Response) (*PostApiV1ClientsBul
 	return response, nil
 }
 
+// ParsePostApiV1ClientsMigrateLegacyResponse parses an HTTP response from a PostApiV1ClientsMigrateLegacyWithResponse call
+func ParsePostApiV1ClientsMigrateLegacyResponse(rsp *http.Response) (*PostApiV1ClientsMigrateLegacyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClientsMigrateLegacyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseDeleteApiV1ClientsIdResponse parses an HTTP response from a DeleteApiV1ClientsIdWithResponse call
 func ParseDeleteApiV1ClientsIdResponse(rsp *http.Response) (*DeleteApiV1ClientsIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -11655,6 +11963,22 @@ func ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*De
 	}
 
 	response := &DeleteApiV1ClientsIdBindingsBindingIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePatchApiV1ClientsIdBindingsBindingIdResponse parses an HTTP response from a PatchApiV1ClientsIdBindingsBindingIdWithResponse call
+func ParsePatchApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchApiV1ClientsIdBindingsBindingIdResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -11787,6 +12111,22 @@ func ParseGetApiV1TrafficStreamResponse(rsp *http.Response) (*GetApiV1TrafficStr
 	}
 
 	response := &GetApiV1TrafficStreamResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficSummaryResponse parses an HTTP response from a GetApiV1TrafficSummaryWithResponse call
+func ParseGetApiV1TrafficSummaryResponse(rsp *http.Response) (*GetApiV1TrafficSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficSummaryResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

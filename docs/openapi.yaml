@@ -1848,16 +1848,21 @@ paths:
               properties:
                 action:
                   type: string
-                  enum: [enable, disable, delete, extend, reset_quota]
+                  enum: [enable, disable, delete, extend_expiry, set_quota, reset_traffic, attach_inbound, detach_inbound]
                 clientIds:
                   type: array
                   items:
                     type: string
                 days:
                   type: integer
+                quotaBytes:
+                  type: integer
+                  format: int64
+                inboundId:
+                  type: string
       responses:
         "200":
-          description: '{"action,total,succeeded,failed,results[]}'
+          description: '{"action,total,succeeded,skipped,failed,results[],revision,applyJob,success}'
   /api/v1/clients/{id}/bindings:
     get:
       tags: [clients]
@@ -1898,6 +1903,36 @@ paths:
         "201":
           description: Created binding.
   /api/v1/clients/{id}/bindings/{bindingId}:
+    patch:
+      tags: [clients]
+      summary: Update a binding (toggle enabled, optimistic locking)
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                version:
+                  type: integer
+      responses:
+        "200":
+          description: Updated binding with mutation envelope.
     delete:
       tags: [clients]
       summary: Remove a binding
@@ -1973,9 +2008,22 @@ paths:
                   type: string
                 value:
                   type: string
+                  description: Optional; when empty the server generates a high-entropy secret returned once.
       responses:
         "200":
-          description: Rotated credential.
+          description: Rotated credential; server-generated rotate returns {credential,plaintext}.
+  /api/v1/clients/migrate-legacy:
+    post:
+      tags: [clients]
+      summary: Convert legacy inbound-embedded profiles to normalized clients (idempotent)
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      responses:
+        "200":
+          description: '{"migrated,inbounds[],revision,applyJob,success}'
   /api/v1/clients/{id}:
     get:
       tags: [clients]
@@ -2105,6 +2153,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SubscriptionTokenResponse"
+  /api/v1/traffic/summary:
+    get:
+      tags: [traffic]
+      summary: Aggregate traffic totals + honest telemetry provider state
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+        - veilToken: []
+      responses:
+        "200":
+          description: '{"state,providerCount,uploadBytes,downloadBytes,usedBytes}'
   /api/v1/traffic/top:
     get:
       tags: [traffic]
