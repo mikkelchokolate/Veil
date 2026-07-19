@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
 import type { ApplyJob } from "../api/generated/models";
+import { Link } from "@tanstack/react-router";
 
 function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({
@@ -127,7 +128,9 @@ export function ApplyPage() {
 										<tr key={j.id}>
 											<td className="muted">{fmtTime(j.createdAt)}</td>
 											<td className="mono">
-												{j.baseRevision} → {j.desiredRevision}
+												<Link to="/apply/jobs/$jobId" params={{ jobId: j.id }} className="mono">
+													{j.baseRevision} → {j.desiredRevision}
+												</Link>
 											</td>
 											<td className="muted">{j.trigger}</td>
 											<td>

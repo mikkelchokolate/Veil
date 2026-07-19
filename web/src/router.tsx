@@ -49,6 +49,7 @@ const BackupsPage = lazy(() => import("./pages/BackupsPage").then((m) => ({ defa
 const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default: m.UsersPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const ApplyPage = lazy(() => import("./pages/ApplyPage").then((m) => ({ default: m.ApplyPage })));
+const ApplyJobDetailPage = lazy(() => import("./pages/ApplyJobDetailPage").then((m) => ({ default: m.ApplyJobDetailPage })));
 
 const rootRoute = createRootRoute({ component: Outlet });
 
@@ -182,6 +183,16 @@ const applyRoute = createRoute({
 	),
 	errorComponent: RouteErrorBoundary,
 });
+const applyJobDetailRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/apply/jobs/$jobId",
+	component: () => (
+		<Suspense fallback={<RouteLoading />}>
+			<ApplyJobDetailPage />
+		</Suspense>
+	),
+	errorComponent: RouteErrorBoundary,
+});
 
 const routeTree = rootRoute.addChildren([
 	overviewRoute,
@@ -197,6 +208,7 @@ const routeTree = rootRoute.addChildren([
 	usersRoute,
 	settingsRoute,
 	applyRoute,
+	applyJobDetailRoute,
 ]);
 
 const router = createRouter({
