@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -233,6 +234,44 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 		if err := l.Load(); err != nil {
 			return fmt.Errorf("reload state: %w", err)
 		}
+	}
+	// A6: auto-migrate legacy inbound-embedded profiles to normalized
+	// Client+Binding+Credential on startup/upgrade. Idempotent (stable derived
+	// client IDs) so safe to run every boot. Runs AFTER state load so legacy
+	// profiles are visible.
+	if err := l.AutoMigrateLegacyLocked(); err != nil {
+		// Non-fatal: log and continue. Manual migration via API still available.
+		log.Printf("auto-migrate legacy profiles: %v", err)
+	}
+	return nil
+}
+
+// AutoMigrateLegacyLocked converts any legacy inbound-embedded profiles into
+// the normalized model. Idempotent: clients already migrated (by stable ID)
+// are skipped. Caller must hold l.state.mu.
+func (l ManagementStateLifecycle) AutoMigrateLegacyLocked() error {
+	if l.state.clientMigrator == nil {
+		return nil
+	}
+	migrated := 0
+	for _, in := range l.state.inbounds {
+		if len(in.Profiles) == 0 {
+			continue
+		}
+		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
+		for _, p := range in.Profiles {
+			profiles = append(profiles, client.LegacyProfile{
+				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
+			})
+		}
+		res, err := l.state.clientMigrator.MigrateInboundProfiles(in.Name, in.Protocol, profiles)
+		if err != nil {
+			return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
+		}
+		migrated += res.ClientsCreated
+	}
+	if migrated > 0 {
+		log.Printf("auto-migrated %d legacy profiles to normalized clients", migrated)
 	}
 	return nil
 }
