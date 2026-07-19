@@ -13,6 +13,17 @@ type Service struct {
 	creds    *CredentialStore
 	notifier ApplyNotifier
 	now      func() int64
+	// inboundLookup resolves an inbound's protocol capabilities by inbound ID
+	// (name) for the enriched binding read model. Optional; when nil the
+	// view falls back to bare inboundIds.
+	inboundLookup func(inboundID string) *BindingCapability
+}
+
+// WithInboundLookup attaches a resolver that maps an inbound ID to its
+// protocol capabilities, enabling the enriched bindings read model on views.
+func (s *Service) WithInboundLookup(fn func(inboundID string) *BindingCapability) *Service {
+	s.inboundLookup = fn
+	return s
 }
 
 // ApplyNotifier is invoked after a mutation that changes desired config so a
@@ -32,6 +43,28 @@ type View struct {
 	Status     EffectiveStatus `json:"status"`
 	InboundIDs []string        `json:"inboundIds,omitempty"`
 	HasCreds   bool            `json:"hasCredentials"`
+	// Bindings is the full binding read model: each bound inbound with its id,
+	// enabled flag and the protocol capabilities relevant to a client binding.
+	// Empty when no inbound lookup was attached to the service.
+	Bindings []BindingView `json:"bindings,omitempty"`
+}
+
+// BindingView describes one client->inbound binding enriched with the
+// protocol capabilities of the bound inbound, so the UI/API consumer knows
+// what a client on this inbound supports (per-client credentials, transports).
+type BindingView struct {
+	ID         string           `json:"id"`
+	InboundID  string           `json:"inboundId"`
+	Enabled    bool             `json:"enabled"`
+	Capability *BindingCapability `json:"capability,omitempty"`
+}
+
+// BindingCapability captures the protocol capabilities of a bound inbound.
+type BindingCapability struct {
+	Protocol              string   `json:"protocol"`
+	Transports            []string `json:"transports"`
+	PerClientCredentials  bool     `json:"perClientCredentials"`
+	RequiresCaddy         bool     `json:"requiresCaddy"`
 }
 
 // ErrValidation marks a 400-class client-side validation failure.
@@ -217,9 +250,15 @@ func (s *Service) toView(c Client) (View, error) {
 		return View{}, err
 	}
 	inbounds := make([]string, 0, len(bindings))
+	bindingViews := make([]BindingView, 0, len(bindings))
 	hasCreds := false
 	for _, b := range bindings {
 		inbounds = append(inbounds, b.InboundID)
+		bv := BindingView{ID: b.ID, InboundID: b.InboundID, Enabled: b.Enabled}
+		if s.inboundLookup != nil {
+			bv.Capability = s.inboundLookup(b.InboundID)
+		}
+		bindingViews = append(bindingViews, bv)
 		if !hasCreds {
 			creds, err := s.creds.ListForBinding(b.ID)
 			if err == nil && len(creds) > 0 {
@@ -228,7 +267,7 @@ func (s *Service) toView(c Client) (View, error) {
 		}
 	}
 	status := ComputeStatus(c, timeFromUnix(s.now()), false, false, len(bindings) == 0)
-	return View{Client: c, Status: status, InboundIDs: inbounds, HasCreds: hasCreds}, nil
+	return View{Client: c, Status: status, InboundIDs: inbounds, HasCreds: hasCreds, Bindings: bindingViews}, nil
 }
 
 func (s *Service) notify(kind, id string) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -39,7 +40,38 @@ func initApplySubsystem(s *managementState) {
 	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, s.executeApplyRevision)
 }
 
-// initClientSubsystem wires the normalized client domain (Stage 1) onto the
+// bindingCapabilityForInbound resolves the protocol capabilities of the named
+// inbound for the enriched client binding read model. Returns nil when the
+// inbound or its protocol is unknown. Per-client credential support is taken
+// from the protocol's ClientAccessProvider capability.
+func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.BindingCapability {
+	s.mu.Lock()
+	var proto string
+	for _, in := range s.inbounds {
+		if in.Name == inboundID {
+			proto = in.Protocol
+			break
+		}
+	}
+	s.mu.Unlock()
+	if proto == "" {
+		return nil
+	}
+	reg := protocols.NewRegistry()
+	p, ok := reg.Get(proto)
+	if !ok {
+		return nil
+	}
+	meta := protocols.MetadataOf(p)
+	_, perClient := protocols.AsClientAccessProvider(p)
+	return &client.BindingCapability{
+		Protocol:             meta.Protocol,
+		Transports:           meta.Transports,
+		PerClientCredentials: perClient,
+		RequiresCaddy:        meta.RequiresCaddy,
+	}
+}
+
 // same SQLite store. It must run AFTER the secrets cipher is loaded because
 // the credential store encrypts at rest with it. No-op when no store/cipher.
 func initClientSubsystem(s *managementState) {
@@ -52,7 +84,7 @@ func initClientSubsystem(s *managementState) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.autoApplyResultLocked(nil, "system")
-	}))
+	})).WithInboundLookup(s.bindingCapabilityForInbound)
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds)
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
