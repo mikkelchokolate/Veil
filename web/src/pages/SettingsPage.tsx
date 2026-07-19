@@ -1,14 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
-
-interface Settings {
-	domain?: string;
-	mode?: string;
-	panelListen?: string;
-	panelAccess?: string;
-	webBasePath?: string;
-	email?: string;
-}
+import type { Settings } from "../api/generated/models";
 
 /** Settings: read-only view of the current panel/server settings. Editing
  * server settings is a staged, apply-gated mutation; shown read-only here to

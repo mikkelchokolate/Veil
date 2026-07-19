@@ -1,15 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
-
-interface WarpConfig {
-	enabled: boolean;
-	endpoint?: string;
-	localAddress?: string;
-	socksListen?: string;
-	socksPort?: number;
-	mtu?: number;
-}
+import type { WarpConfig } from "../api/generated/models";
 
 /** WARP outbound: enable/disable toggle + read-only status. Provisioning of a
  * free Cloudflare account is server-side on enable. */

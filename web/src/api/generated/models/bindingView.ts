@@ -40,24 +40,14 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BindingView } from './bindingView.ts';
-import type { ClientViewStatus } from './clientViewStatus.ts';
+import type { BindingCapability } from './bindingCapability.ts';
+import type { CredentialMeta } from './credentialMeta.ts';
 
-export interface ClientView {
+export interface BindingView {
   id: string;
-  name: string;
-  email?: string;
-  enabled?: boolean;
-  quotaBytes?: number;
-  quotaResetPolicy?: string;
-  expiresAt?: number;
-  depleted?: boolean;
-  /** Effective status. */
-  status: ClientViewStatus;
-  inboundIds?: string[];
-  hasCreds?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  version?: number;
-  bindings?: BindingView[];
+  inboundId: string;
+  enabled: boolean;
+  version: number;
+  capability?: BindingCapability;
+  credential?: CredentialMeta;
 }

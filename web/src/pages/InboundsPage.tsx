@@ -1,13 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
-
-interface Inbound {
-	name: string;
-	protocol: string;
-	transport?: string;
-	port?: number;
-	enabled?: boolean;
-}
+import type { Inbound } from "../api/generated/models";
 
 /** B10: inbounds list. Legacy embedded profiles are no longer edited here —
  * normalized clients are managed under Clients; attached clients shown. */

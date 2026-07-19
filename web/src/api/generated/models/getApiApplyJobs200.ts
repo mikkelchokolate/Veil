@@ -40,24 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BindingView } from './bindingView.ts';
-import type { ClientViewStatus } from './clientViewStatus.ts';
+import type { ApplyJob } from './applyJob.ts';
 
-export interface ClientView {
-  id: string;
-  name: string;
-  email?: string;
-  enabled?: boolean;
-  quotaBytes?: number;
-  quotaResetPolicy?: string;
-  expiresAt?: number;
-  depleted?: boolean;
-  /** Effective status. */
-  status: ClientViewStatus;
-  inboundIds?: string[];
-  hasCreds?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  version?: number;
-  bindings?: BindingView[];
-}
+export type GetApiApplyJobs200 = {
+  items: ApplyJob[];
+};

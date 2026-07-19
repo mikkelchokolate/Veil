@@ -2,46 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { apiFetch, ApiError } from "../api/fetcher";
+import type { BindingView, ClientView } from "../api/generated/models";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
 
-interface BindingCapability {
-	protocol?: string;
-	transports?: string[];
-	perClientCredentials?: boolean;
-	requiresCaddy?: boolean;
-}
-
-interface CredentialMeta {
-	configured?: boolean;
-	kind?: string;
-	version?: number;
-	rotatedAt?: number;
-}
-
-interface BindingView {
-	id: string;
-	inboundId: string;
-	enabled: boolean;
-	version?: number;
-	capability?: BindingCapability;
-	credential?: CredentialMeta;
-}
-
-interface ClientDetail {
-	id: string;
-	name: string;
-	email?: string;
-	enabled?: boolean;
-	quotaBytes?: number;
-	expiresAt?: number;
-	status: string;
-	inboundIds?: string[];
-	bindings?: BindingView[];
-	version?: number;
-	notes?: string;
-}
-
+type ClientDetail = ClientView;
 type Tab = "overview" | "access" | "subscription" | "traffic";
 
 export function ClientDetailPage() {
@@ -137,7 +102,6 @@ export function ClientDetailPage() {
 					<p><strong>Enabled:</strong> {c.enabled ? "yes" : "no"}</p>
 					<p><strong>Quota:</strong> {c.quotaBytes != null ? `${c.quotaBytes} bytes` : "unlimited"}</p>
 					<p><strong>Expires:</strong> {c.expiresAt ? new Date(c.expiresAt * 1000).toLocaleString() : "never"}</p>
-					{c.notes ? <p><strong>Notes:</strong> {c.notes}</p> : null}
 				</div>
 			) : null}
 

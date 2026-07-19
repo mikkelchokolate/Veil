@@ -1,14 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
-
-interface BackupArchive {
-	name: string;
-	path: string;
-	size: number;
-	createdAt: string;
-	encrypted: boolean;
-}
+import type { BackupArchive } from "../api/generated/models";
 
 function fmtBytes(n: number): string {
 	const units = ["B", "KiB", "MiB", "GiB"];

@@ -1338,7 +1338,17 @@ paths:
         - veilToken: []
       responses:
         "200":
-          description: '{"items": [...]}'
+          description: List of apply jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApplyJob"
   /api/apply/jobs/{id}:
     get:
       tags: [apply]
@@ -3478,6 +3488,33 @@ components:
               type: string
             success:
               type: boolean
+    ApplyJob:
+      type: object
+      required: [id, desiredRevision, baseRevision, status, trigger, createdAt]
+      properties:
+        id:
+          type: string
+        desiredRevision:
+          type: integer
+        baseRevision:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, success, failed, rolled_back]
+        trigger:
+          type: string
+        actorId:
+          type: string
+        createdAt:
+          type: integer
+        startedAt:
+          type: integer
+        finishedAt:
+          type: integer
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
     ServiceActionRequest:
       type: object
       required: [confirm]
@@ -3886,6 +3923,53 @@ components:
           format: int64
         version:
           type: integer
+        bindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/BindingView"
+    BindingView:
+      type: object
+      required: [id, inboundId, enabled, version]
+      properties:
+        id:
+          type: string
+        inboundId:
+          type: string
+        enabled:
+          type: boolean
+        version:
+          type: integer
+        capability:
+          $ref: "#/components/schemas/BindingCapability"
+        credential:
+          $ref: "#/components/schemas/CredentialMeta"
+    BindingCapability:
+      type: object
+      required: [protocol, transports, perClientCredentials, requiresCaddy]
+      properties:
+        protocol:
+          type: string
+        transports:
+          type: array
+          items:
+            type: string
+        perClientCredentials:
+          type: boolean
+        requiresCaddy:
+          type: boolean
+    CredentialMeta:
+      type: object
+      required: [configured]
+      properties:
+        configured:
+          type: boolean
+        kind:
+          type: string
+        version:
+          type: integer
+        rotatedAt:
+          type: integer
+          format: int64
     ClientListResponse:
       type: object
       required: [items, total]

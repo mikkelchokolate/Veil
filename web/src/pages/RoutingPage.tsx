@@ -1,12 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
-
-interface RoutingRule {
-	name: string;
-	match: string;
-	outbound: string;
-	enabled: boolean;
-}
+import type { RoutingRule } from "../api/generated/models";
 
 /** Routing rules: read-only list. Editing staged routing is a higher-risk
  * mutation surface; list + status shown here. */

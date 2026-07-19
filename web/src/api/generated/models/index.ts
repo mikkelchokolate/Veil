@@ -42,6 +42,8 @@
  */
 
 export * from './applyHistoryEntry.ts';
+export * from './applyJob.ts';
+export * from './applyJobStatus.ts';
 export * from './applyOperation.ts';
 export * from './applyOperationInterruptionRisk.ts';
 export * from './applyOperationType.ts';
@@ -65,6 +67,8 @@ export * from './backupRestoreRequest.ts';
 export * from './backupVerificationReport.ts';
 export * from './backupVerificationReportEncryptionVersion.ts';
 export * from './badRequestResponse.ts';
+export * from './bindingCapability.ts';
+export * from './bindingView.ts';
 export * from './clientArtifact.ts';
 export * from './clientLink.ts';
 export * from './clientLinkQRRequest.ts';
@@ -78,6 +82,7 @@ export * from './clientViewStatus.ts';
 export * from './configValidationResult.ts';
 export * from './connectionListener.ts';
 export * from './connectionsStats.ts';
+export * from './credentialMeta.ts';
 export * from './dirSizeInfo.ts';
 export * from './diskStats.ts';
 export * from './dNSLookupRequest.ts';
@@ -91,6 +96,7 @@ export * from './fieldSchema.ts';
 export * from './firewallRule.ts';
 export * from './firewallRuleProtocol.ts';
 export * from './forbiddenResponse.ts';
+export * from './getApiApplyJobs200.ts';
 export * from './getApiAuditParams.ts';
 export * from './getApiClientLinksSubscriptionFormat.ts';
 export * from './getApiClientLinksSubscriptionParams.ts';

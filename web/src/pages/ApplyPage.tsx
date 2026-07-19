@@ -2,20 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
-
-interface ApplyJob {
-	id: string;
-	desiredRevision: number;
-	baseRevision: number;
-	status: string;
-	trigger: string;
-	actorId?: string;
-	createdAt: number;
-	startedAt?: number;
-	finishedAt?: number;
-	errorCode?: string;
-	errorMessage?: string;
-}
+import type { ApplyJob } from "../api/generated/models";
 
 function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({

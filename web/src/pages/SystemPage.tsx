@@ -1,17 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "../api/fetcher";
-
-interface SystemStats {
-	cpuPercent: number;
-	memoryUsedMB: number;
-	memoryTotalMB: number;
-	diskUsedGB: number;
-	diskTotalGB: number;
-	uptimeSeconds: number;
-	loadAvg1: number;
-	loadAvg5: number;
-	loadAvg15: number;
-}
+import type { SystemStats } from "../api/generated/models";
 
 function fmtUptime(sec: number): string {
 	const d = Math.floor(sec / 86400);

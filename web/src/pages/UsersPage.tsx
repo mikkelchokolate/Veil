@@ -2,12 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { apiFetch, ApiError } from "../api/fetcher";
 import { useAuth, useIsAdmin } from "../auth/AuthContext";
+import type { UserResponse } from "../api/generated/models";
 
-interface PanelUser {
-	username: string;
-	role: string;
-	locale?: string;
-}
+type PanelUser = UserResponse;
 
 /** Panel users (RBAC): list + create admin/viewer. Self-deletion guarded
  * server-side (admin invariant). */

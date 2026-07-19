@@ -46,6 +46,7 @@ import type {
   ApplyRequest,
   ApplyResponse,
   BadRequestResponse,
+  GetApiApplyJobs200,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
   ValidationFailedResponse
@@ -89,7 +90,7 @@ export const getApiApplyState = async ( options?: RequestInit): Promise<getApiAp
 
 
 export type getApiApplyJobsResponse200 = {
-  data: void
+  data: GetApiApplyJobs200
   status: 200
 }
 

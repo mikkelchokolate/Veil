@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/fetcher";
+import type { TrafficTopEntry } from "../api/generated/models";
 
 interface TrafficSummary {
 	state: string;
@@ -9,13 +10,7 @@ interface TrafficSummary {
 	usedBytes?: number;
 }
 
-interface TopEntry {
-	clientId: string;
-	name: string;
-	uploadBytes: number;
-	downloadBytes: number;
-	usedBytes: number;
-}
+type TopEntry = TrafficTopEntry;
 
 function fmtBytes(n?: number): string {
 	if (n == null) return "—";
@@ -108,7 +103,7 @@ export function TrafficPage() {
 												<td>{t.name}</td>
 												<td className="muted">{fmtBytes(t.uploadBytes)}</td>
 												<td className="muted">{fmtBytes(t.downloadBytes)}</td>
-												<td className="muted">{fmtBytes(t.usedBytes)}</td>
+												<td className="muted">{fmtBytes(t.totalBytes)}</td>
 											</tr>
 										))
 									)}
