@@ -17,6 +17,7 @@ import (
 func (s *managementState) registerClientV1Routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/clients", s.handleV1Clients)
 	mux.HandleFunc("/api/v1/clients/bulk", s.handleV1Bulk)
+	mux.HandleFunc("/api/v1/clients/migrate-legacy", s.handleV1MigrateLegacy)
 	mux.HandleFunc("/api/v1/clients/", s.handleV1ClientByID)
 }
 
@@ -172,6 +173,66 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) error {
 	}
 	_, err = s.clientService.Update(c, c.Version)
 	return err
+}
+
+// handleV1MigrateLegacy converts legacy inbound-embedded client profiles into
+// the normalized Client+Binding+Credential model. It is idempotent (stable
+// derived client IDs) so it is safe to re-run during a rolling migration. After
+// migrating, the operator can drop the embedded profiles; normalized clients
+// are rendered into live configs regardless.
+func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	if s.clientMigrator == nil {
+		writeError(w, "client migration unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	s.mu.Lock()
+	inbounds := append([]Inbound(nil), s.inbounds...)
+	s.mu.Unlock()
+
+	type inboundResult struct {
+		Inbound            string `json:"inbound"`
+		ClientsCreated     int    `json:"clientsCreated"`
+		BindingsCreated    int    `json:"bindingsCreated"`
+		CredentialsCreated int    `json:"credentialsCreated"`
+		Skipped            int    `json:"skipped"`
+	}
+	results := []inboundResult{}
+	totalCreated := 0
+	for _, in := range inbounds {
+		if len(in.Profiles) == 0 {
+			continue
+		}
+		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
+		for _, p := range in.Profiles {
+			profiles = append(profiles, client.LegacyProfile{
+				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
+			})
+		}
+		res, err := s.clientMigrator.MigrateInboundProfiles(in.Name, in.Protocol, profiles)
+		if err != nil {
+			s.logUserAction(r, "migrate_legacy", in.Name, false, err.Error())
+			writeError(w, "migrate inbound "+in.Name+": "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		totalCreated += res.ClientsCreated
+		results = append(results, inboundResult{
+			Inbound:            in.Name,
+			ClientsCreated:     res.ClientsCreated,
+			BindingsCreated:    res.BindingsCreated,
+			CredentialsCreated: res.CredentialsCreated,
+			Skipped:            res.Skipped,
+		})
+	}
+	s.logUserAction(r, "migrate_legacy", "", true, "")
+	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	s.writeMutationResponse(w, http.StatusOK, map[string]any{
+		"results":        results,
+		"clientsCreated": totalCreated,
+	}, outcome)
 }
 
 func nowUnixAPI() int64 { return time.Now().Unix() }

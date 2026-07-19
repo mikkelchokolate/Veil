@@ -53,6 +53,7 @@ func initClientSubsystem(s *managementState) {
 		defer s.mu.Unlock()
 		s.autoApplyResultLocked(nil, "system")
 	}))
+	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds)
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 	s.trafficStore = client.NewTrafficStore(s.db)

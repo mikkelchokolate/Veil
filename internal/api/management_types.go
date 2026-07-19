@@ -90,6 +90,7 @@ type managementState struct {
 	applySnapshots    *apply.SnapshotStore
 	applyRunner       *apply.Runner
 	clientService     *client.Service
+	clientMigrator    *client.Migrator
 	tokenStore        *client.TokenStore
 	subRenderer       *client.SubscriptionRenderer
 	trafficStore      *client.TrafficStore
