@@ -15,3 +15,7 @@ api.test
 /.worktrees/
 /coverage
 acme/
+
+# web frontend
+web/node_modules/
+web/dist/

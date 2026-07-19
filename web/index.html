@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!--
+			The base href is rewritten by the Go server to the active WebBasePath
+			("/" or "/<secret>/") at serve time. Relative asset URLs then resolve
+			correctly under either mount point and /s/{token} stays outside the base.
+		-->
+		<base href="/" />
+		<title>Veil</title>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="./src/main.tsx"></script>
+	</body>
+</html>
