@@ -47,6 +47,18 @@ func (s *managementState) writeMutationResponse(w http.ResponseWriter, status in
 	writeJSONStatus(w, status, obj)
 }
 
+// mergeOutcomeInto merges the mutation envelope (revision/applyJob/success)
+// into an already-built response map, matching writeMutationResponse's shape.
+func (s *managementState) mergeOutcomeInto(obj map[string]any, outcome autoApplyOutcome) {
+	obj["revision"] = s.mergedRevisionView(outcome)
+	if outcome.job != nil {
+		obj["applyJob"] = outcome.job
+		obj["success"] = outcome.success
+	} else {
+		obj["success"] = true
+	}
+}
+
 // mergedRevisionView resolves the revision view for a mutation response.
 func (s *managementState) mergedRevisionView(outcome autoApplyOutcome) revisionView {
 	if !s.applyTrackingEnabled() {

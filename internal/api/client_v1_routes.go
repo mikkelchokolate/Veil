@@ -85,9 +85,11 @@ func (s *managementState) handleV1Clients(w http.ResponseWriter, r *http.Request
 // --- Bulk operations ---
 
 type v1BulkRequest struct {
-	Action    string   `json:"action"` // enable | disable | delete | extend | reset_quota
-	ClientIDs []string `json:"clientIds"`
-	Days      *int     `json:"days"` // for extend
+	Action     string   `json:"action"` // enable|disable|delete|extend_expiry|set_quota|reset_traffic|attach_inbound|detach_inbound
+	ClientIDs  []string `json:"clientIds"`
+	Days       *int     `json:"days"`       // for extend_expiry
+	QuotaBytes *int64   `json:"quotaBytes"` // for set_quota
+	InboundID  string   `json:"inboundId"`  // for attach/detach_inbound
 }
 
 type v1BulkResult struct {
@@ -117,32 +119,49 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	}
 	results := make([]v1BulkResult, 0, len(req.ClientIDs))
 	succeeded := 0
+	skipped := 0
 	for _, id := range req.ClientIDs {
 		res := v1BulkResult{ID: id}
-		err := s.applyBulkAction(id, req)
-		if err != nil {
+		ok, sk, err := s.applyBulkAction(id, req)
+		switch {
+		case err != nil:
 			res.OK = false
 			res.Message = err.Error()
-		} else {
-			res.OK = true
+		case sk:
+			res.OK = false
+			res.Message = "skipped"
+			skipped++
+		default:
+			res.OK = ok
 			succeeded++
 		}
 		results = append(results, res)
 	}
+	failed := len(req.ClientIDs) - succeeded - skipped
 	s.logUserAction(r, "bulk_"+req.Action, "clients", succeeded == len(req.ClientIDs), "")
-	writeJSON(w, map[string]any{
+	// A bulk mutation changes desired state for many clients: run a single
+	// apply and return the honest revision/applyJob envelope.
+	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	resp := map[string]any{
 		"action":    req.Action,
 		"total":     len(req.ClientIDs),
 		"succeeded": succeeded,
-		"failed":    len(req.ClientIDs) - succeeded,
+		"skipped":   skipped,
+		"failed":    failed,
 		"results":   results,
-	})
+	}
+	s.mergeOutcomeInto(resp, outcome)
+	writeJSON(w, resp)
 }
 
-func (s *managementState) applyBulkAction(id string, req v1BulkRequest) error {
+// applyBulkAction applies one bulk action to one client. It returns
+// (applied, skipped, err): err for hard failures (not found, validation),
+// skipped for no-op cases the plan calls skipped (already in desired state),
+// applied=true when a change was persisted.
+func (s *managementState) applyBulkAction(id string, req v1BulkRequest) (bool, bool, error) {
 	existing, err := s.clientService.Get(id)
 	if err != nil {
-		return err
+		return false, false, err
 	}
 	c := existing.Client
 	switch req.Action {
@@ -151,13 +170,28 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) error {
 	case "disable":
 		c.Enabled = false
 	case "delete":
-		return s.clientService.Delete(id)
+		return true, false, s.clientService.Delete(id)
 	case "reset_quota":
+		// Deprecated alias of reset_traffic kept for backward compatibility.
+		fallthrough
+	case "reset_traffic":
+		// Clear actual recorded usage and the depleted flag. This is the
+		// honest "reset traffic" (not merely un-depleting the client).
+		if s.trafficStore != nil {
+			if err := s.trafficStore.ResetForClient(id); err != nil {
+				return false, false, err
+			}
+		}
 		c.Depleted = false
 		c.QuotaResetAt = nil
-	case "extend":
+	case "set_quota":
+		if req.QuotaBytes == nil || *req.QuotaBytes < 0 {
+			return false, false, client.ErrValidation
+		}
+		c.QuotaBytes = req.QuotaBytes
+	case "extend", "extend_expiry":
 		if req.Days == nil || *req.Days <= 0 {
-			return client.ErrValidation
+			return false, false, client.ErrValidation
 		}
 		var base int64
 		now := nowUnixAPI()
@@ -168,11 +202,31 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) error {
 		}
 		newExp := base + int64(*req.Days)*86400
 		c.ExpiresAt = &newExp
+	case "attach_inbound":
+		if req.InboundID == "" {
+			return false, false, client.ErrValidation
+		}
+		if _, err := s.clientService.AddBinding(id, req.InboundID); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
+	case "detach_inbound":
+		if req.InboundID == "" {
+			return false, false, client.ErrValidation
+		}
+		// find binding id for this inbound
+		bv := existing.Bindings
+		for _, b := range bv {
+			if b.InboundID == req.InboundID {
+				return true, false, s.clientService.RemoveBinding(b.ID, id)
+			}
+		}
+		return false, true, nil // not attached -> skipped
 	default:
-		return client.ErrValidation
+		return false, false, client.ErrValidation
 	}
 	_, err = s.clientService.Update(c, c.Version)
-	return err
+	return err == nil, false, err
 }
 
 // handleV1MigrateLegacy converts legacy inbound-embedded client profiles into
