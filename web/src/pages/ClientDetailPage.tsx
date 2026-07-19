@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { apiFetch, ApiError } from "../api/fetcher";
+import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
+import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
 
 interface BindingCapability {
 	protocol?: string;
@@ -191,19 +193,9 @@ export function ClientDetailPage() {
 				</div>
 			) : null}
 
-			{tab === "subscription" ? (
-				<div className="card">
-					<h2>Subscription tokens</h2>
-					<p className="muted">Token management appears here (list / create / rotate / revoke, one-time plaintext).</p>
-				</div>
-			) : null}
+			{tab === "subscription" ? <SubscriptionTokensPanel clientId={clientId} /> : null}
 
-			{tab === "traffic" ? (
-				<div className="card">
-					<h2>Traffic</h2>
-					<p className="muted">Per-client traffic usage and history appear here.</p>
-				</div>
-			) : null}
+			{tab === "traffic" ? <ClientTrafficPanel clientId={clientId} /> : null}
 		</>
 	);
 }
