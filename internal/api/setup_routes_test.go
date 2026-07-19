@@ -120,7 +120,10 @@ func TestRouterAllowsUnauthenticatedLocalSetupOnly(t *testing.T) {
 	}
 }
 
-func TestPanelRendersSetupBeforeDashboard(t *testing.T) {
+// First-run setup is now client-side in the SPA: "/" serves the React shell,
+// which detects setup-required via /api/setup/status and renders the setup
+// flow (B2/B11). The legacy server-rendered setup HTML was superseded.
+func TestPanelServesSPAForFirstRunSetup(t *testing.T) {
 	dir := t.TempDir()
 	router, _ := NewRouter(ServerInfo{
 		Version:      "test",
@@ -136,8 +139,8 @@ func TestPanelRendersSetupBeforeDashboard(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="setup-form"`) {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="root"`) {
+		t.Fatalf("expected SPA shell for first-run setup, status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

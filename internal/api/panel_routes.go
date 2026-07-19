@@ -42,22 +42,42 @@ func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) 
 }
 
 func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
-	// The new React SPA is the primary UI (B11). It is served at "/" and for
-	// any client-side route; login/setup/RBAC are handled client-side against
-	// the API. The legacy server-rendered panel remains available for the
-	// not-yet-migrated sections (see legacy panel handler).
-	if routes.spa != nil && routes.spa.matches(r.URL.Path) {
-		routes.spa.serveIndex(w, r)
-		return
-	}
-	if r.URL.Path != "/" {
-		writeNotFound(w)
-		return
-	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, http.MethodGet, http.MethodHead)
 		return
 	}
+
+	// SPA client-side routes (e.g. /clients, /apply) render the shell via the
+	// history-API fallback. API/asset/subscription/metrics paths are handled by
+	// their own mux registrations and never reach here.
+	if r.URL.Path != "/" {
+		if routes.spa != nil && routes.spa.matches(r.URL.Path) {
+			routes.spa.serveIndex(w, r)
+			return
+		}
+		writeNotFound(w)
+		return
+	}
+
+	// Fail-closed guard (preserved): on a public listener with no users yet the
+	// panel must NOT render any HTML — first-run admin setup is CLI-only there.
+	if routes.State != nil {
+		routes.State.mu.Lock()
+		noUsers := len(routes.State.users) == 0
+		routes.State.mu.Unlock()
+		if routes.Info.PublicListen && noUsers {
+			writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
+	// The new React SPA is the primary UI (B11): served at "/", it handles
+	// login, first-run setup, and RBAC client-side against the API.
+	if routes.spa != nil {
+		routes.spa.serveIndex(w, r)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")

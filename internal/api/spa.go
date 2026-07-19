@@ -69,6 +69,9 @@ func (h *spaHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	html = strings.Replace(html, `<base href="/" />`, `<base href="`+base+`" />`, 1)
 	setSPAHeaders(w, "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Method == http.MethodHead {
+		return
+	}
 	_, _ = w.Write([]byte(html))
 }
 
@@ -113,6 +116,11 @@ func serveSPAFile(w http.ResponseWriter, r *http.Request, dist fs.FS, name, cach
 func setSPAHeaders(w http.ResponseWriter, cache string) {
 	w.Header().Set("Cache-Control", cache)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// SPA CSP (B12): no unsafe-inline scripts/styles, no CDN. The bundle is
+	// self-hosted; fonts use the system stack. Tightened vs the legacy panel.
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Frame-Options", "DENY")
 	if cache == "no-store" {
 		w.Header().Set("Pragma", "no-cache")
 	}
