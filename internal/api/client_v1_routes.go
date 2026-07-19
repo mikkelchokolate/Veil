@@ -474,6 +474,28 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 	}
 	// /bindings/{bindingId}
 	bindingID := parts[1]
+	if r.Method == http.MethodPatch {
+		var req struct {
+			Enabled *bool `json:"enabled"`
+			Version int   `json:"version"`
+		}
+		if !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		if req.Enabled == nil {
+			writeError(w, "enabled is required", http.StatusBadRequest)
+			return
+		}
+		b, err := s.clientService.SetBindingEnabled(bindingID, *req.Enabled, req.Version)
+		if err != nil {
+			s.writeV1ClientError(w, err)
+			return
+		}
+		s.logUserAction(r, "update_binding", clientID, true, bindingID)
+		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+		s.writeMutationResponse(w, http.StatusOK, b, outcome)
+		return
+	}
 	if r.Method == http.MethodDelete {
 		if err := s.clientService.RemoveBinding(bindingID, clientID); err != nil {
 			s.writeV1ClientError(w, err)
@@ -484,7 +506,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": bindingID}, outcome)
 		return
 	}
-	methodNotAllowed(w, http.MethodDelete)
+	methodNotAllowed(w, http.MethodPatch, http.MethodDelete)
 }
 
 func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
@@ -525,6 +547,20 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		}
 		if req.Kind == "" {
 			req.Kind = "password"
+		}
+		// Server-generated rotate (preferred, capability-driven): when no value
+		// is supplied the server generates a high-entropy secret and returns it
+		// exactly once. An explicit value keeps the legacy caller-supplied path.
+		if req.Value == "" {
+			gen, err := s.clientService.RotateCredentialGenerated(bindingID, req.Kind)
+			if err != nil {
+				s.writeV1ClientError(w, err)
+				return
+			}
+			s.logUserAction(r, "rotate_credential", clientID, true, bindingID)
+			outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+			s.writeMutationResponse(w, http.StatusOK, gen, outcome)
+			return
 		}
 		cred, err := s.clientService.RotateCredential(bindingID, req.Kind, req.Value)
 		if err != nil {

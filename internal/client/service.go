@@ -1,6 +1,8 @@
 package client
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 )
@@ -56,7 +58,20 @@ type BindingView struct {
 	ID         string           `json:"id"`
 	InboundID  string           `json:"inboundId"`
 	Enabled    bool             `json:"enabled"`
+	Version    int              `json:"version"`
 	Capability *BindingCapability `json:"capability,omitempty"`
+	// Credential is metadata-only (configured/kind/version/rotatedAt); never
+	// any encrypted or plaintext material.
+	Credential *CredentialMeta `json:"credential,omitempty"`
+}
+
+// CredentialMeta describes the active credential for a binding without any
+// secret material.
+type CredentialMeta struct {
+	Configured bool   `json:"configured"`
+	Kind       string `json:"kind,omitempty"`
+	Version    int    `json:"version,omitempty"`
+	RotatedAt  *int64 `json:"rotatedAt,omitempty"`
 }
 
 // BindingCapability captures the protocol capabilities of a bound inbound.
@@ -194,6 +209,54 @@ func (s *Service) RotateCredential(bindingID, kind, plaintext string) (Credentia
 	return c, nil
 }
 
+// GeneratedCredential pairs the rotated credential metadata with the one-time
+// plaintext the server generated. The plaintext is returned exactly once and
+// never persisted (only the encrypted form is stored).
+type GeneratedCredential struct {
+	Credential Credential `json:"credential"`
+	Plaintext  string     `json:"plaintext"`
+}
+
+// RotateCredentialGenerated rotates a credential with a server-generated
+// high-entropy plaintext, returning the new plaintext once. This is the
+// preferred rotate path (capability-driven): the caller never supplies the
+// secret and it is shown to the operator a single time.
+func (s *Service) RotateCredentialGenerated(bindingID, kind string) (GeneratedCredential, error) {
+	plaintext, err := generateCredentialPlaintext()
+	if err != nil {
+		return GeneratedCredential{}, err
+	}
+	c, err := s.RotateCredential(bindingID, kind, plaintext)
+	if err != nil {
+		return GeneratedCredential{}, err
+	}
+	return GeneratedCredential{Credential: c, Plaintext: plaintext}, nil
+}
+
+// generateCredentialPlaintext returns a URL-safe 256-bit random secret.
+func generateCredentialPlaintext() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("client: generate credential: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// SetBindingEnabled toggles a binding's enabled flag with optimistic locking.
+func (s *Service) SetBindingEnabled(bindingID string, enabled bool, version int) (Binding, error) {
+	b, err := s.repo.GetBinding(bindingID)
+	if err != nil {
+		return Binding{}, err
+	}
+	b.Enabled = enabled
+	updated, err := s.repo.UpdateBinding(b, version)
+	if err != nil {
+		return Binding{}, err
+	}
+	s.notify("binding-update", bindingID)
+	return updated, nil
+}
+
 // BindingCredential pairs a normalized client's resolved credential with its
 // identity, for render-time injection into an inbound's runtime access model.
 type BindingCredential struct {
@@ -254,9 +317,17 @@ func (s *Service) toView(c Client) (View, error) {
 	hasCreds := false
 	for _, b := range bindings {
 		inbounds = append(inbounds, b.InboundID)
-		bv := BindingView{ID: b.ID, InboundID: b.InboundID, Enabled: b.Enabled}
+		bv := BindingView{ID: b.ID, InboundID: b.InboundID, Enabled: b.Enabled, Version: b.Version}
 		if s.inboundLookup != nil {
 			bv.Capability = s.inboundLookup(b.InboundID)
+		}
+		if active, err := s.creds.ActiveForBinding(b.ID, "password"); err == nil && active.ID != "" {
+			bv.Credential = &CredentialMeta{
+				Configured: true,
+				Kind:       active.Kind,
+				Version:    active.CredentialVersion,
+				RotatedAt:  active.RotatedAt,
+			}
 		}
 		bindingViews = append(bindingViews, bv)
 		if !hasCreds {
