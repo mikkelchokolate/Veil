@@ -26,9 +26,14 @@ build:
 	mkdir -p bin
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY) ./cmd/veil
 
+# web builds the React SPA into web/dist (embedded into the binary).
+.PHONY: web
+web:
+	cd web && pnpm install --frozen-lockfile && pnpm build
+
 # dist builds a release-style static binary into dist/veil for the current
 # GOARCH. Packaging targets consume this artifact.
-dist:
+dist: web
 	mkdir -p dist
 	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o dist/$(BINARY) ./cmd/veil
 

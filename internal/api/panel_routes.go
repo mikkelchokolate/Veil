@@ -14,9 +14,14 @@ type PanelRoutes struct {
 	Info     ServerInfo
 	BasePath string
 	State    *managementState
+	spa      *spaHandler
 }
 
 func (routes PanelRoutes) Register(mux *http.ServeMux) {
+	if spa, err := newSPAHandler(routes.BasePath); err == nil {
+		routes.spa = spa
+		spa.Register(mux)
+	}
 	mux.HandleFunc("/", routes.handlePanel)
 	mux.HandleFunc("/favicon.ico", routes.handleFavicon)
 	mux.HandleFunc("/healthz", routes.handleHealth)
@@ -37,6 +42,14 @@ func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) 
 }
 
 func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
+	// The new React SPA is the primary UI (B11). It is served at "/" and for
+	// any client-side route; login/setup/RBAC are handled client-side against
+	// the API. The legacy server-rendered panel remains available for the
+	// not-yet-migrated sections (see legacy panel handler).
+	if routes.spa != nil && routes.spa.matches(r.URL.Path) {
+		routes.spa.serveIndex(w, r)
+		return
+	}
 	if r.URL.Path != "/" {
 		writeNotFound(w)
 		return
