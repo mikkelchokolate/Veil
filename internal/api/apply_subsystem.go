@@ -10,6 +10,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/hysteria2"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -97,12 +98,54 @@ func initClientSubsystem(s *managementState) {
 		defer s.mu.Unlock()
 		s.autoApplyResultLocked(nil, "system")
 	})
-	// A9: start the collector and reconciler so quota depletion is reconciled
-	// and counters are collected whenever a provider is registered. With zero
-	// providers CollectOnce is a no-op and the summary endpoint honestly
-	// reports state="unsupported" (no fake zeros).
+	// A9: register real TrafficProviders for supported protocols. Hysteria2
+	// reads per-user stats from the runtime's stats file. Other protocols can
+	// register their own providers here.
+	s.registerTrafficProvidersLocked()
+	// Start the collector and reconciler so quota depletion is reconciled and
+	// counters are collected. With zero providers CollectOnce is a no-op and
+	// the summary endpoint honestly reports state="unsupported" (no fake zeros).
 	s.trafficCollector.Start()
 	s.trafficReconciler.Start()
+}
+
+// registerTrafficProvidersLocked creates and registers TrafficProviders for
+// all supported protocols with live runtime roots. Caller must hold s.mu.
+func (s *managementState) registerTrafficProvidersLocked() {
+	if s.trafficCollector == nil || s.clientRepo == nil {
+		return
+	}
+	// Build client username -> bindingID map for attribution.
+	bindings := make(map[string]string)
+	clients, err := s.clientRepo.AllClients()
+	if err != nil {
+		log.Printf("traffic: list clients for provider bindings: %v", err)
+		return
+	}
+	allBindings, err := s.clientRepo.AllBindings()
+	if err != nil {
+		log.Printf("traffic: list bindings for provider: %v", err)
+		return
+	}
+	clientNameByID := make(map[string]string, len(clients))
+	for _, c := range clients {
+		clientNameByID[c.ID] = c.Name
+	}
+	for _, b := range allBindings {
+		if name, ok := clientNameByID[b.ClientID]; ok {
+			bindings[name] = b.ID
+		}
+	}
+	// Register hysteria2 provider if any hysteria2 inbound exists.
+	for _, in := range s.inbounds {
+		if in.Protocol != "hysteria2" || !in.Enabled {
+			continue
+		}
+		statsPath := hysteria2.StatsFilePath(s.liveRoot, in.Name)
+		provider := hysteria2.NewStatsProvider("hysteria2:"+in.Name, statsPath, bindings)
+		s.trafficCollector.Register(provider)
+		log.Printf("traffic: registered hysteria2 provider for inbound %s (stats: %s)", in.Name, statsPath)
+	}
 }
 
 // stopTrafficSubsystem halts the periodic collector/reconciler. Safe to call
