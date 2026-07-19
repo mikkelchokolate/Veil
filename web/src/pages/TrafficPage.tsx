@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/fetcher";
 import type { TrafficTopEntry } from "../api/generated/models";
+import { useEffect, useRef } from "react";
+import * as echarts from "echarts";
 
 interface TrafficSummary {
 	state: string;
@@ -25,7 +27,7 @@ function fmtBytes(n?: number): string {
 	return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
 }
 
-/** B9: traffic dashboard over honest telemetry states. When no runtime feeds
+/** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
 export function TrafficPage() {
 	const summary = useQuery<TrafficSummary>({
@@ -41,6 +43,70 @@ export function TrafficPage() {
 	});
 
 	const state = summary.data?.state;
+	const chartRef = useRef<HTMLDivElement>(null);
+	const chartInstance = useRef<echarts.ECharts | null>(null);
+
+	// Initialize chart when collecting.
+	useEffect(() => {
+		if (state !== "collecting" || !chartRef.current) return;
+		if (!chartInstance.current) {
+			chartInstance.current = echarts.init(chartRef.current);
+		}
+		const items = top.data?.items ?? [];
+		const option: echarts.EChartsOption = {
+			tooltip: {
+				trigger: "axis",
+				axisPointer: { type: "shadow" },
+				formatter: (params: unknown) => {
+					const p = params as Array<{ name: string; value: number; seriesName: string }>;
+					if (!p.length) return "";
+					const name = p[0].name;
+					const up = p.find((x) => x.seriesName === "Upload")?.value ?? 0;
+					const down = p.find((x) => x.seriesName === "Download")?.value ?? 0;
+					return `${name}<br/>Upload: ${fmtBytes(up)}<br/>Download: ${fmtBytes(down)}<br/>Total: ${fmtBytes(up + down)}`;
+				},
+			},
+			legend: { data: ["Upload", "Download"] },
+			grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
+			xAxis: {
+				type: "category",
+				data: items.map((t) => t.name),
+				axisLabel: { rotate: 30 },
+			},
+			yAxis: {
+				type: "value",
+				axisLabel: { formatter: (v: number) => fmtBytes(v) },
+			},
+			series: [
+				{
+					name: "Upload",
+					type: "bar",
+					stack: "total",
+					data: items.map((t) => t.uploadBytes ?? 0),
+					itemStyle: { color: "#3b82f6" },
+				},
+				{
+					name: "Download",
+					type: "bar",
+					stack: "total",
+					data: items.map((t) => t.downloadBytes ?? 0),
+					itemStyle: { color: "#10b981" },
+				},
+			],
+		};
+		chartInstance.current.setOption(option);
+		const onResize = () => chartInstance.current?.resize();
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	}, [state, top.data]);
+
+	// Cleanup on unmount.
+	useEffect(() => {
+		return () => {
+			chartInstance.current?.dispose();
+			chartInstance.current = null;
+		};
+	}, []);
 
 	return (
 		<>
@@ -76,40 +142,37 @@ export function TrafficPage() {
 
 			{state === "collecting" ? (
 				<div className="card">
-					<h2>Top clients by usage</h2>
+					<h2>Usage breakdown</h2>
 					{top.isLoading ? (
 						<p className="muted">Loading…</p>
+					) : (top.data?.items ?? []).length === 0 ? (
+						<p className="muted">No usage recorded yet.</p>
 					) : (
-						<div className="table-container">
-							<table className="data-table">
-								<thead>
-									<tr>
-										<th>Client</th>
-										<th>Upload</th>
-										<th>Download</th>
-										<th>Total</th>
-									</tr>
-								</thead>
-								<tbody>
-									{(top.data?.items ?? []).length === 0 ? (
+						<>
+							<div ref={chartRef} style={{ width: "100%", height: 320 }} />
+							<div className="table-container" style={{ marginTop: 16 }}>
+								<table className="data-table">
+									<thead>
 										<tr>
-											<td colSpan={4} className="muted">
-												No usage recorded yet.
-											</td>
+											<th>Client</th>
+											<th>Upload</th>
+											<th>Download</th>
+											<th>Total</th>
 										</tr>
-									) : (
-										(top.data?.items ?? []).map((t) => (
+									</thead>
+									<tbody>
+										{(top.data?.items ?? []).map((t) => (
 											<tr key={t.clientId}>
 												<td>{t.name}</td>
 												<td className="muted">{fmtBytes(t.uploadBytes)}</td>
 												<td className="muted">{fmtBytes(t.downloadBytes)}</td>
 												<td className="muted">{fmtBytes(t.totalBytes)}</td>
 											</tr>
-										))
-									)}
-								</tbody>
-							</table>
-						</div>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</>
 					)}
 				</div>
 			) : null}
