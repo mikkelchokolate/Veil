@@ -6,6 +6,12 @@ import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
 import type { ClientView } from "../api/generated/models";
 import { ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	useReactTable,
+	getCoreRowModel,
+	flexRender,
+	type ColumnDef,
+} from "@tanstack/react-table";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 	active: { label: "active", cls: "badge-success" },
@@ -98,6 +104,73 @@ export function ClientsPage() {
 	const items = (query.data?.items ?? []) as ClientView[];
 	const total = query.data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+	// B6: TanStack Table for column definitions + visibility.
+	const columns: ColumnDef<ClientView>[] = [
+		...(isAdmin
+			? [
+					{
+						id: "select",
+						header: () => (
+							<input
+								type="checkbox"
+								checked={items.length > 0 && selected.size === items.length}
+								onChange={toggleAll}
+								aria-label="select all"
+							/>
+						),
+						cell: ({ row }) => (
+							<input
+								type="checkbox"
+								checked={selected.has(row.original.id)}
+								onChange={() => toggle(row.original.id)}
+								aria-label={`select ${row.original.name}`}
+								onClick={(e) => e.stopPropagation()}
+							/>
+						),
+						size: 32,
+					} as ColumnDef<ClientView>,
+				]
+			: []),
+		{
+			accessorKey: "name",
+			header: "Name",
+			cell: ({ row }) => (
+				<div>
+					<div>{row.original.name}</div>
+					{row.original.email ? (
+						<div className="muted" style={{ fontSize: 12 }}>{row.original.email}</div>
+					) : null}
+				</div>
+			),
+		},
+		{
+			accessorKey: "status",
+			header: "Status",
+			cell: ({ row }) => <StatusBadge status={row.original.status} />,
+		},
+		{
+			accessorKey: "inboundIds",
+			header: "Inbounds",
+			cell: ({ row }) => <span className="muted">{row.original.inboundIds?.length ?? 0}</span>,
+		},
+		{
+			accessorKey: "quotaBytes",
+			header: "Quota",
+			cell: ({ row }) => <span className="muted">{fmtBytes(row.original.quotaBytes)}</span>,
+		},
+		{
+			accessorKey: "expiresAt",
+			header: "Expires",
+			cell: ({ row }) => <span className="muted">{fmtExpiry(row.original.expiresAt)}</span>,
+		},
+	];
+
+	const table = useReactTable({
+		data: items,
+		columns,
+		getCoreRowModel: getCoreRowModel(),
+	});
 
 	function toggle(id: string) {
 		setSelected((prev) => {
@@ -216,58 +289,35 @@ export function ClientsPage() {
 					<div className="table-container">
 						<table className="data-table">
 							<thead>
-								<tr>
-									{isAdmin ? (
-										<th style={{ width: 32 }}>
-											<input
-												type="checkbox"
-												checked={items.length > 0 && selected.size === items.length}
-												onChange={toggleAll}
-												aria-label="select all"
-											/>
-										</th>
-									) : null}
-									<th>Name</th>
-									<th>Status</th>
-									<th>Inbounds</th>
-									<th>Quota</th>
-									<th>Expires</th>
-								</tr>
+								{table.getHeaderGroups().map((hg) => (
+									<tr key={hg.id}>
+										{hg.headers.map((h) => (
+											<th key={h.id} style={{ width: h.getSize() !== 150 ? h.getSize() : undefined }}>
+												{flexRender(h.column.columnDef.header, h.getContext())}
+											</th>
+										))}
+									</tr>
+								))}
 							</thead>
 							<tbody>
-								{items.length === 0 ? (
+								{table.getRowModel().rows.length === 0 ? (
 									<tr>
-										<td colSpan={isAdmin ? 6 : 5} className="muted">
+										<td colSpan={columns.length} className="muted">
 											No clients found.
 										</td>
 									</tr>
 								) : (
-									items.map((c) => (
+									table.getRowModel().rows.map((row) => (
 										<tr
-											key={c.id}
+											key={row.id}
 											style={{ cursor: "pointer" }}
-											onClick={() => void navigate({ to: `/clients/${c.id}` })}
+											onClick={() => void navigate({ to: `/clients/${row.original.id}` })}
 										>
-											{isAdmin ? (
-												<td onClick={(e) => e.stopPropagation()}>
-													<input
-														type="checkbox"
-														checked={selected.has(c.id)}
-														onChange={() => toggle(c.id)}
-														aria-label={`select ${c.name}`}
-													/>
+											{row.getVisibleCells().map((cell) => (
+												<td key={cell.id}>
+													{flexRender(cell.column.columnDef.cell, cell.getContext())}
 												</td>
-											) : null}
-											<td>
-												<div>{c.name}</div>
-												{c.email ? <div className="muted" style={{ fontSize: 12 }}>{c.email}</div> : null}
-											</td>
-											<td>
-												<StatusBadge status={c.status} />
-											</td>
-											<td className="muted">{c.inboundIds?.length ?? 0}</td>
-											<td className="muted">{fmtBytes(c.quotaBytes)}</td>
-											<td className="muted">{fmtExpiry(c.expiresAt)}</td>
+											))}
 										</tr>
 									))
 								)}
