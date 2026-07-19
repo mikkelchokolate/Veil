@@ -81,9 +81,13 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	clientaccess.NewClientSubscriptionDeliveryHeaders(subscription).Apply(w.Header())
+	var upload, download int64
+	if s.trafficStore != nil {
+		upload, download, _ = s.trafficStore.TotalsForClient(cl.ID)
+	}
 	meta := clientaccess.SubscriptionMetaHeaders{
-		Upload:                     0,
-		Download:                   0,
+		Upload:                     upload,
+		Download:                   download,
 		Total:                      cl.QuotaBytes,
 		Expire:                     cl.ExpiresAt,
 		ProfileUpdateIntervalHours: subscriptionUpdateIntervalHours(),
