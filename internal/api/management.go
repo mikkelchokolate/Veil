@@ -58,6 +58,7 @@ func (s *managementState) register(mux *http.ServeMux) {
 	s.registerClientV1Routes(mux)
 	s.registerSubscriptionRoutes(mux)
 	s.registerTrafficRoutes(mux)
+	s.registerEventsRoutes(mux)
 	mux.HandleFunc("/api/auth/login", s.handleLoginWithRevalidation)
 	mux.HandleFunc("/api/auth/logout", s.handleLogoutWithSettingsSnapshot)
 	mux.HandleFunc("/api/auth/status", s.handleEffectiveAuthStatus)
