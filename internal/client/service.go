@@ -113,6 +113,56 @@ func (s *Service) Create(c Client) (View, error) {
 	return s.toView(created)
 }
 
+// BindingInput pairs an inbound ID with an optional plaintext credential for
+// transactional client creation.
+type BindingInput struct {
+	InboundID  string
+	Credential string
+}
+
+// CreateWithBindings atomically creates a client plus its bindings and
+// credentials in ONE SQL transaction, then triggers exactly ONE apply. If any
+// binding or credential fails the whole mutation rolls back — the client is
+// never persisted half-configured, no apply runs for a partial state, and no
+// compensating deletes are used. This is the required path for client create;
+// the separate Create/AddBinding/SetCredential sequence is legacy.
+func (s *Service) CreateWithBindings(c Client, bindings []BindingInput) (View, error) {
+	if err := validate(c); err != nil {
+		return View{}, err
+	}
+	for _, b := range bindings {
+		if b.InboundID == "" {
+			return View{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
+		}
+	}
+	var createdID string
+	err := s.repo.WithTx(func(tx *Tx) error {
+		created, err := tx.CreateClient(c)
+		if err != nil {
+			return err
+		}
+		createdID = created.ID
+		for _, b := range bindings {
+			bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, Enabled: true})
+			if err != nil {
+				return err
+			}
+			if b.Credential != "" {
+				if _, err := tx.SetCredential(s.creds, bind.ID, "password", b.Credential); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return View{}, err
+	}
+	// Exactly one apply for the committed, fully-configured client.
+	s.notify("create", createdID)
+	return s.Get(createdID)
+}
+
 // Get returns one client with computed status.
 func (s *Service) Get(id string) (View, error) {
 	c, err := s.repo.Get(id)

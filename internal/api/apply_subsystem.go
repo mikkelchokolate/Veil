@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -79,6 +80,7 @@ func initClientSubsystem(s *managementState) {
 		return
 	}
 	clientRepo := client.NewRepository(s.db)
+	s.clientRepo = clientRepo
 	clientCreds := client.NewCredentialStore(s.db, s.cipher)
 	s.clientService = client.NewService(clientRepo, clientCreds, applyNotifierFunc(func(kind, id string) {
 		s.mu.Lock()
@@ -158,7 +160,12 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 	// s.mu is held by the caller no newer mutation can interleave, but a retry
 	// or reconcile may run for an OLDER revision after newer ones committed —
 	// in that case render from the pinned snapshot, not live state.
-	restore := s.pinStateToRevisionLocked(revision)
+	restore, err := s.pinStateToRevisionLocked(revision)
+	if err != nil {
+		// A3: no immutable snapshot → apply must fail, not fall back to current
+		// mutable state (which would violate revision immutability).
+		return apply.Result{Success: false, ErrorCode: "SNAPSHOT_UNAVAILABLE", ErrorMessage: err.Error()}, err
+	}
 	if restore != nil {
 		defer restore()
 	}
@@ -183,28 +190,30 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 // or the revision is the latest), it returns nil and the executor renders
 // current state. Caller must hold s.mu; the returned closure must run before
 // releasing it.
-func (s *managementState) pinStateToRevisionLocked(revision uint64) func() {
+func (s *managementState) pinStateToRevisionLocked(revision uint64) (func(), error) {
 	if s.applySnapshots == nil {
-		return nil
+		return nil, fmt.Errorf("apply: snapshot store unavailable for revision %d", revision)
 	}
 	payload, err := s.applySnapshots.Load(revision)
 	if err != nil {
-		return nil // no pinned snapshot; render current (latest) state
+		// A3: FORBIDDEN fallback removed. For tracked revisions we must render
+		// from the immutable snapshot, never from current mutable state. If the
+		// snapshot is missing or corrupt the apply must fail, not silently use
+		// newer state that would violate immutability.
+		return nil, fmt.Errorf("apply: no immutable snapshot for revision %d: %w", revision, err)
 	}
 	var snap managementSnapshot
 	if err := json.Unmarshal(payload, &snap); err != nil {
-		log.Printf("apply subsystem: decode revision %d snapshot: %v", revision, err)
-		return nil
+		return nil, fmt.Errorf("apply: decode revision %d snapshot: %w", revision, err)
 	}
 	// Snapshots are stored encrypted; decrypt before rendering.
 	if err := s.decryptSnapshot(&snap); err != nil {
-		log.Printf("apply subsystem: decrypt revision %d snapshot: %v", revision, err)
-		return nil
+		return nil, fmt.Errorf("apply: decrypt revision %d snapshot: %w", revision, err)
 	}
 	// Capture live state so we can restore it after the pinned render.
 	prev := s.snapshotLocked()
 	applyRenderSnapshot(s, snap)
-	return func() { applyRenderSnapshot(s, prev) }
+	return func() { applyRenderSnapshot(s, prev) }, nil
 }
 
 // applyRenderSnapshot overwrites the live mutable configuration with a
@@ -221,6 +230,12 @@ func applyRenderSnapshot(s *managementState, snap managementSnapshot) {
 	s.routingSource = snap.RoutingSource
 	s.warp = snap.Warp
 	s.users = snap.Users
+	// A3: normalized client state is part of the immutable snapshot. The
+	// renderer must see exactly the clients/bindings/credentials committed as
+	// this revision, not current mutable SQLite state.
+	s.renderClients = snap.Clients
+	s.renderBindings = snap.Bindings
+	s.renderCredentials = snap.Credentials
 }
 
 // applyFailureCode maps an unsuccessful apply response to a stable error code.

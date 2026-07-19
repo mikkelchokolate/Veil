@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"path/filepath"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -136,6 +138,13 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 // normalized clients (not just legacy inbound-embedded profiles). Failures to
 // resolve credentials are non-fatal: the inbound renders without them.
 func (s *managementState) inboundsWithRuntimeCredentialsLocked() []Inbound {
+	// A3: when pinned to an immutable revision snapshot, resolve runtime
+	// credentials from the snapshot's frozen Clients/Bindings/Credentials, not
+	// from current mutable SQLite state. This is the core immutability
+	// guarantee: a retry of revision N renders exactly revision N.
+	if s.renderClients != nil || s.renderBindings != nil || s.renderCredentials != nil {
+		return s.inboundsWithPinnedCredentialsLocked()
+	}
 	if s.clientService == nil {
 		return s.inbounds
 	}
@@ -151,6 +160,59 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() []Inbound {
 			rc = append(rc, RuntimeCredential{Name: c.Name, Username: c.Username, Password: c.Password})
 		}
 		out[i].RuntimeCredentials = rc
+	}
+	return out
+}
+
+// inboundsWithPinnedCredentialsLocked resolves runtime credentials from the
+// pinned immutable snapshot (renderClients/renderBindings/renderCredentials)
+// instead of live SQLite state. Used only during a pinned apply render.
+func (s *managementState) inboundsWithPinnedCredentialsLocked() []Inbound {
+	out := make([]Inbound, len(s.inbounds))
+	copy(out, s.inbounds)
+	// Build lookup: bindingID -> client, bindingID -> credential.
+	clientByID := make(map[string]model.ClientSnapshot, len(s.renderClients))
+	for _, c := range s.renderClients {
+		clientByID[c.ID] = c
+	}
+	credByBinding := make(map[string]model.CredentialSnapshot, len(s.renderCredentials))
+	for _, cr := range s.renderCredentials {
+		credByBinding[cr.BindingID] = cr
+	}
+	// Group enabled bindings by inbound.
+	bindingsByInbound := make(map[string][]model.BindingSnapshot)
+	for _, b := range s.renderBindings {
+		if !b.Enabled {
+			continue
+		}
+		bindingsByInbound[b.InboundID] = append(bindingsByInbound[b.InboundID], b)
+	}
+	for i := range out {
+		bindings := bindingsByInbound[out[i].Name]
+		if len(bindings) == 0 {
+			continue
+		}
+		rc := make([]RuntimeCredential, 0, len(bindings))
+		for _, b := range bindings {
+			c, ok := clientByID[b.ClientID]
+			if !ok || !c.Enabled || c.Depleted {
+				continue
+			}
+			cred, ok := credByBinding[b.ID]
+			if !ok {
+				continue
+			}
+			// Decrypt the pinned credential for rendering.
+			plaintext, err := s.cipher.Decrypt(string(cred.EncryptedValue))
+			if err != nil {
+				log.Printf("apply: decrypt pinned credential %s: %v", cred.ID, err)
+				continue
+			}
+			rc = append(rc, RuntimeCredential{Name: c.Name, Username: c.Name, Password: plaintext})
+		}
+		if len(rc) > 0 {
+			out[i].RuntimeCredentials = rc
+		}
 	}
 	return out
 }

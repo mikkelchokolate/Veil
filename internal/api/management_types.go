@@ -90,10 +90,17 @@ type managementState struct {
 	applySnapshots    *apply.SnapshotStore
 	applyRunner       *apply.Runner
 	clientService     *client.Service
+	clientRepo        *client.Repository
 	clientMigrator    *client.Migrator
 	tokenStore        *client.TokenStore
 	subRenderer       *client.SubscriptionRenderer
 	trafficStore      *client.TrafficStore
 	trafficCollector  *client.Collector
 	trafficReconciler *client.Reconciler
+	// A3: normalized client state pinned from the immutable revision snapshot
+	// for the duration of an apply render. When non-nil these override live
+	// SQLite state so a retry of revision N renders exactly revision N.
+	renderClients     []model.ClientSnapshot
+	renderBindings    []model.BindingSnapshot
+	renderCredentials []model.CredentialSnapshot
 }

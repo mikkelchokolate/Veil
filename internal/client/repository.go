@@ -37,6 +37,109 @@ type Repository struct{ db *sql.DB }
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{db: db} }
 
+// Tx is a transactional view of the repository. All methods execute within
+// the bound *sql.Tx so a multi-entity mutation (client + bindings +
+// credentials + revision snapshot) commits or rolls back atomically.
+type Tx struct{ tx *sql.Tx }
+
+// WithTx runs fn inside a single SQL transaction. If fn returns an error the
+// transaction is rolled back; otherwise it is committed. This is the ONLY
+// supported way to perform a logical Client mutation that spans clients,
+// bindings, and credentials — compensating deletes across public service
+// methods are not a substitute for a real ROLLBACK.
+func (r *Repository) WithTx(fn func(tx *Tx) error) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("client: begin tx: %w", err)
+	}
+	if err := fn(&Tx{tx: tx}); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("client: commit tx: %w", err)
+	}
+	return nil
+}
+
+// CreateClient inserts a client within the transaction.
+func (t *Tx) CreateClient(c Client) (Client, error) {
+	if c.ID == "" {
+		c.ID = uuid.NewString()
+	}
+	if c.QuotaResetPolicy == "" {
+		c.QuotaResetPolicy = ResetNever
+	}
+	now := nowUnix()
+	c.CreatedAt, c.UpdatedAt, c.Version = now, now, 1
+	_, err := t.tx.Exec(`INSERT INTO clients
+	  (id, name, email, enabled, group_id, quota_bytes, quota_reset_policy, quota_reset_at,
+	   expires_at, device_limit, notes, depleted, created_at, updated_at, version)
+	  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		c.ID, c.Name, c.Email, boolToInt(c.Enabled), c.GroupID, c.QuotaBytes, c.QuotaResetPolicy,
+		c.QuotaResetAt, c.ExpiresAt, c.DeviceLimit, c.Notes, boolToInt(c.Depleted),
+		c.CreatedAt, c.UpdatedAt, c.Version)
+	if err != nil {
+		return Client{}, fmt.Errorf("client: create: %w", err)
+	}
+	return c, nil
+}
+
+// CreateBinding inserts a binding within the transaction.
+func (t *Tx) CreateBinding(b Binding) (Binding, error) {
+	if b.ID == "" {
+		b.ID = uuid.NewString()
+	}
+	now := nowUnix()
+	b.CreatedAt, b.UpdatedAt, b.Version = now, now, 1
+	if b.ProtocolSettings == "" {
+		b.ProtocolSettings = "{}"
+	}
+	_, err := t.tx.Exec(`INSERT INTO client_bindings
+	  (id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version)
+	  VALUES(?,?,?,?,?,?,?,?)`,
+		b.ID, b.ClientID, b.InboundID, boolToInt(b.Enabled), b.ProtocolSettings,
+		b.CreatedAt, b.UpdatedAt, b.Version)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return Binding{}, ErrDuplicateBinding
+		}
+		return Binding{}, fmt.Errorf("client: create binding: %w", err)
+	}
+	return b, nil
+}
+
+// SetCredential encrypts and stores a credential within the transaction. The
+// cipher is passed explicitly so the Tx does not need a reference to the
+// CredentialStore's DB handle (which would bypass the transaction).
+func (t *Tx) SetCredential(creds *CredentialStore, bindingID, kind, plaintext string) (Credential, error) {
+	if creds.cipher == nil {
+		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
+	}
+	enc, err := creds.cipher.Encrypt(plaintext)
+	if err != nil {
+		return Credential{}, fmt.Errorf("client: encrypt credential: %w", err)
+	}
+	version := nextVersionForTx(t.tx, bindingID, kind)
+	c := Credential{
+		ID:                uuid.NewString(),
+		BindingID:         bindingID,
+		Kind:              kind,
+		EncryptedValue:    []byte(enc),
+		KeyVersion:        1,
+		CredentialVersion: version,
+		CreatedAt:         nowUnix(),
+	}
+	_, err = t.tx.Exec(`INSERT INTO client_credentials
+	  (id, binding_id, kind, encrypted_value, key_version, credential_version, created_at)
+	  VALUES(?,?,?,?,?,?,?)`,
+		c.ID, c.BindingID, c.Kind, c.EncryptedValue, c.KeyVersion, c.CredentialVersion, c.CreatedAt)
+	if err != nil {
+		return Credential{}, fmt.Errorf("client: store credential: %w", err)
+	}
+	return c, nil
+}
+
 func (r *Repository) Create(c Client) (Client, error) {
 	if c.ID == "" {
 		c.ID = uuid.NewString()
@@ -299,6 +402,66 @@ func (r *Repository) DeleteBindingsForInbound(inboundID string) (int, error) {
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// AllClients returns every client (no pagination) for revision snapshots.
+func (r *Repository) AllClients() ([]Client, error) {
+	rows, err := r.db.Query(`SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy,
+	  quota_reset_at, expires_at, device_limit, notes, depleted, created_at, updated_at, version
+	  FROM clients ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("client: list all: %w", err)
+	}
+	defer rows.Close()
+	var out []Client
+	for rows.Next() {
+		c, err := scanClient(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// AllBindings returns every binding (no pagination) for revision snapshots.
+func (r *Repository) AllBindings() ([]Binding, error) {
+	rows, err := r.db.Query(`SELECT id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version
+	  FROM client_bindings ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("client: list all bindings: %w", err)
+	}
+	defer rows.Close()
+	var out []Binding
+	for rows.Next() {
+		b, err := scanBinding(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// AllActiveCredentials returns every active (non-revoked) credential for
+// revision snapshots. Encrypted material is included so a retry of revision N
+// renders with exactly the credential that was active at revision N.
+func (r *Repository) AllActiveCredentials() ([]Credential, error) {
+	rows, err := r.db.Query(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
+	  created_at, rotated_at, revoked_at FROM client_credentials WHERE revoked_at IS NULL ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("client: list active credentials: %w", err)
+	}
+	defer rows.Close()
+	var out []Credential
+	for rows.Next() {
+		c, err := scanCredential(rows, true)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // --- helpers ---

@@ -360,47 +360,28 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		DeviceLimit:      req.DeviceLimit,
 		Notes:            req.Notes,
 	}
-	created, err := s.clientService.Create(c)
-	if err != nil {
-		s.writeV1ClientError(w, err)
-		return
-	}
-	// Create bindings (+ credentials) transactionally: if ANY requested binding
-	// or credential fails, the whole create is rolled back so the client never
-	// persists in a half-configured state, and we never return 201 for a
-	// partially-created client.
-	var createdBindingIDs []string
-	fail := func(cause error) {
-		for _, bid := range createdBindingIDs {
-			_ = s.clientService.RemoveBinding(bid, created.ID)
-		}
-		if derr := s.clientService.Delete(created.ID); derr != nil {
-			s.logUserAction(r, "create_client", req.Name, false, "rollback: "+derr.Error())
-		}
-		s.logUserAction(r, "create_client", req.Name, false, cause.Error())
-		s.writeV1ClientError(w, cause)
-	}
+	// A4/A5: single SQL transaction. Client + bindings + credentials commit or
+	// roll back atomically; exactly one apply runs for the fully-configured
+	// client; no compensating deletes. A failure returns an error, never a 201
+	// for a partially-created client.
+	bindings := make([]client.BindingInput, 0, len(req.Bindings))
 	for _, b := range req.Bindings {
 		if b.InboundID == "" {
 			continue
 		}
-		bind, berr := s.clientService.AddBinding(created.ID, b.InboundID)
-		if berr != nil {
-			fail(berr)
-			return
-		}
-		createdBindingIDs = append(createdBindingIDs, bind.ID)
-		if b.Credential != "" {
-			if _, cerr := s.clientService.SetCredential(bind.ID, "password", b.Credential); cerr != nil {
-				fail(cerr)
-				return
-			}
-		}
+		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, Credential: b.Credential})
+	}
+	final, err := s.clientService.CreateWithBindings(c, bindings)
+	if err != nil {
+		s.logUserAction(r, "create_client", req.Name, false, err.Error())
+		s.writeV1ClientError(w, err)
+		return
 	}
 	s.logUserAction(r, "create_client", req.Name, true, "")
-	final, _ := s.clientService.Get(created.ID)
-	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
-	s.writeMutationResponse(w, http.StatusCreated, final, outcome)
+	// A4: CreateWithBindings already triggered exactly one apply via the
+	// notifier (after the transaction committed). Do NOT run a second apply
+	// here — that would be the forbidden double-apply architecture.
+	s.writeMutationResponse(w, http.StatusCreated, final, autoApplyOutcome{})
 }
 
 func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Request) {

@@ -147,3 +147,11 @@ func nextVersionFor(db *sql.DB, bindingID, kind string) int {
 	_ = db.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
 	return max + 1
 }
+
+// nextVersionForTx is the transactional variant used within a WithTx block so
+// the version computation sees uncommitted rows in the same transaction.
+func nextVersionForTx(tx *sql.Tx, bindingID, kind string) int {
+	var max int
+	_ = tx.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
+	return max + 1
+}

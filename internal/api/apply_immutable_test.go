@@ -34,7 +34,10 @@ func TestPinStateToRevisionSwapsAndRestores(t *testing.T) {
 	}
 
 	// Pin to revision 41: live state must now render the OLDER config.
-	restore := s.pinStateToRevisionLocked(41)
+	restore, err := s.pinStateToRevisionLocked(41)
+	if err != nil {
+		t.Fatalf("pin: %v", err)
+	}
 	if restore == nil {
 		t.Fatal("expected a pin (snapshot exists), got nil")
 	}
@@ -49,15 +52,21 @@ func TestPinStateToRevisionSwapsAndRestores(t *testing.T) {
 	}
 }
 
-// TestPinStateToRevisionMissingSnapshotIsNoop ensures a revision with no
-// recorded snapshot falls back to current state without mutating it.
-func TestPinStateToRevisionMissingSnapshotIsNoop(t *testing.T) {
+// TestPinStateToRevisionMissingSnapshotFails ensures a revision with no
+// recorded snapshot FAILS the apply (A3: forbidden fallback removed). The
+// executor must never silently render current mutable state for a tracked
+// revision — that would violate immutability.
+func TestPinStateToRevisionMissingSnapshotFails(t *testing.T) {
 	s := &managementState{}
 	s.settings = Settings{Domain: "current.example"}
 	db := openApplyTestDB(t)
 	s.applySnapshots = apply.NewSnapshotStore(db)
 
-	if restore := s.pinStateToRevisionLocked(999); restore != nil {
+	restore, err := s.pinStateToRevisionLocked(999)
+	if err == nil {
+		t.Fatal("expected error for missing snapshot, got nil")
+	}
+	if restore != nil {
 		t.Fatal("expected nil restore for missing snapshot")
 	}
 	if s.settings.Domain != "current.example" {
@@ -93,7 +102,10 @@ func TestSnapshotDoesNotContainPlaintextCredentials(t *testing.T) {
 		t.Fatalf("snapshot stored plaintext credential: %s", raw)
 	}
 	// And the pinned render must decrypt it back for the renderer.
-	restore := s.pinStateToRevisionLocked(rev)
+	restore, err := s.pinStateToRevisionLocked(rev)
+	if err != nil {
+		t.Fatalf("pin: %v", err)
+	}
 	if restore == nil {
 		t.Fatal("expected pin")
 	}

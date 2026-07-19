@@ -276,4 +276,51 @@ type ManagementSnapshot struct {
 	RoutingSource RoutingSource `json:"routingSource,omitempty"`
 	Warp          WarpConfig    `json:"warp"`
 	Users         []User        `json:"users,omitempty"`
+	// A3: normalized client state that affects runtime rendering. Snapshot
+	// must freeze Clients, Bindings, and active credential references so an
+	// apply job for revision N renders exactly the configuration committed as
+	// revision N, never newer mutable state.
+	Clients     []ClientSnapshot     `json:"clients,omitempty"`
+	Bindings    []BindingSnapshot    `json:"bindings,omitempty"`
+	Credentials []CredentialSnapshot `json:"credentials,omitempty"`
+}
+
+// ClientSnapshot is the immutable per-revision view of a normalized client.
+type ClientSnapshot struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Email            *string `json:"email,omitempty"`
+	Enabled          bool    `json:"enabled"`
+	GroupID          *string `json:"groupId,omitempty"`
+	QuotaBytes       *int64  `json:"quotaBytes,omitempty"`
+	QuotaResetPolicy string  `json:"quotaResetPolicy"`
+	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
+	ExpiresAt        *int64  `json:"expiresAt,omitempty"`
+	DeviceLimit      *int    `json:"deviceLimit,omitempty"`
+	Depleted         bool    `json:"depleted"`
+	Version          int     `json:"version"`
+}
+
+// BindingSnapshot is the immutable per-revision view of a client->inbound
+// binding, including enabled state and protocol settings.
+type BindingSnapshot struct {
+	ID               string `json:"id"`
+	ClientID         string `json:"clientId"`
+	InboundID        string `json:"inboundId"`
+	Enabled          bool   `json:"enabled"`
+	ProtocolSettings string `json:"protocolSettings,omitempty"`
+	Version          int    `json:"version"`
+}
+
+// CredentialSnapshot is the immutable per-revision reference to the active
+// credential for a binding. It stores the encrypted material (never plaintext)
+// so a retry of revision N renders with exactly the credential that was active
+// at revision N, even if a newer revision rotated it.
+type CredentialSnapshot struct {
+	ID                string `json:"id"`
+	BindingID         string `json:"bindingId"`
+	Kind              string `json:"kind"`
+	EncryptedValue    []byte `json:"encryptedValue"`
+	KeyVersion        int    `json:"keyVersion"`
+	CredentialVersion int    `json:"credentialVersion"`
 }

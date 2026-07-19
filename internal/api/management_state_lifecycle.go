@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -147,7 +148,7 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 }
 
 func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
-	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
+	input := managementstate.SnapshotInput{
 		Setup:         l.state.setup,
 		Settings:      l.state.settings,
 		Inbounds:      l.state.inbounds,
@@ -156,7 +157,42 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 		RoutingSource: l.state.routingSource,
 		Warp:          l.state.warp,
 		Users:         l.state.users,
-	})
+	}
+	// A3: freeze normalized client state so an apply job for revision N renders
+	// exactly the configuration committed as revision N, never newer mutable
+	// state. Load all clients, bindings, and active credentials from the repo.
+	if l.state.clientRepo != nil {
+		if clients, err := l.state.clientRepo.AllClients(); err == nil {
+			input.Clients = make([]model.ClientSnapshot, 0, len(clients))
+			for _, c := range clients {
+				input.Clients = append(input.Clients, model.ClientSnapshot{
+					ID: c.ID, Name: c.Name, Email: c.Email, Enabled: c.Enabled,
+					GroupID: c.GroupID, QuotaBytes: c.QuotaBytes, QuotaResetPolicy: c.QuotaResetPolicy,
+					QuotaResetAt: c.QuotaResetAt, ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit,
+					Depleted: c.Depleted, Version: c.Version,
+				})
+			}
+		}
+		if bindings, err := l.state.clientRepo.AllBindings(); err == nil {
+			input.Bindings = make([]model.BindingSnapshot, 0, len(bindings))
+			for _, b := range bindings {
+				input.Bindings = append(input.Bindings, model.BindingSnapshot{
+					ID: b.ID, ClientID: b.ClientID, InboundID: b.InboundID, Enabled: b.Enabled,
+					ProtocolSettings: b.ProtocolSettings, Version: b.Version,
+				})
+			}
+		}
+		if creds, err := l.state.clientRepo.AllActiveCredentials(); err == nil {
+			input.Credentials = make([]model.CredentialSnapshot, 0, len(creds))
+			for _, c := range creds {
+				input.Credentials = append(input.Credentials, model.CredentialSnapshot{
+					ID: c.ID, BindingID: c.BindingID, Kind: c.Kind, EncryptedValue: c.EncryptedValue,
+					KeyVersion: c.KeyVersion, CredentialVersion: c.CredentialVersion,
+				})
+			}
+		}
+	}
+	return managementstate.BuildSnapshot(input)
 }
 
 func (l ManagementStateLifecycle) SaveLocked() error {

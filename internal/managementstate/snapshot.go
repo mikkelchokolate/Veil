@@ -11,6 +11,10 @@ type SnapshotInput struct {
 	RoutingSource model.RoutingSource
 	Warp          model.WarpConfig
 	Users         []model.User
+	// A3: normalized client state that affects runtime rendering.
+	Clients     []model.ClientSnapshot
+	Bindings    []model.BindingSnapshot
+	Credentials []model.CredentialSnapshot
 }
 
 type SnapshotTarget struct {
@@ -34,6 +38,9 @@ func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 		RoutingSource: cloneRoutingSource(input.RoutingSource),
 		Warp:          cloneWarp(input.Warp),
 		Users:         cloneUsers(input.Users),
+		Clients:       append([]model.ClientSnapshot(nil), input.Clients...),
+		Bindings:      append([]model.BindingSnapshot(nil), input.Bindings...),
+		Credentials:   append([]model.CredentialSnapshot(nil), input.Credentials...),
 	}
 }
 
