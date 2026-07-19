@@ -7,6 +7,8 @@ import {
 import { Outlet } from "@tanstack/react-router";
 import { ApplyPage } from "./pages/ApplyPage";
 import { BackupsPage } from "./pages/BackupsPage";
+import { ClientDetailPage } from "./pages/ClientDetailPage";
+import { ClientNewPage } from "./pages/ClientNewPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { InboundsPage } from "./pages/InboundsPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -36,6 +38,16 @@ const clientsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/clients",
 	component: ClientsPage,
+});
+const clientNewRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/clients/new",
+	component: ClientNewPage,
+});
+const clientDetailRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/clients/$clientId",
+	component: ClientDetailPage,
 });
 const inboundsRoute = createRoute({
 	getParentRoute: () => rootRoute,
@@ -86,6 +98,8 @@ const applyRoute = createRoute({
 const routeTree = rootRoute.addChildren([
 	overviewRoute,
 	clientsRoute,
+	clientNewRoute,
+	clientDetailRoute,
 	inboundsRoute,
 	routingRoute,
 	trafficRoute,
