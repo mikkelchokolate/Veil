@@ -161,6 +161,56 @@ func (s *Service) RotateCredential(bindingID, kind, plaintext string) (Credentia
 	return c, nil
 }
 
+// BindingCredential pairs a normalized client's resolved credential with its
+// identity, for render-time injection into an inbound's runtime access model.
+type BindingCredential struct {
+	Name     string
+	Username string
+	Password string
+}
+
+// CredentialsForInbound resolves the active credential plaintext for every
+// enabled binding on the given inbound. It is the bridge from the normalized
+// Client+Binding+Credential store to the runtime renderer: the returned
+// credentials are merged into the inbound's access model so normalized clients
+// reach the live config. Only enabled clients and enabled bindings contribute.
+func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, error) {
+	clients, _, err := s.repo.List(ListFilter{})
+	if err != nil {
+		return nil, err
+	}
+	out := []BindingCredential{}
+	for _, c := range clients {
+		if !c.Enabled {
+			continue
+		}
+		bindings, err := s.repo.BindingsForClient(c.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range bindings {
+			if b.InboundID != inboundID || !b.Enabled {
+				continue
+			}
+			creds, err := s.creds.ListForBinding(b.ID)
+			if err != nil {
+				return nil, err
+			}
+			for _, cr := range creds {
+				if cr.RevokedAt != nil {
+					continue
+				}
+				plaintext, rerr := s.creds.Reveal(cr.ID)
+				if rerr != nil {
+					return nil, rerr
+				}
+				out = append(out, BindingCredential{Name: c.Name, Username: c.Name, Password: plaintext})
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) toView(c Client) (View, error) {
 	bindings, err := s.repo.BindingsForClient(c.ID)
 	if err != nil {

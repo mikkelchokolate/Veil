@@ -39,6 +39,17 @@ type ClientProfile struct {
 	Enabled  bool   `json:"enabled"`
 }
 
+// RuntimeCredential carries per-client credential material resolved from the
+// normalized Client+Binding+Credential store for a single inbound. It is a
+// runtime-only carrier: it is never persisted or serialized (json:"-"), and is
+// merged into the access model at render time so normalized clients reach the
+// live config alongside legacy inbound-embedded profiles.
+type RuntimeCredential struct {
+	Name     string `json:"-"`
+	Username string `json:"-"`
+	Password string `json:"-"`
+}
+
 type Inbound struct {
 	Name              string          `json:"name"`
 	Protocol          string          `json:"protocol"`
@@ -59,6 +70,12 @@ type Inbound struct {
 	// ProtocolFields holds protocol-specific inbound fields populated by the
 	// dynamic Panel UI. Legacy flat fields above remain for backward compatibility.
 	ProtocolFields map[string]any `json:"protocolFields,omitempty"`
+
+	// RuntimeCredentials carries per-client credentials resolved from the
+	// normalized client store for this inbound at render time. Runtime-only;
+	// never persisted or serialized. The access model merges these so normalized
+	// clients are rendered into the live config.
+	RuntimeCredentials []RuntimeCredential `json:"-"`
 }
 
 type RoutingRule struct {

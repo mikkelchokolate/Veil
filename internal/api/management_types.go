@@ -17,6 +17,7 @@ import (
 
 type Settings = model.Settings
 type ClientProfile = model.ClientProfile
+type RuntimeCredential = model.RuntimeCredential
 type Inbound = model.Inbound
 type RoutingRule = model.RoutingRule
 type RoutingPreset = model.RoutingPreset

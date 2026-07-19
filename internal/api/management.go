@@ -124,10 +124,35 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 		ApplyRoot: s.applyRoot,
 		LiveRoot:  s.liveRoot,
 		Settings:  s.settings,
-		Inbounds:  s.inbounds,
+		Inbounds:  s.inboundsWithRuntimeCredentialsLocked(),
 		Rules:     s.rules,
 		Warp:      s.warp,
 	})
+}
+
+// inboundsWithRuntimeCredentialsLocked returns the configured inbounds with
+// per-client credentials resolved from the normalized Client+Binding+Credential
+// store attached as runtime-only data, so the rendered live config includes
+// normalized clients (not just legacy inbound-embedded profiles). Failures to
+// resolve credentials are non-fatal: the inbound renders without them.
+func (s *managementState) inboundsWithRuntimeCredentialsLocked() []Inbound {
+	if s.clientService == nil {
+		return s.inbounds
+	}
+	out := make([]Inbound, len(s.inbounds))
+	copy(out, s.inbounds)
+	for i := range out {
+		creds, err := s.clientService.CredentialsForInbound(out[i].Name)
+		if err != nil || len(creds) == 0 {
+			continue
+		}
+		rc := make([]RuntimeCredential, 0, len(creds))
+		for _, c := range creds {
+			rc = append(rc, RuntimeCredential{Name: c.Name, Username: c.Username, Password: c.Password})
+		}
+		out[i].RuntimeCredentials = rc
+	}
+	return out
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {
