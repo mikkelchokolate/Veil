@@ -10,9 +10,10 @@
     "check": "node_modules/.bin/biome check .",
     "check:fix": "node_modules/.bin/biome check --write .",
     "gen": "node node_modules/orval/dist/bin/orval.mjs --config orval.config.ts",
-    "test": "node_modules/.bin/vitest run",
+    "test": "vitest run",
     "test:browser": "node_modules/.bin/vitest run --browser.enabled",
-    "test:e2e": "node_modules/.bin/playwright test"
+    "test:e2e": "node_modules/.bin/playwright test",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.0",
@@ -26,10 +27,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^29.1.1",
     "msw": "^2.15.0",
     "orval": "^8.22.0",
     "typescript": "^7.0.2",

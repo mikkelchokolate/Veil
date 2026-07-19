@@ -8,6 +8,12 @@ import { defineConfig } from "vite";
 export default defineConfig({
 	base: "./",
 	plugins: [react()],
+	test: {
+		environment: "jsdom",
+		setupFiles: ["./src/test/setup.ts"],
+		globals: true,
+		css: false,
+	},
 	server: {
 		proxy: {
 			"/api": "http://127.0.0.1:47359",
