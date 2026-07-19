@@ -5,6 +5,7 @@ import { LoginView } from "./auth/LoginView";
 import { SetupView } from "./auth/SetupView";
 import { AppShell } from "./shell/AppShell";
 import { RouterView } from "./router";
+import { I18nProvider } from "./i18n/I18nContext";
 
 interface SetupStatus {
 	required: boolean;
@@ -41,9 +42,11 @@ function Gate() {
 	}
 
 	return (
-		<AppShell>
-			<RouterView />
-		</AppShell>
+		<I18nProvider initialLocale={(session?.locale as "en" | "ru" | undefined) ?? "en"}>
+			<AppShell>
+				<RouterView />
+			</AppShell>
+		</I18nProvider>
 	);
 }
 

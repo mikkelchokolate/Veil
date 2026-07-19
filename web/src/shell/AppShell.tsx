@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { ApplyStatusIndicator } from "../apply/ApplyStatusIndicator";
 import { NAV_ENTRIES } from "./nav";
+import { useI18n } from "../i18n/I18nContext";
 
 function NavIcon({ path }: { path: string }) {
 	return (
@@ -24,6 +25,7 @@ function NavIcon({ path }: { path: string }) {
 export function AppShell({ children }: { children?: ReactNode }) {
 	const { session, logout } = useAuth();
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const { t, locale, setLocale } = useI18n();
 
 	return (
 		<div className="app-shell">
@@ -37,7 +39,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 							<li key={entry.to}>
 								<Link to={entry.to} className={`nav-item${active ? " active" : ""}`}>
 									<NavIcon path={entry.icon} />
-									<span>{entry.label}</span>
+									<span>{t(entry.labelKey)}</span>
 								</Link>
 							</li>
 						);
@@ -53,8 +55,17 @@ export function AppShell({ children }: { children?: ReactNode }) {
 							{session?.username}
 							{session?.role ? ` · ${session.role}` : ""}
 						</span>
+						<select
+							className="input"
+							style={{ maxWidth: 80 }}
+							value={locale}
+							onChange={(e) => setLocale(e.target.value as "en" | "ru")}
+						>
+							<option value="en">EN</option>
+							<option value="ru">RU</option>
+						</select>
 						<button type="button" className="btn" onClick={() => void logout()}>
-							Logout
+							{t("common.logout") || "Logout"}
 						</button>
 					</div>
 				</header>
