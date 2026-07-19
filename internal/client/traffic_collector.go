@@ -76,6 +76,15 @@ func (c *Collector) CollectOnce() error {
 	return nil
 }
 
+// ProviderCount reports how many traffic providers are registered. Zero means
+// no runtime is feeding counters and the telemetry state must be reported as
+// "no providers" rather than fake zeros.
+func (c *Collector) ProviderCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.providers)
+}
+
 // Start begins periodic collection until Stop. Non-blocking.
 func (c *Collector) Start() {
 	c.mu.Lock()

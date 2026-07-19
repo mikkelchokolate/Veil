@@ -95,6 +95,23 @@ func initClientSubsystem(s *managementState) {
 		defer s.mu.Unlock()
 		s.autoApplyResultLocked(nil, "system")
 	})
+	// A9: start the collector and reconciler so quota depletion is reconciled
+	// and counters are collected whenever a provider is registered. With zero
+	// providers CollectOnce is a no-op and the summary endpoint honestly
+	// reports state="unsupported" (no fake zeros).
+	s.trafficCollector.Start()
+	s.trafficReconciler.Start()
+}
+
+// stopTrafficSubsystem halts the periodic collector/reconciler. Safe to call
+// multiple times.
+func (s *managementState) stopTrafficSubsystem() {
+	if s.trafficCollector != nil {
+		s.trafficCollector.Stop()
+	}
+	if s.trafficReconciler != nil {
+		s.trafficReconciler.Stop()
+	}
 }
 
 // applyTrackingEnabled reports whether durable revisions/jobs are available.

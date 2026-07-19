@@ -16,6 +16,7 @@ import (
 func (s *managementState) registerTrafficRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/traffic/top", s.handleV1TrafficTop)
 	mux.HandleFunc("/api/v1/traffic/stream", s.handleV1TrafficStream)
+	mux.HandleFunc("/api/v1/traffic/summary", s.handleV1TrafficSummary)
 	mux.HandleFunc("/api/v1/traffic/", s.handleV1TrafficClient)
 }
 
@@ -86,6 +87,44 @@ func (s *managementState) handleV1TrafficHistory(w http.ResponseWriter, r *http.
 		return
 	}
 	writeJSON(w, map[string]any{"items": rows, "count": len(rows)})
+}
+
+// handleV1TrafficSummary returns aggregate traffic totals over the whole set
+// plus the honest telemetry provider state so the UI never renders fake zeros
+// as real data.
+func (s *managementState) handleV1TrafficSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	// Telemetry state: honest about whether any runtime is feeding counters.
+	state := "unsupported"
+	providerCount := 0
+	if s.trafficCollector != nil {
+		providerCount = s.trafficCollector.ProviderCount()
+		if providerCount > 0 {
+			state = "collecting"
+		}
+	}
+	resp := map[string]any{
+		"state":         state,
+		"providerCount": providerCount,
+	}
+	if s.trafficStore != nil {
+		var up, down int64
+		clients, _, err := s.clientService.List(client.ListFilter{PageSize: 1000})
+		if err == nil {
+			for _, c := range clients {
+				u, d, _ := s.trafficStore.TotalsForClient(c.ID)
+				up += u
+				down += d
+			}
+		}
+		resp["uploadBytes"] = up
+		resp["downloadBytes"] = down
+		resp["usedBytes"] = up + down
+	}
+	writeJSON(w, resp)
 }
 
 // handleV1TrafficTop returns clients ranked by total usage (top talkers).
