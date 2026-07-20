@@ -138,7 +138,7 @@ export function ApplyPage() {
 											<td className="muted">{fmtTime(j.createdAt)}</td>
 											<td className="mono">
 												<Link
-													to="/apply/jobs/$jobId"
+													to="/apply/$jobId"
 													params={{ jobId: j.id }}
 													className="mono"
 												>

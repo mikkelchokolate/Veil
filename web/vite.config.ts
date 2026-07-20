@@ -1,4 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -8,7 +9,12 @@ import { defineConfig } from "vite";
 // server needing to know the secret at build time.
 export default defineConfig({
 	base: "./",
-	plugins: [react(), tailwindcss()],
+	plugins: [
+		// S7: file-based router. Must run before react() per TanStack docs.
+		tanstackRouter({ target: "react", autoCodeSplitting: true }),
+		react(),
+		tailwindcss(),
+	],
 	test: {
 		environment: "jsdom",
 		setupFiles: ["./src/test/setup.ts"],

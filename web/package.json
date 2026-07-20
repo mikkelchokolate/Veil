@@ -5,8 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node_modules/.bin/vite",
-		"build": "node_modules/.bin/tsc -b && node_modules/.bin/vite build",
-		"typecheck": "node_modules/.bin/tsc -b --noEmit",
+		"build": "node_modules/.bin/tsr generate && node_modules/.bin/tsc -b && node_modules/.bin/vite build",
+		"typecheck": "node_modules/.bin/tsr generate && node_modules/.bin/tsc -b --noEmit",
+		"router:gen": "node_modules/.bin/tsr generate",
 		"check": "node_modules/.bin/biome check .",
 		"check:fix": "node_modules/.bin/biome check --write .",
 		"gen": "node node_modules/orval/dist/bin/orval.mjs --config orval.config.ts",
@@ -30,6 +31,8 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.4",
 		"@tailwindcss/vite": "^4.3.3",
+		"@tanstack/router-cli": "^1.167.21",
+		"@tanstack/router-plugin": "^1.168.23",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/react": "^16.3.2",
 		"@testing-library/user-event": "^14.6.1",
