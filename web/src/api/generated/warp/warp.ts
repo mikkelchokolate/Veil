@@ -40,12 +40,51 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   WarpConfig
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiWarpResponse200 = {
   data: WarpConfig
@@ -82,7 +121,54 @@ export const getApiWarp = async ( options?: RequestInit): Promise<getApiWarpResp
 );}
 
 
-export type putApiWarpResponse200 = {
+
+
+
+export const getGetApiWarpMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiWarp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiWarp>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiWarp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiWarp>>, void> = () => {
+
+
+          return  getApiWarp(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiWarpMutationResult = NonNullable<Awaited<ReturnType<typeof getApiWarp>>>
+
+    export type GetApiWarpMutationError = unknown
+
+    /**
+ * @summary Read WARP state with secrets redacted
+ */
+export const useGetApiWarp = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiWarp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiWarp>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiWarpMutationOptions(options), queryClient);
+    }
+    export type putApiWarpResponse200 = {
   data: WarpConfig
   status: 200
 }
@@ -122,5 +208,82 @@ export const putApiWarp = async (warpConfig: WarpConfig, options?: RequestInit):
     body: JSON.stringify(warpConfig)
   }
 );}
+
+
+
+
+
+export const getPutApiWarpQueryKey = (warpConfig?: WarpConfig,) => {
+    return [
+    'PUT', `/api/warp`, warpConfig
+    ] as const;
+    }
+
+
+export const getPutApiWarpQueryOptions = <TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiWarpQueryKey(warpConfig);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiWarp>>> = ({ signal }) => putApiWarp(warpConfig, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiWarpQueryResult = NonNullable<Awaited<ReturnType<typeof putApiWarp>>>
+export type PutApiWarpQueryError = BadRequestResponse
+
+
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+ warpConfig: WarpConfig, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiWarp>>,
+          TError,
+          Awaited<ReturnType<typeof putApiWarp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+ warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiWarp>>,
+          TError,
+          Awaited<ReturnType<typeof putApiWarp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+ warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update WARP state
+ */
+
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+ warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiWarpQueryOptions(warpConfig,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   AuthStatusResponse,
   BadRequestResponse,
@@ -59,6 +78,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type postApiAuthLoginResponse200 = {
   data: LoginResponse
@@ -107,6 +146,83 @@ export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: Req
 );}
 
 
+
+
+
+export const getPostApiAuthLoginQueryKey = (loginRequest?: LoginRequest,) => {
+    return [
+    'POST', `/api/auth/login`, loginRequest
+    ] as const;
+    }
+
+
+export const getPostApiAuthLoginQueryOptions = <TData = Awaited<ReturnType<typeof postApiAuthLogin>>, TError = BadRequestResponse | UnauthorizedResponse>(loginRequest: LoginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiAuthLoginQueryKey(loginRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiAuthLogin>>> = ({ signal }) => postApiAuthLogin(loginRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiAuthLoginQueryResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLogin>>>
+export type PostApiAuthLoginQueryError = BadRequestResponse | UnauthorizedResponse
+
+
+export function usePostApiAuthLogin<TData = Awaited<ReturnType<typeof postApiAuthLogin>>, TError = BadRequestResponse | UnauthorizedResponse>(
+ loginRequest: LoginRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLogin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLogin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLogin<TData = Awaited<ReturnType<typeof postApiAuthLogin>>, TError = BadRequestResponse | UnauthorizedResponse>(
+ loginRequest: LoginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLogin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLogin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLogin<TData = Awaited<ReturnType<typeof postApiAuthLogin>>, TError = BadRequestResponse | UnauthorizedResponse>(
+ loginRequest: LoginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a browser session
+ */
+
+export function usePostApiAuthLogin<TData = Awaited<ReturnType<typeof postApiAuthLogin>>, TError = BadRequestResponse | UnauthorizedResponse>(
+ loginRequest: LoginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiAuthLoginQueryOptions(loginRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiAuthLogoutResponse200 = {
   data: SuccessResponse
   status: 200
@@ -140,6 +256,83 @@ export const postApiAuthLogout = async ( options?: RequestInit): Promise<postApi
 
   }
 );}
+
+
+
+
+
+export const getPostApiAuthLogoutQueryKey = () => {
+    return [
+    'POST', `/api/auth/logout`
+    ] as const;
+    }
+
+
+export const getPostApiAuthLogoutQueryOptions = <TData = Awaited<ReturnType<typeof postApiAuthLogout>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiAuthLogoutQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiAuthLogout>>> = ({ signal }) => postApiAuthLogout({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiAuthLogoutQueryResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLogout>>>
+export type PostApiAuthLogoutQueryError = unknown
+
+
+export function usePostApiAuthLogout<TData = Awaited<ReturnType<typeof postApiAuthLogout>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLogout>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLogout>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLogout<TData = Awaited<ReturnType<typeof postApiAuthLogout>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLogout>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLogout>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLogout<TData = Awaited<ReturnType<typeof postApiAuthLogout>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete the browser session cookie
+ */
+
+export function usePostApiAuthLogout<TData = Awaited<ReturnType<typeof postApiAuthLogout>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiAuthLogoutQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type getApiAuthStatusResponse200 = {
@@ -177,7 +370,54 @@ export const getApiAuthStatus = async ( options?: RequestInit): Promise<getApiAu
 );}
 
 
-export type postApiAuthLocaleResponse200 = {
+
+
+
+export const getGetApiAuthStatusMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAuthStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiAuthStatus>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiAuthStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiAuthStatus>>, void> = () => {
+
+
+          return  getApiAuthStatus(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiAuthStatusMutationResult = NonNullable<Awaited<ReturnType<typeof getApiAuthStatus>>>
+
+    export type GetApiAuthStatusMutationError = unknown
+
+    /**
+ * @summary Inspect the current browser session
+ */
+export const useGetApiAuthStatus = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAuthStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiAuthStatus>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiAuthStatusMutationOptions(options), queryClient);
+    }
+    export type postApiAuthLocaleResponse200 = {
   data: LocaleResponse
   status: 200
 }
@@ -239,6 +479,83 @@ export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest
 );}
 
 
+
+
+
+export const getPostApiAuthLocaleQueryKey = (localeUpdateRequest?: LocaleUpdateRequest,) => {
+    return [
+    'POST', `/api/auth/locale`, localeUpdateRequest
+    ] as const;
+    }
+
+
+export const getPostApiAuthLocaleQueryOptions = <TData = Awaited<ReturnType<typeof postApiAuthLocale>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(localeUpdateRequest: LocaleUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiAuthLocaleQueryKey(localeUpdateRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiAuthLocale>>> = ({ signal }) => postApiAuthLocale(localeUpdateRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiAuthLocaleQueryResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLocale>>>
+export type PostApiAuthLocaleQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function usePostApiAuthLocale<TData = Awaited<ReturnType<typeof postApiAuthLocale>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ localeUpdateRequest: LocaleUpdateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLocale>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLocale>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLocale<TData = Awaited<ReturnType<typeof postApiAuthLocale>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ localeUpdateRequest: LocaleUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAuthLocale>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAuthLocale>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAuthLocale<TData = Awaited<ReturnType<typeof postApiAuthLocale>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ localeUpdateRequest: LocaleUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update the current browser user's locale
+ */
+
+export function usePostApiAuthLocale<TData = Awaited<ReturnType<typeof postApiAuthLocale>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ localeUpdateRequest: LocaleUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiAuthLocaleQueryOptions(localeUpdateRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiAuthSessionsResponse200 = {
   data: SessionInfo[]
   status: 200
@@ -287,7 +604,54 @@ export const getApiAuthSessions = async ( options?: RequestInit): Promise<getApi
 );}
 
 
-export type deleteApiAuthSessionsResponse200 = {
+
+
+
+export const getGetApiAuthSessionsMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAuthSessions>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiAuthSessions>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiAuthSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiAuthSessions>>, void> = () => {
+
+
+          return  getApiAuthSessions(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiAuthSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiAuthSessions>>>
+
+    export type GetApiAuthSessionsMutationError = UnauthorizedResponse | ForbiddenResponse
+
+    /**
+ * @summary List active browser sessions
+ */
+export const useGetApiAuthSessions = <TError = UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAuthSessions>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiAuthSessions>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiAuthSessionsMutationOptions(options), queryClient);
+    }
+    export type deleteApiAuthSessionsResponse200 = {
   data: SuccessResponse
   status: 200
 }
@@ -345,6 +709,83 @@ export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteR
 );}
 
 
+
+
+
+export const getDeleteApiAuthSessionsQueryKey = (sessionDeleteRequest?: SessionDeleteRequest,) => {
+    return [
+    'DELETE', `/api/auth/sessions`, sessionDeleteRequest
+    ] as const;
+    }
+
+
+export const getDeleteApiAuthSessionsQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(sessionDeleteRequest: SessionDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiAuthSessionsQueryKey(sessionDeleteRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiAuthSessions>>> = ({ signal }) => deleteApiAuthSessions(sessionDeleteRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiAuthSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiAuthSessions>>>
+export type DeleteApiAuthSessionsQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useDeleteApiAuthSessions<TData = Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ sessionDeleteRequest: SessionDeleteRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiAuthSessions>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiAuthSessions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiAuthSessions<TData = Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ sessionDeleteRequest: SessionDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiAuthSessions>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiAuthSessions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiAuthSessions<TData = Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ sessionDeleteRequest: SessionDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Revoke an active browser session
+ */
+
+export function useDeleteApiAuthSessions<TData = Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ sessionDeleteRequest: SessionDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiAuthSessionsQueryOptions(sessionDeleteRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiUsersResponse200 = {
   data: UserResponse[]
   status: 200
@@ -380,7 +821,54 @@ export const getApiUsers = async ( options?: RequestInit): Promise<getApiUsersRe
 );}
 
 
-export type postApiUsersResponse201 = {
+
+
+
+export const getGetApiUsersMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiUsers>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiUsers>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiUsers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiUsers>>, void> = () => {
+
+
+          return  getApiUsers(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiUsersMutationResult = NonNullable<Awaited<ReturnType<typeof getApiUsers>>>
+
+    export type GetApiUsersMutationError = unknown
+
+    /**
+ * @summary List registered Panel users
+ */
+export const useGetApiUsers = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiUsers>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiUsers>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiUsersMutationOptions(options), queryClient);
+    }
+    export type postApiUsersResponse201 = {
   data: UserResponse
   status: 201
 }
@@ -431,6 +919,83 @@ export const postApiUsers = async (userCreateRequest: UserCreateRequest, options
     body: JSON.stringify(userCreateRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiUsersQueryKey = (userCreateRequest?: UserCreateRequest,) => {
+    return [
+    'POST', `/api/users`, userCreateRequest
+    ] as const;
+    }
+
+
+export const getPostApiUsersQueryOptions = <TData = Awaited<ReturnType<typeof postApiUsers>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(userCreateRequest: UserCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiUsersQueryKey(userCreateRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiUsers>>> = ({ signal }) => postApiUsers(userCreateRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiUsersQueryResult = NonNullable<Awaited<ReturnType<typeof postApiUsers>>>
+export type PostApiUsersQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+
+
+export function usePostApiUsers<TData = Awaited<ReturnType<typeof postApiUsers>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+ userCreateRequest: UserCreateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiUsers>>,
+          TError,
+          Awaited<ReturnType<typeof postApiUsers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiUsers<TData = Awaited<ReturnType<typeof postApiUsers>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+ userCreateRequest: UserCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiUsers>>,
+          TError,
+          Awaited<ReturnType<typeof postApiUsers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiUsers<TData = Awaited<ReturnType<typeof postApiUsers>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+ userCreateRequest: UserCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a Panel user
+ */
+
+export function usePostApiUsers<TData = Awaited<ReturnType<typeof postApiUsers>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+ userCreateRequest: UserCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiUsersQueryOptions(userCreateRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type putApiUsersUsernameResponse200 = {
@@ -486,6 +1051,89 @@ export const putApiUsersUsername = async (username: string,
 );}
 
 
+
+
+
+export const getPutApiUsersUsernameQueryKey = (username: string,
+    userUpdateRequest?: UserUpdateRequest,) => {
+    return [
+    'PUT', `/api/users/${username}`, userUpdateRequest
+    ] as const;
+    }
+
+
+export const getPutApiUsersUsernameQueryOptions = <TData = Awaited<ReturnType<typeof putApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(username: string,
+    userUpdateRequest: UserUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiUsersUsernameQueryKey(username,userUpdateRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiUsersUsername>>> = ({ signal }) => putApiUsersUsername(username,userUpdateRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiUsersUsernameQueryResult = NonNullable<Awaited<ReturnType<typeof putApiUsersUsername>>>
+export type PutApiUsersUsernameQueryError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function usePutApiUsersUsername<TData = Awaited<ReturnType<typeof putApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string,
+    userUpdateRequest: UserUpdateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiUsersUsername>>,
+          TError,
+          Awaited<ReturnType<typeof putApiUsersUsername>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiUsersUsername<TData = Awaited<ReturnType<typeof putApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string,
+    userUpdateRequest: UserUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiUsersUsername>>,
+          TError,
+          Awaited<ReturnType<typeof putApiUsersUsername>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiUsersUsername<TData = Awaited<ReturnType<typeof putApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string,
+    userUpdateRequest: UserUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update a Panel user
+ */
+
+export function usePutApiUsersUsername<TData = Awaited<ReturnType<typeof putApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string,
+    userUpdateRequest: UserUpdateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiUsersUsernameQueryOptions(username,userUpdateRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type deleteApiUsersUsernameResponse204 = {
   data: void
   status: 204
@@ -536,5 +1184,82 @@ export const deleteApiUsersUsername = async (username: string, options?: Request
 
   }
 );}
+
+
+
+
+
+export const getDeleteApiUsersUsernameQueryKey = (username: string,) => {
+    return [
+    'DELETE', `/api/users/${username}`
+    ] as const;
+    }
+
+
+export const getDeleteApiUsersUsernameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiUsersUsernameQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiUsersUsername>>> = ({ signal }) => deleteApiUsersUsername(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiUsersUsernameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiUsersUsername>>>
+export type DeleteApiUsersUsernameQueryError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useDeleteApiUsersUsername<TData = Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiUsersUsername>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiUsersUsername>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiUsersUsername<TData = Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiUsersUsername>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiUsersUsername>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiUsersUsername<TData = Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete a Panel user
+ */
+
+export function useDeleteApiUsersUsername<TData = Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiUsersUsernameQueryOptions(username,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

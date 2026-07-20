@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ErrorText,
@@ -50,6 +69,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiSetupStatusResponse200 = {
   data: SetupStatusResponse
@@ -87,7 +126,54 @@ export const getApiSetupStatus = async ( options?: RequestInit): Promise<getApiS
 );}
 
 
-export type postApiSetupCompleteResponse201 = {
+
+
+
+export const getGetApiSetupStatusMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSetupStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiSetupStatus>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiSetupStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiSetupStatus>>, void> = () => {
+
+
+          return  getApiSetupStatus(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiSetupStatusMutationResult = NonNullable<Awaited<ReturnType<typeof getApiSetupStatus>>>
+
+    export type GetApiSetupStatusMutationError = unknown
+
+    /**
+ * @summary Inspect first-run setup state
+ */
+export const useGetApiSetupStatus = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSetupStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiSetupStatus>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiSetupStatusMutationOptions(options), queryClient);
+    }
+    export type postApiSetupCompleteResponse201 = {
   data: SetupCompleteResponse
   status: 201
 }
@@ -138,5 +224,82 @@ export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRe
     body: JSON.stringify(setupCompleteRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiSetupCompleteQueryKey = (setupCompleteRequest?: SetupCompleteRequest,) => {
+    return [
+    'POST', `/api/setup/complete`, setupCompleteRequest
+    ] as const;
+    }
+
+
+export const getPostApiSetupCompleteQueryOptions = <TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorText>(setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiSetupCompleteQueryKey(setupCompleteRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiSetupComplete>>> = ({ signal }) => postApiSetupComplete(setupCompleteRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiSetupCompleteQueryResult = NonNullable<Awaited<ReturnType<typeof postApiSetupComplete>>>
+export type PostApiSetupCompleteQueryError = BadRequestResponse | ForbiddenResponse | ErrorText
+
+
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorText>(
+ setupCompleteRequest: SetupCompleteRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiSetupComplete>>,
+          TError,
+          Awaited<ReturnType<typeof postApiSetupComplete>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorText>(
+ setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiSetupComplete>>,
+          TError,
+          Awaited<ReturnType<typeof postApiSetupComplete>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorText>(
+ setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create the initial administrator
+ */
+
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorText>(
+ setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiSetupCompleteQueryOptions(setupCompleteRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

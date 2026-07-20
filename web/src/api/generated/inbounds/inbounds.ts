@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ForbiddenResponse,
@@ -49,6 +68,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiInboundsResponse200 = {
   data: Inbound[]
@@ -92,7 +131,54 @@ export const getApiInbounds = async ( options?: RequestInit): Promise<getApiInbo
 );}
 
 
-export type postApiInboundsResponse201 = {
+
+
+
+export const getGetApiInboundsMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiInbounds>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiInbounds>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiInbounds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiInbounds>>, void> = () => {
+
+
+          return  getApiInbounds(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiInboundsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiInbounds>>>
+
+    export type GetApiInboundsMutationError = UnauthorizedResponse
+
+    /**
+ * @summary List inbounds
+ */
+export const useGetApiInbounds = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiInbounds>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiInbounds>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiInboundsMutationOptions(options), queryClient);
+    }
+    export type postApiInboundsResponse201 = {
   data: Inbound
   status: 201
 }
@@ -139,6 +225,83 @@ export const postApiInbounds = async (inbound: Inbound, options?: RequestInit): 
 );}
 
 
+
+
+
+export const getPostApiInboundsQueryKey = (inbound?: Inbound,) => {
+    return [
+    'POST', `/api/inbounds`, inbound
+    ] as const;
+    }
+
+
+export const getPostApiInboundsQueryOptions = <TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiInboundsQueryKey(inbound);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiInbounds>>> = ({ signal }) => postApiInbounds(inbound, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiInboundsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiInbounds>>>
+export type PostApiInboundsQueryError = BadRequestResponse | ForbiddenResponse
+
+
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+ inbound: Inbound, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiInbounds>>,
+          TError,
+          Awaited<ReturnType<typeof postApiInbounds>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+ inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiInbounds>>,
+          TError,
+          Awaited<ReturnType<typeof postApiInbounds>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+ inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create an inbound
+ */
+
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+ inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiInboundsQueryOptions(inbound,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiInboundsNameResponse200 = {
   data: Inbound
   status: 200
@@ -181,7 +344,54 @@ export const getApiInboundsName = async (name: string, options?: RequestInit): P
 );}
 
 
-export type putApiInboundsNameResponse200 = {
+
+
+
+export const getGetApiInboundsNameMutationOptions = <TError = NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiInboundsName>>, TError,{name: string}, TContext> => {
+
+const mutationKey = ['getApiInboundsName'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiInboundsName>>, {name: string}> = (props) => {
+          const {name} = props ?? {};
+
+          return  getApiInboundsName(name,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiInboundsNameMutationResult = NonNullable<Awaited<ReturnType<typeof getApiInboundsName>>>
+
+    export type GetApiInboundsNameMutationError = NotFoundResponse
+
+    /**
+ * @summary Read one inbound
+ */
+export const useGetApiInboundsName = <TError = NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiInboundsName>>,
+        TError,
+        {name: string},
+        TContext
+      > => {
+      return useMutation(getGetApiInboundsNameMutationOptions(options), queryClient);
+    }
+    export type putApiInboundsNameResponse200 = {
   data: Inbound
   status: 200
 }
@@ -234,6 +444,89 @@ export const putApiInboundsName = async (name: string,
 );}
 
 
+
+
+
+export const getPutApiInboundsNameQueryKey = (name: string,
+    inbound?: Inbound,) => {
+    return [
+    'PUT', `/api/inbounds/${name}`, inbound
+    ] as const;
+    }
+
+
+export const getPutApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(name: string,
+    inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiInboundsNameQueryKey(name,inbound);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiInboundsName>>> = ({ signal }) => putApiInboundsName(name,inbound, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiInboundsNameQueryResult = NonNullable<Awaited<ReturnType<typeof putApiInboundsName>>>
+export type PutApiInboundsNameQueryError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ name: string,
+    inbound: Inbound, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiInboundsName>>,
+          TError,
+          Awaited<ReturnType<typeof putApiInboundsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ name: string,
+    inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiInboundsName>>,
+          TError,
+          Awaited<ReturnType<typeof putApiInboundsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ name: string,
+    inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update an inbound
+ */
+
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+ name: string,
+    inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiInboundsNameQueryOptions(name,inbound,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type deleteApiInboundsNameResponse200 = {
   data: void
   status: 200
@@ -279,5 +572,82 @@ export const deleteApiInboundsName = async (name: string, options?: RequestInit)
 
   }
 );}
+
+
+
+
+
+export const getDeleteApiInboundsNameQueryKey = (name: string,) => {
+    return [
+    'DELETE', `/api/inbounds/${name}`
+    ] as const;
+    }
+
+
+export const getDeleteApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiInboundsNameQueryKey(name);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiInboundsName>>> = ({ signal }) => deleteApiInboundsName(name, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiInboundsNameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundsName>>>
+export type DeleteApiInboundsNameQueryError = ForbiddenResponse | NotFoundResponse
+
+
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+ name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiInboundsName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiInboundsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiInboundsName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiInboundsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete an inbound
+ */
+
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiInboundsNameQueryOptions(name,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

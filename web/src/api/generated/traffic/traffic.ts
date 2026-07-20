@@ -40,6 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation
+} from '@tanstack/react-query';
+import type {
+  MutationFunction,
+  QueryClient,
+  UseMutationOptions,
+  UseMutationResult
+} from '@tanstack/react-query';
+
 import type {
   GetApiV1EventsParams,
   GetApiV1TrafficIdHistoryParams,
@@ -49,6 +59,11 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export type getApiV1TrafficSummaryResponse200 = {
   data: void
@@ -85,7 +100,54 @@ export const getApiV1TrafficSummary = async ( options?: RequestInit): Promise<ge
 );}
 
 
-export type getApiV1TrafficTopResponse200 = {
+
+
+
+export const getGetApiV1TrafficSummaryMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficSummary>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficSummary>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiV1TrafficSummary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficSummary>>, void> = () => {
+
+
+          return  getApiV1TrafficSummary(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficSummaryMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficSummary>>>
+
+    export type GetApiV1TrafficSummaryMutationError = unknown
+
+    /**
+ * @summary Aggregate traffic totals + honest telemetry provider state
+ */
+export const useGetApiV1TrafficSummary = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficSummary>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficSummary>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficSummaryMutationOptions(options), queryClient);
+    }
+    export type getApiV1TrafficTopResponse200 = {
   data: TrafficTopResponse
   status: 200
 }
@@ -120,7 +182,54 @@ export const getApiV1TrafficTop = async ( options?: RequestInit): Promise<getApi
 );}
 
 
-export type getApiV1TrafficIdResponse200 = {
+
+
+
+export const getGetApiV1TrafficTopMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficTop>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficTop>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiV1TrafficTop'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficTop>>, void> = () => {
+
+
+          return  getApiV1TrafficTop(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficTopMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficTop>>>
+
+    export type GetApiV1TrafficTopMutationError = unknown
+
+    /**
+ * @summary Top talkers ranked by cumulative usage
+ */
+export const useGetApiV1TrafficTop = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficTop>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficTop>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficTopMutationOptions(options), queryClient);
+    }
+    export type getApiV1TrafficIdResponse200 = {
   data: TrafficTotals
   status: 200
 }
@@ -162,7 +271,54 @@ export const getApiV1TrafficId = async (id: string, options?: RequestInit): Prom
 );}
 
 
-export type getApiV1TrafficIdHistoryResponse200 = {
+
+
+
+export const getGetApiV1TrafficIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficId>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiV1TrafficId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficId>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiV1TrafficId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficId>>>
+
+    export type GetApiV1TrafficIdMutationError = void
+
+    /**
+ * @summary Per-client cumulative traffic totals
+ */
+export const useGetApiV1TrafficId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficId>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficIdMutationOptions(options), queryClient);
+    }
+    export type getApiV1TrafficIdHistoryResponse200 = {
   data: TrafficHistoryResponse
   status: 200
 }
@@ -206,7 +362,54 @@ export const getApiV1TrafficIdHistory = async (id: string,
 );}
 
 
-export type getApiV1TrafficStreamResponse200 = {
+
+
+
+export const getGetApiV1TrafficIdHistoryMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>, TError,{id: string;params?: GetApiV1TrafficIdHistoryParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>, TError,{id: string;params?: GetApiV1TrafficIdHistoryParams}, TContext> => {
+
+const mutationKey = ['getApiV1TrafficIdHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>, {id: string;params?: GetApiV1TrafficIdHistoryParams}> = (props) => {
+          const {id,params} = props ?? {};
+
+          return  getApiV1TrafficIdHistory(id,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficIdHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>>
+
+    export type GetApiV1TrafficIdHistoryMutationError = unknown
+
+    /**
+ * @summary Per-client bucketed traffic samples over a window
+ */
+export const useGetApiV1TrafficIdHistory = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>, TError,{id: string;params?: GetApiV1TrafficIdHistoryParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficIdHistory>>,
+        TError,
+        {id: string;params?: GetApiV1TrafficIdHistoryParams},
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficIdHistoryMutationOptions(options), queryClient);
+    }
+    export type getApiV1TrafficStreamResponse200 = {
   data: string
   status: 200
 }
@@ -242,7 +445,54 @@ export const getApiV1TrafficStream = async ( options?: RequestInit): Promise<get
 );}
 
 
-export type getApiV1EventsResponse200 = {
+
+
+
+export const getGetApiV1TrafficStreamMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficStream>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficStream>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiV1TrafficStream'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficStream>>, void> = () => {
+
+
+          return  getApiV1TrafficStream(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficStreamMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficStream>>>
+
+    export type GetApiV1TrafficStreamMutationError = unknown
+
+    /**
+ * @summary Server-sent stream of live traffic snapshots
+ */
+export const useGetApiV1TrafficStream = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficStream>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficStream>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficStreamMutationOptions(options), queryClient);
+    }
+    export type getApiV1EventsResponse200 = {
   data: string
   status: 200
 }
@@ -288,3 +538,50 @@ export const getApiV1Events = async (params?: GetApiV1EventsParams, options?: Re
 );}
 
 
+
+
+
+export const getGetApiV1EventsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext> => {
+
+const mutationKey = ['getApiV1Events'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1Events>>, {params?: GetApiV1EventsParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  getApiV1Events(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1EventsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1Events>>>
+
+    export type GetApiV1EventsMutationError = unknown
+
+    /**
+ * @summary Unified Server-Sent Events stream (A10)
+ */
+export const useGetApiV1Events = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1Events>>,
+        TError,
+        {params?: GetApiV1EventsParams},
+        TContext
+      > => {
+      return useMutation(getGetApiV1EventsMutationOptions(options), queryClient);
+    }

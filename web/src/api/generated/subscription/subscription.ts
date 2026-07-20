@@ -40,12 +40,51 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   GetSTokenParams,
   HeadSTokenParams
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getSTokenResponse200TextPlain = {
   data: string
@@ -107,7 +146,54 @@ export const getSToken = async (token: string,
 );}
 
 
-export type headSTokenResponse200 = {
+
+
+
+export const getGetSTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext> => {
+
+const mutationKey = ['getSToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getSToken>>, {token: string;params?: GetSTokenParams}> = (props) => {
+          const {token,params} = props ?? {};
+
+          return  getSToken(token,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetSTokenMutationResult = NonNullable<Awaited<ReturnType<typeof getSToken>>>
+
+    export type GetSTokenMutationError = void
+
+    /**
+ * @summary Public subscription endpoint (token is the capability)
+ */
+export const useGetSToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getSToken>>,
+        TError,
+        {token: string;params?: GetSTokenParams},
+        TContext
+      > => {
+      return useMutation(getGetSTokenMutationOptions(options), queryClient);
+    }
+    export type headSTokenResponse200 = {
   data: void
   status: 200
 }
@@ -156,5 +242,88 @@ export const headSToken = async (token: string,
 
   }
 );}
+
+
+
+
+
+export const getHeadSTokenQueryKey = (token: string,
+    params?: HeadSTokenParams,) => {
+    return [
+    'HEAD', `/s/${token}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getHeadSTokenQueryOptions = <TData = Awaited<ReturnType<typeof headSToken>>, TError = void>(token: string,
+    params?: HeadSTokenParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getHeadSTokenQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof headSToken>>> = ({ signal }) => headSToken(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type HeadSTokenQueryResult = NonNullable<Awaited<ReturnType<typeof headSToken>>>
+export type HeadSTokenQueryError = void
+
+
+export function useHeadSToken<TData = Awaited<ReturnType<typeof headSToken>>, TError = void>(
+ token: string,
+    params: undefined |  HeadSTokenParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof headSToken>>,
+          TError,
+          Awaited<ReturnType<typeof headSToken>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useHeadSToken<TData = Awaited<ReturnType<typeof headSToken>>, TError = void>(
+ token: string,
+    params?: HeadSTokenParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof headSToken>>,
+          TError,
+          Awaited<ReturnType<typeof headSToken>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useHeadSToken<TData = Awaited<ReturnType<typeof headSToken>>, TError = void>(
+ token: string,
+    params?: HeadSTokenParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary HEAD variant of the public subscription endpoint (headers only)
+ */
+
+export function useHeadSToken<TData = Awaited<ReturnType<typeof headSToken>>, TError = void>(
+ token: string,
+    params?: HeadSTokenParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof headSToken>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getHeadSTokenQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ClientLinkQRRequest,
@@ -50,6 +69,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiClientLinksResponse200 = {
   data: ClientLinksResponse
@@ -86,7 +125,54 @@ export const getApiClientLinks = async ( options?: RequestInit): Promise<getApiC
 );}
 
 
-export type getApiClientLinksSubscriptionResponse200TextPlain = {
+
+
+
+export const getGetApiClientLinksMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinks>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinks>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiClientLinks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiClientLinks>>, void> = () => {
+
+
+          return  getApiClientLinks(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiClientLinksMutationResult = NonNullable<Awaited<ReturnType<typeof getApiClientLinks>>>
+
+    export type GetApiClientLinksMutationError = unknown
+
+    /**
+ * @summary Client links derived from enabled inbounds and profiles
+ */
+export const useGetApiClientLinks = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinks>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiClientLinks>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiClientLinksMutationOptions(options), queryClient);
+    }
+    export type getApiClientLinksSubscriptionResponse200TextPlain = {
   data: string
   status: 200
 }
@@ -133,7 +219,54 @@ export const getApiClientLinksSubscription = async (params?: GetApiClientLinksSu
 );}
 
 
-export type postApiClientLinksQrResponse200 = {
+
+
+
+export const getGetApiClientLinksSubscriptionMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinksSubscription>>, TError,{params?: GetApiClientLinksSubscriptionParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinksSubscription>>, TError,{params?: GetApiClientLinksSubscriptionParams}, TContext> => {
+
+const mutationKey = ['getApiClientLinksSubscription'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiClientLinksSubscription>>, {params?: GetApiClientLinksSubscriptionParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  getApiClientLinksSubscription(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiClientLinksSubscriptionMutationResult = NonNullable<Awaited<ReturnType<typeof getApiClientLinksSubscription>>>
+
+    export type GetApiClientLinksSubscriptionMutationError = unknown
+
+    /**
+ * @summary Subscription-format client links
+ */
+export const useGetApiClientLinksSubscription = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiClientLinksSubscription>>, TError,{params?: GetApiClientLinksSubscriptionParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiClientLinksSubscription>>,
+        TError,
+        {params?: GetApiClientLinksSubscriptionParams},
+        TContext
+      > => {
+      return useMutation(getGetApiClientLinksSubscriptionMutationOptions(options), queryClient);
+    }
+    export type postApiClientLinksQrResponse200 = {
   data: Blob
   status: 200
 }
@@ -184,5 +317,82 @@ export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequ
     body: JSON.stringify(clientLinkQRRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiClientLinksQrQueryKey = (clientLinkQRRequest?: ClientLinkQRRequest,) => {
+    return [
+    'POST', `/api/client-links/qr`, clientLinkQRRequest
+    ] as const;
+    }
+
+
+export const getPostApiClientLinksQrQueryOptions = <TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiClientLinksQrQueryKey(clientLinkQRRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiClientLinksQr>>> = ({ signal }) => postApiClientLinksQr(clientLinkQRRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiClientLinksQrQueryResult = NonNullable<Awaited<ReturnType<typeof postApiClientLinksQr>>>
+export type PostApiClientLinksQrQueryError = BadRequestResponse | UnauthorizedResponse | ErrorText
+
+
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+ clientLinkQRRequest: ClientLinkQRRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiClientLinksQr>>,
+          TError,
+          Awaited<ReturnType<typeof postApiClientLinksQr>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+ clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiClientLinksQr>>,
+          TError,
+          Awaited<ReturnType<typeof postApiClientLinksQr>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+ clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Render a client URI as a local QR PNG
+ */
+
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+ clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiClientLinksQrQueryOptions(clientLinkQRRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

@@ -40,6 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation
+} from '@tanstack/react-query';
+import type {
+  MutationFunction,
+  QueryClient,
+  UseMutationOptions,
+  UseMutationResult
+} from '@tanstack/react-query';
+
 import type {
   ForbiddenResponse,
   ProtocolInfo,
@@ -47,6 +57,11 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export type getApiProtocolsResponse200 = {
   data: ProtocolInfo[]
@@ -95,3 +110,50 @@ export const getApiProtocols = async ( options?: RequestInit): Promise<getApiPro
 );}
 
 
+
+
+
+export const getGetApiProtocolsMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProtocols>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiProtocols>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiProtocols'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiProtocols>>, void> = () => {
+
+
+          return  getApiProtocols(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiProtocolsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiProtocols>>>
+
+    export type GetApiProtocolsMutationError = UnauthorizedResponse | ForbiddenResponse
+
+    /**
+ * @summary List supported protocols and their UI/runtime metadata
+ */
+export const useGetApiProtocols = <TError = UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProtocols>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiProtocols>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiProtocolsMutationOptions(options), queryClient);
+    }

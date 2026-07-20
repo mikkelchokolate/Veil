@@ -40,6 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation
+} from '@tanstack/react-query';
+import type {
+  MutationFunction,
+  QueryClient,
+  UseMutationOptions,
+  UseMutationResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ConnectionsStats,
@@ -54,6 +64,11 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export type getApiSystemResponse200 = {
   data: SystemStats
@@ -90,7 +105,54 @@ export const getApiSystem = async ( options?: RequestInit): Promise<getApiSystem
 );}
 
 
-export type getApiTlsResponse200 = {
+
+
+
+export const getGetApiSystemMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSystem>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiSystem>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiSystem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiSystem>>, void> = () => {
+
+
+          return  getApiSystem(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiSystemMutationResult = NonNullable<Awaited<ReturnType<typeof getApiSystem>>>
+
+    export type GetApiSystemMutationError = unknown
+
+    /**
+ * @summary System resource observation
+ */
+export const useGetApiSystem = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSystem>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiSystem>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiSystemMutationOptions(options), queryClient);
+    }
+    export type getApiTlsResponse200 = {
   data: TLSCertInfo
   status: 200
 }
@@ -125,7 +187,54 @@ export const getApiTls = async ( options?: RequestInit): Promise<getApiTlsRespon
 );}
 
 
-export type getApiNetworkResponse200 = {
+
+
+
+export const getGetApiTlsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiTls>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiTls>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiTls'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiTls>>, void> = () => {
+
+
+          return  getApiTls(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiTlsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiTls>>>
+
+    export type GetApiTlsMutationError = unknown
+
+    /**
+ * @summary Panel TLS observation
+ */
+export const useGetApiTls = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiTls>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiTls>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiTlsMutationOptions(options), queryClient);
+    }
+    export type getApiNetworkResponse200 = {
   data: NetworkStats
   status: 200
 }
@@ -160,7 +269,54 @@ export const getApiNetwork = async ( options?: RequestInit): Promise<getApiNetwo
 );}
 
 
-export type getApiConnectionsResponse200 = {
+
+
+
+export const getGetApiNetworkMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiNetwork>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiNetwork>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiNetwork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiNetwork>>, void> = () => {
+
+
+          return  getApiNetwork(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiNetworkMutationResult = NonNullable<Awaited<ReturnType<typeof getApiNetwork>>>
+
+    export type GetApiNetworkMutationError = unknown
+
+    /**
+ * @summary Network counters observation
+ */
+export const useGetApiNetwork = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiNetwork>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiNetwork>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiNetworkMutationOptions(options), queryClient);
+    }
+    export type getApiConnectionsResponse200 = {
   data: ConnectionsStats
   status: 200
 }
@@ -195,7 +351,54 @@ export const getApiConnections = async ( options?: RequestInit): Promise<getApiC
 );}
 
 
-export type getApiProcessesResponse200 = {
+
+
+
+export const getGetApiConnectionsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiConnections>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiConnections>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiConnections'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiConnections>>, void> = () => {
+
+
+          return  getApiConnections(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiConnectionsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiConnections>>>
+
+    export type GetApiConnectionsMutationError = unknown
+
+    /**
+ * @summary Listening ports / connections observation
+ */
+export const useGetApiConnections = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiConnections>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiConnections>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiConnectionsMutationOptions(options), queryClient);
+    }
+    export type getApiProcessesResponse200 = {
   data: ProcessesStats
   status: 200
 }
@@ -230,7 +433,54 @@ export const getApiProcesses = async ( options?: RequestInit): Promise<getApiPro
 );}
 
 
-export type getApiDiskResponse200 = {
+
+
+
+export const getGetApiProcessesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProcesses>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiProcesses>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiProcesses'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiProcesses>>, void> = () => {
+
+
+          return  getApiProcesses(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiProcessesMutationResult = NonNullable<Awaited<ReturnType<typeof getApiProcesses>>>
+
+    export type GetApiProcessesMutationError = unknown
+
+    /**
+ * @summary Managed processes observation
+ */
+export const useGetApiProcesses = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProcesses>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiProcesses>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiProcessesMutationOptions(options), queryClient);
+    }
+    export type getApiDiskResponse200 = {
   data: DiskStats
   status: 200
 }
@@ -265,7 +515,54 @@ export const getApiDisk = async ( options?: RequestInit): Promise<getApiDiskResp
 );}
 
 
-export type getApiRuntimeObservationResponse200 = {
+
+
+
+export const getGetApiDiskMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiDisk>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiDisk>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiDisk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiDisk>>, void> = () => {
+
+
+          return  getApiDisk(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiDiskMutationResult = NonNullable<Awaited<ReturnType<typeof getApiDisk>>>
+
+    export type GetApiDiskMutationError = unknown
+
+    /**
+ * @summary Disk usage observation
+ */
+export const useGetApiDisk = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiDisk>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiDisk>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiDiskMutationOptions(options), queryClient);
+    }
+    export type getApiRuntimeObservationResponse200 = {
   data: RuntimeObservation
   status: 200
 }
@@ -300,7 +597,54 @@ export const getApiRuntimeObservation = async ( options?: RequestInit): Promise<
 );}
 
 
-export type getApiLogsResponse200 = {
+
+
+
+export const getGetApiRuntimeObservationMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRuntimeObservation>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiRuntimeObservation>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiRuntimeObservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRuntimeObservation>>, void> = () => {
+
+
+          return  getApiRuntimeObservation(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiRuntimeObservationMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRuntimeObservation>>>
+
+    export type GetApiRuntimeObservationMutationError = unknown
+
+    /**
+ * @summary Combined runtime observation
+ */
+export const useGetApiRuntimeObservation = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRuntimeObservation>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiRuntimeObservation>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiRuntimeObservationMutationOptions(options), queryClient);
+    }
+    export type getApiLogsResponse200 = {
   data: LogResult
   status: 200
 }
@@ -349,3 +693,50 @@ export const getApiLogs = async (params?: GetApiLogsParams, options?: RequestIni
 );}
 
 
+
+
+
+export const getGetApiLogsMutationOptions = <TError = BadRequestResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext> => {
+
+const mutationKey = ['getApiLogs'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiLogs>>, {params?: GetApiLogsParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  getApiLogs(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiLogsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiLogs>>>
+
+    export type GetApiLogsMutationError = BadRequestResponse
+
+    /**
+ * @summary Bounded journald reads for managed units
+ */
+export const useGetApiLogs = <TError = BadRequestResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiLogs>>,
+        TError,
+        {params?: GetApiLogsParams},
+        TContext
+      > => {
+      return useMutation(getGetApiLogsMutationOptions(options), queryClient);
+    }

@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ClientListResponse,
@@ -55,6 +74,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiV1ClientsResponse200 = {
   data: ClientListResponse
@@ -91,7 +130,54 @@ export const getApiV1Clients = async ( options?: RequestInit): Promise<getApiV1C
 );}
 
 
-export type postApiV1ClientsResponse201 = {
+
+
+
+export const getGetApiV1ClientsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Clients>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1Clients>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiV1Clients'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1Clients>>, void> = () => {
+
+
+          return  getApiV1Clients(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1Clients>>>
+
+    export type GetApiV1ClientsMutationError = unknown
+
+    /**
+ * @summary List clients with effective status
+ */
+export const useGetApiV1Clients = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Clients>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1Clients>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsMutationOptions(options), queryClient);
+    }
+    export type postApiV1ClientsResponse201 = {
   data: ClientView
   status: 201
 }
@@ -133,6 +219,83 @@ export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest,
 );}
 
 
+
+
+
+export const getPostApiV1ClientsQueryKey = (clientUpsertRequest?: ClientUpsertRequest,) => {
+    return [
+    'POST', `/api/v1/clients`, clientUpsertRequest
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsQueryKey(clientUpsertRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1Clients>>> = ({ signal }) => postApiV1Clients(clientUpsertRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1Clients>>>
+export type PostApiV1ClientsQueryError = BadRequestResponse
+
+
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+ clientUpsertRequest: ClientUpsertRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1Clients>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1Clients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+ clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1Clients>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1Clients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+ clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a client
+ */
+
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+ clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsQueryOptions(clientUpsertRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiV1ClientsBulkResponse200 = {
   data: void
   status: 200
@@ -166,6 +329,83 @@ export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1Cl
     body: JSON.stringify(postApiV1ClientsBulkBody)
   }
 );}
+
+
+
+
+
+export const getPostApiV1ClientsBulkQueryKey = (postApiV1ClientsBulkBody?: PostApiV1ClientsBulkBody,) => {
+    return [
+    'POST', `/api/v1/clients/bulk`, postApiV1ClientsBulkBody
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsBulkQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsBulkQueryKey(postApiV1ClientsBulkBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsBulk>>> = ({ signal }) => postApiV1ClientsBulk(postApiV1ClientsBulkBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsBulkQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
+export type PostApiV1ClientsBulkQueryError = unknown
+
+
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+ postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsBulk>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+ postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsBulk>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+ postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Bulk action across clients; per-client results
+ */
+
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+ postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsBulkQueryOptions(postApiV1ClientsBulkBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type getApiV1ClientsIdBindingsResponse200 = {
@@ -203,7 +443,54 @@ export const getApiV1ClientsIdBindings = async (id: string, options?: RequestIni
 );}
 
 
-export type postApiV1ClientsIdBindingsResponse201 = {
+
+
+
+export const getGetApiV1ClientsIdBindingsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiV1ClientsIdBindings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiV1ClientsIdBindings(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdBindingsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>>
+
+    export type GetApiV1ClientsIdBindingsMutationError = unknown
+
+    /**
+ * @summary List client bindings
+ */
+export const useGetApiV1ClientsIdBindings = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdBindingsMutationOptions(options), queryClient);
+    }
+    export type postApiV1ClientsIdBindingsResponse201 = {
   data: void
   status: 201
 }
@@ -237,6 +524,89 @@ export const postApiV1ClientsIdBindings = async (id: string,
     body: JSON.stringify(postApiV1ClientsIdBindingsBody)
   }
 );}
+
+
+
+
+
+export const getPostApiV1ClientsIdBindingsQueryKey = (id: string,
+    postApiV1ClientsIdBindingsBody?: PostApiV1ClientsIdBindingsBody,) => {
+    return [
+    'POST', `/api/v1/clients/${id}/bindings`, postApiV1ClientsIdBindingsBody
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsIdBindingsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdBindingsQueryKey(id,postApiV1ClientsIdBindingsBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>> = ({ signal }) => postApiV1ClientsIdBindings(id,postApiV1ClientsIdBindingsBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsIdBindingsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>>
+export type PostApiV1ClientsIdBindingsQueryError = unknown
+
+
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Add a binding (optional credential)
+ */
+
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsIdBindingsQueryOptions(id,postApiV1ClientsIdBindingsBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type patchApiV1ClientsIdBindingsBindingIdResponse200 = {
@@ -277,6 +647,95 @@ export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
 );}
 
 
+
+
+
+export const getPatchApiV1ClientsIdBindingsBindingIdQueryKey = (id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody?: PatchApiV1ClientsIdBindingsBindingIdBody,) => {
+    return [
+    'PATCH', `/api/v1/clients/${id}/bindings/${bindingId}`, patchApiV1ClientsIdBindingsBindingIdBody
+    ] as const;
+    }
+
+
+export const getPatchApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPatchApiV1ClientsIdBindingsBindingIdQueryKey(id,bindingId,patchApiV1ClientsIdBindingsBindingIdBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>> = ({ signal }) => patchApiV1ClientsIdBindingsBindingId(id,bindingId,patchApiV1ClientsIdBindingsBindingIdBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && bindingId !== null && bindingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PatchApiV1ClientsIdBindingsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>>
+export type PatchApiV1ClientsIdBindingsBindingIdQueryError = unknown
+
+
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update a binding (toggle enabled, optimistic locking)
+ */
+
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPatchApiV1ClientsIdBindingsBindingIdQueryOptions(id,bindingId,patchApiV1ClientsIdBindingsBindingIdBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type deleteApiV1ClientsIdBindingsBindingIdResponse200 = {
   data: void
   status: 200
@@ -312,6 +771,89 @@ export const deleteApiV1ClientsIdBindingsBindingId = async (id: string,
 
   }
 );}
+
+
+
+
+
+export const getDeleteApiV1ClientsIdBindingsBindingIdQueryKey = (id: string,
+    bindingId: string,) => {
+    return [
+    'DELETE', `/api/v1/clients/${id}/bindings/${bindingId}`
+    ] as const;
+    }
+
+
+export const getDeleteApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1ClientsIdBindingsBindingIdQueryKey(id,bindingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>> = ({ signal }) => deleteApiV1ClientsIdBindingsBindingId(id,bindingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && bindingId !== null && bindingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1ClientsIdBindingsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>>
+export type DeleteApiV1ClientsIdBindingsBindingIdQueryError = unknown
+
+
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Remove a binding
+ */
+
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1ClientsIdBindingsBindingIdQueryOptions(id,bindingId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type postApiV1ClientsIdCredentialsBindingIdResponse201 = {
@@ -352,6 +894,95 @@ export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
 );}
 
 
+
+
+
+export const getPostApiV1ClientsIdCredentialsBindingIdQueryKey = (id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody?: PostApiV1ClientsIdCredentialsBindingIdBody,) => {
+    return [
+    'POST', `/api/v1/clients/${id}/credentials/${bindingId}`, postApiV1ClientsIdCredentialsBindingIdBody
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsIdCredentialsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdCredentialsBindingIdQueryKey(id,bindingId,postApiV1ClientsIdCredentialsBindingIdBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>> = ({ signal }) => postApiV1ClientsIdCredentialsBindingId(id,bindingId,postApiV1ClientsIdCredentialsBindingIdBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && bindingId !== null && bindingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsIdCredentialsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>>
+export type PostApiV1ClientsIdCredentialsBindingIdQueryError = unknown
+
+
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Set a binding credential
+ */
+
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsIdCredentialsBindingIdQueryOptions(id,bindingId,postApiV1ClientsIdCredentialsBindingIdBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiV1ClientsIdCredentialsBindingIdRotateResponse200 = {
   data: void
   status: 200
@@ -390,6 +1021,95 @@ export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
 );}
 
 
+
+
+
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateQueryKey = (id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody?: PostApiV1ClientsIdCredentialsBindingIdRotateBody,) => {
+    return [
+    'POST', `/api/v1/clients/${id}/credentials/${bindingId}/rotate`, postApiV1ClientsIdCredentialsBindingIdRotateBody
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdCredentialsBindingIdRotateQueryKey(id,bindingId,postApiV1ClientsIdCredentialsBindingIdRotateBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>> = ({ signal }) => postApiV1ClientsIdCredentialsBindingIdRotate(id,bindingId,postApiV1ClientsIdCredentialsBindingIdRotateBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && bindingId !== null && bindingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsIdCredentialsBindingIdRotateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>>
+export type PostApiV1ClientsIdCredentialsBindingIdRotateQueryError = unknown
+
+
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Rotate a binding credential
+ */
+
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+ id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsIdCredentialsBindingIdRotateQueryOptions(id,bindingId,postApiV1ClientsIdCredentialsBindingIdRotateBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiV1ClientsMigrateLegacyResponse200 = {
   data: void
   status: 200
@@ -423,6 +1143,83 @@ export const postApiV1ClientsMigrateLegacy = async ( options?: RequestInit): Pro
 
   }
 );}
+
+
+
+
+
+export const getPostApiV1ClientsMigrateLegacyQueryKey = () => {
+    return [
+    'POST', `/api/v1/clients/migrate-legacy`
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsMigrateLegacyQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsMigrateLegacyQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>> = ({ signal }) => postApiV1ClientsMigrateLegacy({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsMigrateLegacyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>>
+export type PostApiV1ClientsMigrateLegacyQueryError = unknown
+
+
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
+ */
+
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsMigrateLegacyQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type getApiV1ClientsIdResponse200 = {
@@ -467,7 +1264,54 @@ export const getApiV1ClientsId = async (id: string, options?: RequestInit): Prom
 );}
 
 
-export type putApiV1ClientsIdResponse200 = {
+
+
+
+export const getGetApiV1ClientsIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiV1ClientsId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsId>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiV1ClientsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsId>>>
+
+    export type GetApiV1ClientsIdMutationError = void
+
+    /**
+ * @summary Get a client with bindings and effective status
+ */
+export const useGetApiV1ClientsId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsId>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdMutationOptions(options), queryClient);
+    }
+    export type putApiV1ClientsIdResponse200 = {
   data: ClientView
   status: 200
 }
@@ -508,6 +1352,89 @@ export const putApiV1ClientsId = async (id: string,
     body: JSON.stringify(clientUpsertRequest)
   }
 );}
+
+
+
+
+
+export const getPutApiV1ClientsIdQueryKey = (id: string,
+    clientUpsertRequest?: ClientUpsertRequest,) => {
+    return [
+    'PUT', `/api/v1/clients/${id}`, clientUpsertRequest
+    ] as const;
+    }
+
+
+export const getPutApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(id: string,
+    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiV1ClientsIdQueryKey(id,clientUpsertRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiV1ClientsId>>> = ({ signal }) => putApiV1ClientsId(id,clientUpsertRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof putApiV1ClientsId>>>
+export type PutApiV1ClientsIdQueryError = void
+
+
+export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+ id: string,
+    clientUpsertRequest: ClientUpsertRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiV1ClientsId>>,
+          TError,
+          Awaited<ReturnType<typeof putApiV1ClientsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+ id: string,
+    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiV1ClientsId>>,
+          TError,
+          Awaited<ReturnType<typeof putApiV1ClientsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+ id: string,
+    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update a client (optimistic concurrency via version)
+ */
+
+export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+ id: string,
+    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiV1ClientsIdQueryOptions(id,clientUpsertRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type deleteApiV1ClientsIdResponse200 = {
@@ -552,6 +1479,83 @@ export const deleteApiV1ClientsId = async (id: string, options?: RequestInit): P
 );}
 
 
+
+
+
+export const getDeleteApiV1ClientsIdQueryKey = (id: string,) => {
+    return [
+    'DELETE', `/api/v1/clients/${id}`
+    ] as const;
+    }
+
+
+export const getDeleteApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1ClientsIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1ClientsId>>> = ({ signal }) => deleteApiV1ClientsId(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsId>>>
+export type DeleteApiV1ClientsIdQueryError = void
+
+
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete a client
+ */
+
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1ClientsIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiV1ClientsIdTokensResponse200 = {
   data: void
   status: 200
@@ -587,7 +1591,54 @@ export const getApiV1ClientsIdTokens = async (id: string, options?: RequestInit)
 );}
 
 
-export type postApiV1ClientsIdTokensResponse201 = {
+
+
+
+export const getGetApiV1ClientsIdTokensMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiV1ClientsIdTokens'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiV1ClientsIdTokens(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdTokensMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>>
+
+    export type GetApiV1ClientsIdTokensMutationError = unknown
+
+    /**
+ * @summary List a client's subscription tokens (redacted)
+ */
+export const useGetApiV1ClientsIdTokens = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdTokensMutationOptions(options), queryClient);
+    }
+    export type postApiV1ClientsIdTokensResponse201 = {
   data: SubscriptionTokenResponse
   status: 201
 }
@@ -621,6 +1672,89 @@ export const postApiV1ClientsIdTokens = async (id: string,
     body: JSON.stringify(postApiV1ClientsIdTokensBody)
   }
 );}
+
+
+
+
+
+export const getPostApiV1ClientsIdTokensQueryKey = (id: string,
+    postApiV1ClientsIdTokensBody?: PostApiV1ClientsIdTokensBody,) => {
+    return [
+    'POST', `/api/v1/clients/${id}/tokens`, postApiV1ClientsIdTokensBody
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsIdTokensQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdTokensQueryKey(id,postApiV1ClientsIdTokensBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>> = ({ signal }) => postApiV1ClientsIdTokens(id,postApiV1ClientsIdTokensBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsIdTokensQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>>
+export type PostApiV1ClientsIdTokensQueryError = unknown
+
+
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Issue a subscription token; plaintext returned once
+ */
+
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+ id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsIdTokensQueryOptions(id,postApiV1ClientsIdTokensBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
@@ -660,6 +1794,89 @@ export const deleteApiV1ClientsIdTokensTokenId = async (id: string,
 );}
 
 
+
+
+
+export const getDeleteApiV1ClientsIdTokensTokenIdQueryKey = (id: string,
+    tokenId: string,) => {
+    return [
+    'DELETE', `/api/v1/clients/${id}/tokens/${tokenId}`
+    ] as const;
+    }
+
+
+export const getDeleteApiV1ClientsIdTokensTokenIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1ClientsIdTokensTokenIdQueryKey(id,tokenId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>> = ({ signal }) => deleteApiV1ClientsIdTokensTokenId(id,tokenId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && tokenId !== null && tokenId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1ClientsIdTokensTokenIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>>
+export type DeleteApiV1ClientsIdTokensTokenIdQueryError = unknown
+
+
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+ id: string,
+    tokenId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Revoke a subscription token
+ */
+
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1ClientsIdTokensTokenIdQueryOptions(id,tokenId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiV1ClientsIdTokensTokenIdRotateResponse200 = {
   data: SubscriptionTokenResponse
   status: 200
@@ -695,5 +1912,88 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
 
   }
 );}
+
+
+
+
+
+export const getPostApiV1ClientsIdTokensTokenIdRotateQueryKey = (id: string,
+    tokenId: string,) => {
+    return [
+    'POST', `/api/v1/clients/${id}/tokens/${tokenId}/rotate`
+    ] as const;
+    }
+
+
+export const getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdTokensTokenIdRotateQueryKey(id,tokenId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>> = ({ signal }) => postApiV1ClientsIdTokensTokenIdRotate(id,tokenId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && tokenId !== null && tokenId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1ClientsIdTokensTokenIdRotateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>>
+export type PostApiV1ClientsIdTokensTokenIdRotateQueryError = unknown
+
+
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+ id: string,
+    tokenId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Rotate a subscription token; new plaintext returned once
+ */
+
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions(id,tokenId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

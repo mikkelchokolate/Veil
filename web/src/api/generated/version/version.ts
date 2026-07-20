@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   EmptyObject,
@@ -52,6 +71,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiVersionResponse200 = {
   data: VersionResponse
@@ -95,7 +134,54 @@ export const getApiVersion = async ( options?: RequestInit): Promise<getApiVersi
 );}
 
 
-export type postApiVersionUpdateResponse200 = {
+
+
+
+export const getGetApiVersionMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiVersion>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiVersion>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiVersion>>, void> = () => {
+
+
+          return  getApiVersion(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiVersionMutationResult = NonNullable<Awaited<ReturnType<typeof getApiVersion>>>
+
+    export type GetApiVersionMutationError = UnauthorizedResponse
+
+    /**
+ * @summary Current Veil version
+ */
+export const useGetApiVersion = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiVersion>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiVersion>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiVersionMutationOptions(options), queryClient);
+    }
+    export type postApiVersionUpdateResponse200 = {
   data: UpdateResponse
   status: 200
 }
@@ -150,5 +236,82 @@ export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: 
     body: JSON.stringify(emptyObject)
   }
 );}
+
+
+
+
+
+export const getPostApiVersionUpdateQueryKey = (emptyObject?: EmptyObject,) => {
+    return [
+    'POST', `/api/version/update`, emptyObject
+    ] as const;
+    }
+
+
+export const getPostApiVersionUpdateQueryOptions = <TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiVersionUpdateQueryKey(emptyObject);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiVersionUpdate>>> = ({ signal }) => postApiVersionUpdate(emptyObject, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiVersionUpdateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiVersionUpdate>>>
+export type PostApiVersionUpdateQueryError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse
+
+
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse>(
+ emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiVersionUpdate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiVersionUpdate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiVersionUpdate>>,
+          TError,
+          Awaited<ReturnType<typeof postApiVersionUpdate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Trigger a staged self-update to the latest release
+ */
+
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiVersionUpdateQueryOptions(emptyObject,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   ApplyHistoryEntry,
   ApplyPlanResponse,
@@ -53,6 +72,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiApplyStateResponse200 = {
   data: void
@@ -89,7 +128,54 @@ export const getApiApplyState = async ( options?: RequestInit): Promise<getApiAp
 );}
 
 
-export type getApiApplyJobsResponse200 = {
+
+
+
+export const getGetApiApplyStateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyState>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyState>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiApplyState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyState>>, void> = () => {
+
+
+          return  getApiApplyState(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiApplyStateMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyState>>>
+
+    export type GetApiApplyStateMutationError = unknown
+
+    /**
+ * @summary Desired/applied revisions and derived system state
+ */
+export const useGetApiApplyState = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyState>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiApplyState>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiApplyStateMutationOptions(options), queryClient);
+    }
+    export type getApiApplyJobsResponse200 = {
   data: GetApiApplyJobs200
   status: 200
 }
@@ -124,7 +210,54 @@ export const getApiApplyJobs = async ( options?: RequestInit): Promise<getApiApp
 );}
 
 
-export type getApiApplyJobsIdResponse200 = {
+
+
+
+export const getGetApiApplyJobsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobs>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobs>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiApplyJobs'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyJobs>>, void> = () => {
+
+
+          return  getApiApplyJobs(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiApplyJobsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobs>>>
+
+    export type GetApiApplyJobsMutationError = unknown
+
+    /**
+ * @summary List apply jobs (newest first)
+ */
+export const useGetApiApplyJobs = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobs>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiApplyJobs>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiApplyJobsMutationOptions(options), queryClient);
+    }
+    export type getApiApplyJobsIdResponse200 = {
   data: void
   status: 200
 }
@@ -166,7 +299,54 @@ export const getApiApplyJobsId = async (id: string, options?: RequestInit): Prom
 );}
 
 
-export type postApiApplyJobsIdRetryResponse200 = {
+
+
+
+export const getGetApiApplyJobsIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiApplyJobsId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyJobsId>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiApplyJobsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiApplyJobsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobsId>>>
+
+    export type GetApiApplyJobsIdMutationError = void
+
+    /**
+ * @summary Get one apply job
+ */
+export const useGetApiApplyJobsId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiApplyJobsId>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiApplyJobsIdMutationOptions(options), queryClient);
+    }
+    export type postApiApplyJobsIdRetryResponse200 = {
   data: void
   status: 200
 }
@@ -213,6 +393,83 @@ export const postApiApplyJobsIdRetry = async (id: string, options?: RequestInit)
 );}
 
 
+
+
+
+export const getPostApiApplyJobsIdRetryQueryKey = (id: string,) => {
+    return [
+    'POST', `/api/apply/jobs/${id}/retry`
+    ] as const;
+    }
+
+
+export const getPostApiApplyJobsIdRetryQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiApplyJobsIdRetryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>> = ({ signal }) => postApiApplyJobsIdRetry(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiApplyJobsIdRetryQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>>
+export type PostApiApplyJobsIdRetryQueryError = void
+
+
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a NEW apply job for the same desired revision
+ */
+
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiApplyJobsIdRetryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiApplyReconcileResponse200 = {
   data: void
   status: 200
@@ -253,6 +510,83 @@ export const postApiApplyReconcile = async ( options?: RequestInit): Promise<pos
 
   }
 );}
+
+
+
+
+
+export const getPostApiApplyReconcileQueryKey = () => {
+    return [
+    'POST', `/api/apply/reconcile`
+    ] as const;
+    }
+
+
+export const getPostApiApplyReconcileQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyReconcile>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiApplyReconcileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiApplyReconcile>>> = ({ signal }) => postApiApplyReconcile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiApplyReconcileQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApplyReconcile>>>
+export type PostApiApplyReconcileQueryError = void
+
+
+export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postApiApplyReconcile>>, TError = void>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyReconcile>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyReconcile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postApiApplyReconcile>>, TError = void>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyReconcile>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyReconcile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postApiApplyReconcile>>, TError = void>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Apply current desired revision if ahead of applied (idempotent)
+ */
+
+export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postApiApplyReconcile>>, TError = void>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiApplyReconcileQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type postApiApplyResponse200 = {
@@ -297,6 +631,83 @@ export const postApiApply = async (applyRequest: ApplyRequest, options?: Request
 );}
 
 
+
+
+
+export const getPostApiApplyQueryKey = (applyRequest?: ApplyRequest,) => {
+    return [
+    'POST', `/api/apply`, applyRequest
+    ] as const;
+    }
+
+
+export const getPostApiApplyQueryOptions = <TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse>(applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiApplyQueryKey(applyRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiApply>>> = ({ signal }) => postApiApply(applyRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiApplyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApply>>>
+export type PostApiApplyQueryError = BadRequestResponse
+
+
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse>(
+ applyRequest: ApplyRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApply>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApply>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse>(
+ applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApply>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApply>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse>(
+ applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Stage and optionally promote current management state
+ */
+
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse>(
+ applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiApplyQueryOptions(applyRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiApplyPlanResponse200 = {
   data: ApplyPlanResponse
   status: 200
@@ -339,6 +750,83 @@ export const postApiApplyPlan = async ( options?: RequestInit): Promise<postApiA
 );}
 
 
+
+
+
+export const getPostApiApplyPlanQueryKey = () => {
+    return [
+    'POST', `/api/apply/plan`
+    ] as const;
+    }
+
+
+export const getPostApiApplyPlanQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyPlan>>, TError = ValidationFailedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiApplyPlanQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiApplyPlan>>> = ({ signal }) => postApiApplyPlan({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiApplyPlanQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApplyPlan>>>
+export type PostApiApplyPlanQueryError = ValidationFailedResponse
+
+
+export function usePostApiApplyPlan<TData = Awaited<ReturnType<typeof postApiApplyPlan>>, TError = ValidationFailedResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyPlan>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyPlan>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyPlan<TData = Awaited<ReturnType<typeof postApiApplyPlan>>, TError = ValidationFailedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyPlan>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyPlan>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyPlan<TData = Awaited<ReturnType<typeof postApiApplyPlan>>, TError = ValidationFailedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Preview the apply plan without writing live files
+ */
+
+export function usePostApiApplyPlan<TData = Awaited<ReturnType<typeof postApiApplyPlan>>, TError = ValidationFailedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiApplyPlanQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiApplyHistoryResponse200 = {
   data: ApplyHistoryEntry[]
   status: 200
@@ -374,7 +862,54 @@ export const getApiApplyHistory = async ( options?: RequestInit): Promise<getApi
 );}
 
 
-export type postApiProfilesRuRecommendedPreviewResponse200 = {
+
+
+
+export const getGetApiApplyHistoryMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyHistory>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyHistory>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiApplyHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyHistory>>, void> = () => {
+
+
+          return  getApiApplyHistory(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiApplyHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyHistory>>>
+
+    export type GetApiApplyHistoryMutationError = unknown
+
+    /**
+ * @summary Apply workflow history
+ */
+export const useGetApiApplyHistory = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyHistory>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiApplyHistory>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiApplyHistoryMutationOptions(options), queryClient);
+    }
+    export type postApiProfilesRuRecommendedPreviewResponse200 = {
   data: RURecommendedPreviewResponse
   status: 200
 }
@@ -414,5 +949,82 @@ export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRe
     body: JSON.stringify(rURecommendedPreviewRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiProfilesRuRecommendedPreviewQueryKey = (rURecommendedPreviewRequest?: RURecommendedPreviewRequest,) => {
+    return [
+    'POST', `/api/profiles/ru-recommended/preview`, rURecommendedPreviewRequest
+    ] as const;
+    }
+
+
+export const getPostApiProfilesRuRecommendedPreviewQueryOptions = <TData = Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError = BadRequestResponse>(rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiProfilesRuRecommendedPreviewQueryKey(rURecommendedPreviewRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>> = ({ signal }) => postApiProfilesRuRecommendedPreview(rURecommendedPreviewRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiProfilesRuRecommendedPreviewQueryResult = NonNullable<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>>
+export type PostApiProfilesRuRecommendedPreviewQueryError = BadRequestResponse
+
+
+export function usePostApiProfilesRuRecommendedPreview<TData = Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError = BadRequestResponse>(
+ rURecommendedPreviewRequest: RURecommendedPreviewRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>,
+          TError,
+          Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiProfilesRuRecommendedPreview<TData = Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError = BadRequestResponse>(
+ rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>,
+          TError,
+          Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiProfilesRuRecommendedPreview<TData = Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError = BadRequestResponse>(
+ rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Preview the ru-recommended install profile
+ */
+
+export function usePostApiProfilesRuRecommendedPreview<TData = Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError = BadRequestResponse>(
+ rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiProfilesRuRecommendedPreviewQueryOptions(rURecommendedPreviewRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

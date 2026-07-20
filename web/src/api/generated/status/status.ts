@@ -40,6 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation
+} from '@tanstack/react-query';
+import type {
+  MutationFunction,
+  QueryClient,
+  UseMutationOptions,
+  UseMutationResult
+} from '@tanstack/react-query';
+
 import type {
   FirewallRule,
   HealthResponse,
@@ -48,6 +58,11 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export type getHealthzResponse200 = {
   data: HealthResponse
@@ -97,7 +112,54 @@ export const getHealthz = async ( options?: RequestInit): Promise<getHealthzResp
 );}
 
 
-export type getMetricsResponse200 = {
+
+
+
+export const getGetHealthzMutationOptions = <TError = UnauthorizedResponse | HealthResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getHealthz>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getHealthz>>, TError,void, TContext> => {
+
+const mutationKey = ['getHealthz'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getHealthz>>, void> = () => {
+
+
+          return  getHealthz(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetHealthzMutationResult = NonNullable<Awaited<ReturnType<typeof getHealthz>>>
+
+    export type GetHealthzMutationError = UnauthorizedResponse | HealthResponse
+
+    /**
+ * @summary Liveness/readiness probe
+ */
+export const useGetHealthz = <TError = UnauthorizedResponse | HealthResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getHealthz>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getHealthz>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetHealthzMutationOptions(options), queryClient);
+    }
+    export type getMetricsResponse200 = {
   data: string
   status: 200
 }
@@ -144,7 +206,54 @@ export const getMetrics = async ( options?: RequestInit): Promise<getMetricsResp
 );}
 
 
-export type getApiStatusResponse200 = {
+
+
+
+export const getGetMetricsMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMetrics>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getMetrics>>, TError,void, TContext> => {
+
+const mutationKey = ['getMetrics'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getMetrics>>, void> = () => {
+
+
+          return  getMetrics(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetMetricsMutationResult = NonNullable<Awaited<ReturnType<typeof getMetrics>>>
+
+    export type GetMetricsMutationError = UnauthorizedResponse
+
+    /**
+ * @summary Prometheus metrics exposition
+ */
+export const useGetMetrics = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMetrics>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getMetrics>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetMetricsMutationOptions(options), queryClient);
+    }
+    export type getApiStatusResponse200 = {
   data: StatusResponse
   status: 200
 }
@@ -186,7 +295,54 @@ export const getApiStatus = async ( options?: RequestInit): Promise<getApiStatus
 );}
 
 
-export type getApiFirewallResponse200 = {
+
+
+
+export const getGetApiStatusMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiStatus>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiStatus>>, void> = () => {
+
+
+          return  getApiStatus(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiStatusMutationResult = NonNullable<Awaited<ReturnType<typeof getApiStatus>>>
+
+    export type GetApiStatusMutationError = UnauthorizedResponse
+
+    /**
+ * @summary Service status snapshot for managed systemd units
+ */
+export const useGetApiStatus = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiStatus>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiStatusMutationOptions(options), queryClient);
+    }
+    export type getApiFirewallResponse200 = {
   data: FirewallRule[]
   status: 200
 }
@@ -221,3 +377,50 @@ export const getApiFirewall = async ( options?: RequestInit): Promise<getApiFire
 );}
 
 
+
+
+
+export const getGetApiFirewallMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiFirewall>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiFirewall>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiFirewall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiFirewall>>, void> = () => {
+
+
+          return  getApiFirewall(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiFirewallMutationResult = NonNullable<Awaited<ReturnType<typeof getApiFirewall>>>
+
+    export type GetApiFirewallMutationError = unknown
+
+    /**
+ * @summary Firewall rule plan and status
+ */
+export const useGetApiFirewall = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiFirewall>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiFirewall>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiFirewallMutationOptions(options), queryClient);
+    }

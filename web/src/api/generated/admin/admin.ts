@@ -40,6 +40,21 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   EmptyObject,
@@ -50,6 +65,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type postApiAdminRotateKeyResponse200 = {
   data: KeyRotationResponse
@@ -109,5 +144,82 @@ export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?:
     body: JSON.stringify(emptyObject)
   }
 );}
+
+
+
+
+
+export const getPostApiAdminRotateKeyQueryKey = (emptyObject?: EmptyObject,) => {
+    return [
+    'POST', `/api/admin/rotate-key`, emptyObject
+    ] as const;
+    }
+
+
+export const getPostApiAdminRotateKeyQueryOptions = <TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiAdminRotateKeyQueryKey(emptyObject);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiAdminRotateKey>>> = ({ signal }) => postApiAdminRotateKey(emptyObject, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiAdminRotateKeyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiAdminRotateKey>>>
+export type PostApiAdminRotateKeyQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse
+
+
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+ emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAdminRotateKey>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAdminRotateKey>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiAdminRotateKey>>,
+          TError,
+          Awaited<ReturnType<typeof postApiAdminRotateKey>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Rotate the state-encryption key
+ */
+
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiAdminRotateKeyQueryOptions(emptyObject,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

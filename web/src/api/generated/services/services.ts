@@ -40,6 +40,21 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ServiceActionRequest,
@@ -47,6 +62,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type postApiServicesNameRestartResponse200 = {
   data: ServiceActionResponse
@@ -94,5 +129,88 @@ export const postApiServicesNameRestart = async (name: string,
     body: JSON.stringify(serviceActionRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiServicesNameRestartQueryKey = (name: string,
+    serviceActionRequest?: ServiceActionRequest,) => {
+    return [
+    'POST', `/api/services/${name}/restart`, serviceActionRequest
+    ] as const;
+    }
+
+
+export const getPostApiServicesNameRestartQueryOptions = <TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(name: string,
+    serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiServicesNameRestartQueryKey(name,serviceActionRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiServicesNameRestart>>> = ({ signal }) => postApiServicesNameRestart(name,serviceActionRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiServicesNameRestartQueryResult = NonNullable<Awaited<ReturnType<typeof postApiServicesNameRestart>>>
+export type PostApiServicesNameRestartQueryError = BadRequestResponse | ServiceActionResponse
+
+
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+ name: string,
+    serviceActionRequest: ServiceActionRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiServicesNameRestart>>,
+          TError,
+          Awaited<ReturnType<typeof postApiServicesNameRestart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+ name: string,
+    serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiServicesNameRestart>>,
+          TError,
+          Awaited<ReturnType<typeof postApiServicesNameRestart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+ name: string,
+    serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Restart a managed systemd unit
+ */
+
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+ name: string,
+    serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiServicesNameRestartQueryOptions(name,serviceActionRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

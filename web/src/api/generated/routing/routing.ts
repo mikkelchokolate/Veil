@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   NotFoundResponse,
@@ -48,6 +67,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiRoutingRulesResponse200 = {
   data: RoutingRule[]
@@ -84,7 +123,54 @@ export const getApiRoutingRules = async ( options?: RequestInit): Promise<getApi
 );}
 
 
-export type postApiRoutingRulesResponse201 = {
+
+
+
+export const getGetApiRoutingRulesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRules>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRules>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiRoutingRules'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRoutingRules>>, void> = () => {
+
+
+          return  getApiRoutingRules(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiRoutingRulesMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingRules>>>
+
+    export type GetApiRoutingRulesMutationError = unknown
+
+    /**
+ * @summary List routing rules
+ */
+export const useGetApiRoutingRules = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRules>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiRoutingRules>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiRoutingRulesMutationOptions(options), queryClient);
+    }
+    export type postApiRoutingRulesResponse201 = {
   data: RoutingRule
   status: 201
 }
@@ -124,6 +210,83 @@ export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Re
     body: JSON.stringify(routingRule)
   }
 );}
+
+
+
+
+
+export const getPostApiRoutingRulesQueryKey = (routingRule?: RoutingRule,) => {
+    return [
+    'POST', `/api/routing/rules`, routingRule
+    ] as const;
+    }
+
+
+export const getPostApiRoutingRulesQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiRoutingRulesQueryKey(routingRule);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiRoutingRules>>> = ({ signal }) => postApiRoutingRules(routingRule, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiRoutingRulesQueryResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingRules>>>
+export type PostApiRoutingRulesQueryError = BadRequestResponse
+
+
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+ routingRule: RoutingRule, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiRoutingRules>>,
+          TError,
+          Awaited<ReturnType<typeof postApiRoutingRules>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+ routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiRoutingRules>>,
+          TError,
+          Awaited<ReturnType<typeof postApiRoutingRules>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+ routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a routing rule
+ */
+
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+ routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiRoutingRulesQueryOptions(routingRule,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type getApiRoutingRulesNameResponse200 = {
@@ -168,7 +331,54 @@ export const getApiRoutingRulesName = async (name: string, options?: RequestInit
 );}
 
 
-export type putApiRoutingRulesNameResponse200 = {
+
+
+
+export const getGetApiRoutingRulesNameMutationOptions = <TError = NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext> => {
+
+const mutationKey = ['getApiRoutingRulesName'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRoutingRulesName>>, {name: string}> = (props) => {
+          const {name} = props ?? {};
+
+          return  getApiRoutingRulesName(name,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiRoutingRulesNameMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingRulesName>>>
+
+    export type GetApiRoutingRulesNameMutationError = NotFoundResponse
+
+    /**
+ * @summary Read a routing rule
+ */
+export const useGetApiRoutingRulesName = <TError = NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiRoutingRulesName>>,
+        TError,
+        {name: string},
+        TContext
+      > => {
+      return useMutation(getGetApiRoutingRulesNameMutationOptions(options), queryClient);
+    }
+    export type putApiRoutingRulesNameResponse200 = {
   data: RoutingRule
   status: 200
 }
@@ -216,6 +426,89 @@ export const putApiRoutingRulesName = async (name: string,
 );}
 
 
+
+
+
+export const getPutApiRoutingRulesNameQueryKey = (name: string,
+    routingRule?: RoutingRule,) => {
+    return [
+    'PUT', `/api/routing/rules/${name}`, routingRule
+    ] as const;
+    }
+
+
+export const getPutApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(name: string,
+    routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiRoutingRulesNameQueryKey(name,routingRule);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiRoutingRulesName>>> = ({ signal }) => putApiRoutingRulesName(name,routingRule, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiRoutingRulesNameQueryResult = NonNullable<Awaited<ReturnType<typeof putApiRoutingRulesName>>>
+export type PutApiRoutingRulesNameQueryError = BadRequestResponse | NotFoundResponse
+
+
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+ name: string,
+    routingRule: RoutingRule, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiRoutingRulesName>>,
+          TError,
+          Awaited<ReturnType<typeof putApiRoutingRulesName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+ name: string,
+    routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiRoutingRulesName>>,
+          TError,
+          Awaited<ReturnType<typeof putApiRoutingRulesName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+ name: string,
+    routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update a routing rule
+ */
+
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+ name: string,
+    routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiRoutingRulesNameQueryOptions(name,routingRule,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type deleteApiRoutingRulesNameResponse200 = {
   data: void
   status: 200
@@ -258,6 +551,83 @@ export const deleteApiRoutingRulesName = async (name: string, options?: RequestI
 );}
 
 
+
+
+
+export const getDeleteApiRoutingRulesNameQueryKey = (name: string,) => {
+    return [
+    'DELETE', `/api/routing/rules/${name}`
+    ] as const;
+    }
+
+
+export const getDeleteApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiRoutingRulesNameQueryKey(name);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>> = ({ signal }) => deleteApiRoutingRulesName(name, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiRoutingRulesNameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>>
+export type DeleteApiRoutingRulesNameQueryError = NotFoundResponse
+
+
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+ name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiRoutingRulesName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiRoutingRulesName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiRoutingRulesName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiRoutingRulesName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete a routing rule
+ */
+
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiRoutingRulesNameQueryOptions(name,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiRoutingPresetsResponse200 = {
   data: RoutingPresetResponse
   status: 200
@@ -293,7 +663,54 @@ export const getApiRoutingPresets = async ( options?: RequestInit): Promise<getA
 );}
 
 
-export type postApiRoutingPresetsNameResponse200 = {
+
+
+
+export const getGetApiRoutingPresetsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingPresets>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingPresets>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiRoutingPresets'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRoutingPresets>>, void> = () => {
+
+
+          return  getApiRoutingPresets(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiRoutingPresetsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingPresets>>>
+
+    export type GetApiRoutingPresetsMutationError = unknown
+
+    /**
+ * @summary List routing presets and source material
+ */
+export const useGetApiRoutingPresets = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingPresets>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiRoutingPresets>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiRoutingPresetsMutationOptions(options), queryClient);
+    }
+    export type postApiRoutingPresetsNameResponse200 = {
   data: RoutingPresetResponse
   status: 200
 }
@@ -333,5 +750,82 @@ export const postApiRoutingPresetsName = async (name: string, options?: RequestI
 
   }
 );}
+
+
+
+
+
+export const getPostApiRoutingPresetsNameQueryKey = (name: string,) => {
+    return [
+    'POST', `/api/routing/presets/${name}`
+    ] as const;
+    }
+
+
+export const getPostApiRoutingPresetsNameQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiRoutingPresetsNameQueryKey(name);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiRoutingPresetsName>>> = ({ signal }) => postApiRoutingPresetsName(name, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiRoutingPresetsNameQueryResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingPresetsName>>>
+export type PostApiRoutingPresetsNameQueryError = NotFoundResponse
+
+
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+ name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiRoutingPresetsName>>,
+          TError,
+          Awaited<ReturnType<typeof postApiRoutingPresetsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiRoutingPresetsName>>,
+          TError,
+          Awaited<ReturnType<typeof postApiRoutingPresetsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Apply a routing preset
+ */
+
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiRoutingPresetsNameQueryOptions(name,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

@@ -40,6 +40,21 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   DNSLookupRequest,
@@ -52,6 +67,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type postApiToolsDnsLookupResponse200 = {
   data: DNSLookupResult
@@ -95,6 +130,83 @@ export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, 
 );}
 
 
+
+
+
+export const getPostApiToolsDnsLookupQueryKey = (dNSLookupRequest?: DNSLookupRequest,) => {
+    return [
+    'POST', `/api/tools/dns-lookup`, dNSLookupRequest
+    ] as const;
+    }
+
+
+export const getPostApiToolsDnsLookupQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiToolsDnsLookupQueryKey(dNSLookupRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiToolsDnsLookup>>> = ({ signal }) => postApiToolsDnsLookup(dNSLookupRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiToolsDnsLookupQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsDnsLookup>>>
+export type PostApiToolsDnsLookupQueryError = BadRequestResponse
+
+
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+ dNSLookupRequest: DNSLookupRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsDnsLookup>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+ dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsDnsLookup>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+ dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary DNS lookup diagnostic
+ */
+
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+ dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiToolsDnsLookupQueryOptions(dNSLookupRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiToolsPingResponse200 = {
   data: PingResult
   status: 200
@@ -135,6 +247,83 @@ export const postApiToolsPing = async (pingRequest: PingRequest, options?: Reque
     body: JSON.stringify(pingRequest)
   }
 );}
+
+
+
+
+
+export const getPostApiToolsPingQueryKey = (pingRequest?: PingRequest,) => {
+    return [
+    'POST', `/api/tools/ping`, pingRequest
+    ] as const;
+    }
+
+
+export const getPostApiToolsPingQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiToolsPingQueryKey(pingRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiToolsPing>>> = ({ signal }) => postApiToolsPing(pingRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiToolsPingQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsPing>>>
+export type PostApiToolsPingQueryError = BadRequestResponse
+
+
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+ pingRequest: PingRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsPing>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsPing>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+ pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsPing>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsPing>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+ pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Ping diagnostic
+ */
+
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+ pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiToolsPingQueryOptions(pingRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
 export type postApiToolsSpeedtestResponse200 = {
@@ -182,5 +371,82 @@ export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?:
     body: JSON.stringify(emptyObject)
   }
 );}
+
+
+
+
+
+export const getPostApiToolsSpeedtestQueryKey = (emptyObject?: EmptyObject,) => {
+    return [
+    'POST', `/api/tools/speedtest`, emptyObject
+    ] as const;
+    }
+
+
+export const getPostApiToolsSpeedtestQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiToolsSpeedtestQueryKey(emptyObject);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiToolsSpeedtest>>> = ({ signal }) => postApiToolsSpeedtest(emptyObject, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiToolsSpeedtestQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsSpeedtest>>>
+export type PostApiToolsSpeedtestQueryError = BadRequestResponse | ServiceUnavailableResponse
+
+
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+ emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsSpeedtest>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsSpeedtest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiToolsSpeedtest>>,
+          TError,
+          Awaited<ReturnType<typeof postApiToolsSpeedtest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Speedtest diagnostic
+ */
+
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+ emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiToolsSpeedtestQueryOptions(emptyObject,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 

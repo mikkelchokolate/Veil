@@ -40,6 +40,25 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
+import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
+  MutationFunction,
+  QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
+} from '@tanstack/react-query';
+
 import type {
   BadRequestResponse,
   ForbiddenResponse,
@@ -48,6 +67,26 @@ import type {
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
+
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiSettingsResponse200 = {
   data: Settings
@@ -91,7 +130,54 @@ export const getApiSettings = async ( options?: RequestInit): Promise<getApiSett
 );}
 
 
-export type putApiSettingsResponse200 = {
+
+
+
+export const getGetApiSettingsMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSettings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiSettings>>, TError,void, TContext> => {
+
+const mutationKey = ['getApiSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiSettings>>, void> = () => {
+
+
+          return  getApiSettings(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiSettings>>>
+
+    export type GetApiSettingsMutationError = UnauthorizedResponse
+
+    /**
+ * @summary Read Panel settings with secrets redacted
+ */
+export const useGetApiSettings = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSettings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiSettings>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiSettingsMutationOptions(options), queryClient);
+    }
+    export type putApiSettingsResponse200 = {
   data: Settings
   status: 200
 }
@@ -136,5 +222,82 @@ export const putApiSettings = async (settings: Settings, options?: RequestInit):
     body: JSON.stringify(settings)
   }
 );}
+
+
+
+
+
+export const getPutApiSettingsQueryKey = (settings?: Settings,) => {
+    return [
+    'PUT', `/api/settings`, settings
+    ] as const;
+    }
+
+
+export const getPutApiSettingsQueryOptions = <TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiSettingsQueryKey(settings);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiSettings>>> = ({ signal }) => putApiSettings(settings, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof putApiSettings>>>
+export type PutApiSettingsQueryError = BadRequestResponse | ForbiddenResponse
+
+
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+ settings: Settings, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiSettings>>,
+          TError,
+          Awaited<ReturnType<typeof putApiSettings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+ settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiSettings>>,
+          TError,
+          Awaited<ReturnType<typeof putApiSettings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+ settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Update Panel settings
+ */
+
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+ settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiSettingsQueryOptions(settings,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
 
 
