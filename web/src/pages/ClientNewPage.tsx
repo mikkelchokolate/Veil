@@ -15,6 +15,7 @@ import {
 import { FormItem, FormMessage } from "../components/ui/form";
 import { Input, Textarea } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { useI18n } from "../i18n/I18nContext";
 
 interface InboundOption {
 	name: string;
@@ -48,6 +49,7 @@ const ISSUED_CRED_TIMEOUT_MS = 5 * 60 * 1000;
  * component state — never in the Query cache, URL, or web storage — and are
  * cleared on close, navigation, unmount, and after a timeout. */
 export function ClientNewPage() {
+	const { t } = useI18n();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
 
@@ -118,7 +120,7 @@ export function ClientNewPage() {
 		},
 		onError: (err) => {
 			setError(
-				err instanceof ApiError ? err.message : "Failed to create client",
+				err instanceof ApiError ? err.message : t("clientNew.createError"),
 			);
 		},
 	});
@@ -143,11 +145,16 @@ export function ClientNewPage() {
 		create.mutate();
 	}
 
-	const steps = ["General", "Limits", "Access", "Review"];
+	const steps = [
+		t("clientNew.stepGeneral"),
+		t("clientNew.stepLimits"),
+		t("clientNew.stepAccess"),
+		t("clientNew.stepReview"),
+	];
 
 	return (
 		<div className="card" style={{ maxWidth: 640 }}>
-			<h2>New client</h2>
+			<h2>{t("clientNew.title")}</h2>
 			<div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>
 				{steps.map((s, i) => (
 					<span
@@ -166,7 +173,7 @@ export function ClientNewPage() {
 			{step === 0 ? (
 				<>
 					<FormItem>
-						<Label htmlFor="nc-name">Name</Label>
+						<Label htmlFor="nc-name">{t("common.name")}</Label>
 						<Input
 							id="nc-name"
 							value={name}
@@ -175,7 +182,7 @@ export function ClientNewPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="nc-email">Email (optional)</Label>
+						<Label htmlFor="nc-email">{t("clientNew.emailLabel")}</Label>
 						<Input
 							id="nc-email"
 							type="email"
@@ -184,7 +191,7 @@ export function ClientNewPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="nc-notes">Notes (optional)</Label>
+						<Label htmlFor="nc-notes">{t("clientNew.notesLabel")}</Label>
 						<Textarea
 							id="nc-notes"
 							value={notes}
@@ -197,7 +204,7 @@ export function ClientNewPage() {
 			{step === 1 ? (
 				<>
 					<FormItem>
-						<Label htmlFor="nc-quota">Quota (bytes, optional)</Label>
+						<Label htmlFor="nc-quota">{t("clientNew.quotaLabel")}</Label>
 						<Input
 							id="nc-quota"
 							type="number"
@@ -207,7 +214,7 @@ export function ClientNewPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="nc-exp">Expiry date (optional)</Label>
+						<Label htmlFor="nc-exp">{t("clientNew.expiryLabel")}</Label>
 						<Input
 							id="nc-exp"
 							type="date"
@@ -220,9 +227,9 @@ export function ClientNewPage() {
 
 			{step === 2 ? (
 				<fieldset className="form-field" style={{ border: "none", padding: 0 }}>
-					<legend>Bind to inbounds</legend>
+					<legend>{t("clientNew.bindingsLegend")}</legend>
 					{inboundList.length === 0 ? (
-						<p className="muted">No inbounds available.</p>
+						<p className="muted">{t("clientNew.noInbounds")}</p>
 					) : (
 						inboundList.map((ib) => {
 							const bound = bindings.find((b) => b.inboundId === ib.name);
@@ -258,7 +265,7 @@ export function ClientNewPage() {
 										<Input
 											className="mono"
 											style={{ marginTop: 8 }}
-											placeholder="Credential (blank = server generates)"
+											placeholder={t("clientNew.credentialPlaceholder")}
 											value={bound.credential}
 											onChange={(e) => setCred(ib.name, e.target.value)}
 										/>
@@ -274,7 +281,7 @@ export function ClientNewPage() {
 				<div>
 					{create.isSuccess ? (
 						<>
-							<Badge variant="success">Client created</Badge>
+							<Badge variant="success">{t("clientNew.clientCreated")}</Badge>
 							<Dialog
 								open={issuedCreds.length > 0}
 								onOpenChange={(open) => {
@@ -283,10 +290,11 @@ export function ClientNewPage() {
 							>
 								<DialogContent>
 									<DialogHeader>
-										<DialogTitle>One-time credentials</DialogTitle>
+										<DialogTitle>
+											{t("clientNew.oneTimeCredentialsTitle")}
+										</DialogTitle>
 										<DialogDescription>
-											Copy these now — they are shown only once and will be
-											cleared when you close this dialog or after a few minutes.
+											{t("clientNew.oneTimeCredentialsDescription")}
 										</DialogDescription>
 									</DialogHeader>
 									{issuedCreds.map((c) => (
@@ -306,7 +314,7 @@ export function ClientNewPage() {
 												void navigate({ to: "/clients" });
 											}}
 										>
-											Done
+											{t("common.done")}
 										</Button>
 									</DialogFooter>
 								</DialogContent>
@@ -321,34 +329,36 @@ export function ClientNewPage() {
 											void navigate({ to: "/clients" });
 										}}
 									>
-										Done
+										{t("common.done")}
 									</Button>
 								</div>
 							) : null}
 						</>
 					) : (
 						<>
-							<h2 style={{ fontSize: 14 }}>Review</h2>
+							<h2 style={{ fontSize: 14 }}>{t("clientNew.reviewHeading")}</h2>
 							<p>
-								<strong>Name:</strong> {name}
+								<strong>{t("clientNew.reviewName")}:</strong> {name}
 							</p>
 							{email ? (
 								<p>
-									<strong>Email:</strong> {email}
+									<strong>{t("clientNew.reviewEmail")}:</strong> {email}
 								</p>
 							) : null}
 							{quotaBytes ? (
 								<p>
-									<strong>Quota:</strong> {quotaBytes} bytes
+									<strong>{t("clientNew.reviewQuota")}:</strong>{" "}
+									{t("clientNew.reviewQuotaValue", { quotaBytes })}
 								</p>
 							) : null}
 							{expiresAt ? (
 								<p>
-									<strong>Expires:</strong> {expiresAt}
+									<strong>{t("clientNew.reviewExpires")}:</strong> {expiresAt}
 								</p>
 							) : null}
 							<p>
-								<strong>Bindings:</strong> {bindings.length}
+								<strong>{t("clientNew.reviewBindings")}:</strong>{" "}
+								{bindings.length}
 							</p>
 						</>
 					)}
@@ -369,7 +379,7 @@ export function ClientNewPage() {
 						disabled={step === 0 || create.isPending}
 						onClick={() => setStep((s) => Math.max(0, s - 1))}
 					>
-						Back
+						{t("common.back")}
 					</Button>
 					{step < 2 ? (
 						<Button
@@ -378,15 +388,17 @@ export function ClientNewPage() {
 							disabled={step === 0 && !name}
 							onClick={() => setStep((s) => s + 1)}
 						>
-							Next
+							{t("common.next")}
 						</Button>
 					) : step === 2 ? (
 						<Button type="button" variant="primary" onClick={() => setStep(3)}>
-							Review
+							{t("clientNew.reviewButton")}
 						</Button>
 					) : (
 						<Button type="submit" variant="primary" disabled={create.isPending}>
-							{create.isPending ? "Creating…" : "Create client"}
+							{create.isPending
+								? t("clientNew.creating")
+								: t("clientNew.createClient")}
 						</Button>
 					)}
 				</form>

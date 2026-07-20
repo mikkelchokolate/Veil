@@ -15,6 +15,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({
@@ -42,6 +43,7 @@ const STATUS_VARIANT: Record<
 /** B5: honest synchronous apply semantics — desired vs applied revision,
  * job list with real status, retry, reconcile. No fake queue/202. */
 export function ApplyPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const state = useApplyState();
@@ -66,39 +68,43 @@ export function ApplyPage() {
 	return (
 		<>
 			<div className="card">
-				<h2>Apply state</h2>
+				<h2>{t("apply.title")}</h2>
 				{state.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : state.isError ? (
-					<FormMessage>Apply state unavailable</FormMessage>
+					<FormMessage>{t("apply.stateUnavailable")}</FormMessage>
 				) : s ? (
 					<>
 						<p>
-							<strong>State:</strong>{" "}
+							<strong>{t("apply.stateLabel")}:</strong>{" "}
 							<Badge variant={STATUS_VARIANT[s.state] ?? "default"}>
-								{s.state}
+								{t(`applyState.${s.state}`)}
 							</Badge>
 						</p>
 						<p>
-							<strong>Desired revision:</strong>{" "}
+							<strong>{t("apply.desiredRevisionLabel")}:</strong>{" "}
 							<span className="mono">{s.desiredRevision}</span>
 						</p>
 						<p>
-							<strong>Applied (runtime) revision:</strong>{" "}
+							<strong>{t("apply.appliedRevisionLabel")}:</strong>{" "}
 							<span className="mono">{s.appliedRevision}</span>
 						</p>
 						{drift ? (
 							<p>
 								<Badge variant="warning">
-									Runtime is behind desired — {s.appliedRevision} →{" "}
-									{s.desiredRevision}
+									{t("apply.driftNotice", {
+										applied: s.appliedRevision,
+										desired: s.desiredRevision,
+									})}
 								</Badge>
 							</p>
 						) : null}
 						{s.lastError?.message ? (
 							<FormMessage>
-								Last error{s.lastError.code ? ` (${s.lastError.code})` : ""}:{" "}
-								{s.lastError.message}
+								{t("apply.lastError", {
+									code: s.lastError.code ? ` (${s.lastError.code})` : "",
+									message: s.lastError.message,
+								})}
 							</FormMessage>
 						) : null}
 						{isAdmin && drift ? (
@@ -107,14 +113,16 @@ export function ApplyPage() {
 								disabled={reconcile.isPending}
 								onClick={() => reconcile.mutate()}
 							>
-								{reconcile.isPending ? "Reconciling…" : "Reconcile now"}
+								{reconcile.isPending
+									? t("apply.reconciling")
+									: t("apply.reconcileNow")}
 							</Button>
 						) : null}
 						{reconcile.isError ? (
 							<FormMessage>
 								{reconcile.error instanceof ApiError
 									? reconcile.error.message
-									: "Reconcile failed"}
+									: t("apply.reconcileFailed")}
 							</FormMessage>
 						) : null}
 					</>
@@ -122,20 +130,20 @@ export function ApplyPage() {
 			</div>
 
 			<div className="card">
-				<h2>Apply jobs</h2>
+				<h2>{t("apply.jobsTitle")}</h2>
 				{jobs.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : jobs.isError ? (
-					<FormMessage>Failed to load jobs</FormMessage>
+					<FormMessage>{t("common.error.load")}</FormMessage>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Created</TableHead>
-								<TableHead>Revision</TableHead>
-								<TableHead>Trigger</TableHead>
-								<TableHead>Status</TableHead>
-								<TableHead>Error</TableHead>
+								<TableHead>{t("common.created")}</TableHead>
+								<TableHead>{t("apply.revisionHeader")}</TableHead>
+								<TableHead>{t("apply.triggerHeader")}</TableHead>
+								<TableHead>{t("common.status")}</TableHead>
+								<TableHead>{t("apply.errorHeader")}</TableHead>
 								{isAdmin ? <TableHead /> : null}
 							</TableRow>
 						</TableHeader>
@@ -143,7 +151,7 @@ export function ApplyPage() {
 							{(jobs.data?.items ?? []).length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={isAdmin ? 6 : 5} className="muted">
-										No apply jobs yet.
+										{t("apply.noJobs")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -164,7 +172,7 @@ export function ApplyPage() {
 										<TableCell className="muted">{j.trigger}</TableCell>
 										<TableCell>
 											<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
-												{j.status}
+												{t(`apply.status.${j.status}`)}
 											</Badge>
 										</TableCell>
 										<TableCell className="muted" style={{ maxWidth: 320 }}>
@@ -185,7 +193,7 @@ export function ApplyPage() {
 														disabled={retry.isPending}
 														onClick={() => retry.mutate(j.id)}
 													>
-														Retry
+														{t("common.retry")}
 													</Button>
 												) : null}
 											</TableCell>

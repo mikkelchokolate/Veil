@@ -24,6 +24,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 
 interface RestoreJob {
@@ -45,6 +46,7 @@ interface VerifyResult {
 /** S4: full backup lifecycle — list/create, download, verify, restore (with
  * confirm), prune, and restore job tracking. */
 export function BackupsPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
@@ -79,11 +81,11 @@ export function BackupsPage() {
 			apiFetch("/api/backups", { method: "POST", body: JSON.stringify({}) }),
 		onSuccess: () => {
 			setError(null);
-			setNotice("Backup created.");
+			setNotice(t("backups.notice.created"));
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Backup failed"),
+			setError(e instanceof ApiError ? e.message : t("backups.error.create")),
 	});
 
 	const prune = useMutation({
@@ -94,11 +96,11 @@ export function BackupsPage() {
 			}),
 		onSuccess: () => {
 			setError(null);
-			setNotice("Retention prune complete.");
+			setNotice(t("backups.notice.pruned"));
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Prune failed"),
+			setError(e instanceof ApiError ? e.message : t("backups.error.prune")),
 	});
 
 	const verify = useMutation({
@@ -117,7 +119,7 @@ export function BackupsPage() {
 			setVerifyResult((prev) => ({ ...prev, [name]: res }));
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Verify failed"),
+			setError(e instanceof ApiError ? e.message : t("backups.error.verify")),
 	});
 
 	const restore = useMutation({
@@ -134,13 +136,11 @@ export function BackupsPage() {
 		onSuccess: (j) => {
 			setConfirmRestore(null);
 			setError(null);
-			setNotice(
-				`Restore queued for ${j.archive}. You may be logged out when it finishes.`,
-			);
+			setNotice(t("backups.notice.queued", { archive: j.archive }));
 			setActiveJob(j);
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Restore failed"),
+			setError(e instanceof ApiError ? e.message : t("backups.error.restore")),
 	});
 
 	async function download(name: string) {
@@ -161,7 +161,7 @@ export function BackupsPage() {
 			URL.revokeObjectURL(url);
 			setError(null);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Download failed");
+			setError(e instanceof Error ? e.message : t("backups.error.download"));
 		}
 	}
 
@@ -169,18 +169,18 @@ export function BackupsPage() {
 		<>
 			<div className="card">
 				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-					<h2 style={{ margin: 0, flex: 1 }}>Backups</h2>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("backups.title")}</h2>
 					{isAdmin ? (
 						<>
 							<Button disabled={prune.isPending} onClick={() => prune.mutate()}>
-								{prune.isPending ? "Pruning…" : "Prune (retention)"}
+								{prune.isPending ? t("backups.pruning") : t("backups.prune")}
 							</Button>
 							<Button
 								variant="primary"
 								disabled={create.isPending}
 								onClick={() => create.mutate()}
 							>
-								{create.isPending ? "Creating…" : "Create backup"}
+								{create.isPending ? t("backups.creating") : t("backups.create")}
 							</Button>
 						</>
 					) : null}
@@ -191,7 +191,7 @@ export function BackupsPage() {
 
 			{job ? (
 				<div className="card">
-					<h2 style={{ fontSize: 15 }}>Restore job</h2>
+					<h2 style={{ fontSize: 15 }}>{t("backups.restoreJobTitle")}</h2>
 					<p>
 						<Badge
 							variant={
@@ -202,7 +202,7 @@ export function BackupsPage() {
 										: "warning"
 							}
 						>
-							{job.status}
+							{t(`backups.status.${job.status}`)}
 						</Badge>{" "}
 						<span className="mono">{job.archive}</span>
 					</p>
@@ -214,7 +214,7 @@ export function BackupsPage() {
 								void qc.invalidateQueries({ queryKey: ["backups"] });
 							}}
 						>
-							Dismiss
+							{t("backups.dismiss")}
 						</Button>
 					) : null}
 				</div>
@@ -222,24 +222,24 @@ export function BackupsPage() {
 
 			<div className="card">
 				{backups.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Size</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead>Encrypted</TableHead>
-								<TableHead>Verify</TableHead>
-								{isAdmin ? <TableHead>Actions</TableHead> : null}
+								<TableHead>{t("common.name")}</TableHead>
+								<TableHead>{t("backups.size")}</TableHead>
+								<TableHead>{t("common.created")}</TableHead>
+								<TableHead>{t("backups.encrypted")}</TableHead>
+								<TableHead>{t("backups.verify")}</TableHead>
+								{isAdmin ? <TableHead>{t("common.actions")}</TableHead> : null}
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{items.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={6} className="muted">
-										No backups yet.
+										{t("backups.empty")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -256,7 +256,7 @@ export function BackupsPage() {
 											</TableCell>
 											<TableCell>
 												<Badge variant={b.encrypted ? "success" : "default"}>
-													{b.encrypted ? "yes" : "no"}
+													{b.encrypted ? t("common.yes") : t("common.no")}
 												</Badge>
 											</TableCell>
 											<TableCell>
@@ -265,8 +265,10 @@ export function BackupsPage() {
 														variant={v.ok || v.valid ? "success" : "danger"}
 													>
 														{v.ok || v.valid
-															? "ok"
-															: (v.error ?? v.message ?? "invalid")}
+															? t("backups.verifyOk")
+															: (v.error ??
+																v.message ??
+																t("backups.verifyInvalid"))}
 													</Badge>
 												) : (
 													<span className="muted">—</span>
@@ -285,21 +287,21 @@ export function BackupsPage() {
 															size="sm"
 															onClick={() => void download(b.name)}
 														>
-															Download
+															{t("backups.download")}
 														</Button>
 														<Button
 															size="sm"
 															disabled={verify.isPending}
 															onClick={() => verify.mutate(b.name)}
 														>
-															Verify
+															{t("backups.verify")}
 														</Button>
 														<Button
 															size="sm"
 															variant="danger"
 															onClick={() => setConfirmRestore(b.name)}
 														>
-															Restore
+															{t("backups.restore")}
 														</Button>
 													</div>
 												</TableCell>
@@ -321,14 +323,26 @@ export function BackupsPage() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Restore backup?</AlertDialogTitle>
+						<AlertDialogTitle>
+							{t("backups.restoreConfirmTitle")}
+						</AlertDialogTitle>
 						<AlertDialogDescription>
-							Restoring <span className="mono">{confirmRestore}</span> replaces
-							the current state. You may be logged out when it finishes.
+							{t("backups.restoreConfirmDescription")
+								.split("{name}")
+								.map((part, i, arr) => (
+									// static two-part split of a translated template; the
+									// interpolated archive name is rendered between them
+									<span key={part}>
+										{part}
+										{i === 0 && arr.length > 1 ? (
+											<span className="mono">{confirmRestore}</span>
+										) : null}
+									</span>
+								))}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							disabled={restore.isPending}
 							onClick={(e) => {
@@ -336,7 +350,9 @@ export function BackupsPage() {
 								if (confirmRestore) restore.mutate(confirmRestore);
 							}}
 						>
-							{restore.isPending ? "Restoring…" : "Confirm restore"}
+							{restore.isPending
+								? t("backups.restoring")
+								: t("backups.confirmRestore")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

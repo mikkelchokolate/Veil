@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/fetcher";
+import { useI18n } from "../i18n/I18nContext";
 
 interface ClientTraffic {
 	clientId: string;
@@ -28,6 +29,7 @@ function fmtBytes(n?: number): string {
 /** B9: per-client traffic usage + quota progress in the client detail Traffic
  * tab. */
 export function ClientTrafficPanel({ clientId }: { clientId: string }) {
+	const { t } = useI18n();
 	const traffic = useQuery<ClientTraffic>({
 		queryKey: ["traffic", clientId],
 		queryFn: () => apiFetch(`/api/v1/traffic/${clientId}`),
@@ -37,42 +39,46 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 	if (traffic.isLoading) {
 		return (
 			<div className="card">
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			</div>
 		);
 	}
 	if (traffic.isError || !traffic.data) {
 		return (
 			<div className="card">
-				<p className="form-error">Traffic unavailable</p>
+				<p className="form-error">{t("clientTraffic.unavailable")}</p>
 			</div>
 		);
 	}
 
-	const t = traffic.data;
+	const data = traffic.data;
 	const pct =
-		t.quotaBytes && t.quotaBytes > 0
-			? Math.min(100, Math.round((t.usedBytes / t.quotaBytes) * 100))
+		data.quotaBytes && data.quotaBytes > 0
+			? Math.min(100, Math.round((data.usedBytes / data.quotaBytes) * 100))
 			: null;
 
 	return (
 		<div className="card">
-			<h2>Traffic usage</h2>
+			<h2>{t("clientTraffic.title")}</h2>
 			<p>
-				<strong>Upload:</strong> {fmtBytes(t.uploadBytes)}
+				<strong>{t("clientTraffic.upload")}:</strong>{" "}
+				{fmtBytes(data.uploadBytes)}
 			</p>
 			<p>
-				<strong>Download:</strong> {fmtBytes(t.downloadBytes)}
+				<strong>{t("clientTraffic.download")}:</strong>{" "}
+				{fmtBytes(data.downloadBytes)}
 			</p>
 			<p>
-				<strong>Total used:</strong> {fmtBytes(t.usedBytes)}
+				<strong>{t("clientTraffic.totalUsed")}:</strong>{" "}
+				{fmtBytes(data.usedBytes)}
 			</p>
-			{t.quotaBytes != null ? (
+			{data.quotaBytes != null ? (
 				<>
 					<p>
-						<strong>Quota:</strong> {fmtBytes(t.quotaBytes)}
-						{t.remainingBytes != null
-							? ` · remaining ${fmtBytes(t.remainingBytes)}`
+						<strong>{t("clientTraffic.quota")}:</strong>{" "}
+						{fmtBytes(data.quotaBytes)}
+						{data.remainingBytes != null
+							? ` · ${t("clientTraffic.remaining", { n: fmtBytes(data.remainingBytes) })}`
 							: ""}
 					</p>
 					<div
@@ -92,23 +98,25 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 							style={{
 								height: "100%",
 								width: `${pct ?? 0}%`,
-								background: t.depleted
+								background: data.depleted
 									? "var(--accent-danger)"
 									: "var(--accent)",
 							}}
 						/>
 					</div>
-					{t.depleted ? (
+					{data.depleted ? (
 						<p className="badge badge-danger" style={{ marginTop: 8 }}>
-							quota depleted
+							{t("clientTraffic.depleted")}
 						</p>
 					) : null}
 				</>
 			) : (
-				<p className="muted">No quota configured.</p>
+				<p className="muted">{t("clientTraffic.noQuota")}</p>
 			)}
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-				Collected {new Date(t.collectedAt * 1000).toLocaleTimeString()}
+				{t("clientTraffic.collected", {
+					at: new Date(data.collectedAt * 1000).toLocaleTimeString(),
+				})}
 			</p>
 		</div>
 	);

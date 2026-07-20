@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
+import { I18nProvider } from "../i18n/I18nContext";
 import { ClientsPage } from "../pages/ClientsPage";
 import { HttpResponse, http, server } from "./server";
 
@@ -29,7 +30,9 @@ function renderClients(initialPath = "/clients") {
 	return render(
 		<QueryClientProvider client={qc}>
 			<AuthProvider>
-				<RouterProvider router={router} />
+				<I18nProvider>
+					<RouterProvider router={router} />
+				</I18nProvider>
 			</AuthProvider>
 		</QueryClientProvider>,
 	);

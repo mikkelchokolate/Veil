@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nContext";
 import { QR } from "./QR";
 
 interface SubscriptionToken {
@@ -31,6 +32,7 @@ function fmtTime(ts?: number): string {
  * revoke. One-time plaintext + subscription URL + QR shown once at issue or
  * rotate. Never persisted. */
 export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [label, setLabel] = useState("");
@@ -56,7 +58,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Create failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("subTokens.error.create"),
+			),
 	});
 
 	const rotate = useMutation({
@@ -73,7 +77,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Rotate failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("subTokens.error.rotate"),
+			),
 	});
 
 	const revoke = useMutation({
@@ -86,7 +92,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Revoke failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("subTokens.error.revoke"),
+			),
 	});
 
 	const subURL = issued?.url ?? (issued ? `/s/${issued.plaintext}` : null);
@@ -103,13 +111,11 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 	return (
 		<div className="card">
-			<h2>Subscription tokens</h2>
+			<h2>{t("subTokens.title")}</h2>
 
 			{issued && subURL ? (
 				<div className="card" style={{ borderColor: "var(--border-hover)" }}>
-					<h2 style={{ fontSize: 14 }}>
-						New subscription — copy now (shown once)
-					</h2>
+					<h2 style={{ fontSize: 14 }}>{t("subTokens.issuedTitle")}</h2>
 					<div
 						style={{
 							display: "flex",
@@ -149,14 +155,14 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 										)
 									}
 								>
-									{copied ? "Copied" : "Copy URL"}
+									{copied ? t("subTokens.copied") : t("subTokens.copyUrl")}
 								</button>
 								<button
 									type="button"
 									className="btn"
 									onClick={() => setIssued(null)}
 								>
-									Dismiss
+									{t("subTokens.dismiss")}
 								</button>
 							</div>
 							<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -175,7 +181,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 					<input
 						className="input"
 						style={{ maxWidth: 240 }}
-						placeholder="Label (e.g. phone, laptop)"
+						placeholder={t("subTokens.labelPlaceholder")}
 						value={label}
 						onChange={(e) => setLabel(e.target.value)}
 					/>
@@ -185,24 +191,24 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 						disabled={create.isPending}
 						onClick={() => create.mutate()}
 					>
-						{create.isPending ? "Creating…" : "Create token"}
+						{create.isPending ? t("subTokens.creating") : t("subTokens.create")}
 					</button>
 				</div>
 			) : null}
 
 			{tokens.isLoading ? (
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			) : (
 				<div className="table-container">
 					<table className="data-table">
 						<thead>
 							<tr>
-								<th>Label</th>
-								<th>Prefix</th>
-								<th>Status</th>
-								<th>Created</th>
-								<th>Last used</th>
-								<th>Expires</th>
+								<th>{t("subTokens.label")}</th>
+								<th>{t("subTokens.prefix")}</th>
+								<th>{t("common.status")}</th>
+								<th>{t("common.created")}</th>
+								<th>{t("subTokens.lastUsed")}</th>
+								<th>{t("subTokens.expires")}</th>
 								{isAdmin ? <th /> : null}
 							</tr>
 						</thead>
@@ -210,45 +216,51 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 							{(tokens.data?.items ?? []).length === 0 ? (
 								<tr>
 									<td colSpan={isAdmin ? 7 : 6} className="muted">
-										No subscription tokens.
+										{t("subTokens.empty")}
 									</td>
 								</tr>
 							) : (
-								(tokens.data?.items ?? []).map((t) => (
-									<tr key={t.id}>
-										<td>{t.label || <span className="muted">—</span>}</td>
-										<td className="mono muted">{t.prefix}…</td>
+								(tokens.data?.items ?? []).map((tok) => (
+									<tr key={tok.id}>
+										<td>{tok.label || <span className="muted">—</span>}</td>
+										<td className="mono muted">{tok.prefix}…</td>
 										<td>
-											{t.revokedAt ? (
-												<span className="badge badge-danger">revoked</span>
-											) : t.enabled ? (
-												<span className="badge badge-success">active</span>
+											{tok.revokedAt ? (
+												<span className="badge badge-danger">
+													{t("subTokens.status.revoked")}
+												</span>
+											) : tok.enabled ? (
+												<span className="badge badge-success">
+													{t("subTokens.status.active")}
+												</span>
 											) : (
-												<span className="badge">disabled</span>
+												<span className="badge">
+													{t("subTokens.status.disabled")}
+												</span>
 											)}
 										</td>
-										<td className="muted">{fmtTime(t.createdAt)}</td>
-										<td className="muted">{fmtTime(t.lastUsedAt)}</td>
-										<td className="muted">{fmtTime(t.expiresAt)}</td>
+										<td className="muted">{fmtTime(tok.createdAt)}</td>
+										<td className="muted">{fmtTime(tok.lastUsedAt)}</td>
+										<td className="muted">{fmtTime(tok.expiresAt)}</td>
 										{isAdmin ? (
 											<td style={{ whiteSpace: "nowrap" }}>
-												{!t.revokedAt ? (
+												{!tok.revokedAt ? (
 													<>
 														<button
 															type="button"
 															className="btn"
 															disabled={rotate.isPending}
-															onClick={() => rotate.mutate(t.id)}
+															onClick={() => rotate.mutate(tok.id)}
 														>
-															Rotate
+															{t("subTokens.rotate")}
 														</button>{" "}
 														<button
 															type="button"
 															className="btn btn-danger"
 															disabled={revoke.isPending}
-															onClick={() => revoke.mutate(t.id)}
+															onClick={() => revoke.mutate(tok.id)}
 														>
-															Revoke
+															{t("subTokens.revoke")}
 														</button>
 													</>
 												) : null}

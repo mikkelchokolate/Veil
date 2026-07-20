@@ -48,27 +48,28 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 
-const STATUS_BADGE: Record<
+const STATUS_VARIANT: Record<
 	string,
-	{ label: string; variant: "success" | "warning" | "danger" | "default" }
+	"success" | "warning" | "danger" | "default"
 > = {
-	active: { label: "active", variant: "success" },
-	disabled: { label: "disabled", variant: "default" },
-	expired: { label: "expired", variant: "warning" },
-	depleted: { label: "depleted", variant: "warning" },
-	pending_apply: { label: "pending apply", variant: "warning" },
-	apply_failed: { label: "apply failed", variant: "danger" },
-	orphaned: { label: "orphaned", variant: "danger" },
+	active: "success",
+	disabled: "default",
+	expired: "warning",
+	depleted: "warning",
+	pending_apply: "warning",
+	apply_failed: "danger",
+	orphaned: "danger",
 };
 
 function StatusBadge({ status }: { status: string }) {
-	const meta = STATUS_BADGE[status] ?? {
-		label: status,
-		variant: "default" as const,
-	};
-	return <Badge variant={meta.variant}>{meta.label}</Badge>;
+	const { t } = useI18n();
+	const variant = STATUS_VARIANT[status] ?? "default";
+	const key = `clients.status.${status}`;
+	const label = t(key) === key ? status : t(key);
+	return <Badge variant={variant}>{label}</Badge>;
 }
 
 function fmtExpiry(ts?: number): string {
@@ -98,6 +99,7 @@ interface BulkResult {
 
 export function ClientsPage() {
 	const isAdmin = useIsAdmin();
+	const { t } = useI18n();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
 	const rawSearch = useSearch({ strict: false }) as Record<string, unknown>;
@@ -193,7 +195,7 @@ export function ClientsPage() {
 		onError: (err) => {
 			setBulkResults(null);
 			setBulkError(
-				err instanceof ApiError ? err.message : "Bulk action failed",
+				err instanceof ApiError ? err.message : t("clients.error.bulk"),
 			);
 		},
 	});
@@ -201,6 +203,14 @@ export function ClientsPage() {
 	const items = (query.data?.items ?? []) as ClientView[];
 	const total = query.data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	const pageCountLabel =
+		total === 1
+			? t("clients.pagination.count_one", { n: total })
+			: t("clients.pagination.count_other", { n: total });
+	const deleteCountLabel =
+		selected.size === 1
+			? t("clients.delete.count_one", { n: selected.size })
+			: t("clients.delete.count_other", { n: selected.size });
 
 	// S3: aggregate summary across the current page (bytes kept as numbers
 	// server-side already; fmtBytes formats without precision loss). Per-client
@@ -225,7 +235,7 @@ export function ClientsPage() {
 								type="checkbox"
 								checked={items.length > 0 && selected.size === items.length}
 								onChange={toggleAll}
-								aria-label="select all"
+								aria-label={t("clients.selectAll")}
 							/>
 						),
 						cell: ({ row }) => (
@@ -233,7 +243,9 @@ export function ClientsPage() {
 								type="checkbox"
 								checked={selected.has(row.original.id)}
 								onChange={() => toggle(row.original.id)}
-								aria-label={`select ${row.original.name}`}
+								aria-label={t("clients.selectRow", {
+									name: row.original.name,
+								})}
 								onClick={(e) => e.stopPropagation()}
 							/>
 						),
@@ -244,7 +256,7 @@ export function ClientsPage() {
 			: []),
 		{
 			accessorKey: "name",
-			header: "Name",
+			header: () => t("common.name"),
 			cell: ({ row }) => (
 				<div>
 					<div>{row.original.name}</div>
@@ -258,31 +270,39 @@ export function ClientsPage() {
 		},
 		{
 			accessorKey: "status",
-			header: "Status",
+			header: () => t("common.status"),
 			cell: ({ row }) => <StatusBadge status={row.original.status} />,
 		},
 		{
 			accessorKey: "inboundIds",
-			header: "Inbounds",
+			header: () => t("clients.columns.inbounds"),
 			cell: ({ row }) => (
 				<span className="muted">{row.original.inboundIds?.length ?? 0}</span>
 			),
 		},
 		{
 			accessorKey: "quotaBytes",
-			header: "Quota",
+			header: () => t("clients.columns.quota"),
 			cell: ({ row }) => (
 				<span className="muted">{fmtBytes(row.original.quotaBytes)}</span>
 			),
 		},
 		{
 			accessorKey: "expiresAt",
-			header: "Expires",
+			header: () => t("clients.columns.expires"),
 			cell: ({ row }) => (
 				<span className="muted">{fmtExpiry(row.original.expiresAt)}</span>
 			),
 		},
 	];
+
+	const COLUMN_LABELS: Record<string, string> = {
+		name: t("common.name"),
+		status: t("common.status"),
+		inboundIds: t("clients.columns.inbounds"),
+		quotaBytes: t("clients.columns.quota"),
+		expiresAt: t("clients.columns.expires"),
+	};
 
 	const table = useReactTable({
 		data: items,
@@ -320,13 +340,13 @@ export function ClientsPage() {
 						flexWrap: "wrap",
 					}}
 				>
-					<h2 style={{ margin: 0, flex: 1 }}>Clients</h2>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("clients.title")}</h2>
 					<Input
 						style={{ maxWidth: 260 }}
-						placeholder="Search name or email"
+						placeholder={t("clients.searchPlaceholder")}
 						value={searchInput}
 						onChange={(e) => setSearchInput(e.target.value)}
-						aria-label="search clients"
+						aria-label={t("clients.searchAriaLabel")}
 					/>
 					<Select
 						style={{ maxWidth: 160 }}
@@ -334,22 +354,22 @@ export function ClientsPage() {
 						onChange={(e) =>
 							setParam({ status: e.target.value || undefined, page: "1" })
 						}
-						aria-label="filter status"
+						aria-label={t("clients.filterStatusAriaLabel")}
 					>
-						<option value="">All statuses</option>
-						<option value="enabled">Enabled</option>
-						<option value="disabled">Disabled</option>
-						<option value="depleted">Depleted</option>
+						<option value="">{t("clients.statusFilter.all")}</option>
+						<option value="enabled">{t("clients.status.enabled")}</option>
+						<option value="disabled">{t("clients.status.disabled")}</option>
+						<option value="depleted">{t("clients.status.depleted")}</option>
 					</Select>
 					<Select
 						style={{ maxWidth: 160 }}
 						value={sort}
 						onChange={(e) => setParam({ sort: e.target.value })}
-						aria-label="sort"
+						aria-label={t("clients.sortAriaLabel")}
 					>
-						<option value="created">Newest</option>
-						<option value="name">Name</option>
-						<option value="expires">Expiry</option>
+						<option value="created">{t("clients.sort.newest")}</option>
+						<option value="name">{t("common.name")}</option>
+						<option value="expires">{t("clients.sort.expiry")}</option>
 					</Select>
 					<DropdownMenu
 						modal={false}
@@ -357,7 +377,9 @@ export function ClientsPage() {
 						onOpenChange={setShowColMenu}
 					>
 						<DropdownMenuTrigger asChild>
-							<Button aria-label="toggle columns">Columns</Button>
+							<Button aria-label={t("clients.columnsToggleAriaLabel")}>
+								{t("clients.columnsToggle")}
+							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
 							{table
@@ -370,7 +392,7 @@ export function ClientsPage() {
 										onCheckedChange={(v) => col.toggleVisibility(v === true)}
 										onSelect={(e) => e.preventDefault()}
 									>
-										{col.id}
+										{COLUMN_LABELS[col.id] ?? col.id}
 									</DropdownMenuCheckboxItem>
 								))}
 						</DropdownMenuContent>
@@ -380,16 +402,21 @@ export function ClientsPage() {
 							variant="primary"
 							onClick={() => void navigate({ to: "/clients/new" })}
 						>
-							New client
+							{t("clients.newClient")}
 						</Button>
 					) : null}
 				</div>
 				{/* S3: aggregate summary for the current page */}
 				{items.length > 0 ? (
 					<div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-						{summary.count} shown · {summary.active} active
+						{t("clients.summary", {
+							count: summary.count,
+							active: summary.active,
+						})}
 						{summary.quota > 0
-							? ` · total quota ${fmtBytes(summary.quota)}`
+							? t("clients.summary.totalQuota", {
+									quota: fmtBytes(summary.quota),
+								})
 							: ""}
 					</div>
 				) : null}
@@ -405,14 +432,16 @@ export function ClientsPage() {
 						flexWrap: "wrap",
 					}}
 				>
-					<span className="muted">{selected.size} selected</span>
+					<span className="muted">
+						{t("clients.selected", { n: selected.size })}
+					</span>
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
 							bulk.mutate({ action: "enable", ids: [...selected] })
 						}
 					>
-						Enable
+						{t("common.enable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
@@ -420,7 +449,7 @@ export function ClientsPage() {
 							bulk.mutate({ action: "disable", ids: [...selected] })
 						}
 					>
-						Disable
+						{t("common.disable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
@@ -428,14 +457,14 @@ export function ClientsPage() {
 							bulk.mutate({ action: "reset_traffic", ids: [...selected] })
 						}
 					>
-						Reset traffic
+						{t("clients.resetTraffic")}
 					</Button>
 					<Button
 						variant="danger"
 						disabled={bulk.isPending}
 						onClick={() => setConfirmDelete(true)}
 					>
-						Delete
+						{t("common.delete")}
 					</Button>
 					{bulkError ? <FormMessage>{bulkError}</FormMessage> : null}
 				</div>
@@ -444,7 +473,7 @@ export function ClientsPage() {
 			{/* S3: per-client bulk result */}
 			{bulkResults && bulkResults.length > 0 ? (
 				<div className="card">
-					<h2 style={{ fontSize: 14 }}>Bulk result</h2>
+					<h2 style={{ fontSize: 14 }}>{t("clients.bulkResult.title")}</h2>
 					{bulkResults.map((r) => (
 						<div
 							key={r.id}
@@ -454,7 +483,9 @@ export function ClientsPage() {
 							<span
 								className={r.ok ? "badge badge-success" : "badge badge-danger"}
 							>
-								{r.ok ? "ok" : "failed"}
+								{r.ok
+									? t("clients.bulkResult.ok")
+									: t("clients.bulkResult.failed")}
 							</span>
 							<span className="mono" style={{ fontSize: 12 }}>
 								{r.id}
@@ -467,12 +498,12 @@ export function ClientsPage() {
 
 			<div className="card">
 				{query.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : query.isError ? (
 					<FormMessage>
 						{query.error instanceof ApiError
 							? query.error.message
-							: "Failed to load clients"}
+							: t("clients.error.load")}
 					</FormMessage>
 				) : (
 					<Table>
@@ -496,7 +527,7 @@ export function ClientsPage() {
 							{table.getRowModel().rows.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={columns.length} className="muted">
-										No clients found.
+										{t("clients.empty")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -532,20 +563,21 @@ export function ClientsPage() {
 					}}
 				>
 					<span className="muted">
-						{total} client{total === 1 ? "" : "s"} · page {page} of {totalPages}
+						{pageCountLabel} ·{" "}
+						{t("clients.pagination.pageInfo", { page, totalPages })}
 					</span>
 					<div style={{ flex: 1 }} />
 					<Button
 						disabled={page <= 1}
 						onClick={() => setParam({ page: String(page - 1) })}
 					>
-						Previous
+						{t("clients.pagination.previous")}
 					</Button>
 					<Button
 						disabled={page >= totalPages}
 						onClick={() => setParam({ page: String(page + 1) })}
 					>
-						Next
+						{t("common.next")}
 					</Button>
 				</div>
 			</div>
@@ -553,14 +585,13 @@ export function ClientsPage() {
 			<AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete clients?</AlertDialogTitle>
+						<AlertDialogTitle>{t("clients.delete.title")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							Really delete {selected.size} client
-							{selected.size === 1 ? "" : "s"}? This cannot be undone.
+							{t("clients.delete.confirmation", { count: deleteCountLabel })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							disabled={bulk.isPending}
 							onClick={(e) => {
@@ -568,7 +599,9 @@ export function ClientsPage() {
 								bulk.mutate({ action: "delete", ids: [...selected] });
 							}}
 						>
-							{bulk.isPending ? "Deleting…" : "Confirm delete"}
+							{bulk.isPending
+								? t("clients.delete.confirmPending")
+								: t("clients.delete.confirm")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

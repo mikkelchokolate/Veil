@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { SystemStats } from "../api/generated/models";
 import { FormMessage } from "../components/ui/form";
+import { useI18n } from "../i18n/I18nContext";
 
 function fmtUptime(sec: number): string {
 	const d = Math.floor(sec / 86400);
@@ -63,6 +64,7 @@ function Meter({
 
 /** System overview: live host telemetry (CPU / memory / disk / load / uptime). */
 export function SystemPage() {
+	const { t } = useI18n();
 	const sys = useQuery<SystemStats>({
 		queryKey: ["system"],
 		queryFn: () => apiFetch("/api/system"),
@@ -72,7 +74,7 @@ export function SystemPage() {
 	if (sys.isLoading) {
 		return (
 			<div className="card">
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			</div>
 		);
 	}
@@ -82,7 +84,7 @@ export function SystemPage() {
 				<FormMessage>
 					{sys.error instanceof ApiError
 						? sys.error.message
-						: "System stats unavailable"}
+						: t("system.unavailable")}
 				</FormMessage>
 			</div>
 		);
@@ -91,28 +93,28 @@ export function SystemPage() {
 	const s = sys.data;
 	return (
 		<div className="card">
-			<h2>System</h2>
+			<h2>{t("system.title")}</h2>
 			<Meter
-				label="CPU"
+				label={t("system.cpu")}
 				value={Math.round(s.cpuPercent)}
 				detail={`${s.cpuPercent.toFixed(1)}%`}
 			/>
 			<Meter
-				label="Memory"
+				label={t("system.memory")}
 				value={pct(s.memoryUsedMB, s.memoryTotalMB)}
 				detail={`${s.memoryUsedMB} / ${s.memoryTotalMB} MiB`}
 			/>
 			<Meter
-				label="Disk"
+				label={t("system.disk")}
 				value={pct(s.diskUsedGB, s.diskTotalGB)}
 				detail={`${s.diskUsedGB.toFixed(1)} / ${s.diskTotalGB.toFixed(1)} GiB`}
 			/>
 			<p>
-				<strong>Load average:</strong> {s.loadAvg1.toFixed(2)} ·{" "}
+				<strong>{t("system.loadAverage")}:</strong> {s.loadAvg1.toFixed(2)} ·{" "}
 				{s.loadAvg5.toFixed(2)} · {s.loadAvg15.toFixed(2)}
 			</p>
 			<p>
-				<strong>Uptime:</strong> {fmtUptime(s.uptimeSeconds)}
+				<strong>{t("system.uptime")}:</strong> {fmtUptime(s.uptimeSeconds)}
 			</p>
 		</div>
 	);

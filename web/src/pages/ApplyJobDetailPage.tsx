@@ -15,6 +15,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 function fmtTime(ts?: number): string {
 	if (!ts) return "—";
@@ -91,9 +92,12 @@ interface HistoryEntry {
 	rollbackActions?: ServiceActionResult[];
 }
 
-function okBadge(ok: boolean) {
+function OkBadge({ ok }: { ok: boolean }) {
+	const { t } = useI18n();
 	return (
-		<Badge variant={ok ? "success" : "danger"}>{ok ? "ok" : "failed"}</Badge>
+		<Badge variant={ok ? "success" : "danger"}>
+			{ok ? t("applyJob.ok") : t("applyJob.failed")}
+		</Badge>
 	);
 }
 
@@ -103,6 +107,7 @@ const planOpKey = (op: ApplyPlanOperation, i: number) =>
 	`${op.type}-${op.destination ?? ""}-${i}`;
 
 function PlanOpRow({ op }: { op: ApplyPlanOperation }) {
+	const { t } = useI18n();
 	return (
 		<TableRow>
 			<TableCell className="muted">{op.type}</TableCell>
@@ -115,7 +120,7 @@ function PlanOpRow({ op }: { op: ApplyPlanOperation }) {
 			<TableCell className="muted">{op.unit ?? "—"}</TableCell>
 			<TableCell className="muted">{op.interruptionRisk ?? "—"}</TableCell>
 			<TableCell className="muted">
-				{op.rollbackAvailable ? "yes" : "no"}
+				{op.rollbackAvailable ? t("applyJob.yes") : t("applyJob.no")}
 			</TableCell>
 		</TableRow>
 	);
@@ -125,6 +130,7 @@ export function ApplyJobDetailPage() {
 	const { jobId } = useParams({ strict: false }) as { jobId: string };
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
+	const { t } = useI18n();
 	const [showPlan, setShowPlan] = useState(false);
 
 	const job = useQuery<ApplyJob>({
@@ -162,60 +168,68 @@ export function ApplyJobDetailPage() {
 	const ops: OperationResult[] =
 		(j as unknown as { operations?: OperationResult[] })?.operations ?? [];
 
+	const statusMap: Record<string, string> = {
+		succeeded: t("applyJob.status.succeeded"),
+		failed: t("applyJob.status.failed"),
+		running: t("applyJob.status.running"),
+		pending: t("applyJob.status.pending"),
+		rolled_back: t("applyJob.status.rolled_back"),
+	};
+
 	return (
 		<>
 			<div className="card">
 				<p>
 					<Link to="/apply" className="muted">
-						← Back to apply jobs
+						← {t("applyJob.backToApplyJobs")}
 					</Link>
 				</p>
-				<h2>Apply job {jobId.slice(0, 8)}</h2>
+				<h2>{t("applyJob.title", { jobId: jobId.slice(0, 8) })}</h2>
 				{job.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : job.isError ? (
 					<FormMessage>
 						{job.error instanceof ApiError
 							? job.error.message
-							: "Failed to load job"}
+							: t("applyJob.error.loadJob")}
 					</FormMessage>
 				) : j ? (
 					<>
 						<p>
-							<strong>Status:</strong>{" "}
+							<strong>{t("common.status")}:</strong>{" "}
 							<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
-								{j.status}
+								{statusMap[j.status] ?? j.status}
 							</Badge>
 						</p>
 						<p>
-							<strong>Revision:</strong>{" "}
+							<strong>{t("applyJob.revision")}:</strong>{" "}
 							<span className="mono">
 								{j.baseRevision} → {j.desiredRevision}
 							</span>
 						</p>
 						<p>
-							<strong>Trigger:</strong>{" "}
+							<strong>{t("applyJob.trigger")}:</strong>{" "}
 							<span className="muted">{j.trigger}</span>
 						</p>
 						{j.actorId ? (
 							<p>
-								<strong>Actor:</strong>{" "}
+								<strong>{t("applyJob.actor")}:</strong>{" "}
 								<span className="muted">{j.actorId}</span>
 							</p>
 						) : null}
 						<p>
-							<strong>Created:</strong>{" "}
+							<strong>{t("common.created")}:</strong>{" "}
 							<span className="muted">{fmtTime(j.createdAt)}</span>
 						</p>
 						{j.startedAt ? (
 							<p>
-								<strong>Started:</strong>{" "}
+								<strong>{t("applyJob.started")}:</strong>{" "}
 								<span className="muted">{fmtTime(j.startedAt)}</span>
 							</p>
 						) : null}
 						{j.finishedAt ? (
 							<p>
-								<strong>Finished:</strong>{" "}
+								<strong>{t("applyJob.finished")}:</strong>{" "}
 								<span className="muted">{fmtTime(j.finishedAt)}</span>
 							</p>
 						) : null}
@@ -231,20 +245,20 @@ export function ApplyJobDetailPage() {
 								disabled={retry.isPending}
 								onClick={() => retry.mutate()}
 							>
-								{retry.isPending ? "Retrying…" : "Retry this revision"}
+								{retry.isPending
+									? t("applyJob.retrying")
+									: t("applyJob.retryRevision")}
 							</Button>
 						) : null}
 						{retry.isError ? (
 							<FormMessage>
 								{retry.error instanceof ApiError
 									? retry.error.message
-									: "Retry failed"}
+									: t("applyJob.retryFailed")}
 							</FormMessage>
 						) : null}
 						{retry.isSuccess ? (
-							<p className="muted">
-								Retry queued — the job will re-render the pinned revision.
-							</p>
+							<p className="muted">{t("applyJob.retryQueued")}</p>
 						) : null}
 					</>
 				) : null}
@@ -253,14 +267,14 @@ export function ApplyJobDetailPage() {
 			{/* S5: operation breakdown for this job */}
 			{ops.length > 0 ? (
 				<div className="card">
-					<h2 style={{ fontSize: 15 }}>Operations</h2>
+					<h2 style={{ fontSize: 15 }}>{t("applyJob.operations")}</h2>
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Type</TableHead>
-								<TableHead>Target</TableHead>
-								<TableHead>Result</TableHead>
-								<TableHead>Detail</TableHead>
+								<TableHead>{t("applyJob.type")}</TableHead>
+								<TableHead>{t("applyJob.target")}</TableHead>
+								<TableHead>{t("applyJob.result")}</TableHead>
+								<TableHead>{t("applyJob.detail")}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -271,7 +285,9 @@ export function ApplyJobDetailPage() {
 									<TableCell className="mono" style={{ fontSize: 12 }}>
 										{op.target ?? "—"}
 									</TableCell>
-									<TableCell>{okBadge(op.success)}</TableCell>
+									<TableCell>
+										<OkBadge ok={op.success} />
+									</TableCell>
 									<TableCell className="muted" style={{ maxWidth: 360 }}>
 										{op.detail ?? ""}
 									</TableCell>
@@ -285,23 +301,30 @@ export function ApplyJobDetailPage() {
 			{/* S5: rendered plan (on demand) */}
 			<div className="card">
 				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-					<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>Rendered plan</h2>
+					<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>
+						{t("applyJob.renderedPlan")}
+					</h2>
 					<Button onClick={() => setShowPlan((v) => !v)}>
-						{showPlan ? "Hide" : "Show plan"}
+						{showPlan ? t("applyJob.hide") : t("applyJob.showPlan")}
 					</Button>
 				</div>
 				{showPlan ? (
 					plan.isLoading ? (
-						<p className="muted">Loading plan…</p>
+						<p className="muted">{t("applyJob.loadingPlan")}</p>
 					) : plan.isError ? (
-						<FormMessage>Failed to load plan</FormMessage>
+						<FormMessage>{t("applyJob.error.loadPlan")}</FormMessage>
 					) : plan.data ? (
 						<>
 							<p>
-								{okBadge(plan.data.valid)}{" "}
+								<OkBadge ok={plan.data.valid} />{" "}
 								<span className="muted">
-									{plan.data.configs?.length ?? 0} config(s) ·{" "}
-									{plan.data.actions?.length ?? 0} action(s)
+									{t("applyJob.configs", {
+										n: plan.data.configs?.length ?? 0,
+									})}{" "}
+									·{" "}
+									{t("applyJob.actions", {
+										n: plan.data.actions?.length ?? 0,
+									})}
 								</span>
 							</p>
 							{plan.data.errors && plan.data.errors.length > 0 ? (
@@ -327,12 +350,12 @@ export function ApplyJobDetailPage() {
 									<Table>
 										<TableHeader>
 											<TableRow>
-												<TableHead>Type</TableHead>
-												<TableHead>Source</TableHead>
-												<TableHead>Destination</TableHead>
-												<TableHead>Unit</TableHead>
-												<TableHead>Risk</TableHead>
-												<TableHead>Rollback</TableHead>
+												<TableHead>{t("applyJob.type")}</TableHead>
+												<TableHead>{t("applyJob.source")}</TableHead>
+												<TableHead>{t("applyJob.destination")}</TableHead>
+												<TableHead>{t("applyJob.unit")}</TableHead>
+												<TableHead>{t("applyJob.risk")}</TableHead>
+												<TableHead>{t("applyJob.rollback")}</TableHead>
 											</TableRow>
 										</TableHeader>
 										<TableBody>
@@ -350,34 +373,39 @@ export function ApplyJobDetailPage() {
 
 			{/* S5: legacy apply history with full validation/service/health/rollback */}
 			<div className="card">
-				<h2 style={{ fontSize: 15 }}>Apply history (legacy)</h2>
+				<h2 style={{ fontSize: 15 }}>{t("applyJob.historyTitle")}</h2>
 				{history.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : historyItems.length === 0 ? (
-					<p className="muted">No history entries.</p>
+					<p className="muted">{t("applyJob.historyEmpty")}</p>
 				) : (
 					historyItems.map((h) => (
 						<details key={h.id} style={{ marginBottom: 8 }}>
 							<summary style={{ cursor: "pointer" }}>
-								{okBadge(h.success)}{" "}
+								<OkBadge ok={h.success} />{" "}
 								<span className="muted">
 									{new Date(h.timestamp).toLocaleString()} · {h.stage}
-									{h.rolledBack ? " · rolled back" : ""}
+									{h.rolledBack ? ` · ${t("applyJob.rolledBack")}` : ""}
 								</span>
 							</summary>
 							<div style={{ paddingLeft: 16, marginTop: 8 }}>
 								<p className="muted" style={{ fontSize: 13 }}>
-									applied {String(h.applied)} · live {String(h.liveApplied)} ·
-									services {String(h.servicesApplied)}
+									{t("applyJob.historySummary", {
+										applied: String(h.applied),
+										live: String(h.liveApplied),
+										services: String(h.servicesApplied),
+									})}
 								</p>
 								{h.validations && h.validations.length > 0 ? (
 									<>
-										<strong style={{ fontSize: 13 }}>Validations</strong>
+										<strong style={{ fontSize: 13 }}>
+											{t("applyJob.validations")}
+										</strong>
 										<ul>
 											{h.validations.map((v, i) => (
 												// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 												<li key={`${v.name ?? v.config ?? ""}-${i}`}>
-													{okBadge(v.valid)}{" "}
+													<OkBadge ok={v.valid} />{" "}
 													<span className="mono" style={{ fontSize: 12 }}>
 														{v.name ?? v.config}
 													</span>{" "}
@@ -393,14 +421,16 @@ export function ApplyJobDetailPage() {
 								) : null}
 								{h.serviceActions && h.serviceActions.length > 0 ? (
 									<>
-										<strong style={{ fontSize: 13 }}>Service actions</strong>
+										<strong style={{ fontSize: 13 }}>
+											{t("applyJob.serviceActions")}
+										</strong>
 										<ul>
 											{h.serviceActions.map((a, i) => (
 												<li
 													// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 													key={`${Array.isArray(a.command) ? a.command.join(" ") : a.command}-${i}`}
 												>
-													{okBadge(a.success)}{" "}
+													<OkBadge ok={a.success} />{" "}
 													<span className="mono" style={{ fontSize: 12 }}>
 														{Array.isArray(a.command)
 															? a.command.join(" ")
@@ -418,11 +448,13 @@ export function ApplyJobDetailPage() {
 								) : null}
 								{h.healthChecks && h.healthChecks.length > 0 ? (
 									<>
-										<strong style={{ fontSize: 13 }}>Health checks</strong>
+										<strong style={{ fontSize: 13 }}>
+											{t("applyJob.healthChecks")}
+										</strong>
 										<ul>
 											{h.healthChecks.map((hc) => (
 												<li key={hc.name}>
-													{okBadge(hc.healthy)}{" "}
+													<OkBadge ok={hc.healthy} />{" "}
 													<span className="mono" style={{ fontSize: 12 }}>
 														{hc.name}
 													</span>{" "}
@@ -438,14 +470,16 @@ export function ApplyJobDetailPage() {
 								) : null}
 								{h.rollbackActions && h.rollbackActions.length > 0 ? (
 									<>
-										<strong style={{ fontSize: 13 }}>Rollback actions</strong>
+										<strong style={{ fontSize: 13 }}>
+											{t("applyJob.rollbackActions")}
+										</strong>
 										<ul>
 											{h.rollbackActions.map((a, i) => (
 												<li
 													// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 													key={`rb-${Array.isArray(a.command) ? a.command.join(" ") : a.command}-${i}`}
 												>
-													{okBadge(a.success)}{" "}
+													<OkBadge ok={a.success} />{" "}
 													<span className="mono" style={{ fontSize: 12 }}>
 														{Array.isArray(a.command)
 															? a.command.join(" ")

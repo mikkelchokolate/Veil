@@ -41,6 +41,7 @@ import {
 	TableRow,
 } from "../components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -57,21 +58,27 @@ interface MutationFeedback {
 
 /** S3: client edit form — RHF + Zod. quotaBytes is kept as a decimal string in
  * the form and converted with integer parsing (never Number() on raw bytes)
- * to avoid float precision loss on large quotas. */
-const editSchema = z.object({
-	name: z.string().min(1, "name is required"),
-	email: z.string().email("invalid email").or(z.literal("")),
-	enabled: z.boolean(),
-	quotaBytes: z
-		.string()
-		.refine(
-			(v) => v === "" || /^\d+$/.test(v),
-			"must be a whole number of bytes",
-		),
-	expiresAt: z.string(),
-	notes: z.string(),
-});
-type EditValues = z.infer<typeof editSchema>;
+ * to avoid float precision loss on large quotas. Built per-render so the
+ * validation messages follow the active locale. */
+function buildEditSchema(t: (key: string) => string) {
+	return z.object({
+		name: z.string().min(1, t("clientDetail.validation.nameRequired")),
+		email: z
+			.string()
+			.email(t("clientDetail.validation.invalidEmail"))
+			.or(z.literal("")),
+		enabled: z.boolean(),
+		quotaBytes: z
+			.string()
+			.refine(
+				(v) => v === "" || /^\d+$/.test(v),
+				t("clientDetail.validation.wholeBytes"),
+			),
+		expiresAt: z.string(),
+		notes: z.string(),
+	});
+}
+type EditValues = z.infer<ReturnType<typeof buildEditSchema>>;
 
 interface InboundOption {
 	name: string;
@@ -99,6 +106,7 @@ export function ClientDetailPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
 	const [attachInbound, setAttachInbound] = useState("");
+	const { t } = useI18n();
 
 	// Clear one-time revealed credentials on unmount/navigation.
 	useEffect(() => () => setRevealed({}), []);
@@ -134,7 +142,7 @@ export function ClientDetailPage() {
 
 	// S3: edit form (RHF + Zod), populated from the loaded client.
 	const form = useForm<EditValues>({
-		resolver: zodResolver(editSchema),
+		resolver: zodResolver(buildEditSchema(t)),
 		defaultValues: {
 			name: "",
 			email: "",
@@ -195,7 +203,9 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Save failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.save"),
+			),
 	});
 
 	const enableToggle = useMutation({
@@ -218,7 +228,9 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Update failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.update"),
+			),
 	});
 
 	const remove = useMutation({
@@ -231,7 +243,9 @@ export function ClientDetailPage() {
 			void navigate({ to: "/clients" });
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Delete failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.delete"),
+			),
 	});
 
 	const rotate = useMutation({
@@ -256,7 +270,9 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Rotate failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.rotate"),
+			),
 	});
 
 	const toggleBinding = useMutation({
@@ -273,7 +289,9 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Update failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.update"),
+			),
 	});
 
 	const attach = useMutation({
@@ -288,7 +306,9 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Attach failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.attach"),
+			),
 	});
 
 	const detach = useMutation({
@@ -305,13 +325,15 @@ export function ClientDetailPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Detach failed"),
+			setError(
+				err instanceof ApiError ? err.message : t("clientDetail.error.detach"),
+			),
 	});
 
 	if (client.isLoading) {
 		return (
 			<div className="card">
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			</div>
 		);
 	}
@@ -321,7 +343,7 @@ export function ClientDetailPage() {
 				<p className="form-error">
 					{client.error instanceof ApiError
 						? client.error.message
-						: "Failed to load client"}
+						: t("clientDetail.error.load")}
 				</p>
 			</div>
 		);
@@ -331,11 +353,11 @@ export function ClientDetailPage() {
 	const boundInboundIds = new Set((c.bindings ?? []).map((b) => b.inboundId));
 	const attachable = inboundList.filter((ib) => !boundInboundIds.has(ib.name));
 	const tabs: { id: Tab; label: string }[] = [
-		{ id: "overview", label: "Overview" },
-		{ id: "access", label: "Access" },
-		{ id: "subscription", label: "Subscription" },
-		{ id: "traffic", label: "Traffic" },
-		{ id: "audit", label: "Audit" },
+		{ id: "overview", label: t("clientDetail.tab.overview") },
+		{ id: "access", label: t("clientDetail.tab.access") },
+		{ id: "subscription", label: t("clientDetail.tab.subscription") },
+		{ id: "traffic", label: t("nav.traffic") },
+		{ id: "audit", label: t("clientDetail.tab.audit") },
 	];
 
 	return (
@@ -350,11 +372,13 @@ export function ClientDetailPage() {
 								disabled={enableToggle.isPending}
 								onClick={() => enableToggle.mutate()}
 							>
-								{c.enabled ? "Disable client" : "Enable client"}
+								{c.enabled
+									? t("clientDetail.disableClient")
+									: t("clientDetail.enableClient")}
 							</Button>
 							<AlertDialog>
 								<AlertDialogTrigger asChild>
-									<Button variant="danger">Delete</Button>
+									<Button variant="danger">{t("common.delete")}</Button>
 								</AlertDialogTrigger>
 								<AlertDialogContent>
 									<AlertDialogHeader>
@@ -367,7 +391,7 @@ export function ClientDetailPage() {
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<AlertDialogFooter>
-										<AlertDialogCancel>Cancel</AlertDialogCancel>
+										<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 										<AlertDialogAction
 											disabled={remove.isPending}
 											onClick={() => remove.mutate()}
@@ -409,7 +433,9 @@ export function ClientDetailPage() {
 						}}
 					>
 						<Badge variant={feedback.success === false ? "danger" : "success"}>
-							{feedback.success === false ? "apply failed" : "saved"}
+							{feedback.success === false
+								? t("clientDetail.feedback.applyFailed")
+								: t("clientDetail.feedback.saved")}
 						</Badge>
 						{feedback.revision ? (
 							<FormDescription style={{ fontSize: 13 }}>
@@ -420,7 +446,10 @@ export function ClientDetailPage() {
 						) : null}
 						{feedback.applyJob?.id ? (
 							<FormDescription className="mono" style={{ fontSize: 12 }}>
-								job {feedback.applyJob.id} ({feedback.applyJob.status})
+								{t("clientDetail.feedback.job", {
+									id: feedback.applyJob.id,
+									status: feedback.applyJob.status ?? "",
+								})}
 							</FormDescription>
 						) : null}
 						<Button
@@ -436,19 +465,21 @@ export function ClientDetailPage() {
 
 			{tab === "overview" ? (
 				<div className="card">
-					<h2>Overview</h2>
+					<h2>{t("clientDetail.tab.overview")}</h2>
 					<p>
-						<strong>Status:</strong> {c.status}
+						<strong>{t("common.status")}:</strong> {c.status}
 					</p>
 					<p>
-						<strong>Quota:</strong>{" "}
-						{c.quotaBytes != null ? fmtBytes(c.quotaBytes) : "unlimited"}
+						<strong>{t("clientDetail.quota")}:</strong>{" "}
+						{c.quotaBytes != null
+							? fmtBytes(c.quotaBytes)
+							: t("clientDetail.unlimited")}
 					</p>
 					<p>
-						<strong>Expires:</strong>{" "}
+						<strong>{t("clientDetail.expires")}:</strong>{" "}
 						{c.expiresAt
 							? new Date(c.expiresAt * 1000).toLocaleString()
-							: "never"}
+							: t("clientDetail.never")}
 					</p>
 
 					{isAdmin ? (
@@ -456,14 +487,14 @@ export function ClientDetailPage() {
 							onSubmit={form.handleSubmit((v) => save.mutate(v))}
 							style={{ marginTop: 16, maxWidth: 480 }}
 						>
-							<h2 style={{ fontSize: 14 }}>Edit</h2>
+							<h2 style={{ fontSize: 14 }}>{t("common.edit")}</h2>
 							<FormItem>
-								<Label htmlFor="cd-name">Name</Label>
+								<Label htmlFor="cd-name">{t("common.name")}</Label>
 								<Input id="cd-name" {...form.register("name")} />
 								<FormMessage>{form.formState.errors.name?.message}</FormMessage>
 							</FormItem>
 							<FormItem>
-								<Label htmlFor="cd-email">Email</Label>
+								<Label htmlFor="cd-email">{t("clientDetail.email")}</Label>
 								<Input id="cd-email" type="email" {...form.register("email")} />
 								<FormMessage>
 									{form.formState.errors.email?.message}
@@ -483,7 +514,7 @@ export function ClientDetailPage() {
 								</FormMessage>
 							</FormItem>
 							<FormItem>
-								<Label htmlFor="cd-exp">Expiry date</Label>
+								<Label htmlFor="cd-exp">{t("clientDetail.expiryDate")}</Label>
 								<Input
 									id="cd-exp"
 									type="date"
@@ -491,7 +522,7 @@ export function ClientDetailPage() {
 								/>
 							</FormItem>
 							<FormItem>
-								<Label htmlFor="cd-notes">Notes</Label>
+								<Label htmlFor="cd-notes">{t("clientDetail.notes")}</Label>
 								<Textarea id="cd-notes" {...form.register("notes")} />
 							</FormItem>
 							<Label
@@ -503,14 +534,16 @@ export function ClientDetailPage() {
 								}}
 							>
 								<input type="checkbox" {...form.register("enabled")} />
-								<span>Enabled</span>
+								<span>{t("common.enabled")}</span>
 							</Label>
 							<Button
 								type="submit"
 								variant="primary"
 								disabled={save.isPending || !form.formState.isDirty}
 							>
-								{save.isPending ? "Saving…" : "Save changes"}
+								{save.isPending
+									? t("clientDetail.saving")
+									: t("clientDetail.saveChanges")}
 							</Button>
 						</form>
 					) : null}
@@ -519,9 +552,9 @@ export function ClientDetailPage() {
 
 			{tab === "access" ? (
 				<div className="card">
-					<h2>Bindings & credentials</h2>
+					<h2>{t("clientDetail.bindingsTitle")}</h2>
 					{(c.bindings ?? []).length === 0 ? (
-						<p className="muted">No bindings.</p>
+						<p className="muted">{t("clientDetail.noBindings")}</p>
 					) : (
 						(c.bindings ?? []).map((b) => (
 							<div
@@ -543,7 +576,9 @@ export function ClientDetailPage() {
 								>
 									<strong>{b.inboundId}</strong>
 									<Badge variant={b.enabled ? "success" : "default"}>
-										{b.enabled ? "enabled" : "disabled"}
+										{b.enabled
+											? t("common.enabled").toLowerCase()
+											: t("common.disabled").toLowerCase()}
 									</Badge>
 									{b.capability?.protocol ? (
 										<FormDescription style={{ fontSize: 12 }}>
@@ -558,7 +593,7 @@ export function ClientDetailPage() {
 												disabled={toggleBinding.isPending}
 												onClick={() => toggleBinding.mutate(b)}
 											>
-												{b.enabled ? "Disable" : "Enable"}
+												{b.enabled ? t("common.disable") : t("common.enable")}
 											</Button>
 											<Button
 												variant="default"
@@ -589,7 +624,7 @@ export function ClientDetailPage() {
 								{revealed[b.id] ? (
 									<div style={{ marginTop: 8 }}>
 										<FormDescription style={{ fontSize: 12 }}>
-											New credential (copy now — shown once):
+											{t("clientDetail.newCredential")}
 										</FormDescription>
 										<code className="mono">{revealed[b.id]}</code>
 									</div>
@@ -604,9 +639,9 @@ export function ClientDetailPage() {
 								style={{ maxWidth: 240 }}
 								value={attachInbound}
 								onChange={(e) => setAttachInbound(e.target.value)}
-								aria-label="attach inbound"
+								aria-label={t("clientDetail.attachInboundAria")}
 							>
-								<option value="">Attach inbound…</option>
+								<option value="">{t("clientDetail.attachInbound")}</option>
 								{attachable.map((ib) => (
 									<option key={ib.name} value={ib.name}>
 										{ib.name} ({ib.protocol})
@@ -633,22 +668,22 @@ export function ClientDetailPage() {
 
 			{tab === "audit" ? (
 				<div className="card">
-					<h2>Audit</h2>
+					<h2>{t("clientDetail.tab.audit")}</h2>
 					{audit.isLoading ? (
-						<p className="muted">Loading…</p>
+						<p className="muted">{t("common.loading")}</p>
 					) : audit.isError ? (
-						<p className="muted">Audit log unavailable for this client.</p>
+						<p className="muted">{t("clientDetail.auditUnavailable")}</p>
 					) : auditItems.length === 0 ? (
-						<p className="muted">No audit entries.</p>
+						<p className="muted">{t("clientDetail.noAuditEntries")}</p>
 					) : (
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>When</TableHead>
-									<TableHead>Actor</TableHead>
-									<TableHead>Action</TableHead>
-									<TableHead>Result</TableHead>
-									<TableHead>Details</TableHead>
+									<TableHead>{t("clientDetail.auditWhen")}</TableHead>
+									<TableHead>{t("clientDetail.auditActor")}</TableHead>
+									<TableHead>{t("clientDetail.auditAction")}</TableHead>
+									<TableHead>{t("clientDetail.auditResult")}</TableHead>
+									<TableHead>{t("common.details")}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -663,7 +698,9 @@ export function ClientDetailPage() {
 											<Badge
 												variant={a.success === false ? "danger" : "success"}
 											>
-												{a.success === false ? "failed" : "ok"}
+												{a.success === false
+													? t("clientDetail.auditFailed")
+													: t("clientDetail.auditOk")}
 											</Badge>
 										</TableCell>
 										<TableCell className="muted">{a.details ?? ""}</TableCell>

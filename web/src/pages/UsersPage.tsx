@@ -27,6 +27,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 type PanelUser = UserResponse;
 
@@ -45,6 +46,7 @@ interface SessionInfo {
 /** S4: full panel user management — create, edit role/password, delete (with
  * confirm), and active-session listing + revocation. */
 export function UsersPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const { session } = useAuth();
 	const qc = useQueryClient();
@@ -82,11 +84,11 @@ export function UsersPage() {
 			setUsername("");
 			setPassword("");
 			setError(null);
-			setNotice(`User ${username} created.`);
+			setNotice(t("users.createdNotice", { name: username }));
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Create failed"),
+			setError(err instanceof ApiError ? err.message : t("users.error.create")),
 	});
 
 	const update = useMutation({
@@ -106,11 +108,11 @@ export function UsersPage() {
 			setEditing(null);
 			setEditPassword("");
 			setError(null);
-			setNotice(`User ${args.name} updated.`);
+			setNotice(t("users.updatedNotice", { name: args.name }));
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Update failed"),
+			setError(err instanceof ApiError ? err.message : t("users.error.update")),
 	});
 
 	const remove = useMutation({
@@ -119,11 +121,11 @@ export function UsersPage() {
 		onSuccess: (_d, name) => {
 			setConfirmDelete(null);
 			setError(null);
-			setNotice(`User ${name} deleted.`);
+			setNotice(t("users.deletedNotice", { name }));
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Delete failed"),
+			setError(err instanceof ApiError ? err.message : t("users.error.delete")),
 	});
 
 	const revoke = useMutation({
@@ -137,7 +139,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : "Revoke failed"),
+			setError(err instanceof ApiError ? err.message : t("users.error.revoke")),
 	});
 
 	function onSubmit(e: FormEvent) {
@@ -148,8 +150,8 @@ export function UsersPage() {
 	if (!isAdmin) {
 		return (
 			<div className="card">
-				<h2>Users</h2>
-				<p className="muted">User management requires the admin role.</p>
+				<h2>{t("users.title")}</h2>
+				<p className="muted">{t("users.adminRequired")}</p>
 			</div>
 		);
 	}
@@ -157,19 +159,19 @@ export function UsersPage() {
 	return (
 		<>
 			<div className="card">
-				<h2>Panel users</h2>
+				<h2>{t("users.panelUsers")}</h2>
 				{notice ? <p className="muted">{notice}</p> : null}
 				{error ? <FormMessage>{error}</FormMessage> : null}
 				{users.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Username</TableHead>
-								<TableHead>Role</TableHead>
-								<TableHead>Locale</TableHead>
-								<TableHead>Actions</TableHead>
+								<TableHead>{t("users.username")}</TableHead>
+								<TableHead>{t("users.role")}</TableHead>
+								<TableHead>{t("users.locale")}</TableHead>
+								<TableHead>{t("common.actions")}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -178,12 +180,12 @@ export function UsersPage() {
 									<TableCell>
 										{u.username}
 										{session?.username === u.username ? (
-											<span className="muted"> (you)</span>
+											<span className="muted">{t("users.you")}</span>
 										) : null}
 									</TableCell>
 									<TableCell>
 										<Badge variant={u.role === "admin" ? "success" : "default"}>
-											{u.role}
+											{t(`users.role.${u.role}`)}
 										</Badge>
 									</TableCell>
 									<TableCell className="muted">{u.locale ?? "en"}</TableCell>
@@ -199,7 +201,7 @@ export function UsersPage() {
 													setEditPassword("");
 												}}
 											>
-												Edit
+												{t("common.edit")}
 											</Button>
 											{session?.username !== u.username ? (
 												<Button
@@ -207,7 +209,7 @@ export function UsersPage() {
 													variant="danger"
 													onClick={() => setConfirmDelete(u.username)}
 												>
-													Delete
+													{t("common.delete")}
 												</Button>
 											) : null}
 										</div>
@@ -235,27 +237,31 @@ export function UsersPage() {
 													onChange={(e) =>
 														setEditRole(e.target.value as "admin" | "viewer")
 													}
-													aria-label="role"
+													aria-label={t("users.role")}
 												>
-													<option value="viewer">viewer</option>
-													<option value="admin">admin</option>
+													<option value="viewer">
+														{t("users.role.viewer")}
+													</option>
+													<option value="admin">{t("users.role.admin")}</option>
 												</Select>
 												<Input
 													style={{ maxWidth: 180 }}
 													type="password"
-													placeholder="New password (optional)"
+													placeholder={t("users.newPasswordOptional")}
 													value={editPassword}
 													onChange={(e) => setEditPassword(e.target.value)}
-													aria-label="new password"
+													aria-label={t("users.newPassword")}
 												/>
 												<Button
 													type="submit"
 													variant="primary"
 													disabled={update.isPending}
 												>
-													Save
+													{t("common.save")}
 												</Button>
-												<Button onClick={() => setEditing(null)}>Cancel</Button>
+												<Button onClick={() => setEditing(null)}>
+													{t("common.cancel")}
+												</Button>
 											</form>
 										) : null}
 									</TableCell>
@@ -267,10 +273,10 @@ export function UsersPage() {
 			</div>
 
 			<div className="card">
-				<h2>Create user</h2>
+				<h2>{t("users.createUser")}</h2>
 				<form onSubmit={onSubmit}>
 					<FormItem>
-						<Label htmlFor="nu-username">Username</Label>
+						<Label htmlFor="nu-username">{t("auth.username")}</Label>
 						<Input
 							id="nu-username"
 							value={username}
@@ -279,7 +285,7 @@ export function UsersPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="nu-password">Password</Label>
+						<Label htmlFor="nu-password">{t("auth.password")}</Label>
 						<Input
 							id="nu-password"
 							type="password"
@@ -289,37 +295,37 @@ export function UsersPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="nu-role">Role</Label>
+						<Label htmlFor="nu-role">{t("users.role")}</Label>
 						<Select
 							id="nu-role"
 							value={role}
 							onChange={(e) => setRole(e.target.value as "admin" | "viewer")}
 						>
-							<option value="viewer">viewer (read-only)</option>
-							<option value="admin">admin</option>
+							<option value="viewer">{t("users.role.viewerReadOnly")}</option>
+							<option value="admin">{t("users.role.admin")}</option>
 						</Select>
 					</FormItem>
 					<Button type="submit" variant="primary" disabled={create.isPending}>
-						{create.isPending ? "Creating…" : "Create user"}
+						{create.isPending ? t("users.creating") : t("users.createUser")}
 					</Button>
 				</form>
 			</div>
 
 			<div className="card">
-				<h2>Active sessions</h2>
+				<h2>{t("users.activeSessions")}</h2>
 				{sessions.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : (sessions.data ?? []).length === 0 ? (
-					<p className="muted">No active sessions.</p>
+					<p className="muted">{t("users.noActiveSessions")}</p>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>User</TableHead>
-								<TableHead>Role</TableHead>
-								<TableHead>Last seen</TableHead>
-								<TableHead>Expires</TableHead>
-								<TableHead>Agent</TableHead>
+								<TableHead>{t("users.sessionUser")}</TableHead>
+								<TableHead>{t("users.role")}</TableHead>
+								<TableHead>{t("users.lastSeen")}</TableHead>
+								<TableHead>{t("users.expires")}</TableHead>
+								<TableHead>{t("users.agent")}</TableHead>
 								<TableHead />
 							</TableRow>
 						</TableHeader>
@@ -328,9 +334,13 @@ export function UsersPage() {
 								<TableRow key={s.id}>
 									<TableCell>
 										{s.username}
-										{s.current ? <span className="muted"> (this)</span> : null}
+										{s.current ? (
+											<span className="muted">{t("users.thisSession")}</span>
+										) : null}
 									</TableCell>
-									<TableCell className="muted">{s.role}</TableCell>
+									<TableCell className="muted">
+										{t(`users.role.${s.role}`)}
+									</TableCell>
 									<TableCell className="muted">
 										{new Date(s.lastSeenAt).toLocaleString()}
 									</TableCell>
@@ -354,7 +364,7 @@ export function UsersPage() {
 												disabled={revoke.isPending}
 												onClick={() => revoke.mutate(s.id)}
 											>
-												Revoke
+												{t("users.revoke")}
 											</Button>
 										) : null}
 									</TableCell>
@@ -373,14 +383,15 @@ export function UsersPage() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete user?</AlertDialogTitle>
+						<AlertDialogTitle>{t("users.deleteDialogTitle")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							Deleting <span className="mono">{confirmDelete}</span> removes the
-							account and revokes its sessions. This cannot be undone.
+							{t("users.deleteDialogDescription", {
+								name: confirmDelete ?? "",
+							})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							disabled={remove.isPending}
 							onClick={(e) => {
@@ -388,7 +399,9 @@ export function UsersPage() {
 								if (confirmDelete) remove.mutate(confirmDelete);
 							}}
 						>
-							{remove.isPending ? "Deleting…" : "Confirm delete"}
+							{remove.isPending
+								? t("users.deleting")
+								: t("users.confirmDelete")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

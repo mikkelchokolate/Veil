@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/fetcher";
+import { useI18n } from "../i18n/I18nContext";
 
 export interface ApplyErrorView {
 	code?: string;
@@ -24,28 +25,35 @@ export function useApplyState() {
 	});
 }
 
-const STATE_LABEL: Record<string, { label: string; cls: string }> = {
-	synced: { label: "Synced", cls: "badge-success" },
-	pending: { label: "Pending", cls: "badge-warning" },
-	applying: { label: "Applying", cls: "badge-warning" },
-	failed: { label: "Apply failed", cls: "badge-danger" },
-	rolling_back: { label: "Rolling back", cls: "badge-warning" },
-	rolled_back: { label: "Rolled back", cls: "badge-warning" },
-	degraded: { label: "Degraded", cls: "badge-danger" },
+const STATE_CLS: Record<string, string> = {
+	synced: "badge-success",
+	pending: "badge-warning",
+	applying: "badge-warning",
+	failed: "badge-danger",
+	rolling_back: "badge-warning",
+	rolled_back: "badge-warning",
+	degraded: "badge-danger",
 };
 
 /** Global apply-status indicator shown on every authenticated page (B5). */
 export function ApplyStatusIndicator() {
+	const { t } = useI18n();
 	const { data, isError } = useApplyState();
 
 	if (isError) {
-		return <span className="badge badge-danger">apply state unavailable</span>;
+		return (
+			<span className="badge badge-danger">{t("applyState.unavailable")}</span>
+		);
 	}
 	if (!data) {
-		return <span className="badge">apply…</span>;
+		return <span className="badge">{t("applyState.loading")}</span>;
 	}
 
-	const meta = STATE_LABEL[data.state] ?? { label: data.state, cls: "" };
+	const label = t(`applyState.${data.state}`);
+	const meta = {
+		label: label === `applyState.${data.state}` ? data.state : label,
+		cls: STATE_CLS[data.state] ?? "",
+	};
 	const drift = data.desiredRevision !== data.appliedRevision;
 
 	return (

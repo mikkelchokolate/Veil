@@ -16,9 +16,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 /** Routing rules: list + create/edit/delete mutations. */
 export function RoutingPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [editing, setEditing] = useState<RoutingRule | null>(null);
@@ -91,10 +93,10 @@ export function RoutingPage() {
 		<>
 			<div className="card">
 				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-					<h2 style={{ margin: 0, flex: 1 }}>Routing rules</h2>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("routing.title")}</h2>
 					{isAdmin ? (
 						<Button variant="primary" onClick={startCreate}>
-							New rule
+							{t("routing.newRule")}
 						</Button>
 					) : null}
 				</div>
@@ -102,10 +104,14 @@ export function RoutingPage() {
 
 			{creating || editing ? (
 				<div className="card">
-					<h3>{creating ? "Create rule" : `Edit ${editing?.name}`}</h3>
+					<h3>
+						{creating
+							? t("routing.createRule")
+							: t("routing.editRule", { name: editing?.name ?? "" })}
+					</h3>
 					<div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
 						<FormItem>
-							<Label htmlFor="rule-name">Name</Label>
+							<Label htmlFor="rule-name">{t("routing.name")}</Label>
 							<Input
 								id="rule-name"
 								value={form.name}
@@ -114,7 +120,7 @@ export function RoutingPage() {
 							/>
 						</FormItem>
 						<FormItem>
-							<Label htmlFor="rule-match">Match (CIDR, domain, or geoip)</Label>
+							<Label htmlFor="rule-match">{t("routing.match")}</Label>
 							<Input
 								id="rule-match"
 								value={form.match}
@@ -122,7 +128,7 @@ export function RoutingPage() {
 							/>
 						</FormItem>
 						<FormItem>
-							<Label htmlFor="rule-outbound">Outbound</Label>
+							<Label htmlFor="rule-outbound">{t("routing.outbound")}</Label>
 							<Input
 								id="rule-outbound"
 								value={form.outbound}
@@ -142,7 +148,7 @@ export function RoutingPage() {
 										setForm({ ...form, enabled: e.target.checked })
 									}
 								/>
-								Enabled
+								{t("routing.enabled")}
 							</Label>
 						</FormItem>
 						<div style={{ display: "flex", gap: 8 }}>
@@ -160,15 +166,15 @@ export function RoutingPage() {
 									})
 								}
 							>
-								{save.isPending ? "Saving…" : "Save"}
+								{save.isPending ? t("routing.saving") : t("common.save")}
 							</Button>
-							<Button onClick={cancel}>Cancel</Button>
+							<Button onClick={cancel}>{t("common.cancel")}</Button>
 						</div>
 						{save.isError ? (
 							<FormMessage>
 								{save.error instanceof ApiError
 									? save.error.message
-									: "Save failed"}
+									: t("routing.saveFailed")}
 							</FormMessage>
 						) : null}
 					</div>
@@ -177,21 +183,21 @@ export function RoutingPage() {
 
 			<div className="card">
 				{rules.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : rules.isError ? (
 					<FormMessage>
 						{rules.error instanceof ApiError
 							? rules.error.message
-							: "Failed to load routing rules"}
+							: t("routing.loadFailed")}
 					</FormMessage>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Match</TableHead>
-								<TableHead>Outbound</TableHead>
-								<TableHead>Status</TableHead>
+								<TableHead>{t("common.name")}</TableHead>
+								<TableHead>{t("routing.match")}</TableHead>
+								<TableHead>{t("routing.outbound")}</TableHead>
+								<TableHead>{t("common.status")}</TableHead>
 								{isAdmin ? <TableHead /> : null}
 							</TableRow>
 						</TableHeader>
@@ -199,7 +205,7 @@ export function RoutingPage() {
 							{(rules.data ?? []).length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={isAdmin ? 5 : 4} className="muted">
-										No routing rules configured.
+										{t("routing.empty")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -210,13 +216,13 @@ export function RoutingPage() {
 										<TableCell className="muted">{r.outbound}</TableCell>
 										<TableCell>
 											<Badge variant={r.enabled ? "success" : "default"}>
-												{r.enabled ? "enabled" : "disabled"}
+												{r.enabled ? t("common.enabled") : t("common.disabled")}
 											</Badge>
 										</TableCell>
 										{isAdmin ? (
 											<TableCell style={{ display: "flex", gap: 4 }}>
 												<Button size="sm" onClick={() => startEdit(r)}>
-													Edit
+													{t("common.edit")}
 												</Button>
 												<Button
 													size="sm"
@@ -224,7 +230,7 @@ export function RoutingPage() {
 													disabled={del.isPending}
 													onClick={() => del.mutate(r.name)}
 												>
-													Delete
+													{t("common.delete")}
 												</Button>
 											</TableCell>
 										) : null}

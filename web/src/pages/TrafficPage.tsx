@@ -13,6 +13,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 
 interface TrafficSummary {
@@ -28,6 +29,7 @@ type TopEntry = TrafficTopEntry;
 /** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
 export function TrafficPage() {
+	const { t } = useI18n();
 	const summary = useQuery<TrafficSummary>({
 		queryKey: ["traffic", "summary"],
 		queryFn: () => apiFetch("/api/v1/traffic/summary"),
@@ -50,6 +52,9 @@ export function TrafficPage() {
 		if (!chartInstance.current) {
 			chartInstance.current = echarts.init(chartRef.current);
 		}
+		const uploadLabel = t("traffic.upload");
+		const downloadLabel = t("traffic.download");
+		const totalLabel = t("traffic.total");
 		const items = top.data?.items ?? [];
 		const option: echarts.EChartsOption = {
 			tooltip: {
@@ -63,12 +68,13 @@ export function TrafficPage() {
 					}>;
 					if (!p.length) return "";
 					const name = p[0].name;
-					const up = p.find((x) => x.seriesName === "Upload")?.value ?? 0;
-					const down = p.find((x) => x.seriesName === "Download")?.value ?? 0;
-					return `${name}<br/>Upload: ${fmtBytes(up)}<br/>Download: ${fmtBytes(down)}<br/>Total: ${fmtBytes(up + down)}`;
+					const up = p.find((x) => x.seriesName === uploadLabel)?.value ?? 0;
+					const down =
+						p.find((x) => x.seriesName === downloadLabel)?.value ?? 0;
+					return `${name}<br/>${uploadLabel}: ${fmtBytes(up)}<br/>${downloadLabel}: ${fmtBytes(down)}<br/>${totalLabel}: ${fmtBytes(up + down)}`;
 				},
 			},
-			legend: { data: ["Upload", "Download"] },
+			legend: { data: [uploadLabel, downloadLabel] },
 			grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
 			xAxis: {
 				type: "category",
@@ -81,14 +87,14 @@ export function TrafficPage() {
 			},
 			series: [
 				{
-					name: "Upload",
+					name: uploadLabel,
 					type: "bar",
 					stack: "total",
 					data: items.map((t) => t.uploadBytes ?? 0),
 					itemStyle: { color: "#3b82f6" },
 				},
 				{
-					name: "Download",
+					name: downloadLabel,
 					type: "bar",
 					stack: "total",
 					data: items.map((t) => t.downloadBytes ?? 0),
@@ -100,7 +106,7 @@ export function TrafficPage() {
 		const onResize = () => chartInstance.current?.resize();
 		window.addEventListener("resize", onResize);
 		return () => window.removeEventListener("resize", onResize);
-	}, [state, top.data]);
+	}, [state, top.data, t]);
 
 	// Cleanup on unmount.
 	useEffect(() => {
@@ -113,37 +119,33 @@ export function TrafficPage() {
 	return (
 		<>
 			<div className="card">
-				<h2>Traffic telemetry</h2>
+				<h2>{t("traffic.title")}</h2>
 				{summary.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : summary.isError ? (
-					<FormMessage>Traffic summary unavailable</FormMessage>
+					<FormMessage>{t("traffic.summaryUnavailable")}</FormMessage>
 				) : summary.data ? (
 					<>
 						<p>
-							<strong>Telemetry state:</strong>{" "}
+							<strong>{t("traffic.telemetryState")}:</strong>{" "}
 							<Badge variant={state === "collecting" ? "success" : "warning"}>
 								{state}
 							</Badge>
 						</p>
 						{state !== "collecting" ? (
-							<p className="muted">
-								No traffic source is feeding counters yet. Usage figures below
-								are not real telemetry — configure a runtime traffic provider to
-								begin collecting.
-							</p>
+							<p className="muted">{t("traffic.noTrafficSource")}</p>
 						) : (
 							<>
 								<p>
-									<strong>Total upload:</strong>{" "}
+									<strong>{t("traffic.totalUpload")}:</strong>{" "}
 									{fmtBytes(summary.data.uploadBytes)}
 								</p>
 								<p>
-									<strong>Total download:</strong>{" "}
+									<strong>{t("traffic.totalDownload")}:</strong>{" "}
 									{fmtBytes(summary.data.downloadBytes)}
 								</p>
 								<p>
-									<strong>Total used:</strong>{" "}
+									<strong>{t("traffic.totalUsed")}:</strong>{" "}
 									{fmtBytes(summary.data.usedBytes)}
 								</p>
 							</>
@@ -154,11 +156,11 @@ export function TrafficPage() {
 
 			{state === "collecting" ? (
 				<div className="card">
-					<h2>Usage breakdown</h2>
+					<h2>{t("traffic.usageBreakdown")}</h2>
 					{top.isLoading ? (
-						<p className="muted">Loading…</p>
+						<p className="muted">{t("common.loading")}</p>
 					) : (top.data?.items ?? []).length === 0 ? (
-						<p className="muted">No usage recorded yet.</p>
+						<p className="muted">{t("traffic.noUsageRecorded")}</p>
 					) : (
 						<>
 							<div ref={chartRef} style={{ width: "100%", height: 320 }} />
@@ -166,10 +168,10 @@ export function TrafficPage() {
 								<Table>
 									<TableHeader>
 										<TableRow>
-											<TableHead>Client</TableHead>
-											<TableHead>Upload</TableHead>
-											<TableHead>Download</TableHead>
-											<TableHead>Total</TableHead>
+											<TableHead>{t("traffic.client")}</TableHead>
+											<TableHead>{t("traffic.upload")}</TableHead>
+											<TableHead>{t("traffic.download")}</TableHead>
+											<TableHead>{t("traffic.total")}</TableHead>
 										</TableRow>
 									</TableHeader>
 									<TableBody>

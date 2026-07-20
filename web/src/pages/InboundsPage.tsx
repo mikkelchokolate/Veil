@@ -28,6 +28,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 /** S4: mutation envelope feedback (revision/applyJob/success). */
 interface MutationFeedback {
@@ -63,6 +64,7 @@ const EMPTY: InboundForm = {
 
 export function InboundsPage() {
 	const isAdmin = useIsAdmin();
+	const { t } = useI18n();
 	const qc = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
@@ -129,7 +131,9 @@ export function InboundsPage() {
 			invalidate();
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Create failed"),
+			setError(
+				e instanceof ApiError ? e.message : t("inbounds.error.createFailed"),
+			),
 	});
 
 	const update = useMutation({
@@ -145,7 +149,9 @@ export function InboundsPage() {
 			invalidate();
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Update failed"),
+			setError(
+				e instanceof ApiError ? e.message : t("inbounds.error.updateFailed"),
+			),
 	});
 
 	const remove = useMutation({
@@ -160,7 +166,9 @@ export function InboundsPage() {
 			invalidate();
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Delete failed"),
+			setError(
+				e instanceof ApiError ? e.message : t("inbounds.error.deleteFailed"),
+			),
 	});
 
 	function startCreate() {
@@ -187,7 +195,9 @@ export function InboundsPage() {
 		creating || editing ? (
 			<div className="card">
 				<h2 style={{ fontSize: 15 }}>
-					{creating ? "New inbound" : `Edit ${editing}`}
+					{creating
+						? t("inbounds.newInbound")
+						: t("inbounds.edit", { name: editing ?? "" })}
 				</h2>
 				<div
 					style={{
@@ -198,7 +208,7 @@ export function InboundsPage() {
 					}}
 				>
 					<FormItem>
-						<Label htmlFor="ib-name">Name</Label>
+						<Label htmlFor="ib-name">{t("common.name")}</Label>
 						<Input
 							id="ib-name"
 							value={form.name}
@@ -207,7 +217,7 @@ export function InboundsPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="ib-proto">Protocol</Label>
+						<Label htmlFor="ib-proto">{t("inbounds.protocol")}</Label>
 						<Select
 							id="ib-proto"
 							value={form.protocol}
@@ -221,7 +231,7 @@ export function InboundsPage() {
 						</Select>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="ib-trans">Transport</Label>
+						<Label htmlFor="ib-trans">{t("inbounds.transport")}</Label>
 						<Select
 							id="ib-trans"
 							value={form.transport}
@@ -235,7 +245,7 @@ export function InboundsPage() {
 						</Select>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="ib-port">Port</Label>
+						<Label htmlFor="ib-port">{t("inbounds.port")}</Label>
 						<Input
 							id="ib-port"
 							inputMode="numeric"
@@ -244,7 +254,7 @@ export function InboundsPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="ib-masq">Masquerade URL</Label>
+						<Label htmlFor="ib-masq">{t("inbounds.masqueradeURL")}</Label>
 						<Input
 							id="ib-masq"
 							value={form.masqueradeURL}
@@ -254,7 +264,7 @@ export function InboundsPage() {
 						/>
 					</FormItem>
 					<FormItem>
-						<Label htmlFor="ib-fb">Fallback root</Label>
+						<Label htmlFor="ib-fb">{t("inbounds.fallbackRoot")}</Label>
 						<Input
 							id="ib-fb"
 							value={form.fallbackRoot}
@@ -265,7 +275,7 @@ export function InboundsPage() {
 					</FormItem>
 					{form.protocol === "olcrtc" ? (
 						<FormItem>
-							<Label htmlFor="ib-room">olcRTC room ID</Label>
+							<Label htmlFor="ib-room">{t("inbounds.olcrtcRoomID")}</Label>
 							<Input
 								id="ib-room"
 								value={form.olcrtcRoomID}
@@ -291,7 +301,7 @@ export function InboundsPage() {
 						checked={form.enabled}
 						onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
 					/>
-					<span>Enabled</span>
+					<span>{t("common.enabled")}</span>
 				</Label>
 				<div style={{ display: "flex", gap: 8 }}>
 					<Button
@@ -305,7 +315,7 @@ export function InboundsPage() {
 							}
 						}}
 					>
-						{creating ? "Create" : "Save"}
+						{creating ? t("common.create") : t("common.save")}
 					</Button>
 					<Button
 						onClick={() => {
@@ -314,7 +324,7 @@ export function InboundsPage() {
 							setForm(EMPTY);
 						}}
 					>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 				</div>
 			</div>
@@ -324,14 +334,14 @@ export function InboundsPage() {
 		<>
 			<div className="card">
 				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-					<h2 style={{ margin: 0, flex: 1 }}>Inbounds</h2>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("inbounds.title")}</h2>
 					{isAdmin ? (
 						<button
 							type="button"
 							className="btn btn-primary"
 							onClick={startCreate}
 						>
-							New inbound
+							{t("inbounds.newInbound")}
 						</button>
 					) : null}
 				</div>
@@ -360,18 +370,21 @@ export function InboundsPage() {
 									: "badge badge-success"
 							}
 						>
-							{feedback.success === false ? "apply failed" : "saved"}
+							{feedback.success === false
+								? t("inbounds.applyFailed")
+								: t("inbounds.saved")}
 						</span>
 						{feedback.revision ? (
 							<span className="muted" style={{ fontSize: 13 }}>
-								desired rev {feedback.revision.desired ?? "—"} · applied{" "}
-								{feedback.revision.applied ?? "—"} ·{" "}
+								{t("inbounds.desiredRev")} {feedback.revision.desired ?? "—"} ·{" "}
+								{t("inbounds.applied")} {feedback.revision.applied ?? "—"} ·{" "}
 								{feedback.revision.state ?? ""}
 							</span>
 						) : null}
 						{feedback.applyJob?.id ? (
 							<span className="muted mono" style={{ fontSize: 12 }}>
-								job {feedback.applyJob.id} ({feedback.applyJob.status})
+								{t("inbounds.job")} {feedback.applyJob.id} (
+								{feedback.applyJob.status})
 							</span>
 						) : null}
 						<button
@@ -380,7 +393,7 @@ export function InboundsPage() {
 							style={{ marginLeft: "auto" }}
 							onClick={() => setFeedback(null)}
 						>
-							Dismiss
+							{t("inbounds.dismiss")}
 						</button>
 					</div>
 				</div>
@@ -390,26 +403,26 @@ export function InboundsPage() {
 
 			<div className="card">
 				{inbounds.isLoading ? (
-					<p className="muted">Loading…</p>
+					<p className="muted">{t("common.loading")}</p>
 				) : inbounds.isError ? (
 					<FormMessage>
 						{inbounds.error instanceof ApiError
 							? inbounds.error.message
-							: "Failed to load inbounds"}
+							: t("inbounds.error.loadFailed")}
 					</FormMessage>
 				) : (inbounds.data ?? []).length === 0 ? (
-					<p className="muted">No inbounds configured.</p>
+					<p className="muted">{t("inbounds.empty")}</p>
 				) : (
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Protocol</TableHead>
-								<TableHead>Transport</TableHead>
-								<TableHead>Port</TableHead>
-								<TableHead>Status</TableHead>
-								<TableHead>Attached clients</TableHead>
-								{isAdmin ? <TableHead>Actions</TableHead> : null}
+								<TableHead>{t("common.name")}</TableHead>
+								<TableHead>{t("inbounds.protocol")}</TableHead>
+								<TableHead>{t("inbounds.transport")}</TableHead>
+								<TableHead>{t("inbounds.port")}</TableHead>
+								<TableHead>{t("common.status")}</TableHead>
+								<TableHead>{t("inbounds.attachedClients")}</TableHead>
+								{isAdmin ? <TableHead>{t("common.actions")}</TableHead> : null}
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -425,7 +438,9 @@ export function InboundsPage() {
 										<TableCell className="muted">{ib.port ?? "—"}</TableCell>
 										<TableCell>
 											<Badge variant={ib.enabled ? "success" : "default"}>
-												{ib.enabled ? "enabled" : "disabled"}
+												{ib.enabled
+													? t("common.enabled")
+													: t("common.disabled")}
 											</Badge>
 										</TableCell>
 										<TableCell>
@@ -461,7 +476,7 @@ export function InboundsPage() {
 													}}
 												>
 													<Button size="sm" onClick={() => startEdit(ib)}>
-														Edit
+														{t("common.edit")}
 													</Button>
 													<Button
 														size="sm"
@@ -480,14 +495,16 @@ export function InboundsPage() {
 															})
 														}
 													>
-														{ib.enabled ? "Disable" : "Enable"}
+														{ib.enabled
+															? t("common.disable")
+															: t("common.enable")}
 													</Button>
 													<Button
 														size="sm"
 														variant="danger"
 														onClick={() => setConfirmDelete(ib.name)}
 													>
-														Delete
+														{t("common.delete")}
 													</Button>
 												</div>
 											</TableCell>
@@ -508,14 +525,13 @@ export function InboundsPage() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete inbound?</AlertDialogTitle>
+						<AlertDialogTitle>{t("inbounds.delete.title")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							Deleting <span className="mono">{confirmDelete}</span> removes the
-							listener and detaches its clients. This cannot be undone.
+							{t("inbounds.delete.description", { name: confirmDelete ?? "" })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							disabled={remove.isPending}
 							onClick={(e) => {
@@ -523,7 +539,9 @@ export function InboundsPage() {
 								if (confirmDelete) remove.mutate(confirmDelete);
 							}}
 						>
-							{remove.isPending ? "Deleting…" : "Confirm delete"}
+							{remove.isPending
+								? t("inbounds.delete.deleting")
+								: t("inbounds.delete.confirm")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

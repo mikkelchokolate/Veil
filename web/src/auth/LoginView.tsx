@@ -1,8 +1,10 @@
 import { type FormEvent, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nContext";
 
 export function LoginView() {
 	const { login } = useAuth();
+	const { t } = useI18n();
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState<string | null>(null);
@@ -15,7 +17,7 @@ export function LoginView() {
 		try {
 			await login(username, password);
 		} catch {
-			setError("Invalid username or password.");
+			setError(t("auth.login.invalid"));
 		} finally {
 			setBusy(false);
 		}
@@ -25,9 +27,9 @@ export function LoginView() {
 		<div className="center-screen">
 			<form className="auth-card" onSubmit={onSubmit}>
 				<h1>Veil</h1>
-				<div className="subtitle">Sign in to the panel</div>
+				<div className="subtitle">{t("auth.login.subtitle")}</div>
 				<div className="form-field">
-					<label htmlFor="login-username">Username</label>
+					<label htmlFor="login-username">{t("auth.username")}</label>
 					<input
 						id="login-username"
 						className="input"
@@ -38,7 +40,7 @@ export function LoginView() {
 					/>
 				</div>
 				<div className="form-field">
-					<label htmlFor="login-password">Password</label>
+					<label htmlFor="login-password">{t("auth.password")}</label>
 					<input
 						id="login-password"
 						className="input"
@@ -60,7 +62,7 @@ export function LoginView() {
 					disabled={busy}
 					style={{ width: "100%", marginTop: 8 }}
 				>
-					{busy ? "Signing in…" : "Sign in"}
+					{busy ? t("auth.login.signingIn") : t("auth.login.signIn")}
 				</button>
 			</form>
 		</div>

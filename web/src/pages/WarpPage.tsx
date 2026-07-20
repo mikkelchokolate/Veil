@@ -5,10 +5,12 @@ import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { FormMessage } from "../components/ui/form";
+import { useI18n } from "../i18n/I18nContext";
 
 /** WARP outbound: enable/disable toggle + read-only status. Provisioning of a
  * free Cloudflare account is server-side on enable. */
 export function WarpPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 
@@ -29,7 +31,7 @@ export function WarpPage() {
 	if (warp.isLoading) {
 		return (
 			<div className="card">
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			</div>
 		);
 	}
@@ -39,7 +41,7 @@ export function WarpPage() {
 				<FormMessage>
 					{warp.error instanceof ApiError
 						? warp.error.message
-						: "WARP config unavailable"}
+						: t("warp.unavailable")}
 				</FormMessage>
 			</div>
 		);
@@ -48,28 +50,28 @@ export function WarpPage() {
 	const w = warp.data;
 	return (
 		<div className="card">
-			<h2>WARP outbound</h2>
+			<h2>{t("warp.title")}</h2>
 			<p>
-				<strong>Status:</strong>{" "}
+				<strong>{t("warp.status")}:</strong>{" "}
 				<Badge variant={w.enabled ? "success" : "default"}>
-					{w.enabled ? "enabled" : "disabled"}
+					{w.enabled ? t("common.enabled") : t("common.disabled")}
 				</Badge>
 			</p>
 			{w.endpoint ? (
 				<p>
-					<strong>Endpoint:</strong>{" "}
+					<strong>{t("warp.endpoint")}:</strong>{" "}
 					<span className="mono muted">{w.endpoint}</span>
 				</p>
 			) : null}
 			{w.localAddress ? (
 				<p>
-					<strong>Local address:</strong>{" "}
+					<strong>{t("warp.localAddress")}:</strong>{" "}
 					<span className="mono muted">{w.localAddress}</span>
 				</p>
 			) : null}
 			{w.socksListen ? (
 				<p>
-					<strong>SOCKS:</strong>{" "}
+					<strong>{t("warp.socks")}:</strong>{" "}
 					<span className="mono muted">
 						{w.socksListen}
 						{w.socksPort ? `:${w.socksPort}` : ""}
@@ -78,7 +80,8 @@ export function WarpPage() {
 			) : null}
 			{w.mtu ? (
 				<p>
-					<strong>MTU:</strong> <span className="muted">{w.mtu}</span>
+					<strong>{t("warp.mtu")}:</strong>{" "}
+					<span className="muted">{w.mtu}</span>
 				</p>
 			) : null}
 			{isAdmin ? (
@@ -88,22 +91,21 @@ export function WarpPage() {
 					onClick={() => toggle.mutate(!w.enabled)}
 				>
 					{toggle.isPending
-						? "Applying…"
+						? t("warp.applying")
 						: w.enabled
-							? "Disable WARP"
-							: "Enable WARP"}
+							? t("warp.disable")
+							: t("warp.enable")}
 				</Button>
 			) : null}
 			{toggle.isError ? (
 				<FormMessage>
 					{toggle.error instanceof ApiError
 						? toggle.error.message
-						: "Toggle failed"}
+						: t("warp.toggleFailed")}
 				</FormMessage>
 			) : null}
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-				Enabling provisions a free Cloudflare WARP account server-side; changes
-				apply on the next config apply.
+				{t("warp.provisionNotice")}
 			</p>
 		</div>
 	);

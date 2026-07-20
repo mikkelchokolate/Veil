@@ -1,9 +1,11 @@
 import QRCode from "qrcode";
 import { useEffect, useRef } from "react";
+import { useI18n } from "../i18n/I18nContext";
 
 /** Renders a subscription URL as a QR code (B8). Canvas-based so no inline
  * styles / CDN are needed (B12 CSP). */
 export function QR({ value, size = 180 }: { value: string; size?: number }) {
+	const { t } = useI18n();
 	const ref = useRef<HTMLCanvasElement>(null);
 
 	useEffect(() => {
@@ -22,7 +24,7 @@ export function QR({ value, size = 180 }: { value: string; size?: number }) {
 			ref={ref}
 			width={size}
 			height={size}
-			aria-label="subscription QR code"
+			aria-label={t("subTokens.qrAria")}
 		/>
 	);
 }

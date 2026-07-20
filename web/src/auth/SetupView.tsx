@@ -1,9 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { apiFetch } from "../api/fetcher";
+import { useI18n } from "../i18n/I18nContext";
 
 export function SetupView() {
 	const qc = useQueryClient();
+	const { t } = useI18n();
 	const [username, setUsername] = useState("admin");
 	const [password, setPassword] = useState("");
 	const [confirm, setConfirm] = useState("");
@@ -14,7 +16,7 @@ export function SetupView() {
 		e.preventDefault();
 		setError(null);
 		if (password !== confirm) {
-			setError("Passwords do not match.");
+			setError(t("auth.setup.mismatch"));
 			return;
 		}
 		setBusy(true);
@@ -25,7 +27,7 @@ export function SetupView() {
 			});
 			await qc.invalidateQueries();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Setup failed.");
+			setError(err instanceof Error ? err.message : t("auth.setup.failed"));
 		} finally {
 			setBusy(false);
 		}
@@ -34,10 +36,10 @@ export function SetupView() {
 	return (
 		<div className="center-screen">
 			<form className="auth-card" onSubmit={onSubmit}>
-				<h1>Welcome to Veil</h1>
-				<div className="subtitle">Create the initial administrator account</div>
+				<h1>{t("auth.setup.title")}</h1>
+				<div className="subtitle">{t("auth.setup.subtitle")}</div>
 				<div className="form-field">
-					<label htmlFor="setup-username">Username</label>
+					<label htmlFor="setup-username">{t("auth.username")}</label>
 					<input
 						id="setup-username"
 						className="input"
@@ -48,7 +50,7 @@ export function SetupView() {
 					/>
 				</div>
 				<div className="form-field">
-					<label htmlFor="setup-password">Password</label>
+					<label htmlFor="setup-password">{t("auth.password")}</label>
 					<input
 						id="setup-password"
 						className="input"
@@ -60,7 +62,7 @@ export function SetupView() {
 					/>
 				</div>
 				<div className="form-field">
-					<label htmlFor="setup-confirm">Confirm password</label>
+					<label htmlFor="setup-confirm">{t("auth.setup.confirm")}</label>
 					<input
 						id="setup-confirm"
 						className="input"
@@ -82,7 +84,7 @@ export function SetupView() {
 					disabled={busy}
 					style={{ width: "100%", marginTop: 8 }}
 				>
-					{busy ? "Creating…" : "Create administrator"}
+					{busy ? t("auth.setup.creating") : t("auth.setup.create")}
 				</button>
 			</form>
 		</div>

@@ -18,11 +18,13 @@ import { FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableRow } from "../components/ui/table";
+import { useI18n } from "../i18n/I18nContext";
 
 /** S4: full settings edit (every editable field) + security key rotation.
  * Fields are grouped: identity/access, protocol credentials, ACME, firewall.
  * The apply pipeline applies the result; the envelope surfaces revision/job. */
 export function SettingsPage() {
+	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [editing, setEditing] = useState(false);
@@ -37,16 +39,41 @@ export function SettingsPage() {
 	});
 	const s = settings.data;
 
+	const FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
+		{ key: "domain", label: t("settings.field.domain") },
+		{ key: "panelDomain", label: t("settings.field.panelDomain") },
+		{
+			key: "panelAccess",
+			label: t("settings.field.panelAccess"),
+			placeholder: "public | private",
+		},
+		{ key: "webBasePath", label: t("settings.field.webBasePath") },
+		{ key: "email", label: t("settings.field.email") },
+		{ key: "panelEmail", label: t("settings.field.panelEmail") },
+		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
+		{ key: "hysteria2Password", label: t("settings.field.hysteria2Password") },
+		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
+		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
+		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
+		{ key: "defaultAcmeEmail", label: t("settings.field.defaultAcmeEmail") },
+		{
+			key: "acmeChallengeMode",
+			label: t("settings.field.acmeChallengeMode"),
+			placeholder: "http-01 | dns-01",
+		},
+	];
+
 	const save = useMutation({
 		mutationFn: (patch: Record<string, unknown>) =>
 			apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
 		onSuccess: () => {
 			setEditing(false);
 			setError(null);
-			setNotice("Settings saved.");
+			setNotice(t("settings.saved"));
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 		},
-		onError: (e) => setError(e instanceof ApiError ? e.message : "Save failed"),
+		onError: (e) =>
+			setError(e instanceof ApiError ? e.message : t("settings.saveFailed")),
 	});
 
 	const rotateKey = useMutation({
@@ -58,35 +85,12 @@ export function SettingsPage() {
 		onSuccess: () => {
 			setConfirmRotate(false);
 			setError(null);
-			setNotice("State key rotated. Other sessions were revoked.");
+			setNotice(t("settings.rotated"));
 		},
-		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : "Key rotation failed"),
+		onError: (e) => {
+			setError(e instanceof ApiError ? e.message : t("settings.rotateFailed"));
+		},
 	});
-
-	const FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
-		{ key: "domain", label: "Domain" },
-		{ key: "panelDomain", label: "Panel domain" },
-		{
-			key: "panelAccess",
-			label: "Panel access",
-			placeholder: "public | private",
-		},
-		{ key: "webBasePath", label: "Web base path" },
-		{ key: "email", label: "Email" },
-		{ key: "panelEmail", label: "Panel email" },
-		{ key: "naiveUsername", label: "NaiveProxy username" },
-		{ key: "hysteria2Password", label: "hysteria2 password" },
-		{ key: "masqueradeURL", label: "Masquerade URL" },
-		{ key: "fallbackRoot", label: "Fallback root" },
-		{ key: "olcrtcRoomID", label: "olcRTC room ID" },
-		{ key: "defaultAcmeEmail", label: "Default ACME email" },
-		{
-			key: "acmeChallengeMode",
-			label: "ACME challenge mode",
-			placeholder: "http-01 | dns-01",
-		},
-	];
 
 	function startEdit() {
 		const next: Record<string, string> = {};
@@ -119,28 +123,28 @@ export function SettingsPage() {
 	}
 
 	const rows: Array<[string, string | undefined]> = [
-		["Domain", s?.domain],
-		["Mode", s?.mode],
-		["Panel listen", s?.panelListen],
-		["Panel access", s?.panelAccess],
-		["Web base path", s?.webBasePath],
-		["Email", s?.email],
+		[t("settings.field.domain"), s?.domain],
+		[t("settings.field.mode"), s?.mode],
+		[t("settings.field.panelListen"), s?.panelListen],
+		[t("settings.field.panelAccess"), s?.panelAccess],
+		[t("settings.field.webBasePath"), s?.webBasePath],
+		[t("settings.field.email"), s?.email],
 		[
-			"Panel domain",
+			t("settings.field.panelDomain"),
 			(s as Record<string, unknown> | undefined)?.panelDomain as
 				| string
 				| undefined,
 		],
-		["Masquerade URL", s?.masqueradeURL],
-		["Fallback root", s?.fallbackRoot],
+		[t("settings.field.masqueradeURL"), s?.masqueradeURL],
+		[t("settings.field.fallbackRoot"), s?.fallbackRoot],
 		[
-			"ACME email",
+			t("settings.field.acmeEmail"),
 			(s as Record<string, unknown> | undefined)?.defaultAcmeEmail as
 				| string
 				| undefined,
 		],
 		[
-			"ACME challenge",
+			t("settings.field.acmeChallenge"),
 			(s as Record<string, unknown> | undefined)?.acmeChallengeMode as
 				| string
 				| undefined,
@@ -150,7 +154,7 @@ export function SettingsPage() {
 	if (settings.isLoading) {
 		return (
 			<div className="card">
-				<p className="muted">Loading…</p>
+				<p className="muted">{t("common.loading")}</p>
 			</div>
 		);
 	}
@@ -160,7 +164,7 @@ export function SettingsPage() {
 				<FormMessage>
 					{settings.error instanceof ApiError
 						? settings.error.message
-						: "Settings unavailable"}
+						: t("settings.unavailable")}
 				</FormMessage>
 			</div>
 		);
@@ -170,9 +174,9 @@ export function SettingsPage() {
 		<>
 			<div className="card">
 				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-					<h2 style={{ margin: 0, flex: 1 }}>Settings</h2>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("settings.title")}</h2>
 					{isAdmin && !editing ? (
-						<Button onClick={startEdit}>Edit</Button>
+						<Button onClick={startEdit}>{t("common.edit")}</Button>
 					) : null}
 				</div>
 				{notice ? <p className="muted">{notice}</p> : null}
@@ -181,7 +185,7 @@ export function SettingsPage() {
 
 			{editing ? (
 				<div className="card">
-					<h2 style={{ fontSize: 15 }}>Edit settings</h2>
+					<h2 style={{ fontSize: 15 }}>{t("settings.editTitle")}</h2>
 					<div
 						style={{
 							display: "grid",
@@ -209,9 +213,11 @@ export function SettingsPage() {
 							disabled={save.isPending}
 							onClick={saveEdit}
 						>
-							{save.isPending ? "Saving…" : "Save"}
+							{save.isPending ? t("settings.saving") : t("common.save")}
 						</Button>
-						<Button onClick={() => setEditing(false)}>Cancel</Button>
+						<Button onClick={() => setEditing(false)}>
+							{t("common.cancel")}
+						</Button>
 					</div>
 				</div>
 			) : null}
@@ -230,32 +236,29 @@ export function SettingsPage() {
 					</TableBody>
 				</Table>
 				<p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-					Listen address and mode are changed through the CLI / setup flow.
-					Everything else above is editable.
+					{t("settings.readOnlyHint")}
 				</p>
 			</div>
 
 			{isAdmin ? (
 				<div className="card">
-					<h2 style={{ fontSize: 15 }}>Security</h2>
-					<p className="muted">
-						Rotate the state encryption key. This revokes every other session
-						and re-encrypts the state file.
-					</p>
+					<h2 style={{ fontSize: 15 }}>{t("settings.security")}</h2>
+					<p className="muted">{t("settings.rotateDescription")}</p>
 					<Button variant="danger" onClick={() => setConfirmRotate(true)}>
-						Rotate state key
+						{t("settings.rotate")}
 					</Button>
 					<AlertDialog open={confirmRotate} onOpenChange={setConfirmRotate}>
 						<AlertDialogContent>
 							<AlertDialogHeader>
-								<AlertDialogTitle>Rotate state key?</AlertDialogTitle>
+								<AlertDialogTitle>
+									{t("settings.rotateConfirmTitle")}
+								</AlertDialogTitle>
 								<AlertDialogDescription>
-									This revokes every other session and re-encrypts the state
-									file.
+									{t("settings.rotateConfirmDescription")}
 								</AlertDialogDescription>
 							</AlertDialogHeader>
 							<AlertDialogFooter>
-								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 								<AlertDialogAction
 									disabled={rotateKey.isPending}
 									onClick={(e) => {
@@ -263,7 +266,9 @@ export function SettingsPage() {
 										rotateKey.mutate();
 									}}
 								>
-									{rotateKey.isPending ? "Rotating…" : "Confirm rotation"}
+									{rotateKey.isPending
+										? t("settings.rotating")
+										: t("settings.confirmRotation")}
 								</AlertDialogAction>
 							</AlertDialogFooter>
 						</AlertDialogContent>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useI18n } from "../i18n/I18nContext";
 
 export function PlaceholderCard({
 	title,
@@ -7,12 +8,11 @@ export function PlaceholderCard({
 	title: string;
 	children?: ReactNode;
 }) {
+	const { t } = useI18n();
 	return (
 		<div className="card">
 			<h2>{title}</h2>
-			{children ?? (
-				<p className="muted">This section is being migrated to the new UI.</p>
-			)}
+			{children ?? <p className="muted">{t("common.placeholder")}</p>}
 		</div>
 	);
 }
