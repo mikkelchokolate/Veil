@@ -230,6 +230,7 @@ export function ApplyJobDetailPage() {
 							</thead>
 							<tbody>
 								{ops.map((op, i) => (
+									// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 									<tr key={`${op.type}-${op.target ?? ""}-${i}`}>
 										<td className="muted">{op.type}</td>
 										<td className="mono" style={{ fontSize: 12 }}>
@@ -283,6 +284,7 @@ export function ApplyJobDetailPage() {
 							{plan.data.issues && plan.data.issues.length > 0 ? (
 								<ul>
 									{plan.data.issues.map((iss, i) => (
+										// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 										<li key={`${iss.path ?? ""}-${i}`} className="muted">
 											[{iss.severity ?? "info"}] {iss.path ?? ""}{" "}
 											{iss.message ?? ""}
@@ -305,6 +307,7 @@ export function ApplyJobDetailPage() {
 										</thead>
 										<tbody>
 											{plan.data.operations.map((op, i) => (
+												// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 												<tr key={`${op.type}-${op.destination ?? ""}-${i}`}>
 													<td className="muted">{op.type}</td>
 													<td className="mono" style={{ fontSize: 12 }}>
@@ -358,6 +361,7 @@ export function ApplyJobDetailPage() {
 										<strong style={{ fontSize: 13 }}>Validations</strong>
 										<ul>
 											{h.validations.map((v, i) => (
+												// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 												<li key={`${v.name ?? v.config ?? ""}-${i}`}>
 													{okBadge(v.valid)}{" "}
 													<span className="mono" style={{ fontSize: 12 }}>
@@ -377,6 +381,7 @@ export function ApplyJobDetailPage() {
 										<ul>
 											{h.serviceActions.map((a, i) => (
 												<li
+													// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 													key={`${Array.isArray(a.command) ? a.command.join(" ") : a.command}-${i}`}
 												>
 													{okBadge(a.success)}{" "}
@@ -417,6 +422,7 @@ export function ApplyJobDetailPage() {
 										<ul>
 											{h.rollbackActions.map((a, i) => (
 												<li
+													// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
 													key={`rb-${Array.isArray(a.command) ? a.command.join(" ") : a.command}-${i}`}
 												>
 													{okBadge(a.success)}{" "}

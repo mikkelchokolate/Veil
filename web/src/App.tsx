@@ -27,7 +27,7 @@ function Gate() {
 	if (setup.isLoading || loading) {
 		return (
 			<div className="center-screen">
-				<span className="spinner" aria-label="loading" />
+				<span className="spinner" role="status" aria-label="loading" />
 			</div>
 		);
 	}
