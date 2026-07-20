@@ -55,6 +55,9 @@ func seedTrafficClient(t *testing.T, r http.Handler, st *managementState, name s
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"`+name+`","bindings":[{"inboundId":"in-`+name+`","credential":"pw"}]}`)
 	var c map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&c)
+	if nested, ok := c["client"].(map[string]any); ok {
+		c = nested
+	}
 	id := c["id"].(string)
 	// Query the binding ID directly from the DB via the state's repository.
 	var bindingID string

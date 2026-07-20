@@ -20,6 +20,10 @@ func seedClientWithToken(t *testing.T, r http.Handler) (plaintext, clientID stri
 	}
 	var c map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&c)
+	// S2 nested the created client under "client"; tolerate both shapes.
+	if nested, ok := c["client"].(map[string]any); ok {
+		c = nested
+	}
 	clientID = c["id"].(string)
 	wt := v1Request(t, r, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens", `{"label":"phone"}`)
 	if wt.Code != http.StatusCreated {

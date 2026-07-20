@@ -25,14 +25,29 @@ func v1Request(t *testing.T, r http.Handler, method, path, body string) *httptes
 	return w
 }
 
+// unwrapClient returns the client object from a create response. S2 nested
+// the created client under "client" alongside issuedCredentials/revision; for
+// backward compatibility the same fields are also promoted to the top level,
+// so this tolerates both shapes.
+func unwrapClient(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode create body: %v", err)
+	}
+	if c, ok := raw["client"].(map[string]any); ok {
+		return c
+	}
+	return raw
+}
+
 func TestV1CreateClientReturnsIDAndVersion(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","quotaResetPolicy":"never"}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", w.Code, w.Body.String())
 	}
-	var resp map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&resp)
+	resp := unwrapClient(t, w.Body.Bytes())
 	if resp["id"] == "" {
 		t.Fatalf("expected id, got %v", resp)
 	}
@@ -55,8 +70,7 @@ func TestV1CreateClientValidationError(t *testing.T) {
 func TestV1UpdateRenameKeepsID(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice"}`)
-	var created map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&created)
+	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 
 	w2 := v1Request(t, r, http.MethodPut, "/api/v1/clients/"+id, `{"version":1,"name":"alice-renamed"}`)
@@ -79,8 +93,7 @@ func TestV1UpdateRenameKeepsID(t *testing.T) {
 func TestV1OptimisticLockingConflict(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice"}`)
-	var created map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&created)
+	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 
 	// First update OK.
@@ -101,8 +114,7 @@ func TestV1ClientWithBindingAndCredential(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", w.Code, w.Body.String())
 	}
-	var created map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&created)
+	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 	if created["hasCredentials"] != true {
 		t.Fatalf("expected hasCredentials true, got %v", created["hasCredentials"])
@@ -148,8 +160,7 @@ func TestV1DeleteBindingKeepsClient(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","bindings":[{"inboundId":"hy2-d","credential":"pw"}]}`)
-	var created map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&created)
+	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 	inbounds, _ := created["inboundIds"].([]any)
 	if len(inbounds) == 0 {
@@ -194,8 +205,7 @@ func TestV1BulkEnableDisableExtend(t *testing.T) {
 	ids := []string{}
 	for _, name := range []string{"a", "b", "c"} {
 		w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"`+name+`"}`)
-		var c map[string]any
-		_ = json.NewDecoder(w.Body).Decode(&c)
+		c := unwrapClient(t, w.Body.Bytes())
 		ids = append(ids, c["id"].(string))
 	}
 	body := `{"action":"disable","clientIds":["` + ids[0] + `","` + ids[1] + `"]}`
@@ -237,8 +247,7 @@ func TestV1BulkEnableDisableExtend(t *testing.T) {
 func TestV1BulkReportsPerClientFailures(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"real"}`)
-	var c map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&c)
+	c := unwrapClient(t, w.Body.Bytes())
 	good := c["id"].(string)
 
 	body := `{"action":"enable","clientIds":["` + good + `","nonexistent-id"]}`

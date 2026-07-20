@@ -74,6 +74,10 @@ func createV1ClientWithBinding(t *testing.T, r http.Handler, name, inboundID, cr
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+	// S2 nested the created client under "client"; tolerate both shapes.
+	if c, ok := resp["client"].(map[string]any); ok {
+		resp = c
+	}
 	if id, ok := resp["id"].(string); ok {
 		return id
 	}

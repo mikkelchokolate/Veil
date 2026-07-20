@@ -413,3 +413,62 @@ func TestClientMutationApplyFailureSuccessFalse(t *testing.T) {
 		t.Errorf("(6) applyJob status = %+v, want failed/rolled_back", env.ApplyJob)
 	}
 }
+
+// TestV1ClientAudit verifies the per-client audit endpoint returns only the
+// entries scoped to that client (target = client ID or name), newest first.
+func TestV1ClientAudit(t *testing.T) {
+	r, _ := newApplyTrackedRouter(t)
+	w := postJSON(t, r, "/api/v1/clients", `{"name":"audit-client"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	clientID := func() string {
+		var raw map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode create body: %v", err)
+		}
+		if c, ok := raw["client"].(map[string]any); ok {
+			if id, ok := c["id"].(string); ok {
+				return id
+			}
+		}
+		id, _ := raw["id"].(string)
+		return id
+	}()
+	if clientID == "" {
+		t.Fatalf("no client id in create response: %s", w.Body.String())
+	}
+	// Trigger a client-scoped mutation so there is at least one entry with
+	// target == clientID.
+	putReq := httptest.NewRequest(http.MethodPut, "/api/v1/clients/"+clientID, strings.NewReader(`{"name":"audit-client","version":1}`))
+	putReq.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, putReq)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: %d %s", w.Code, w.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clients/"+clientID+"/audit", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("audit: %d %s", w2.Code, w2.Body.String())
+	}
+	var body struct {
+		Items []struct {
+			Action string `json:"action"`
+			Target string `json:"target"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode audit: %v", err)
+	}
+	if len(body.Items) == 0 {
+		t.Fatalf("expected at least one audit entry for client, got none")
+	}
+	for _, it := range body.Items {
+		if it.Target != clientID && it.Target != "audit-client" {
+			t.Errorf("audit entry leaked another client's target: %+v", it)
+		}
+	}
+}

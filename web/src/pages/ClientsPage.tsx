@@ -10,13 +10,16 @@ import {
 	flexRender,
 	getCoreRowModel,
 	useReactTable,
+	type VisibilityState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import { listClients } from "../api/clients";
 import { ApiError } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
 import type { ClientView } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { fmtBytes } from "../lib/bytes";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 	active: { label: "active", cls: "badge-success" },
@@ -33,54 +36,97 @@ function StatusBadge({ status }: { status: string }) {
 	return <span className={`badge ${meta.cls}`}>{meta.label}</span>;
 }
 
-function fmtBytes(n?: number): string {
-	if (n == null) return "—";
-	if (n === 0) return "0 B";
-	const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-	let v = n;
-	let i = 0;
-	while (v >= 1024 && i < units.length - 1) {
-		v /= 1024;
-		i++;
-	}
-	return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
-}
-
 function fmtExpiry(ts?: number): string {
 	if (!ts) return "—";
 	return new Date(ts * 1000).toLocaleDateString();
+}
+
+/** S3: search params validated with Zod — every value the URL carries is
+ * parsed/coerced/defaulted here so a hand-edited or stale URL can never put
+ * the page in an invalid state. */
+const searchSchema = z.object({
+	page: z.coerce.number().int().positive().catch(1),
+	pageSize: z.coerce.number().int().positive().max(200).catch(25),
+	search: z.string().catch(""),
+	status: z.string().catch(""),
+	inboundId: z.string().catch(""),
+	sort: z.string().catch("created"),
+});
+
+const DEBOUNCE_MS = 300;
+
+interface BulkResult {
+	id: string;
+	ok: boolean;
+	message?: string;
 }
 
 export function ClientsPage() {
 	const isAdmin = useIsAdmin();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
-	const search = useSearch({ strict: false }) as Record<
-		string,
-		string | undefined
-	>;
+	const rawSearch = useSearch({ strict: false }) as Record<string, unknown>;
+	const parsed = searchSchema.parse(rawSearch);
 
-	const page = Number(search.page ?? "1") || 1;
-	const pageSize = Number(search.pageSize ?? "25") || 25;
-	const searchText = search.search ?? "";
-	const status = search.status ?? "";
-	const sort = search.sort ?? "created";
+	const page = parsed.page;
+	const pageSize = parsed.pageSize;
+	const status = parsed.status;
+	const inboundId = parsed.inboundId;
+	const sort = parsed.sort;
+
+	// S3: debounced server-side search. The input is uncontrolled-local; the
+	// debounced value is what actually reaches the query and the URL.
+	const [searchInput, setSearchInput] = useState(parsed.search);
+	const [searchText, setSearchText] = useState(parsed.search);
+	useEffect(() => {
+		const t = setTimeout(() => setSearchText(searchInput.trim()), DEBOUNCE_MS);
+		return () => clearTimeout(t);
+	}, [searchInput]);
+	// Push the debounced value into the URL so it is shareable/restorable.
+	useEffect(() => {
+		if (searchText !== parsed.search) {
+			void navigate({
+				to: "/clients",
+				search: (prev: Record<string, unknown>) => ({
+					...prev,
+					search: searchText || undefined,
+					page: 1,
+				}),
+				replace: true,
+			});
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchText, parsed.search, navigate]);
 
 	const query = useQuery({
-		queryKey: ["clients", "list", { page, pageSize, searchText, status, sort }],
+		queryKey: [
+			"clients",
+			"list",
+			{ page, pageSize, searchText, status, inboundId, sort },
+		],
 		queryFn: () =>
-			listClients({ page, pageSize, search: searchText, status, sort }),
+			listClients({
+				page,
+				pageSize,
+				search: searchText,
+				status,
+				inboundId,
+				sort,
+			}),
 		placeholderData: keepPreviousData,
 	});
 
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkError, setBulkError] = useState<string | null>(null);
-	const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+	const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
+	const [colVis, setColVis] = useState<VisibilityState>({});
+	const [showColMenu, setShowColMenu] = useState(false);
+	const [confirmDelete, setConfirmDelete] = useState(false);
 
-	function setParam(patch: Record<string, string>) {
+	function setParam(patch: Record<string, string | undefined>) {
 		void navigate({
 			to: "/clients",
-			search: (prev: Record<string, string>) => ({ ...prev, ...patch }),
+			search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }),
 			replace: true,
 		});
 	}
@@ -94,19 +140,22 @@ export function ClientsPage() {
 		onSuccess: (res) => {
 			setSelected(new Set());
 			setBulkError(null);
+			setConfirmDelete(false);
 			const data = res.data as
-				| { succeeded?: number; skipped?: number; failed?: number }
+				| {
+						succeeded?: number;
+						skipped?: number;
+						failed?: number;
+						results?: BulkResult[];
+				  }
 				| undefined;
-			if (data) {
-				setBulkNotice(
-					`succeeded ${data.succeeded ?? 0}, skipped ${data.skipped ?? 0}, failed ${data.failed ?? 0}`,
-				);
-			}
+			// S3: per-client bulk result, not just an aggregate.
+			setBulkResults(data?.results ?? null);
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
 		onError: (err) => {
-			setBulkNotice(null);
+			setBulkResults(null);
 			setBulkError(
 				err instanceof ApiError ? err.message : "Bulk action failed",
 			);
@@ -117,7 +166,19 @@ export function ClientsPage() {
 	const total = query.data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-	// B6: TanStack Table for column definitions + visibility.
+	// S3: aggregate summary across the current page (bytes kept as numbers
+	// server-side already; fmtBytes formats without precision loss). Per-client
+	// traffic usage is a Traffic (S6) concern, not part of ClientView.
+	const summary = useMemo(() => {
+		let quota = 0;
+		let active = 0;
+		for (const c of items) {
+			if (typeof c.quotaBytes === "number") quota += c.quotaBytes;
+			if (c.status === "active") active++;
+		}
+		return { quota, active, count: items.length };
+	}, [items]);
+
 	const columns: ColumnDef<ClientView>[] = [
 		...(isAdmin
 			? [
@@ -141,6 +202,7 @@ export function ClientsPage() {
 							/>
 						),
 						size: 32,
+						enableHiding: false,
 					} as ColumnDef<ClientView>,
 				]
 			: []),
@@ -190,6 +252,8 @@ export function ClientsPage() {
 		data: items,
 		columns,
 		getCoreRowModel: getCoreRowModel(),
+		state: { columnVisibility: colVis },
+		onColumnVisibilityChange: setColVis,
 	});
 
 	function toggle(id: string) {
@@ -225,21 +289,18 @@ export function ClientsPage() {
 						className="input"
 						style={{ maxWidth: 260 }}
 						placeholder="Search name or email"
-						defaultValue={searchText}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								setParam({
-									search: (e.target as HTMLInputElement).value,
-									page: "1",
-								});
-							}
-						}}
+						value={searchInput}
+						onChange={(e) => setSearchInput(e.target.value)}
+						aria-label="search clients"
 					/>
 					<select
 						className="input"
 						style={{ maxWidth: 160 }}
 						value={status}
-						onChange={(e) => setParam({ status: e.target.value, page: "1" })}
+						onChange={(e) =>
+							setParam({ status: e.target.value || undefined, page: "1" })
+						}
+						aria-label="filter status"
 					>
 						<option value="">All statuses</option>
 						<option value="enabled">Enabled</option>
@@ -251,11 +312,58 @@ export function ClientsPage() {
 						style={{ maxWidth: 160 }}
 						value={sort}
 						onChange={(e) => setParam({ sort: e.target.value })}
+						aria-label="sort"
 					>
 						<option value="created">Newest</option>
 						<option value="name">Name</option>
 						<option value="expires">Expiry</option>
 					</select>
+					<div style={{ position: "relative" }}>
+						<button
+							type="button"
+							className="btn"
+							onClick={() => setShowColMenu((v) => !v)}
+							aria-label="toggle columns"
+						>
+							Columns
+						</button>
+						{showColMenu ? (
+							<div
+								className="card"
+								style={{
+									position: "absolute",
+									right: 0,
+									top: "110%",
+									zIndex: 20,
+									padding: 8,
+									minWidth: 160,
+								}}
+							>
+								{table
+									.getAllLeafColumns()
+									.filter((c) => c.getCanHide())
+									.map((col) => (
+										<label
+											key={col.id}
+											style={{
+												display: "flex",
+												gap: 8,
+												alignItems: "center",
+												padding: "4px 2px",
+												cursor: "pointer",
+											}}
+										>
+											<input
+												type="checkbox"
+												checked={col.getIsVisible()}
+												onChange={col.getToggleVisibilityHandler()}
+											/>
+											<span style={{ fontSize: 13 }}>{col.id}</span>
+										</label>
+									))}
+							</div>
+						) : null}
+					</div>
 					{isAdmin ? (
 						<button
 							type="button"
@@ -266,12 +374,26 @@ export function ClientsPage() {
 						</button>
 					) : null}
 				</div>
+				{/* S3: aggregate summary for the current page */}
+				{items.length > 0 ? (
+					<div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+						{summary.count} shown · {summary.active} active
+						{summary.quota > 0
+							? ` · total quota ${fmtBytes(summary.quota)}`
+							: ""}
+					</div>
+				) : null}
 			</div>
 
 			{isAdmin && selected.size > 0 ? (
 				<div
 					className="card"
-					style={{ display: "flex", gap: 8, alignItems: "center" }}
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
 				>
 					<span className="muted">{selected.size} selected</span>
 					<button
@@ -304,18 +426,65 @@ export function ClientsPage() {
 					>
 						Reset traffic
 					</button>
-					<button
-						type="button"
-						className="btn btn-danger"
-						disabled={bulk.isPending}
-						onClick={() =>
-							bulk.mutate({ action: "delete", ids: [...selected] })
-						}
-					>
-						Delete
-					</button>
-					{bulkNotice ? <span className="muted">{bulkNotice}</span> : null}
+					{confirmDelete ? (
+						<>
+							<span className="muted" style={{ fontSize: 13 }}>
+								Really delete {selected.size} client
+								{selected.size === 1 ? "" : "s"}? This cannot be undone.
+							</span>
+							<button
+								type="button"
+								className="btn btn-danger"
+								disabled={bulk.isPending}
+								onClick={() =>
+									bulk.mutate({ action: "delete", ids: [...selected] })
+								}
+							>
+								Confirm delete
+							</button>
+							<button
+								type="button"
+								className="btn"
+								onClick={() => setConfirmDelete(false)}
+							>
+								Cancel
+							</button>
+						</>
+					) : (
+						<button
+							type="button"
+							className="btn btn-danger"
+							disabled={bulk.isPending}
+							onClick={() => setConfirmDelete(true)}
+						>
+							Delete
+						</button>
+					)}
 					{bulkError ? <span className="form-error">{bulkError}</span> : null}
+				</div>
+			) : null}
+
+			{/* S3: per-client bulk result */}
+			{bulkResults && bulkResults.length > 0 ? (
+				<div className="card">
+					<h2 style={{ fontSize: 14 }}>Bulk result</h2>
+					{bulkResults.map((r) => (
+						<div
+							key={r.id}
+							className="muted"
+							style={{ fontSize: 13, display: "flex", gap: 8 }}
+						>
+							<span
+								className={r.ok ? "badge badge-success" : "badge badge-danger"}
+							>
+								{r.ok ? "ok" : "failed"}
+							</span>
+							<span className="mono" style={{ fontSize: 12 }}>
+								{r.id}
+							</span>
+							{r.message ? <span>{r.message}</span> : null}
+						</div>
+					))}
 				</div>
 			) : null}
 

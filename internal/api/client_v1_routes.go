@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
@@ -472,6 +473,8 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 
 func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
 	switch parts[0] {
+	case "audit":
+		s.handleV1ClientAudit(w, r, clientID)
 	case "bindings":
 		s.handleV1ClientBindings(w, r, clientID, parts)
 	case "credentials":
@@ -491,6 +494,40 @@ func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *ht
 	default:
 		writeNotFound(w)
 	}
+}
+
+// handleV1ClientAudit returns the audit entries scoped to one client. Entries
+// match when the audit target is the client's ID, its current name, or a
+// client-scoped action whose target is this client. Admin-only, newest first.
+func (s *managementState) handleV1ClientAudit(w http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if !requestHasAdminRole(s, r) {
+		writeError(w, "forbidden: admin role required", http.StatusForbidden)
+		return
+	}
+	view, err := s.clientService.Get(clientID)
+	if err != nil {
+		writeNotFound(w)
+		return
+	}
+	records, err := s.auditRecorder().List(500, time.Time{})
+	if err != nil {
+		writeError(w, "failed to read audit history", http.StatusInternalServerError)
+		return
+	}
+	items := make([]audit.Record, 0)
+	for _, rec := range records {
+		// Client-scoped actions record the target as the client ID (mutations)
+		// or the client name (create). Bindings/credentials record the client
+		// ID as target with the sub-id in details.
+		if rec.Target == clientID || rec.Target == view.Name {
+			items = append(items, rec)
+		}
+	}
+	writeJSON(w, map[string]any{"items": items})
 }
 
 func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {

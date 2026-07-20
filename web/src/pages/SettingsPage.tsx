@@ -4,28 +4,105 @@ import { ApiError, apiFetch } from "../api/fetcher";
 import type { Settings } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 
-/** Settings: view + edit mutations for safe fields (email, panel access). */
+/** S4: full settings edit (every editable field) + security key rotation.
+ * Fields are grouped: identity/access, protocol credentials, ACME, firewall.
+ * The apply pipeline applies the result; the envelope surfaces revision/job. */
 export function SettingsPage() {
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [editing, setEditing] = useState(false);
-	const [form, setForm] = useState({ email: "", panelAccess: "" });
+	const [error, setError] = useState<string | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
+	const [confirmRotate, setConfirmRotate] = useState(false);
+	const [form, setForm] = useState<Record<string, string>>({});
 
 	const settings = useQuery<Settings>({
 		queryKey: ["settings"],
 		queryFn: () => apiFetch("/api/settings"),
 	});
+	const s = settings.data;
 
 	const save = useMutation({
-		mutationFn: (patch: Partial<Settings>) =>
+		mutationFn: (patch: Record<string, unknown>) =>
 			apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
 		onSuccess: () => {
 			setEditing(false);
+			setError(null);
+			setNotice("Settings saved.");
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 		},
+		onError: (e) => setError(e instanceof ApiError ? e.message : "Save failed"),
 	});
 
-	const s = settings.data;
+	const rotateKey = useMutation({
+		mutationFn: () =>
+			apiFetch("/api/admin/rotate-key", {
+				method: "POST",
+				body: JSON.stringify({}),
+			}),
+		onSuccess: () => {
+			setConfirmRotate(false);
+			setError(null);
+			setNotice("State key rotated. Other sessions were revoked.");
+		},
+		onError: (e) =>
+			setError(e instanceof ApiError ? e.message : "Key rotation failed"),
+	});
+
+	const FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
+		{ key: "domain", label: "Domain" },
+		{ key: "panelDomain", label: "Panel domain" },
+		{
+			key: "panelAccess",
+			label: "Panel access",
+			placeholder: "public | private",
+		},
+		{ key: "webBasePath", label: "Web base path" },
+		{ key: "email", label: "Email" },
+		{ key: "panelEmail", label: "Panel email" },
+		{ key: "naiveUsername", label: "NaiveProxy username" },
+		{ key: "hysteria2Password", label: "hysteria2 password" },
+		{ key: "masqueradeURL", label: "Masquerade URL" },
+		{ key: "fallbackRoot", label: "Fallback root" },
+		{ key: "olcrtcRoomID", label: "olcRTC room ID" },
+		{ key: "defaultAcmeEmail", label: "Default ACME email" },
+		{
+			key: "acmeChallengeMode",
+			label: "ACME challenge mode",
+			placeholder: "http-01 | dns-01",
+		},
+	];
+
+	function startEdit() {
+		const next: Record<string, string> = {};
+		for (const f of FIELDS) {
+			next[f.key] = String(
+				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
+			);
+		}
+		setForm(next);
+		setEditing(true);
+		setNotice(null);
+		setError(null);
+	}
+
+	function saveEdit() {
+		const patch: Record<string, unknown> = {};
+		for (const f of FIELDS) {
+			const cur = String(
+				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
+			);
+			if (form[f.key] !== cur) {
+				if (form[f.key] !== "") patch[f.key] = form[f.key];
+			}
+		}
+		if (Object.keys(patch).length === 0) {
+			setEditing(false);
+			return;
+		}
+		save.mutate(patch);
+	}
+
 	const rows: Array<[string, string | undefined]> = [
 		["Domain", s?.domain],
 		["Mode", s?.mode],
@@ -33,12 +110,27 @@ export function SettingsPage() {
 		["Panel access", s?.panelAccess],
 		["Web base path", s?.webBasePath],
 		["Email", s?.email],
+		[
+			"Panel domain",
+			(s as Record<string, unknown> | undefined)?.panelDomain as
+				| string
+				| undefined,
+		],
+		["Masquerade URL", s?.masqueradeURL],
+		["Fallback root", s?.fallbackRoot],
+		[
+			"ACME email",
+			(s as Record<string, unknown> | undefined)?.defaultAcmeEmail as
+				| string
+				| undefined,
+		],
+		[
+			"ACME challenge",
+			(s as Record<string, unknown> | undefined)?.acmeChallengeMode as
+				| string
+				| undefined,
+		],
 	];
-
-	function startEdit() {
-		setForm({ email: s?.email ?? "", panelAccess: s?.panelAccess ?? "" });
-		setEditing(true);
-	}
 
 	if (settings.isLoading) {
 		return (
@@ -70,62 +162,51 @@ export function SettingsPage() {
 						</button>
 					) : null}
 				</div>
+				{notice ? <p className="muted">{notice}</p> : null}
+				{error ? <p className="form-error">{error}</p> : null}
 			</div>
 
 			{editing ? (
 				<div className="card">
-					<h3>Edit settings</h3>
-					<div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
-						<label>
-							Email
-							<input
-								className="input"
-								value={form.email}
-								onChange={(e) => setForm({ ...form, email: e.target.value })}
-							/>
-						</label>
-						<label>
-							Panel access
-							<select
-								className="input"
-								value={form.panelAccess}
-								onChange={(e) =>
-									setForm({ ...form, panelAccess: e.target.value })
-								}
-							>
-								<option value="">—</option>
-								<option value="public">public</option>
-								<option value="private">private</option>
-							</select>
-						</label>
-						<div style={{ display: "flex", gap: 8 }}>
-							<button
-								type="button"
-								className="btn btn-primary"
-								disabled={save.isPending}
-								onClick={() => {
-									const patch: Record<string, string> = { email: form.email };
-									if (form.panelAccess) patch.panelAccess = form.panelAccess;
-									save.mutate(patch);
-								}}
-							>
-								{save.isPending ? "Saving…" : "Save"}
-							</button>
-							<button
-								type="button"
-								className="btn"
-								onClick={() => setEditing(false)}
-							>
-								Cancel
-							</button>
-						</div>
-						{save.isError ? (
-							<p className="form-error">
-								{save.error instanceof ApiError
-									? save.error.message
-									: "Save failed"}
-							</p>
-						) : null}
+					<h2 style={{ fontSize: 15 }}>Edit settings</h2>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+							gap: 12,
+						}}
+					>
+						{FIELDS.map((f) => (
+							<div className="form-field" key={f.key}>
+								<label htmlFor={`set-${f.key}`}>{f.label}</label>
+								<input
+									id={`set-${f.key}`}
+									className="input"
+									placeholder={f.placeholder}
+									value={form[f.key] ?? ""}
+									onChange={(e) =>
+										setForm({ ...form, [f.key]: e.target.value })
+									}
+								/>
+							</div>
+						))}
+					</div>
+					<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+						<button
+							type="button"
+							className="btn btn-primary"
+							disabled={save.isPending}
+							onClick={saveEdit}
+						>
+							{save.isPending ? "Saving…" : "Save"}
+						</button>
+						<button
+							type="button"
+							className="btn"
+							onClick={() => setEditing(false)}
+						>
+							Cancel
+						</button>
 					</div>
 				</div>
 			) : null}
@@ -146,10 +227,47 @@ export function SettingsPage() {
 					</table>
 				</div>
 				<p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-					Server settings are applied through the apply pipeline. Use the CLI /
-					setup flow to change listen address, domain, or base path safely.
+					Listen address and mode are changed through the CLI / setup flow.
+					Everything else above is editable.
 				</p>
 			</div>
+
+			{isAdmin ? (
+				<div className="card">
+					<h2 style={{ fontSize: 15 }}>Security</h2>
+					<p className="muted">
+						Rotate the state encryption key. This revokes every other session
+						and re-encrypts the state file.
+					</p>
+					{confirmRotate ? (
+						<div style={{ display: "flex", gap: 8 }}>
+							<button
+								type="button"
+								className="btn btn-danger"
+								disabled={rotateKey.isPending}
+								onClick={() => rotateKey.mutate()}
+							>
+								{rotateKey.isPending ? "Rotating…" : "Confirm rotation"}
+							</button>
+							<button
+								type="button"
+								className="btn"
+								onClick={() => setConfirmRotate(false)}
+							>
+								Cancel
+							</button>
+						</div>
+					) : (
+						<button
+							type="button"
+							className="btn btn-danger"
+							onClick={() => setConfirmRotate(true)}
+						>
+							Rotate state key
+						</button>
+					)}
+				</div>
+			) : null}
 		</>
 	);
 }

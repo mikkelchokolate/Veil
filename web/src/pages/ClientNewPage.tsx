@@ -211,8 +211,8 @@ export function ClientNewPage() {
 			) : null}
 
 			{step === 2 ? (
-				<div className="form-field">
-					<label>Bind to inbounds</label>
+				<fieldset className="form-field" style={{ border: "none", padding: 0 }}>
+					<legend>Bind to inbounds</legend>
 					{inboundList.length === 0 ? (
 						<p className="muted">No inbounds available.</p>
 					) : (
@@ -259,7 +259,7 @@ export function ClientNewPage() {
 							);
 						})
 					)}
-				</div>
+				</fieldset>
 			) : null}
 
 			{step === 3 ? (
