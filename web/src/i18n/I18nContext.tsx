@@ -2,64 +2,30 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { postApiAuthLocale } from "../api/generated/auth/auth";
 import type { Locale } from "../api/generated/models";
+import { en } from "./locales/en";
+import { ru } from "./locales/ru";
 
-// B-i18n: en + ru localization. Translations keyed by locale, then by key.
-const translations: Record<Locale, Record<string, string>> = {
-	en: {
-		"nav.overview": "Overview",
-		"nav.clients": "Clients",
-		"nav.inbounds": "Inbounds",
-		"nav.routing": "Routing",
-		"nav.traffic": "Traffic",
-		"nav.warp": "WARP",
-		"nav.system": "System",
-		"nav.backups": "Backups",
-		"nav.users": "Users",
-		"nav.settings": "Settings",
-		"nav.apply": "Apply",
-		"common.logout": "Logout",
-		"common.loading": "Loading…",
-		"common.save": "Save",
-		"common.cancel": "Cancel",
-		"common.delete": "Delete",
-		"common.edit": "Edit",
-		"common.create": "Create",
-		"common.retry": "Retry",
-		"common.error": "Error",
-		"common.success": "Success",
-	},
-	ru: {
-		"nav.overview": "Обзор",
-		"nav.clients": "Клиенты",
-		"nav.inbounds": "Входы",
-		"nav.routing": "Маршрутизация",
-		"nav.traffic": "Трафик",
-		"nav.warp": "WARP",
-		"nav.system": "Система",
-		"nav.backups": "Бэкапы",
-		"nav.users": "Пользователи",
-		"nav.settings": "Настройки",
-		"nav.apply": "Применить",
-		"common.logout": "Выйти",
-		"common.loading": "Загрузка…",
-		"common.save": "Сохранить",
-		"common.cancel": "Отмена",
-		"common.delete": "Удалить",
-		"common.edit": "Изменить",
-		"common.create": "Создать",
-		"common.retry": "Повторить",
-		"common.error": "Ошибка",
-		"common.success": "Успешно",
-	},
-};
+// en + ru localization. Catalogs live in ./locales/<locale>.ts, keyed flat
+// with dot namespaces (nav.*, common.*, <page>.*). t() falls back to en, then
+// to the key itself, and interpolates {placeholders} from the vars argument.
+const translations: Record<Locale, Record<string, string>> = { en, ru };
+
+export type I18nVars = Record<string, string | number>;
 
 interface I18nContextValue {
 	locale: Locale;
-	t: (key: string) => string;
+	t: (key: string, vars?: I18nVars) => string;
 	setLocale: (locale: Locale) => void;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
+
+function interpolate(template: string, vars?: I18nVars): string {
+	if (!vars) return template;
+	return template.replace(/\{(\w+)\}/g, (m, name: string) =>
+		name in vars ? String(vars[name]) : m,
+	);
+}
 
 export function I18nProvider({
 	children,
@@ -83,8 +49,9 @@ export function I18nProvider({
 		setLocaleMutation.mutate(loc);
 	}
 
-	function t(key: string): string {
-		return translations[locale][key] ?? translations.en[key] ?? key;
+	function t(key: string, vars?: I18nVars): string {
+		const raw = translations[locale][key] ?? translations.en[key] ?? key;
+		return interpolate(raw, vars);
 	}
 
 	return (

@@ -4,6 +4,17 @@ import { ApiError, apiFetch } from "../api/fetcher";
 import type { ApplyJob } from "../api/generated/models";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
 import { useIsAdmin } from "../auth/AuthContext";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormMessage } from "../components/ui/form";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 
 function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({
@@ -18,11 +29,14 @@ function fmtTime(ts?: number): string {
 	return new Date(ts * 1000).toLocaleString();
 }
 
-const STATUS_CLS: Record<string, string> = {
-	succeeded: "badge-success",
-	failed: "badge-danger",
-	running: "badge-warning",
-	pending: "badge-warning",
+const STATUS_VARIANT: Record<
+	string,
+	"success" | "danger" | "warning" | "default"
+> = {
+	succeeded: "success",
+	failed: "danger",
+	running: "warning",
+	pending: "warning",
 };
 
 /** B5: honest synchronous apply semantics — desired vs applied revision,
@@ -56,14 +70,14 @@ export function ApplyPage() {
 				{state.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : state.isError ? (
-					<p className="form-error">Apply state unavailable</p>
+					<FormMessage>Apply state unavailable</FormMessage>
 				) : s ? (
 					<>
 						<p>
 							<strong>State:</strong>{" "}
-							<span className={`badge ${STATUS_CLS[s.state] ?? ""}`}>
+							<Badge variant={STATUS_VARIANT[s.state] ?? "default"}>
 								{s.state}
-							</span>
+							</Badge>
 						</p>
 						<p>
 							<strong>Desired revision:</strong>{" "}
@@ -74,33 +88,34 @@ export function ApplyPage() {
 							<span className="mono">{s.appliedRevision}</span>
 						</p>
 						{drift ? (
-							<p className="badge badge-warning">
-								Runtime is behind desired — {s.appliedRevision} →{" "}
-								{s.desiredRevision}
+							<p>
+								<Badge variant="warning">
+									Runtime is behind desired — {s.appliedRevision} →{" "}
+									{s.desiredRevision}
+								</Badge>
 							</p>
 						) : null}
 						{s.lastError?.message ? (
-							<p className="form-error">
+							<FormMessage>
 								Last error{s.lastError.code ? ` (${s.lastError.code})` : ""}:{" "}
 								{s.lastError.message}
-							</p>
+							</FormMessage>
 						) : null}
 						{isAdmin && drift ? (
-							<button
-								type="button"
-								className="btn btn-primary"
+							<Button
+								variant="primary"
 								disabled={reconcile.isPending}
 								onClick={() => reconcile.mutate()}
 							>
 								{reconcile.isPending ? "Reconciling…" : "Reconcile now"}
-							</button>
+							</Button>
 						) : null}
 						{reconcile.isError ? (
-							<p className="form-error">
+							<FormMessage>
 								{reconcile.error instanceof ApiError
 									? reconcile.error.message
 									: "Reconcile failed"}
-							</p>
+							</FormMessage>
 						) : null}
 					</>
 				) : null}
@@ -111,76 +126,75 @@ export function ApplyPage() {
 				{jobs.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : jobs.isError ? (
-					<p className="form-error">Failed to load jobs</p>
+					<FormMessage>Failed to load jobs</FormMessage>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Created</th>
-									<th>Revision</th>
-									<th>Trigger</th>
-									<th>Status</th>
-									<th>Error</th>
-									{isAdmin ? <th /> : null}
-								</tr>
-							</thead>
-							<tbody>
-								{(jobs.data?.items ?? []).length === 0 ? (
-									<tr>
-										<td colSpan={isAdmin ? 6 : 5} className="muted">
-											No apply jobs yet.
-										</td>
-									</tr>
-								) : (
-									(jobs.data?.items ?? []).map((j) => (
-										<tr key={j.id}>
-											<td className="muted">{fmtTime(j.createdAt)}</td>
-											<td className="mono">
-												<Link
-													to="/apply/$jobId"
-													params={{ jobId: j.id }}
-													className="mono"
-												>
-													{j.baseRevision} → {j.desiredRevision}
-												</Link>
-											</td>
-											<td className="muted">{j.trigger}</td>
-											<td>
-												<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>
-													{j.status}
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Created</TableHead>
+								<TableHead>Revision</TableHead>
+								<TableHead>Trigger</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Error</TableHead>
+								{isAdmin ? <TableHead /> : null}
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(jobs.data?.items ?? []).length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={isAdmin ? 6 : 5} className="muted">
+										No apply jobs yet.
+									</TableCell>
+								</TableRow>
+							) : (
+								(jobs.data?.items ?? []).map((j) => (
+									<TableRow key={j.id}>
+										<TableCell className="muted">
+											{fmtTime(j.createdAt)}
+										</TableCell>
+										<TableCell className="mono">
+											<Link
+												to="/apply/$jobId"
+												params={{ jobId: j.id }}
+												className="mono"
+											>
+												{j.baseRevision} → {j.desiredRevision}
+											</Link>
+										</TableCell>
+										<TableCell className="muted">{j.trigger}</TableCell>
+										<TableCell>
+											<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
+												{j.status}
+											</Badge>
+										</TableCell>
+										<TableCell className="muted" style={{ maxWidth: 320 }}>
+											{j.errorMessage ? (
+												<span className="text-[var(--danger)]">
+													{j.errorCode ? `[${j.errorCode}] ` : ""}
+													{j.errorMessage}
 												</span>
-											</td>
-											<td className="muted" style={{ maxWidth: 320 }}>
-												{j.errorMessage ? (
-													<span className="form-error">
-														{j.errorCode ? `[${j.errorCode}] ` : ""}
-														{j.errorMessage}
-													</span>
-												) : (
-													"—"
-												)}
-											</td>
-											{isAdmin ? (
-												<td>
-													{j.status === "failed" ? (
-														<button
-															type="button"
-															className="btn"
-															disabled={retry.isPending}
-															onClick={() => retry.mutate(j.id)}
-														>
-															Retry
-														</button>
-													) : null}
-												</td>
-											) : null}
-										</tr>
-									))
-								)}
-							</tbody>
-						</table>
-					</div>
+											) : (
+												"—"
+											)}
+										</TableCell>
+										{isAdmin ? (
+											<TableCell>
+												{j.status === "failed" ? (
+													<Button
+														size="sm"
+														disabled={retry.isPending}
+														onClick={() => retry.mutate(j.id)}
+													>
+														Retry
+													</Button>
+												) : null}
+											</TableCell>
+										) : null}
+									</TableRow>
+								))
+							)}
+						</TableBody>
+					</Table>
 				)}
 			</div>
 		</>

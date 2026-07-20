@@ -3,6 +3,27 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { BackupArchive } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormMessage } from "../components/ui/form";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 import { fmtBytes } from "../lib/bytes";
 
 interface RestoreJob {
@@ -151,58 +172,50 @@ export function BackupsPage() {
 					<h2 style={{ margin: 0, flex: 1 }}>Backups</h2>
 					{isAdmin ? (
 						<>
-							<button
-								type="button"
-								className="btn"
-								disabled={prune.isPending}
-								onClick={() => prune.mutate()}
-							>
+							<Button disabled={prune.isPending} onClick={() => prune.mutate()}>
 								{prune.isPending ? "Pruning…" : "Prune (retention)"}
-							</button>
-							<button
-								type="button"
-								className="btn btn-primary"
+							</Button>
+							<Button
+								variant="primary"
 								disabled={create.isPending}
 								onClick={() => create.mutate()}
 							>
 								{create.isPending ? "Creating…" : "Create backup"}
-							</button>
+							</Button>
 						</>
 					) : null}
 				</div>
 				{notice ? <p className="muted">{notice}</p> : null}
-				{error ? <p className="form-error">{error}</p> : null}
+				{error ? <FormMessage>{error}</FormMessage> : null}
 			</div>
 
 			{job ? (
 				<div className="card">
 					<h2 style={{ fontSize: 15 }}>Restore job</h2>
 					<p>
-						<span
-							className={`badge${
+						<Badge
+							variant={
 								job.status === "finished"
-									? " badge-success"
+									? "success"
 									: job.status === "failed"
-										? " badge-danger"
-										: " badge-warning"
-							}`}
+										? "danger"
+										: "warning"
+							}
 						>
 							{job.status}
-						</span>{" "}
+						</Badge>{" "}
 						<span className="mono">{job.archive}</span>
 					</p>
-					{job.error ? <p className="form-error">{job.error}</p> : null}
+					{job.error ? <FormMessage>{job.error}</FormMessage> : null}
 					{job.status === "finished" || job.status === "failed" ? (
-						<button
-							type="button"
-							className="btn"
+						<Button
 							onClick={() => {
 								setActiveJob(null);
 								void qc.invalidateQueries({ queryKey: ["backups"] });
 							}}
 						>
 							Dismiss
-						</button>
+						</Button>
 					) : null}
 				</div>
 			) : null}
@@ -211,122 +224,123 @@ export function BackupsPage() {
 				{backups.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Name</th>
-									<th>Size</th>
-									<th>Created</th>
-									<th>Encrypted</th>
-									<th>Verify</th>
-									{isAdmin ? <th>Actions</th> : null}
-								</tr>
-							</thead>
-							<tbody>
-								{items.length === 0 ? (
-									<tr>
-										<td colSpan={6} className="muted">
-											No backups yet.
-										</td>
-									</tr>
-								) : (
-									items.map((b) => {
-										const v = verifyResult[b.name];
-										return (
-											<tr key={b.name}>
-												<td className="mono">{b.name}</td>
-												<td className="muted">{fmtBytes(b.size)}</td>
-												<td className="muted">
-													{new Date(b.createdAt).toLocaleString()}
-												</td>
-												<td>
-													<span
-														className={`badge${b.encrypted ? " badge-success" : ""}`}
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Size</TableHead>
+								<TableHead>Created</TableHead>
+								<TableHead>Encrypted</TableHead>
+								<TableHead>Verify</TableHead>
+								{isAdmin ? <TableHead>Actions</TableHead> : null}
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{items.length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={6} className="muted">
+										No backups yet.
+									</TableCell>
+								</TableRow>
+							) : (
+								items.map((b) => {
+									const v = verifyResult[b.name];
+									return (
+										<TableRow key={b.name}>
+											<TableCell className="mono">{b.name}</TableCell>
+											<TableCell className="muted">
+												{fmtBytes(b.size)}
+											</TableCell>
+											<TableCell className="muted">
+												{new Date(b.createdAt).toLocaleString()}
+											</TableCell>
+											<TableCell>
+												<Badge variant={b.encrypted ? "success" : "default"}>
+													{b.encrypted ? "yes" : "no"}
+												</Badge>
+											</TableCell>
+											<TableCell>
+												{v ? (
+													<Badge
+														variant={v.ok || v.valid ? "success" : "danger"}
 													>
-														{b.encrypted ? "yes" : "no"}
-													</span>
-												</td>
-												<td>
-													{v ? (
-														<span
-															className={`badge${
-																v.ok || v.valid
-																	? " badge-success"
-																	: " badge-danger"
-															}`}
+														{v.ok || v.valid
+															? "ok"
+															: (v.error ?? v.message ?? "invalid")}
+													</Badge>
+												) : (
+													<span className="muted">—</span>
+												)}
+											</TableCell>
+											{isAdmin ? (
+												<TableCell>
+													<div
+														style={{
+															display: "flex",
+															gap: 6,
+															flexWrap: "wrap",
+														}}
+													>
+														<Button
+															size="sm"
+															onClick={() => void download(b.name)}
 														>
-															{v.ok || v.valid
-																? "ok"
-																: (v.error ?? v.message ?? "invalid")}
-														</span>
-													) : (
-														<span className="muted">—</span>
-													)}
-												</td>
-												{isAdmin ? (
-													<td>
-														<div
-															style={{
-																display: "flex",
-																gap: 6,
-																flexWrap: "wrap",
-															}}
+															Download
+														</Button>
+														<Button
+															size="sm"
+															disabled={verify.isPending}
+															onClick={() => verify.mutate(b.name)}
 														>
-															<button
-																type="button"
-																className="btn"
-																onClick={() => void download(b.name)}
-															>
-																Download
-															</button>
-															<button
-																type="button"
-																className="btn"
-																disabled={verify.isPending}
-																onClick={() => verify.mutate(b.name)}
-															>
-																Verify
-															</button>
-															{confirmRestore === b.name ? (
-																<>
-																	<button
-																		type="button"
-																		className="btn btn-danger"
-																		disabled={restore.isPending}
-																		onClick={() => restore.mutate(b.name)}
-																	>
-																		Confirm restore
-																	</button>
-																	<button
-																		type="button"
-																		className="btn"
-																		onClick={() => setConfirmRestore(null)}
-																	>
-																		Cancel
-																	</button>
-																</>
-															) : (
-																<button
-																	type="button"
-																	className="btn btn-danger"
-																	onClick={() => setConfirmRestore(b.name)}
-																>
-																	Restore
-																</button>
-															)}
-														</div>
-													</td>
-												) : null}
-											</tr>
-										);
-									})
-								)}
-							</tbody>
-						</table>
-					</div>
+															Verify
+														</Button>
+														<Button
+															size="sm"
+															variant="danger"
+															onClick={() => setConfirmRestore(b.name)}
+														>
+															Restore
+														</Button>
+													</div>
+												</TableCell>
+											) : null}
+										</TableRow>
+									);
+								})
+							)}
+						</TableBody>
+					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmRestore !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmRestore(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Restore backup?</AlertDialogTitle>
+						<AlertDialogDescription>
+							Restoring <span className="mono">{confirmRestore}</span> replaces
+							the current state. You may be logged out when it finishes.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={restore.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmRestore) restore.mutate(confirmRestore);
+							}}
+						>
+							{restore.isPending ? "Restoring…" : "Confirm restore"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

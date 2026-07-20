@@ -19,21 +19,56 @@ import { ApiError } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
 import type { ClientView } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 import { fmtBytes } from "../lib/bytes";
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-	active: { label: "active", cls: "badge-success" },
-	disabled: { label: "disabled", cls: "" },
-	expired: { label: "expired", cls: "badge-warning" },
-	depleted: { label: "depleted", cls: "badge-warning" },
-	pending_apply: { label: "pending apply", cls: "badge-warning" },
-	apply_failed: { label: "apply failed", cls: "badge-danger" },
-	orphaned: { label: "orphaned", cls: "badge-danger" },
+const STATUS_BADGE: Record<
+	string,
+	{ label: string; variant: "success" | "warning" | "danger" | "default" }
+> = {
+	active: { label: "active", variant: "success" },
+	disabled: { label: "disabled", variant: "default" },
+	expired: { label: "expired", variant: "warning" },
+	depleted: { label: "depleted", variant: "warning" },
+	pending_apply: { label: "pending apply", variant: "warning" },
+	apply_failed: { label: "apply failed", variant: "danger" },
+	orphaned: { label: "orphaned", variant: "danger" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-	const meta = STATUS_BADGE[status] ?? { label: status, cls: "" };
-	return <span className={`badge ${meta.cls}`}>{meta.label}</span>;
+	const meta = STATUS_BADGE[status] ?? {
+		label: status,
+		variant: "default" as const,
+	};
+	return <Badge variant={meta.variant}>{meta.label}</Badge>;
 }
 
 function fmtExpiry(ts?: number): string {
@@ -286,16 +321,14 @@ export function ClientsPage() {
 					}}
 				>
 					<h2 style={{ margin: 0, flex: 1 }}>Clients</h2>
-					<input
-						className="input"
+					<Input
 						style={{ maxWidth: 260 }}
 						placeholder="Search name or email"
 						value={searchInput}
 						onChange={(e) => setSearchInput(e.target.value)}
 						aria-label="search clients"
 					/>
-					<select
-						className="input"
+					<Select
 						style={{ maxWidth: 160 }}
 						value={status}
 						onChange={(e) =>
@@ -307,9 +340,8 @@ export function ClientsPage() {
 						<option value="enabled">Enabled</option>
 						<option value="disabled">Disabled</option>
 						<option value="depleted">Depleted</option>
-					</select>
-					<select
-						className="input"
+					</Select>
+					<Select
 						style={{ maxWidth: 160 }}
 						value={sort}
 						onChange={(e) => setParam({ sort: e.target.value })}
@@ -318,61 +350,38 @@ export function ClientsPage() {
 						<option value="created">Newest</option>
 						<option value="name">Name</option>
 						<option value="expires">Expiry</option>
-					</select>
-					<div style={{ position: "relative" }}>
-						<button
-							type="button"
-							className="btn"
-							onClick={() => setShowColMenu((v) => !v)}
-							aria-label="toggle columns"
-						>
-							Columns
-						</button>
-						{showColMenu ? (
-							<div
-								className="card"
-								style={{
-									position: "absolute",
-									right: 0,
-									top: "110%",
-									zIndex: 20,
-									padding: 8,
-									minWidth: 160,
-								}}
-							>
-								{table
-									.getAllLeafColumns()
-									.filter((c) => c.getCanHide())
-									.map((col) => (
-										<label
-											key={col.id}
-											style={{
-												display: "flex",
-												gap: 8,
-												alignItems: "center",
-												padding: "4px 2px",
-												cursor: "pointer",
-											}}
-										>
-											<input
-												type="checkbox"
-												checked={col.getIsVisible()}
-												onChange={col.getToggleVisibilityHandler()}
-											/>
-											<span style={{ fontSize: 13 }}>{col.id}</span>
-										</label>
-									))}
-							</div>
-						) : null}
-					</div>
+					</Select>
+					<DropdownMenu
+						modal={false}
+						open={showColMenu}
+						onOpenChange={setShowColMenu}
+					>
+						<DropdownMenuTrigger asChild>
+							<Button aria-label="toggle columns">Columns</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							{table
+								.getAllLeafColumns()
+								.filter((c) => c.getCanHide())
+								.map((col) => (
+									<DropdownMenuCheckboxItem
+										key={col.id}
+										checked={col.getIsVisible()}
+										onCheckedChange={(v) => col.toggleVisibility(v === true)}
+										onSelect={(e) => e.preventDefault()}
+									>
+										{col.id}
+									</DropdownMenuCheckboxItem>
+								))}
+						</DropdownMenuContent>
+					</DropdownMenu>
 					{isAdmin ? (
-						<button
-							type="button"
-							className="btn btn-primary"
+						<Button
+							variant="primary"
 							onClick={() => void navigate({ to: "/clients/new" })}
 						>
 							New client
-						</button>
+						</Button>
 					) : null}
 				</div>
 				{/* S3: aggregate summary for the current page */}
@@ -397,71 +406,38 @@ export function ClientsPage() {
 					}}
 				>
 					<span className="muted">{selected.size} selected</span>
-					<button
-						type="button"
-						className="btn"
+					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
 							bulk.mutate({ action: "enable", ids: [...selected] })
 						}
 					>
 						Enable
-					</button>
-					<button
-						type="button"
-						className="btn"
+					</Button>
+					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
 							bulk.mutate({ action: "disable", ids: [...selected] })
 						}
 					>
 						Disable
-					</button>
-					<button
-						type="button"
-						className="btn"
+					</Button>
+					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
 							bulk.mutate({ action: "reset_traffic", ids: [...selected] })
 						}
 					>
 						Reset traffic
-					</button>
-					{confirmDelete ? (
-						<>
-							<span className="muted" style={{ fontSize: 13 }}>
-								Really delete {selected.size} client
-								{selected.size === 1 ? "" : "s"}? This cannot be undone.
-							</span>
-							<button
-								type="button"
-								className="btn btn-danger"
-								disabled={bulk.isPending}
-								onClick={() =>
-									bulk.mutate({ action: "delete", ids: [...selected] })
-								}
-							>
-								Confirm delete
-							</button>
-							<button
-								type="button"
-								className="btn"
-								onClick={() => setConfirmDelete(false)}
-							>
-								Cancel
-							</button>
-						</>
-					) : (
-						<button
-							type="button"
-							className="btn btn-danger"
-							disabled={bulk.isPending}
-							onClick={() => setConfirmDelete(true)}
-						>
-							Delete
-						</button>
-					)}
-					{bulkError ? <span className="form-error">{bulkError}</span> : null}
+					</Button>
+					<Button
+						variant="danger"
+						disabled={bulk.isPending}
+						onClick={() => setConfirmDelete(true)}
+					>
+						Delete
+					</Button>
+					{bulkError ? <FormMessage>{bulkError}</FormMessage> : null}
 				</div>
 			) : null}
 
@@ -493,60 +469,58 @@ export function ClientsPage() {
 				{query.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : query.isError ? (
-					<p className="form-error">
+					<FormMessage>
 						{query.error instanceof ApiError
 							? query.error.message
 							: "Failed to load clients"}
-					</p>
+					</FormMessage>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								{table.getHeaderGroups().map((hg) => (
-									<tr key={hg.id}>
-										{hg.headers.map((h) => (
-											<th
-												key={h.id}
-												style={{
-													width: h.getSize() !== 150 ? h.getSize() : undefined,
-												}}
-											>
-												{flexRender(h.column.columnDef.header, h.getContext())}
-											</th>
-										))}
-									</tr>
-								))}
-							</thead>
-							<tbody>
-								{table.getRowModel().rows.length === 0 ? (
-									<tr>
-										<td colSpan={columns.length} className="muted">
-											No clients found.
-										</td>
-									</tr>
-								) : (
-									table.getRowModel().rows.map((row) => (
-										<tr
-											key={row.id}
-											style={{ cursor: "pointer" }}
-											onClick={() =>
-												void navigate({ to: `/clients/${row.original.id}` })
-											}
+					<Table>
+						<TableHeader>
+							{table.getHeaderGroups().map((hg) => (
+								<TableRow key={hg.id}>
+									{hg.headers.map((h) => (
+										<TableHead
+											key={h.id}
+											style={{
+												width: h.getSize() !== 150 ? h.getSize() : undefined,
+											}}
 										>
-											{row.getVisibleCells().map((cell) => (
-												<td key={cell.id}>
-													{flexRender(
-														cell.column.columnDef.cell,
-														cell.getContext(),
-													)}
-												</td>
-											))}
-										</tr>
-									))
-								)}
-							</tbody>
-						</table>
-					</div>
+											{flexRender(h.column.columnDef.header, h.getContext())}
+										</TableHead>
+									))}
+								</TableRow>
+							))}
+						</TableHeader>
+						<TableBody>
+							{table.getRowModel().rows.length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={columns.length} className="muted">
+										No clients found.
+									</TableCell>
+								</TableRow>
+							) : (
+								table.getRowModel().rows.map((row) => (
+									<TableRow
+										key={row.id}
+										style={{ cursor: "pointer" }}
+										onClick={() =>
+											void navigate({ to: `/clients/${row.original.id}` })
+										}
+									>
+										{row.getVisibleCells().map((cell) => (
+											<TableCell key={cell.id}>
+												{flexRender(
+													cell.column.columnDef.cell,
+													cell.getContext(),
+												)}
+											</TableCell>
+										))}
+									</TableRow>
+								))
+							)}
+						</TableBody>
+					</Table>
 				)}
 
 				<div
@@ -561,24 +535,44 @@ export function ClientsPage() {
 						{total} client{total === 1 ? "" : "s"} · page {page} of {totalPages}
 					</span>
 					<div style={{ flex: 1 }} />
-					<button
-						type="button"
-						className="btn"
+					<Button
 						disabled={page <= 1}
 						onClick={() => setParam({ page: String(page - 1) })}
 					>
 						Previous
-					</button>
-					<button
-						type="button"
-						className="btn"
+					</Button>
+					<Button
 						disabled={page >= totalPages}
 						onClick={() => setParam({ page: String(page + 1) })}
 					>
 						Next
-					</button>
+					</Button>
 				</div>
 			</div>
+
+			<AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete clients?</AlertDialogTitle>
+						<AlertDialogDescription>
+							Really delete {selected.size} client
+							{selected.size === 1 ? "" : "s"}? This cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={bulk.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								bulk.mutate({ action: "delete", ids: [...selected] });
+							}}
+						>
+							{bulk.isPending ? "Deleting…" : "Confirm delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

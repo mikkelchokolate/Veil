@@ -4,18 +4,32 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { ApplyJob } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormMessage } from "../components/ui/form";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 
 function fmtTime(ts?: number): string {
 	if (!ts) return "—";
 	return new Date(ts * 1000).toLocaleString();
 }
 
-const STATUS_CLS: Record<string, string> = {
-	succeeded: "badge-success",
-	failed: "badge-danger",
-	running: "badge-warning",
-	pending: "badge-warning",
-	rolled_back: "badge-warning",
+const STATUS_VARIANT: Record<
+	string,
+	"success" | "danger" | "warning" | "default"
+> = {
+	succeeded: "success",
+	failed: "danger",
+	running: "warning",
+	pending: "warning",
+	rolled_back: "warning",
 };
 
 /** S5: apply job detail — full operation/validation/service/health/rollback
@@ -44,6 +58,14 @@ interface ServiceHealthResult {
 	healthy: boolean;
 	error?: string;
 }
+interface ApplyPlanOperation {
+	type: string;
+	source?: string;
+	destination?: string;
+	unit?: string;
+	interruptionRisk?: string;
+	rollbackAvailable?: boolean;
+}
 interface ApplyPlan {
 	valid: boolean;
 	configs?: string[];
@@ -51,14 +73,7 @@ interface ApplyPlan {
 	runtimes?: string[];
 	errors?: string[];
 	issues?: { message?: string; severity?: string; path?: string }[];
-	operations?: {
-		type: string;
-		source?: string;
-		destination?: string;
-		unit?: string;
-		interruptionRisk?: string;
-		rollbackAvailable?: boolean;
-	}[];
+	operations?: ApplyPlanOperation[];
 }
 interface HistoryEntry {
 	id: string;
@@ -78,9 +93,31 @@ interface HistoryEntry {
 
 function okBadge(ok: boolean) {
 	return (
-		<span className={`badge${ok ? " badge-success" : " badge-danger"}`}>
-			{ok ? "ok" : "failed"}
-		</span>
+		<Badge variant={ok ? "success" : "danger"}>{ok ? "ok" : "failed"}</Badge>
+	);
+}
+
+/** Plan rows arrive without ids; stable type+destination prefix plus the row
+ * index is the dedup the rest of this page already uses. */
+const planOpKey = (op: ApplyPlanOperation, i: number) =>
+	`${op.type}-${op.destination ?? ""}-${i}`;
+
+function PlanOpRow({ op }: { op: ApplyPlanOperation }) {
+	return (
+		<TableRow>
+			<TableCell className="muted">{op.type}</TableCell>
+			<TableCell className="mono" style={{ fontSize: 12 }}>
+				{op.source ?? "—"}
+			</TableCell>
+			<TableCell className="mono" style={{ fontSize: 12 }}>
+				{op.destination ?? "—"}
+			</TableCell>
+			<TableCell className="muted">{op.unit ?? "—"}</TableCell>
+			<TableCell className="muted">{op.interruptionRisk ?? "—"}</TableCell>
+			<TableCell className="muted">
+				{op.rollbackAvailable ? "yes" : "no"}
+			</TableCell>
+		</TableRow>
 	);
 }
 
@@ -137,18 +174,18 @@ export function ApplyJobDetailPage() {
 				{job.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : job.isError ? (
-					<p className="form-error">
+					<FormMessage>
 						{job.error instanceof ApiError
 							? job.error.message
 							: "Failed to load job"}
-					</p>
+					</FormMessage>
 				) : j ? (
 					<>
 						<p>
 							<strong>Status:</strong>{" "}
-							<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>
+							<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
 								{j.status}
-							</span>
+							</Badge>
 						</p>
 						<p>
 							<strong>Revision:</strong>{" "}
@@ -183,27 +220,26 @@ export function ApplyJobDetailPage() {
 							</p>
 						) : null}
 						{j.errorMessage ? (
-							<p className="form-error">
+							<FormMessage>
 								{j.errorCode ? `[${j.errorCode}] ` : ""}
 								{j.errorMessage}
-							</p>
+							</FormMessage>
 						) : null}
 						{isAdmin && j.status === "failed" ? (
-							<button
-								type="button"
-								className="btn btn-primary"
+							<Button
+								variant="primary"
 								disabled={retry.isPending}
 								onClick={() => retry.mutate()}
 							>
 								{retry.isPending ? "Retrying…" : "Retry this revision"}
-							</button>
+							</Button>
 						) : null}
 						{retry.isError ? (
-							<p className="form-error">
+							<FormMessage>
 								{retry.error instanceof ApiError
 									? retry.error.message
 									: "Retry failed"}
-							</p>
+							</FormMessage>
 						) : null}
 						{retry.isSuccess ? (
 							<p className="muted">
@@ -218,33 +254,31 @@ export function ApplyJobDetailPage() {
 			{ops.length > 0 ? (
 				<div className="card">
 					<h2 style={{ fontSize: 15 }}>Operations</h2>
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Type</th>
-									<th>Target</th>
-									<th>Result</th>
-									<th>Detail</th>
-								</tr>
-							</thead>
-							<tbody>
-								{ops.map((op, i) => (
-									// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
-									<tr key={`${op.type}-${op.target ?? ""}-${i}`}>
-										<td className="muted">{op.type}</td>
-										<td className="mono" style={{ fontSize: 12 }}>
-											{op.target ?? "—"}
-										</td>
-										<td>{okBadge(op.success)}</td>
-										<td className="muted" style={{ maxWidth: 360 }}>
-											{op.detail ?? ""}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Type</TableHead>
+								<TableHead>Target</TableHead>
+								<TableHead>Result</TableHead>
+								<TableHead>Detail</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{ops.map((op, i) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
+								<TableRow key={`${op.type}-${op.target ?? ""}-${i}`}>
+									<TableCell className="muted">{op.type}</TableCell>
+									<TableCell className="mono" style={{ fontSize: 12 }}>
+										{op.target ?? "—"}
+									</TableCell>
+									<TableCell>{okBadge(op.success)}</TableCell>
+									<TableCell className="muted" style={{ maxWidth: 360 }}>
+										{op.detail ?? ""}
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
 				</div>
 			) : null}
 
@@ -252,19 +286,15 @@ export function ApplyJobDetailPage() {
 			<div className="card">
 				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
 					<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>Rendered plan</h2>
-					<button
-						type="button"
-						className="btn"
-						onClick={() => setShowPlan((v) => !v)}
-					>
+					<Button onClick={() => setShowPlan((v) => !v)}>
 						{showPlan ? "Hide" : "Show plan"}
-					</button>
+					</Button>
 				</div>
 				{showPlan ? (
 					plan.isLoading ? (
 						<p className="muted">Loading plan…</p>
 					) : plan.isError ? (
-						<p className="form-error">Failed to load plan</p>
+						<FormMessage>Failed to load plan</FormMessage>
 					) : plan.data ? (
 						<>
 							<p>
@@ -275,7 +305,7 @@ export function ApplyJobDetailPage() {
 								</span>
 							</p>
 							{plan.data.errors && plan.data.errors.length > 0 ? (
-								<ul className="form-error">
+								<ul className="text-[var(--danger)]">
 									{plan.data.errors.map((e) => (
 										<li key={e}>{e}</li>
 									))}
@@ -293,40 +323,24 @@ export function ApplyJobDetailPage() {
 								</ul>
 							) : null}
 							{plan.data.operations && plan.data.operations.length > 0 ? (
-								<div className="table-container" style={{ marginTop: 8 }}>
-									<table className="data-table">
-										<thead>
-											<tr>
-												<th>Type</th>
-												<th>Source</th>
-												<th>Destination</th>
-												<th>Unit</th>
-												<th>Risk</th>
-												<th>Rollback</th>
-											</tr>
-										</thead>
-										<tbody>
+								<div style={{ marginTop: 8 }}>
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead>Type</TableHead>
+												<TableHead>Source</TableHead>
+												<TableHead>Destination</TableHead>
+												<TableHead>Unit</TableHead>
+												<TableHead>Risk</TableHead>
+												<TableHead>Rollback</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
 											{plan.data.operations.map((op, i) => (
-												// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
-												<tr key={`${op.type}-${op.destination ?? ""}-${i}`}>
-													<td className="muted">{op.type}</td>
-													<td className="mono" style={{ fontSize: 12 }}>
-														{op.source ?? "—"}
-													</td>
-													<td className="mono" style={{ fontSize: 12 }}>
-														{op.destination ?? "—"}
-													</td>
-													<td className="muted">{op.unit ?? "—"}</td>
-													<td className="muted">
-														{op.interruptionRisk ?? "—"}
-													</td>
-													<td className="muted">
-														{op.rollbackAvailable ? "yes" : "no"}
-													</td>
-												</tr>
+												<PlanOpRow key={planOpKey(op, i)} op={op} />
 											))}
-										</tbody>
-									</table>
+										</TableBody>
+									</Table>
 								</div>
 							) : null}
 						</>
@@ -368,7 +382,9 @@ export function ApplyJobDetailPage() {
 														{v.name ?? v.config}
 													</span>{" "}
 													{v.error ? (
-														<span className="form-error">{v.error}</span>
+														<span className="text-[var(--danger)]">
+															{v.error}
+														</span>
 													) : null}
 												</li>
 											))}
@@ -391,7 +407,9 @@ export function ApplyJobDetailPage() {
 															: a.command}
 													</span>{" "}
 													{a.error ? (
-														<span className="form-error">{a.error}</span>
+														<span className="text-[var(--danger)]">
+															{a.error}
+														</span>
 													) : null}
 												</li>
 											))}
@@ -409,7 +427,9 @@ export function ApplyJobDetailPage() {
 														{hc.name}
 													</span>{" "}
 													{hc.error ? (
-														<span className="form-error">{hc.error}</span>
+														<span className="text-[var(--danger)]">
+															{hc.error}
+														</span>
 													) : null}
 												</li>
 											))}

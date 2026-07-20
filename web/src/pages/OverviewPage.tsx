@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { apiFetch } from "../api/fetcher";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
+import { Badge } from "../components/ui/badge";
 
 interface SystemStats {
 	cpuPercent: number;
@@ -42,11 +43,9 @@ export function OverviewPage() {
 				<p>
 					<strong>Apply state:</strong>{" "}
 					{apply.data ? (
-						<span
-							className={`badge${drift ? " badge-warning" : " badge-success"}`}
-						>
+						<Badge variant={drift ? "warning" : "success"}>
 							{apply.data.state}
-						</span>
+						</Badge>
 					) : (
 						<span className="muted">—</span>
 					)}

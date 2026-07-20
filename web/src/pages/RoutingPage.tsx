@@ -3,6 +3,19 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { RoutingRule } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 
 /** Routing rules: list + create/edit/delete mutations. */
 export function RoutingPage() {
@@ -80,13 +93,9 @@ export function RoutingPage() {
 				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
 					<h2 style={{ margin: 0, flex: 1 }}>Routing rules</h2>
 					{isAdmin ? (
-						<button
-							type="button"
-							className="btn btn-primary"
-							onClick={startCreate}
-						>
+						<Button variant="primary" onClick={startCreate}>
 							New rule
-						</button>
+						</Button>
 					) : null}
 				</div>
 			</div>
@@ -95,45 +104,50 @@ export function RoutingPage() {
 				<div className="card">
 					<h3>{creating ? "Create rule" : `Edit ${editing?.name}`}</h3>
 					<div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
-						<label>
-							Name
-							<input
-								className="input"
+						<FormItem>
+							<Label htmlFor="rule-name">Name</Label>
+							<Input
+								id="rule-name"
 								value={form.name}
 								onChange={(e) => setForm({ ...form, name: e.target.value })}
 								disabled={!creating}
 							/>
-						</label>
-						<label>
-							Match (CIDR, domain, or geoip)
-							<input
-								className="input"
+						</FormItem>
+						<FormItem>
+							<Label htmlFor="rule-match">Match (CIDR, domain, or geoip)</Label>
+							<Input
+								id="rule-match"
 								value={form.match}
 								onChange={(e) => setForm({ ...form, match: e.target.value })}
 							/>
-						</label>
-						<label>
-							Outbound
-							<input
-								className="input"
+						</FormItem>
+						<FormItem>
+							<Label htmlFor="rule-outbound">Outbound</Label>
+							<Input
+								id="rule-outbound"
 								value={form.outbound}
 								onChange={(e) => setForm({ ...form, outbound: e.target.value })}
 							/>
-						</label>
-						<label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-							<input
-								type="checkbox"
-								checked={form.enabled}
-								onChange={(e) =>
-									setForm({ ...form, enabled: e.target.checked })
-								}
-							/>
-							Enabled
-						</label>
+						</FormItem>
+						<FormItem>
+							<Label
+								htmlFor="rule-enabled"
+								style={{ display: "flex", gap: 8, alignItems: "center" }}
+							>
+								<input
+									id="rule-enabled"
+									type="checkbox"
+									checked={form.enabled}
+									onChange={(e) =>
+										setForm({ ...form, enabled: e.target.checked })
+									}
+								/>
+								Enabled
+							</Label>
+						</FormItem>
 						<div style={{ display: "flex", gap: 8 }}>
-							<button
-								type="button"
-								className="btn btn-primary"
+							<Button
+								variant="primary"
 								disabled={
 									save.isPending || !form.name || !form.match || !form.outbound
 								}
@@ -147,17 +161,15 @@ export function RoutingPage() {
 								}
 							>
 								{save.isPending ? "Saving…" : "Save"}
-							</button>
-							<button type="button" className="btn" onClick={cancel}>
-								Cancel
-							</button>
+							</Button>
+							<Button onClick={cancel}>Cancel</Button>
 						</div>
 						{save.isError ? (
-							<p className="form-error">
+							<FormMessage>
 								{save.error instanceof ApiError
 									? save.error.message
 									: "Save failed"}
-							</p>
+							</FormMessage>
 						) : null}
 					</div>
 				</div>
@@ -167,68 +179,60 @@ export function RoutingPage() {
 				{rules.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : rules.isError ? (
-					<p className="form-error">
+					<FormMessage>
 						{rules.error instanceof ApiError
 							? rules.error.message
 							: "Failed to load routing rules"}
-					</p>
+					</FormMessage>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Name</th>
-									<th>Match</th>
-									<th>Outbound</th>
-									<th>Status</th>
-									{isAdmin ? <th /> : null}
-								</tr>
-							</thead>
-							<tbody>
-								{(rules.data ?? []).length === 0 ? (
-									<tr>
-										<td colSpan={isAdmin ? 5 : 4} className="muted">
-											No routing rules configured.
-										</td>
-									</tr>
-								) : (
-									(rules.data ?? []).map((r) => (
-										<tr key={r.name}>
-											<td>{r.name}</td>
-											<td className="muted">{r.match}</td>
-											<td className="muted">{r.outbound}</td>
-											<td>
-												<span
-													className={`badge ${r.enabled ? "badge-success" : ""}`}
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Match</TableHead>
+								<TableHead>Outbound</TableHead>
+								<TableHead>Status</TableHead>
+								{isAdmin ? <TableHead /> : null}
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(rules.data ?? []).length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={isAdmin ? 5 : 4} className="muted">
+										No routing rules configured.
+									</TableCell>
+								</TableRow>
+							) : (
+								(rules.data ?? []).map((r) => (
+									<TableRow key={r.name}>
+										<TableCell>{r.name}</TableCell>
+										<TableCell className="muted">{r.match}</TableCell>
+										<TableCell className="muted">{r.outbound}</TableCell>
+										<TableCell>
+											<Badge variant={r.enabled ? "success" : "default"}>
+												{r.enabled ? "enabled" : "disabled"}
+											</Badge>
+										</TableCell>
+										{isAdmin ? (
+											<TableCell style={{ display: "flex", gap: 4 }}>
+												<Button size="sm" onClick={() => startEdit(r)}>
+													Edit
+												</Button>
+												<Button
+													size="sm"
+													variant="danger"
+													disabled={del.isPending}
+													onClick={() => del.mutate(r.name)}
 												>
-													{r.enabled ? "enabled" : "disabled"}
-												</span>
-											</td>
-											{isAdmin ? (
-												<td style={{ display: "flex", gap: 4 }}>
-													<button
-														type="button"
-														className="btn"
-														onClick={() => startEdit(r)}
-													>
-														Edit
-													</button>
-													<button
-														type="button"
-														className="btn btn-danger"
-														disabled={del.isPending}
-														onClick={() => del.mutate(r.name)}
-													>
-														Delete
-													</button>
-												</td>
-											) : null}
-										</tr>
-									))
-								)}
-							</tbody>
-						</table>
-					</div>
+													Delete
+												</Button>
+											</TableCell>
+										) : null}
+									</TableRow>
+								))
+							)}
+						</TableBody>
+					</Table>
 				)}
 			</div>
 		</>

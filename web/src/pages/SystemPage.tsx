@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { SystemStats } from "../api/generated/models";
+import { FormMessage } from "../components/ui/form";
 
 function fmtUptime(sec: number): string {
 	const d = Math.floor(sec / 86400);
@@ -78,11 +79,11 @@ export function SystemPage() {
 	if (sys.isError || !sys.data) {
 		return (
 			<div className="card">
-				<p className="form-error">
+				<FormMessage>
 					{sys.error instanceof ApiError
 						? sys.error.message
 						: "System stats unavailable"}
-				</p>
+				</FormMessage>
 			</div>
 		);
 	}

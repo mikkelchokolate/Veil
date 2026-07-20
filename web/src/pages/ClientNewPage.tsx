@@ -2,6 +2,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "../components/ui/dialog";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input, Textarea } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 
 interface InboundOption {
 	name: string;
@@ -152,61 +165,56 @@ export function ClientNewPage() {
 
 			{step === 0 ? (
 				<>
-					<div className="form-field">
-						<label htmlFor="nc-name">Name</label>
-						<input
+					<FormItem>
+						<Label htmlFor="nc-name">Name</Label>
+						<Input
 							id="nc-name"
-							className="input"
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							required
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="nc-email">Email (optional)</label>
-						<input
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="nc-email">Email (optional)</Label>
+						<Input
 							id="nc-email"
-							className="input"
 							type="email"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="nc-notes">Notes (optional)</label>
-						<textarea
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="nc-notes">Notes (optional)</Label>
+						<Textarea
 							id="nc-notes"
-							className="input"
 							value={notes}
 							onChange={(e) => setNotes(e.target.value)}
 						/>
-					</div>
+					</FormItem>
 				</>
 			) : null}
 
 			{step === 1 ? (
 				<>
-					<div className="form-field">
-						<label htmlFor="nc-quota">Quota (bytes, optional)</label>
-						<input
+					<FormItem>
+						<Label htmlFor="nc-quota">Quota (bytes, optional)</Label>
+						<Input
 							id="nc-quota"
-							className="input"
 							type="number"
 							min="0"
 							value={quotaBytes}
 							onChange={(e) => setQuotaBytes(e.target.value)}
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="nc-exp">Expiry date (optional)</label>
-						<input
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="nc-exp">Expiry date (optional)</Label>
+						<Input
 							id="nc-exp"
-							className="input"
 							type="date"
 							value={expiresAt}
 							onChange={(e) => setExpiresAt(e.target.value)}
 						/>
-					</div>
+					</FormItem>
 				</>
 			) : null}
 
@@ -228,7 +236,7 @@ export function ClientNewPage() {
 										marginBottom: 8,
 									}}
 								>
-									<label
+									<Label
 										style={{
 											display: "flex",
 											alignItems: "center",
@@ -245,10 +253,10 @@ export function ClientNewPage() {
 										<span className="muted" style={{ fontSize: 12 }}>
 											{ib.protocol}
 										</span>
-									</label>
+									</Label>
 									{bound ? (
-										<input
-											className="input mono"
+										<Input
+											className="mono"
 											style={{ marginTop: 8 }}
 											placeholder="Credential (blank = server generates)"
 											value={bound.credential}
@@ -266,19 +274,21 @@ export function ClientNewPage() {
 				<div>
 					{create.isSuccess ? (
 						<>
-							<p className="badge badge-success">Client created</p>
-							{issuedCreds.length > 0 ? (
-								<div
-									className="card"
-									style={{ marginTop: 12, borderColor: "var(--warn, #b7791f)" }}
-									role="dialog"
-									aria-label="One-time credentials"
-								>
-									<h2 style={{ fontSize: 14 }}>One-time credentials</h2>
-									<p className="muted" style={{ fontSize: 13 }}>
-										Copy these now — they are shown only once and will be
-										cleared when you leave or after a few minutes.
-									</p>
+							<Badge variant="success">Client created</Badge>
+							<Dialog
+								open={issuedCreds.length > 0}
+								onOpenChange={(open) => {
+									if (!open) clearIssued();
+								}}
+							>
+								<DialogContent>
+									<DialogHeader>
+										<DialogTitle>One-time credentials</DialogTitle>
+										<DialogDescription>
+											Copy these now — they are shown only once and will be
+											cleared when you close this dialog or after a few minutes.
+										</DialogDescription>
+									</DialogHeader>
 									{issuedCreds.map((c) => (
 										<div key={c.bindingId} style={{ marginBottom: 8 }}>
 											<div className="muted" style={{ fontSize: 12 }}>
@@ -287,20 +297,34 @@ export function ClientNewPage() {
 											<code className="mono">{c.plaintext}</code>
 										</div>
 									))}
+									<DialogFooter>
+										<Button
+											type="button"
+											variant="primary"
+											onClick={() => {
+												clearIssued();
+												void navigate({ to: "/clients" });
+											}}
+										>
+											Done
+										</Button>
+									</DialogFooter>
+								</DialogContent>
+							</Dialog>
+							{issuedCreds.length === 0 ? (
+								<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+									<Button
+										type="button"
+										variant="primary"
+										onClick={() => {
+											clearIssued();
+											void navigate({ to: "/clients" });
+										}}
+									>
+										Done
+									</Button>
 								</div>
 							) : null}
-							<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-								<button
-									type="button"
-									className="btn btn-primary"
-									onClick={() => {
-										clearIssued();
-										void navigate({ to: "/clients" });
-									}}
-								>
-									Done
-								</button>
-							</div>
 						</>
 					) : (
 						<>
@@ -332,9 +356,7 @@ export function ClientNewPage() {
 			) : null}
 
 			{error ? (
-				<div className="form-error" role="alert" style={{ marginTop: 8 }}>
-					{error}
-				</div>
+				<FormMessage style={{ marginTop: 8 }}>{error}</FormMessage>
 			) : null}
 
 			{step < 3 || !create.isSuccess ? (
@@ -342,39 +364,30 @@ export function ClientNewPage() {
 					onSubmit={onSubmit}
 					style={{ display: "flex", gap: 8, marginTop: 20 }}
 				>
-					<button
+					<Button
 						type="button"
-						className="btn"
 						disabled={step === 0 || create.isPending}
 						onClick={() => setStep((s) => Math.max(0, s - 1))}
 					>
 						Back
-					</button>
+					</Button>
 					{step < 2 ? (
-						<button
+						<Button
 							type="button"
-							className="btn btn-primary"
+							variant="primary"
 							disabled={step === 0 && !name}
 							onClick={() => setStep((s) => s + 1)}
 						>
 							Next
-						</button>
+						</Button>
 					) : step === 2 ? (
-						<button
-							type="button"
-							className="btn btn-primary"
-							onClick={() => setStep(3)}
-						>
+						<Button type="button" variant="primary" onClick={() => setStep(3)}>
 							Review
-						</button>
+						</Button>
 					) : (
-						<button
-							type="submit"
-							className="btn btn-primary"
-							disabled={create.isPending}
-						>
+						<Button type="submit" variant="primary" disabled={create.isPending}>
 							{create.isPending ? "Creating…" : "Create client"}
-						</button>
+						</Button>
 					)}
 				</form>
 			) : null}

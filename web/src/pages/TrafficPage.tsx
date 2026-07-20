@@ -3,6 +3,17 @@ import * as echarts from "echarts";
 import { useEffect, useRef } from "react";
 import { apiFetch } from "../api/fetcher";
 import type { TrafficTopEntry } from "../api/generated/models";
+import { Badge } from "../components/ui/badge";
+import { FormMessage } from "../components/ui/form";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
+import { fmtBytes } from "../lib/bytes";
 
 interface TrafficSummary {
 	state: string;
@@ -13,19 +24,6 @@ interface TrafficSummary {
 }
 
 type TopEntry = TrafficTopEntry;
-
-function fmtBytes(n?: number): string {
-	if (n == null) return "—";
-	if (n === 0) return "0 B";
-	const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-	let v = n;
-	let i = 0;
-	while (v >= 1024 && i < units.length - 1) {
-		v /= 1024;
-		i++;
-	}
-	return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
-}
 
 /** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
@@ -119,16 +117,14 @@ export function TrafficPage() {
 				{summary.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : summary.isError ? (
-					<p className="form-error">Traffic summary unavailable</p>
+					<FormMessage>Traffic summary unavailable</FormMessage>
 				) : summary.data ? (
 					<>
 						<p>
 							<strong>Telemetry state:</strong>{" "}
-							<span
-								className={`badge${state === "collecting" ? " badge-success" : " badge-warning"}`}
-							>
+							<Badge variant={state === "collecting" ? "success" : "warning"}>
 								{state}
-							</span>
+							</Badge>
 						</p>
 						{state !== "collecting" ? (
 							<p className="muted">
@@ -166,27 +162,33 @@ export function TrafficPage() {
 					) : (
 						<>
 							<div ref={chartRef} style={{ width: "100%", height: 320 }} />
-							<div className="table-container" style={{ marginTop: 16 }}>
-								<table className="data-table">
-									<thead>
-										<tr>
-											<th>Client</th>
-											<th>Upload</th>
-											<th>Download</th>
-											<th>Total</th>
-										</tr>
-									</thead>
-									<tbody>
+							<div style={{ marginTop: 16 }}>
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>Client</TableHead>
+											<TableHead>Upload</TableHead>
+											<TableHead>Download</TableHead>
+											<TableHead>Total</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
 										{(top.data?.items ?? []).map((t) => (
-											<tr key={t.clientId}>
-												<td>{t.name}</td>
-												<td className="muted">{fmtBytes(t.uploadBytes)}</td>
-												<td className="muted">{fmtBytes(t.downloadBytes)}</td>
-												<td className="muted">{fmtBytes(t.totalBytes)}</td>
-											</tr>
+											<TableRow key={t.clientId}>
+												<TableCell>{t.name}</TableCell>
+												<TableCell className="muted">
+													{fmtBytes(t.uploadBytes)}
+												</TableCell>
+												<TableCell className="muted">
+													{fmtBytes(t.downloadBytes)}
+												</TableCell>
+												<TableCell className="muted">
+													{fmtBytes(t.totalBytes)}
+												</TableCell>
+											</TableRow>
 										))}
-									</tbody>
-								</table>
+									</TableBody>
+								</Table>
 							</div>
 						</>
 					)}

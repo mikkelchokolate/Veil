@@ -15,6 +15,32 @@ import {
 } from "../api/generated/clients/clients";
 import type { BindingView, ClientView } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormDescription, FormItem, FormMessage } from "../components/ui/form";
+import { Input, Textarea } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select } from "../components/ui/select";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { fmtBytes } from "../lib/bytes";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -72,7 +98,6 @@ export function ClientDetailPage() {
 	const [revealed, setRevealed] = useState<Record<string, string>>({});
 	const [error, setError] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
-	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [attachInbound, setAttachInbound] = useState("");
 
 	// Clear one-time revealed credentials on unmount/navigation.
@@ -202,7 +227,6 @@ export function ClientDetailPage() {
 			return res.data;
 		},
 		onSuccess: () => {
-			setConfirmDelete(false);
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void navigate({ to: "/clients" });
 		},
@@ -321,56 +345,50 @@ export function ClientDetailPage() {
 					<h2 style={{ margin: 0, flex: 1 }}>{c.name}</h2>
 					{isAdmin ? (
 						<>
-							<button
-								type="button"
-								className="btn"
+							<Button
+								variant="default"
 								disabled={enableToggle.isPending}
 								onClick={() => enableToggle.mutate()}
 							>
 								{c.enabled ? "Disable client" : "Enable client"}
-							</button>
-							{confirmDelete ? (
-								<>
-									<button
-										type="button"
-										className="btn btn-danger"
-										disabled={remove.isPending}
-										onClick={() => remove.mutate()}
-									>
-										Confirm delete
-									</button>
-									<button
-										type="button"
-										className="btn"
-										onClick={() => setConfirmDelete(false)}
-									>
-										Cancel
-									</button>
-								</>
-							) : (
-								<button
-									type="button"
-									className="btn btn-danger"
-									onClick={() => setConfirmDelete(true)}
-								>
-									Delete
-								</button>
-							)}
+							</Button>
+							<AlertDialog>
+								<AlertDialogTrigger asChild>
+									<Button variant="danger">Delete</Button>
+								</AlertDialogTrigger>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>
+											Really delete this client?
+										</AlertDialogTitle>
+										<AlertDialogDescription>
+											This action cannot be undone. All bindings and credentials
+											will be removed.
+										</AlertDialogDescription>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel>Cancel</AlertDialogCancel>
+										<AlertDialogAction
+											disabled={remove.isPending}
+											onClick={() => remove.mutate()}
+										>
+											Confirm delete
+										</AlertDialogAction>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
 						</>
 					) : null}
 				</div>
-				<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-					{tabs.map((t) => (
-						<button
-							key={t.id}
-							type="button"
-							className={`btn${tab === t.id ? " btn-primary" : ""}`}
-							onClick={() => setTab(t.id)}
-						>
-							{t.label}
-						</button>
-					))}
-				</div>
+				<Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+					<TabsList style={{ marginTop: 12 }}>
+						{tabs.map((t) => (
+							<TabsTrigger key={t.id} value={t.id}>
+								{t.label}
+							</TabsTrigger>
+						))}
+					</TabsList>
+				</Tabs>
 			</div>
 
 			{error ? (
@@ -390,35 +408,28 @@ export function ClientDetailPage() {
 							flexWrap: "wrap",
 						}}
 					>
-						<span
-							className={
-								feedback.success === false
-									? "badge badge-danger"
-									: "badge badge-success"
-							}
-						>
+						<Badge variant={feedback.success === false ? "danger" : "success"}>
 							{feedback.success === false ? "apply failed" : "saved"}
-						</span>
+						</Badge>
 						{feedback.revision ? (
-							<span className="muted" style={{ fontSize: 13 }}>
+							<FormDescription style={{ fontSize: 13 }}>
 								desired rev {feedback.revision.desired ?? "—"} · applied{" "}
 								{feedback.revision.applied ?? "—"} ·{" "}
 								{feedback.revision.state ?? ""}
-							</span>
+							</FormDescription>
 						) : null}
 						{feedback.applyJob?.id ? (
-							<span className="muted mono" style={{ fontSize: 12 }}>
+							<FormDescription className="mono" style={{ fontSize: 12 }}>
 								job {feedback.applyJob.id} ({feedback.applyJob.status})
-							</span>
+							</FormDescription>
 						) : null}
-						<button
-							type="button"
-							className="btn"
+						<Button
+							variant="default"
 							style={{ marginLeft: "auto" }}
 							onClick={() => setFeedback(null)}
 						>
 							Dismiss
-						</button>
+						</Button>
 					</div>
 				</div>
 			) : null}
@@ -446,67 +457,44 @@ export function ClientDetailPage() {
 							style={{ marginTop: 16, maxWidth: 480 }}
 						>
 							<h2 style={{ fontSize: 14 }}>Edit</h2>
-							<div className="form-field">
-								<label htmlFor="cd-name">Name</label>
-								<input
-									id="cd-name"
-									className="input"
-									{...form.register("name")}
-								/>
-								{form.formState.errors.name ? (
-									<span className="form-error">
-										{form.formState.errors.name.message}
-									</span>
-								) : null}
-							</div>
-							<div className="form-field">
-								<label htmlFor="cd-email">Email</label>
-								<input
-									id="cd-email"
-									className="input"
-									type="email"
-									{...form.register("email")}
-								/>
-								{form.formState.errors.email ? (
-									<span className="form-error">
-										{form.formState.errors.email.message}
-									</span>
-								) : null}
-							</div>
-							<div className="form-field">
-								<label htmlFor="cd-quota">
+							<FormItem>
+								<Label htmlFor="cd-name">Name</Label>
+								<Input id="cd-name" {...form.register("name")} />
+								<FormMessage>{form.formState.errors.name?.message}</FormMessage>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-email">Email</Label>
+								<Input id="cd-email" type="email" {...form.register("email")} />
+								<FormMessage>
+									{form.formState.errors.email?.message}
+								</FormMessage>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-quota">
 									Quota (bytes, blank = unlimited)
-								</label>
-								<input
+								</Label>
+								<Input
 									id="cd-quota"
-									className="input"
 									inputMode="numeric"
 									{...form.register("quotaBytes")}
 								/>
-								{form.formState.errors.quotaBytes ? (
-									<span className="form-error">
-										{form.formState.errors.quotaBytes.message}
-									</span>
-								) : null}
-							</div>
-							<div className="form-field">
-								<label htmlFor="cd-exp">Expiry date</label>
-								<input
+								<FormMessage>
+									{form.formState.errors.quotaBytes?.message}
+								</FormMessage>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-exp">Expiry date</Label>
+								<Input
 									id="cd-exp"
-									className="input"
 									type="date"
 									{...form.register("expiresAt")}
 								/>
-							</div>
-							<div className="form-field">
-								<label htmlFor="cd-notes">Notes</label>
-								<textarea
-									id="cd-notes"
-									className="input"
-									{...form.register("notes")}
-								/>
-							</div>
-							<label
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-notes">Notes</Label>
+								<Textarea id="cd-notes" {...form.register("notes")} />
+							</FormItem>
+							<Label
 								style={{
 									display: "flex",
 									gap: 8,
@@ -516,14 +504,14 @@ export function ClientDetailPage() {
 							>
 								<input type="checkbox" {...form.register("enabled")} />
 								<span>Enabled</span>
-							</label>
-							<button
+							</Label>
+							<Button
 								type="submit"
-								className="btn btn-primary"
+								variant="primary"
 								disabled={save.isPending || !form.formState.isDirty}
 							>
 								{save.isPending ? "Saving…" : "Save changes"}
-							</button>
+							</Button>
 						</form>
 					) : null}
 				</div>
@@ -554,58 +542,55 @@ export function ClientDetailPage() {
 									}}
 								>
 									<strong>{b.inboundId}</strong>
-									<span className={`badge${b.enabled ? " badge-success" : ""}`}>
+									<Badge variant={b.enabled ? "success" : "default"}>
 										{b.enabled ? "enabled" : "disabled"}
-									</span>
+									</Badge>
 									{b.capability?.protocol ? (
-										<span className="muted" style={{ fontSize: 12 }}>
+										<FormDescription style={{ fontSize: 12 }}>
 											{b.capability.protocol}
-										</span>
+										</FormDescription>
 									) : null}
 									<div style={{ flex: 1 }} />
 									{isAdmin ? (
 										<>
-											<button
-												type="button"
-												className="btn"
+											<Button
+												variant="default"
 												disabled={toggleBinding.isPending}
 												onClick={() => toggleBinding.mutate(b)}
 											>
 												{b.enabled ? "Disable" : "Enable"}
-											</button>
-											<button
-												type="button"
-												className="btn"
+											</Button>
+											<Button
+												variant="default"
 												disabled={rotate.isPending}
 												onClick={() => rotate.mutate(b.id)}
 											>
 												Rotate credential
-											</button>
-											<button
-												type="button"
-												className="btn btn-danger"
+											</Button>
+											<Button
+												variant="danger"
 												disabled={detach.isPending}
 												onClick={() => detach.mutate(b.id)}
 											>
 												Detach
-											</button>
+											</Button>
 										</>
 									) : null}
 								</div>
 								{b.credential ? (
-									<div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+									<FormDescription style={{ fontSize: 12, marginTop: 6 }}>
 										credential{" "}
 										{b.credential.configured ? "configured" : "not set"}
 										{b.credential.version != null
 											? ` · v${b.credential.version}`
 											: ""}
-									</div>
+									</FormDescription>
 								) : null}
 								{revealed[b.id] ? (
 									<div style={{ marginTop: 8 }}>
-										<div className="muted" style={{ fontSize: 12 }}>
+										<FormDescription style={{ fontSize: 12 }}>
 											New credential (copy now — shown once):
-										</div>
+										</FormDescription>
 										<code className="mono">{revealed[b.id]}</code>
 									</div>
 								) : null}
@@ -615,8 +600,7 @@ export function ClientDetailPage() {
 
 					{isAdmin && attachable.length > 0 ? (
 						<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-							<select
-								className="input"
+							<Select
 								style={{ maxWidth: 240 }}
 								value={attachInbound}
 								onChange={(e) => setAttachInbound(e.target.value)}
@@ -628,15 +612,14 @@ export function ClientDetailPage() {
 										{ib.name} ({ib.protocol})
 									</option>
 								))}
-							</select>
-							<button
-								type="button"
-								className="btn"
+							</Select>
+							<Button
+								variant="default"
 								disabled={!attachInbound || attach.isPending}
 								onClick={() => attach.mutate(attachInbound)}
 							>
 								Attach
-							</button>
+							</Button>
 						</div>
 					) : null}
 				</div>
@@ -658,42 +641,36 @@ export function ClientDetailPage() {
 					) : auditItems.length === 0 ? (
 						<p className="muted">No audit entries.</p>
 					) : (
-						<div className="table-container">
-							<table className="data-table">
-								<thead>
-									<tr>
-										<th>When</th>
-										<th>Actor</th>
-										<th>Action</th>
-										<th>Result</th>
-										<th>Details</th>
-									</tr>
-								</thead>
-								<tbody>
-									{auditItems.map((a, i) => (
-										<tr key={a.id ?? i}>
-											<td className="muted">
-												{a.at ? new Date(a.at * 1000).toLocaleString() : "—"}
-											</td>
-											<td>{a.actor ?? "—"}</td>
-											<td>{a.action ?? "—"}</td>
-											<td>
-												<span
-													className={
-														a.success === false
-															? "badge badge-danger"
-															: "badge badge-success"
-													}
-												>
-													{a.success === false ? "failed" : "ok"}
-												</span>
-											</td>
-											<td className="muted">{a.details ?? ""}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>When</TableHead>
+									<TableHead>Actor</TableHead>
+									<TableHead>Action</TableHead>
+									<TableHead>Result</TableHead>
+									<TableHead>Details</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{auditItems.map((a, i) => (
+									<TableRow key={a.id ?? i}>
+										<TableCell className="muted">
+											{a.at ? new Date(a.at * 1000).toLocaleString() : "—"}
+										</TableCell>
+										<TableCell>{a.actor ?? "—"}</TableCell>
+										<TableCell>{a.action ?? "—"}</TableCell>
+										<TableCell>
+											<Badge
+												variant={a.success === false ? "danger" : "success"}
+											>
+												{a.success === false ? "failed" : "ok"}
+											</Badge>
+										</TableCell>
+										<TableCell className="muted">{a.details ?? ""}</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
 					)}
 				</div>
 			) : null}

@@ -3,6 +3,30 @@ import { type FormEvent, useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { UserResponse } from "../api/generated/models";
 import { useAuth, useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select } from "../components/ui/select";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 
 type PanelUser = UserResponse;
 
@@ -135,191 +159,149 @@ export function UsersPage() {
 			<div className="card">
 				<h2>Panel users</h2>
 				{notice ? <p className="muted">{notice}</p> : null}
-				{error ? <p className="form-error">{error}</p> : null}
+				{error ? <FormMessage>{error}</FormMessage> : null}
 				{users.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Username</th>
-									<th>Role</th>
-									<th>Locale</th>
-									<th>Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{(users.data ?? []).map((u) => (
-									<tr key={u.username}>
-										<td>
-											{u.username}
-											{session?.username === u.username ? (
-												<span className="muted"> (you)</span>
-											) : null}
-										</td>
-										<td>
-											<span
-												className={`badge${u.role === "admin" ? " badge-success" : ""}`}
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Username</TableHead>
+								<TableHead>Role</TableHead>
+								<TableHead>Locale</TableHead>
+								<TableHead>Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(users.data ?? []).map((u) => (
+								<TableRow key={u.username}>
+									<TableCell>
+										{u.username}
+										{session?.username === u.username ? (
+											<span className="muted"> (you)</span>
+										) : null}
+									</TableCell>
+									<TableCell>
+										<Badge variant={u.role === "admin" ? "success" : "default"}>
+											{u.role}
+										</Badge>
+									</TableCell>
+									<TableCell className="muted">{u.locale ?? "en"}</TableCell>
+									<TableCell>
+										<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+											<Button
+												size="sm"
+												onClick={() => {
+													setEditing(u.username);
+													setEditRole(
+														(u.role as "admin" | "viewer") ?? "viewer",
+													);
+													setEditPassword("");
+												}}
 											>
-												{u.role}
-											</span>
-										</td>
-										<td className="muted">{u.locale ?? "en"}</td>
-										<td>
-											<div
-												style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
-											>
-												<button
-													type="button"
-													className="btn"
-													onClick={() => {
-														setEditing(u.username);
-														setEditRole(
-															(u.role as "admin" | "viewer") ?? "viewer",
-														);
-														setEditPassword("");
-													}}
+												Edit
+											</Button>
+											{session?.username !== u.username ? (
+												<Button
+													size="sm"
+													variant="danger"
+													onClick={() => setConfirmDelete(u.username)}
 												>
-													Edit
-												</button>
-												{session?.username !== u.username ? (
-													confirmDelete === u.username ? (
-														<>
-															<button
-																type="button"
-																className="btn btn-danger"
-																disabled={remove.isPending}
-																onClick={() => remove.mutate(u.username)}
-															>
-																Confirm delete
-															</button>
-															<button
-																type="button"
-																className="btn"
-																onClick={() => setConfirmDelete(null)}
-															>
-																Cancel
-															</button>
-														</>
-													) : (
-														<button
-															type="button"
-															className="btn btn-danger"
-															onClick={() => setConfirmDelete(u.username)}
-														>
-															Delete
-														</button>
-													)
-												) : null}
-											</div>
-											{editing === u.username ? (
-												<form
-													style={{
-														marginTop: 8,
-														display: "flex",
-														gap: 8,
-														flexWrap: "wrap",
-														alignItems: "center",
-													}}
-													onSubmit={(e) => {
-														e.preventDefault();
-														update.mutate({
-															name: u.username,
-															role: editRole,
-															password: editPassword || undefined,
-														});
-													}}
-												>
-													<select
-														className="input"
-														style={{ maxWidth: 130 }}
-														value={editRole}
-														onChange={(e) =>
-															setEditRole(e.target.value as "admin" | "viewer")
-														}
-														aria-label="role"
-													>
-														<option value="viewer">viewer</option>
-														<option value="admin">admin</option>
-													</select>
-													<input
-														className="input"
-														style={{ maxWidth: 180 }}
-														type="password"
-														placeholder="New password (optional)"
-														value={editPassword}
-														onChange={(e) => setEditPassword(e.target.value)}
-														aria-label="new password"
-													/>
-													<button
-														type="submit"
-														className="btn btn-primary"
-														disabled={update.isPending}
-													>
-														Save
-													</button>
-													<button
-														type="button"
-														className="btn"
-														onClick={() => setEditing(null)}
-													>
-														Cancel
-													</button>
-												</form>
+													Delete
+												</Button>
 											) : null}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+										</div>
+										{editing === u.username ? (
+											<form
+												style={{
+													marginTop: 8,
+													display: "flex",
+													gap: 8,
+													flexWrap: "wrap",
+													alignItems: "center",
+												}}
+												onSubmit={(e) => {
+													e.preventDefault();
+													update.mutate({
+														name: u.username,
+														role: editRole,
+														password: editPassword || undefined,
+													});
+												}}
+											>
+												<Select
+													style={{ maxWidth: 130 }}
+													value={editRole}
+													onChange={(e) =>
+														setEditRole(e.target.value as "admin" | "viewer")
+													}
+													aria-label="role"
+												>
+													<option value="viewer">viewer</option>
+													<option value="admin">admin</option>
+												</Select>
+												<Input
+													style={{ maxWidth: 180 }}
+													type="password"
+													placeholder="New password (optional)"
+													value={editPassword}
+													onChange={(e) => setEditPassword(e.target.value)}
+													aria-label="new password"
+												/>
+												<Button
+													type="submit"
+													variant="primary"
+													disabled={update.isPending}
+												>
+													Save
+												</Button>
+												<Button onClick={() => setEditing(null)}>Cancel</Button>
+											</form>
+										) : null}
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
 				)}
 			</div>
 
 			<div className="card">
 				<h2>Create user</h2>
 				<form onSubmit={onSubmit}>
-					<div className="form-group">
-						<label htmlFor="nu-username">Username</label>
-						<input
+					<FormItem>
+						<Label htmlFor="nu-username">Username</Label>
+						<Input
 							id="nu-username"
-							className="input"
 							value={username}
 							onChange={(e) => setUsername(e.target.value)}
 							required
 						/>
-					</div>
-					<div className="form-group">
-						<label htmlFor="nu-password">Password</label>
-						<input
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="nu-password">Password</Label>
+						<Input
 							id="nu-password"
-							className="input"
 							type="password"
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							required
 						/>
-					</div>
-					<div className="form-group">
-						<label htmlFor="nu-role">Role</label>
-						<select
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="nu-role">Role</Label>
+						<Select
 							id="nu-role"
-							className="input"
 							value={role}
 							onChange={(e) => setRole(e.target.value as "admin" | "viewer")}
 						>
 							<option value="viewer">viewer (read-only)</option>
 							<option value="admin">admin</option>
-						</select>
-					</div>
-					<button
-						type="submit"
-						className="btn btn-primary"
-						disabled={create.isPending}
-					>
+						</Select>
+					</FormItem>
+					<Button type="submit" variant="primary" disabled={create.isPending}>
 						{create.isPending ? "Creating…" : "Create user"}
-					</button>
+					</Button>
 				</form>
 			</div>
 
@@ -330,63 +312,87 @@ export function UsersPage() {
 				) : (sessions.data ?? []).length === 0 ? (
 					<p className="muted">No active sessions.</p>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>User</th>
-									<th>Role</th>
-									<th>Last seen</th>
-									<th>Expires</th>
-									<th>Agent</th>
-									<th></th>
-								</tr>
-							</thead>
-							<tbody>
-								{(sessions.data ?? []).map((s) => (
-									<tr key={s.id}>
-										<td>
-											{s.username}
-											{s.current ? (
-												<span className="muted"> (this)</span>
-											) : null}
-										</td>
-										<td className="muted">{s.role}</td>
-										<td className="muted">
-											{new Date(s.lastSeenAt).toLocaleString()}
-										</td>
-										<td className="muted">
-											{new Date(s.expiresAt).toLocaleString()}
-										</td>
-										<td
-											className="muted"
-											style={{
-												maxWidth: 200,
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-											}}
-										>
-											{s.userAgent ?? "—"}
-										</td>
-										<td>
-											{!s.current ? (
-												<button
-													type="button"
-													className="btn"
-													disabled={revoke.isPending}
-													onClick={() => revoke.mutate(s.id)}
-												>
-													Revoke
-												</button>
-											) : null}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>User</TableHead>
+								<TableHead>Role</TableHead>
+								<TableHead>Last seen</TableHead>
+								<TableHead>Expires</TableHead>
+								<TableHead>Agent</TableHead>
+								<TableHead />
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(sessions.data ?? []).map((s) => (
+								<TableRow key={s.id}>
+									<TableCell>
+										{s.username}
+										{s.current ? <span className="muted"> (this)</span> : null}
+									</TableCell>
+									<TableCell className="muted">{s.role}</TableCell>
+									<TableCell className="muted">
+										{new Date(s.lastSeenAt).toLocaleString()}
+									</TableCell>
+									<TableCell className="muted">
+										{new Date(s.expiresAt).toLocaleString()}
+									</TableCell>
+									<TableCell
+										className="muted"
+										style={{
+											maxWidth: 200,
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+										}}
+									>
+										{s.userAgent ?? "—"}
+									</TableCell>
+									<TableCell>
+										{!s.current ? (
+											<Button
+												size="sm"
+												disabled={revoke.isPending}
+												onClick={() => revoke.mutate(s.id)}
+											>
+												Revoke
+											</Button>
+										) : null}
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmDelete !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmDelete(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete user?</AlertDialogTitle>
+						<AlertDialogDescription>
+							Deleting <span className="mono">{confirmDelete}</span> removes the
+							account and revokes its sessions. This cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={remove.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmDelete) remove.mutate(confirmDelete);
+							}}
+						>
+							{remove.isPending ? "Deleting…" : "Confirm delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

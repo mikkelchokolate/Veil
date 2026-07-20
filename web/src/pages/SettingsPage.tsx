@@ -3,6 +3,21 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { Settings } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Button } from "../components/ui/button";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Table, TableBody, TableCell, TableRow } from "../components/ui/table";
 
 /** S4: full settings edit (every editable field) + security key rotation.
  * Fields are grouped: identity/access, protocol credentials, ACME, firewall.
@@ -142,11 +157,11 @@ export function SettingsPage() {
 	if (settings.isError || !settings.data) {
 		return (
 			<div className="card">
-				<p className="form-error">
+				<FormMessage>
 					{settings.error instanceof ApiError
 						? settings.error.message
 						: "Settings unavailable"}
-				</p>
+				</FormMessage>
 			</div>
 		);
 	}
@@ -157,13 +172,11 @@ export function SettingsPage() {
 				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
 					<h2 style={{ margin: 0, flex: 1 }}>Settings</h2>
 					{isAdmin && !editing ? (
-						<button type="button" className="btn" onClick={startEdit}>
-							Edit
-						</button>
+						<Button onClick={startEdit}>Edit</Button>
 					) : null}
 				</div>
 				{notice ? <p className="muted">{notice}</p> : null}
-				{error ? <p className="form-error">{error}</p> : null}
+				{error ? <FormMessage>{error}</FormMessage> : null}
 			</div>
 
 			{editing ? (
@@ -177,55 +190,45 @@ export function SettingsPage() {
 						}}
 					>
 						{FIELDS.map((f) => (
-							<div className="form-field" key={f.key}>
-								<label htmlFor={`set-${f.key}`}>{f.label}</label>
-								<input
+							<FormItem key={f.key}>
+								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
+								<Input
 									id={`set-${f.key}`}
-									className="input"
-									placeholder={f.placeholder}
+									{...(f.placeholder ? { placeholder: f.placeholder } : {})}
 									value={form[f.key] ?? ""}
 									onChange={(e) =>
 										setForm({ ...form, [f.key]: e.target.value })
 									}
 								/>
-							</div>
+							</FormItem>
 						))}
 					</div>
 					<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-						<button
-							type="button"
-							className="btn btn-primary"
+						<Button
+							variant="primary"
 							disabled={save.isPending}
 							onClick={saveEdit}
 						>
 							{save.isPending ? "Saving…" : "Save"}
-						</button>
-						<button
-							type="button"
-							className="btn"
-							onClick={() => setEditing(false)}
-						>
-							Cancel
-						</button>
+						</Button>
+						<Button onClick={() => setEditing(false)}>Cancel</Button>
 					</div>
 				</div>
 			) : null}
 
 			<div className="card">
-				<div className="table-container">
-					<table className="data-table">
-						<tbody>
-							{rows.map(([k, v]) => (
-								<tr key={k}>
-									<td style={{ width: 200 }}>
-										<strong>{k}</strong>
-									</td>
-									<td className="muted">{v || "—"}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
+				<Table>
+					<TableBody>
+						{rows.map(([k, v]) => (
+							<TableRow key={k}>
+								<TableCell style={{ width: 200 }}>
+									<strong>{k}</strong>
+								</TableCell>
+								<TableCell className="muted">{v || "—"}</TableCell>
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
 				<p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
 					Listen address and mode are changed through the CLI / setup flow.
 					Everything else above is editable.
@@ -239,33 +242,32 @@ export function SettingsPage() {
 						Rotate the state encryption key. This revokes every other session
 						and re-encrypts the state file.
 					</p>
-					{confirmRotate ? (
-						<div style={{ display: "flex", gap: 8 }}>
-							<button
-								type="button"
-								className="btn btn-danger"
-								disabled={rotateKey.isPending}
-								onClick={() => rotateKey.mutate()}
-							>
-								{rotateKey.isPending ? "Rotating…" : "Confirm rotation"}
-							</button>
-							<button
-								type="button"
-								className="btn"
-								onClick={() => setConfirmRotate(false)}
-							>
-								Cancel
-							</button>
-						</div>
-					) : (
-						<button
-							type="button"
-							className="btn btn-danger"
-							onClick={() => setConfirmRotate(true)}
-						>
-							Rotate state key
-						</button>
-					)}
+					<Button variant="danger" onClick={() => setConfirmRotate(true)}>
+						Rotate state key
+					</Button>
+					<AlertDialog open={confirmRotate} onOpenChange={setConfirmRotate}>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Rotate state key?</AlertDialogTitle>
+								<AlertDialogDescription>
+									This revokes every other session and re-encrypts the state
+									file.
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogAction
+									disabled={rotateKey.isPending}
+									onClick={(e) => {
+										e.preventDefault();
+										rotateKey.mutate();
+									}}
+								>
+									{rotateKey.isPending ? "Rotating…" : "Confirm rotation"}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
 				</div>
 			) : null}
 		</>

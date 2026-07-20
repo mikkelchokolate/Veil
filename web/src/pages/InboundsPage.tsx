@@ -4,6 +4,30 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { ClientView, Inbound } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select } from "../components/ui/select";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "../components/ui/table";
 
 /** S4: mutation envelope feedback (revision/applyJob/success). */
 interface MutationFeedback {
@@ -173,21 +197,19 @@ export function InboundsPage() {
 						marginTop: 8,
 					}}
 				>
-					<div className="form-field">
-						<label htmlFor="ib-name">Name</label>
-						<input
+					<FormItem>
+						<Label htmlFor="ib-name">Name</Label>
+						<Input
 							id="ib-name"
-							className="input"
 							value={form.name}
 							disabled={!!editing}
 							onChange={(e) => setForm({ ...form, name: e.target.value })}
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="ib-proto">Protocol</label>
-						<select
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="ib-proto">Protocol</Label>
+						<Select
 							id="ib-proto"
-							className="input"
 							value={form.protocol}
 							onChange={(e) => setForm({ ...form, protocol: e.target.value })}
 						>
@@ -196,13 +218,12 @@ export function InboundsPage() {
 									{p}
 								</option>
 							))}
-						</select>
-					</div>
-					<div className="form-field">
-						<label htmlFor="ib-trans">Transport</label>
-						<select
+						</Select>
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="ib-trans">Transport</Label>
+						<Select
 							id="ib-trans"
-							className="input"
 							value={form.transport}
 							onChange={(e) => setForm({ ...form, transport: e.target.value })}
 						>
@@ -211,55 +232,52 @@ export function InboundsPage() {
 									{t}
 								</option>
 							))}
-						</select>
-					</div>
-					<div className="form-field">
-						<label htmlFor="ib-port">Port</label>
-						<input
+						</Select>
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="ib-port">Port</Label>
+						<Input
 							id="ib-port"
-							className="input"
 							inputMode="numeric"
 							value={form.port}
 							onChange={(e) => setForm({ ...form, port: e.target.value })}
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="ib-masq">Masquerade URL</label>
-						<input
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="ib-masq">Masquerade URL</Label>
+						<Input
 							id="ib-masq"
-							className="input"
 							value={form.masqueradeURL}
 							onChange={(e) =>
 								setForm({ ...form, masqueradeURL: e.target.value })
 							}
 						/>
-					</div>
-					<div className="form-field">
-						<label htmlFor="ib-fb">Fallback root</label>
-						<input
+					</FormItem>
+					<FormItem>
+						<Label htmlFor="ib-fb">Fallback root</Label>
+						<Input
 							id="ib-fb"
-							className="input"
 							value={form.fallbackRoot}
 							onChange={(e) =>
 								setForm({ ...form, fallbackRoot: e.target.value })
 							}
 						/>
-					</div>
+					</FormItem>
 					{form.protocol === "olcrtc" ? (
-						<div className="form-field">
-							<label htmlFor="ib-room">olcRTC room ID</label>
-							<input
+						<FormItem>
+							<Label htmlFor="ib-room">olcRTC room ID</Label>
+							<Input
 								id="ib-room"
-								className="input"
 								value={form.olcrtcRoomID}
 								onChange={(e) =>
 									setForm({ ...form, olcrtcRoomID: e.target.value })
 								}
 							/>
-						</div>
+						</FormItem>
 					) : null}
 				</div>
-				<label
+				<Label
+					htmlFor="ib-enabled"
 					style={{
 						display: "flex",
 						gap: 8,
@@ -268,16 +286,16 @@ export function InboundsPage() {
 					}}
 				>
 					<input
+						id="ib-enabled"
 						type="checkbox"
 						checked={form.enabled}
 						onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
 					/>
 					<span>Enabled</span>
-				</label>
+				</Label>
 				<div style={{ display: "flex", gap: 8 }}>
-					<button
-						type="button"
-						className="btn btn-primary"
+					<Button
+						variant="primary"
 						disabled={create.isPending || update.isPending}
 						onClick={() => {
 							if (creating) {
@@ -288,10 +306,8 @@ export function InboundsPage() {
 						}}
 					>
 						{creating ? "Create" : "Save"}
-					</button>
-					<button
-						type="button"
-						className="btn"
+					</Button>
+					<Button
 						onClick={() => {
 							setCreating(false);
 							setEditing(null);
@@ -299,7 +315,7 @@ export function InboundsPage() {
 						}}
 					>
 						Cancel
-					</button>
+					</Button>
 				</div>
 			</div>
 		) : null;
@@ -376,141 +392,142 @@ export function InboundsPage() {
 				{inbounds.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : inbounds.isError ? (
-					<p className="form-error">
+					<FormMessage>
 						{inbounds.error instanceof ApiError
 							? inbounds.error.message
 							: "Failed to load inbounds"}
-					</p>
+					</FormMessage>
 				) : (inbounds.data ?? []).length === 0 ? (
 					<p className="muted">No inbounds configured.</p>
 				) : (
-					<div className="table-container">
-						<table className="data-table">
-							<thead>
-								<tr>
-									<th>Name</th>
-									<th>Protocol</th>
-									<th>Transport</th>
-									<th>Port</th>
-									<th>Status</th>
-									<th>Attached clients</th>
-									{isAdmin ? <th>Actions</th> : null}
-								</tr>
-							</thead>
-							<tbody>
-								{(inbounds.data ?? []).map((ib) => {
-									const attached = attachedClients(ib.name);
-									return (
-										<tr key={ib.name}>
-											<td>{ib.name}</td>
-											<td className="muted">{ib.protocol}</td>
-											<td className="muted">{ib.transport ?? "—"}</td>
-											<td className="muted">{ib.port ?? "—"}</td>
-											<td>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Protocol</TableHead>
+								<TableHead>Transport</TableHead>
+								<TableHead>Port</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Attached clients</TableHead>
+								{isAdmin ? <TableHead>Actions</TableHead> : null}
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(inbounds.data ?? []).map((ib) => {
+								const attached = attachedClients(ib.name);
+								return (
+									<TableRow key={ib.name}>
+										<TableCell>{ib.name}</TableCell>
+										<TableCell className="muted">{ib.protocol}</TableCell>
+										<TableCell className="muted">
+											{ib.transport ?? "—"}
+										</TableCell>
+										<TableCell className="muted">{ib.port ?? "—"}</TableCell>
+										<TableCell>
+											<Badge variant={ib.enabled ? "success" : "default"}>
+												{ib.enabled ? "enabled" : "disabled"}
+											</Badge>
+										</TableCell>
+										<TableCell>
+											{attached.length === 0 ? (
+												<span className="muted">—</span>
+											) : (
 												<span
-													className={`badge${ib.enabled ? " badge-success" : ""}`}
+													style={{
+														display: "flex",
+														gap: 4,
+														flexWrap: "wrap",
+													}}
 												>
-													{ib.enabled ? "enabled" : "disabled"}
+													{attached.map((c) => (
+														<Link
+															key={c.id}
+															to="/clients/$clientId"
+															params={{ clientId: c.id }}
+														>
+															<Badge>{c.name}</Badge>
+														</Link>
+													))}
 												</span>
-											</td>
-											<td>
-												{attached.length === 0 ? (
-													<span className="muted">—</span>
-												) : (
-													<span
-														style={{
-															display: "flex",
-															gap: 4,
-															flexWrap: "wrap",
-														}}
+											)}
+										</TableCell>
+										{isAdmin ? (
+											<TableCell>
+												<div
+													style={{
+														display: "flex",
+														gap: 6,
+														flexWrap: "wrap",
+													}}
+												>
+													<Button size="sm" onClick={() => startEdit(ib)}>
+														Edit
+													</Button>
+													<Button
+														size="sm"
+														disabled={update.isPending}
+														onClick={() =>
+															update.mutate({
+																name: ib.name,
+																protocol: ib.protocol,
+																transport: ib.transport ?? "tcp",
+																port: ib.port != null ? String(ib.port) : "",
+																enabled: !ib.enabled,
+																masqueradeURL: ib.masqueradeURL ?? "",
+																fallbackRoot: ib.fallbackRoot ?? "",
+																olcrtcRoomID: ib.olcrtcRoomID ?? "",
+																original: ib.name,
+															})
+														}
 													>
-														{attached.map((c) => (
-															<Link
-																key={c.id}
-																to="/clients/$clientId"
-																params={{ clientId: c.id }}
-																className="badge"
-															>
-																{c.name}
-															</Link>
-														))}
-													</span>
-												)}
-											</td>
-											{isAdmin ? (
-												<td>
-													<div
-														style={{
-															display: "flex",
-															gap: 6,
-															flexWrap: "wrap",
-														}}
+														{ib.enabled ? "Disable" : "Enable"}
+													</Button>
+													<Button
+														size="sm"
+														variant="danger"
+														onClick={() => setConfirmDelete(ib.name)}
 													>
-														<button
-															type="button"
-															className="btn"
-															onClick={() => startEdit(ib)}
-														>
-															Edit
-														</button>
-														<button
-															type="button"
-															className="btn"
-															disabled={update.isPending}
-															onClick={() =>
-																update.mutate({
-																	name: ib.name,
-																	protocol: ib.protocol,
-																	transport: ib.transport ?? "tcp",
-																	port: ib.port != null ? String(ib.port) : "",
-																	enabled: !ib.enabled,
-																	masqueradeURL: ib.masqueradeURL ?? "",
-																	fallbackRoot: ib.fallbackRoot ?? "",
-																	olcrtcRoomID: ib.olcrtcRoomID ?? "",
-																	original: ib.name,
-																})
-															}
-														>
-															{ib.enabled ? "Disable" : "Enable"}
-														</button>
-														{confirmDelete === ib.name ? (
-															<>
-																<button
-																	type="button"
-																	className="btn btn-danger"
-																	disabled={remove.isPending}
-																	onClick={() => remove.mutate(ib.name)}
-																>
-																	Confirm
-																</button>
-																<button
-																	type="button"
-																	className="btn"
-																	onClick={() => setConfirmDelete(null)}
-																>
-																	Cancel
-																</button>
-															</>
-														) : (
-															<button
-																type="button"
-																className="btn btn-danger"
-																onClick={() => setConfirmDelete(ib.name)}
-															>
-																Delete
-															</button>
-														)}
-													</div>
-												</td>
-											) : null}
-										</tr>
-									);
-								})}
-							</tbody>
-						</table>
-					</div>
+														Delete
+													</Button>
+												</div>
+											</TableCell>
+										) : null}
+									</TableRow>
+								);
+							})}
+						</TableBody>
+					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmDelete !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmDelete(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete inbound?</AlertDialogTitle>
+						<AlertDialogDescription>
+							Deleting <span className="mono">{confirmDelete}</span> removes the
+							listener and detaches its clients. This cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={remove.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmDelete) remove.mutate(confirmDelete);
+							}}
+						>
+							{remove.isPending ? "Deleting…" : "Confirm delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

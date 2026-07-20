@@ -23,8 +23,10 @@ export default defineConfig({
 	},
 	server: {
 		proxy: {
+			// "/s/" (not "/s") — a bare "/s" prefix also matches /src/* and would
+			// proxy every module request to the backend.
 			"/api": "http://127.0.0.1:47359",
-			"/s": "http://127.0.0.1:47359",
+			"^/s/": "http://127.0.0.1:47359",
 		},
 	},
 	build: {

@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { WarpConfig } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { FormMessage } from "../components/ui/form";
 
 /** WARP outbound: enable/disable toggle + read-only status. Provisioning of a
  * free Cloudflare account is server-side on enable. */
@@ -33,11 +36,11 @@ export function WarpPage() {
 	if (warp.isError || !warp.data) {
 		return (
 			<div className="card">
-				<p className="form-error">
+				<FormMessage>
 					{warp.error instanceof ApiError
 						? warp.error.message
 						: "WARP config unavailable"}
-				</p>
+				</FormMessage>
 			</div>
 		);
 	}
@@ -48,9 +51,9 @@ export function WarpPage() {
 			<h2>WARP outbound</h2>
 			<p>
 				<strong>Status:</strong>{" "}
-				<span className={`badge${w.enabled ? " badge-success" : ""}`}>
+				<Badge variant={w.enabled ? "success" : "default"}>
 					{w.enabled ? "enabled" : "disabled"}
-				</span>
+				</Badge>
 			</p>
 			{w.endpoint ? (
 				<p>
@@ -79,9 +82,8 @@ export function WarpPage() {
 				</p>
 			) : null}
 			{isAdmin ? (
-				<button
-					type="button"
-					className={`btn ${w.enabled ? "" : "btn-primary"}`}
+				<Button
+					variant={w.enabled ? "default" : "primary"}
 					disabled={toggle.isPending}
 					onClick={() => toggle.mutate(!w.enabled)}
 				>
@@ -90,14 +92,14 @@ export function WarpPage() {
 						: w.enabled
 							? "Disable WARP"
 							: "Enable WARP"}
-				</button>
+				</Button>
 			) : null}
 			{toggle.isError ? (
-				<p className="form-error">
+				<FormMessage>
 					{toggle.error instanceof ApiError
 						? toggle.error.message
 						: "Toggle failed"}
-				</p>
+				</FormMessage>
 			) : null}
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
 				Enabling provisions a free Cloudflare WARP account server-side; changes
