@@ -111,17 +111,26 @@ func (s *managementState) registerTrafficProvidersLocked() {
 	if s.trafficCollector == nil || s.clientRepo == nil {
 		return
 	}
+	s.trafficCollector.ResetProviders(s.buildTrafficProvidersLocked())
+}
+
+// buildTrafficProvidersLocked constructs TrafficProviders for every supported
+// protocol with live runtime roots. Caller must hold s.mu.
+func (s *managementState) buildTrafficProvidersLocked() []client.TrafficProvider {
+	if s.trafficCollector == nil || s.clientRepo == nil {
+		return nil
+	}
 	// Build client username -> bindingID map for attribution.
 	bindings := make(map[string]string)
 	clients, err := s.clientRepo.AllClients()
 	if err != nil {
 		log.Printf("traffic: list clients for provider bindings: %v", err)
-		return
+		return nil
 	}
 	allBindings, err := s.clientRepo.AllBindings()
 	if err != nil {
 		log.Printf("traffic: list bindings for provider: %v", err)
-		return
+		return nil
 	}
 	clientNameByID := make(map[string]string, len(clients))
 	for _, c := range clients {
@@ -132,6 +141,7 @@ func (s *managementState) registerTrafficProvidersLocked() {
 			bindings[name] = b.ID
 		}
 	}
+	providers := []client.TrafficProvider{}
 	// Register hysteria2 provider if any hysteria2 inbound exists.
 	for _, in := range s.inbounds {
 		if in.Protocol != "hysteria2" || !in.Enabled {
@@ -139,9 +149,19 @@ func (s *managementState) registerTrafficProvidersLocked() {
 		}
 		statsPath := hysteria2.StatsFilePath(s.liveRoot, in.Name)
 		provider := hysteria2.NewStatsProvider("hysteria2:"+in.Name, statsPath, bindings)
-		s.trafficCollector.Register(provider)
+		providers = append(providers, provider)
 		log.Printf("traffic: registered hysteria2 provider for inbound %s (stats: %s)", in.Name, statsPath)
 	}
+	return providers
+}
+
+// RefreshTrafficProviders re-registers traffic providers so attribution tracks
+// client/binding/credential/inbound changes without a restart. Safe to call
+// after any client mutation or apply.
+func (s *managementState) RefreshTrafficProviders() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.registerTrafficProvidersLocked()
 }
 
 // stopTrafficSubsystem halts the periodic collector/reconciler. Safe to call

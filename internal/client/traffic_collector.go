@@ -50,6 +50,15 @@ func (c *Collector) Register(p TrafficProvider) {
 	c.providers = append(c.providers, p)
 }
 
+// ResetProviders replaces the registered provider set. Used when clients,
+// bindings, credentials, or inbounds change so provider attribution stays
+// accurate without a restart.
+func (c *Collector) ResetProviders(providers []TrafficProvider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.providers = append([]TrafficProvider(nil), providers...)
+}
+
 // CollectOnce reads all providers and records samples. Exposed for tests and
 // for an immediate manual reconcile.
 func (c *Collector) CollectOnce() error {

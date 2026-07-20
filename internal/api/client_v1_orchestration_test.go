@@ -53,8 +53,8 @@ func applyState(t *testing.T, r http.Handler) (desired, applied uint64) {
 		t.Fatalf("apply state: %d %s", w.Code, w.Body.String())
 	}
 	var st struct {
-		DesiredRevision  uint64 `json:"desiredRevision"`
-		AppliedRevision  uint64 `json:"appliedRevision"`
+		DesiredRevision uint64 `json:"desiredRevision"`
+		AppliedRevision uint64 `json:"appliedRevision"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&st); err != nil {
 		t.Fatalf("decode apply state: %v", err)
@@ -470,5 +470,26 @@ func TestV1ClientAudit(t *testing.T) {
 		if it.Target != clientID && it.Target != "audit-client" {
 			t.Errorf("audit entry leaked another client's target: %+v", it)
 		}
+	}
+}
+
+// TestTrafficProvidersRefreshOnApply (S6) asserts that traffic providers are
+// re-registered after a mutation-driven apply so attribution tracks inbound
+// changes without a restart. Before any inbound exists there are no
+// providers; adding an enabled hysteria2 inbound + applying must register one.
+func TestTrafficProvidersRefreshOnApply(t *testing.T) {
+	r, st := newApplyTrackedRouterWithState(t)
+	if st.trafficCollector == nil {
+		t.Skip("traffic collector not initialized")
+	}
+	before := st.trafficCollector.ProviderCount()
+	w := postJSON(t, r, "/api/inbounds", `{"name":"s6-in","protocol":"hysteria2","transport":"udp","port":14440,"enabled":true}`)
+	if w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", w.Code, w.Body.String())
+	}
+	// The inbound create triggers a mutation apply, which refreshes providers.
+	after := st.trafficCollector.ProviderCount()
+	if after <= before {
+		t.Errorf("(S6) provider count did not increase after apply: before=%d after=%d", before, after)
 	}
 }

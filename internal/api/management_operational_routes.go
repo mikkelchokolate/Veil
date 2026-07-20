@@ -191,6 +191,10 @@ func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) a
 	job, runErr := s.applyRunner.Run(rev.Desired, "mutation", actor)
 	outcome.job = &job
 	outcome.success = runErr == nil && job.Status == apply.StatusSucceeded
+	// S6: re-register traffic providers after every apply so attribution tracks
+	// client/binding/credential/inbound changes without a restart. Caller holds
+	// s.mu, so use the locked variant.
+	s.registerTrafficProvidersLocked()
 	// Refresh revision state after the job so the response reflects the final
 	// applied revision.
 	if after, err := s.applyRevisions.Get(); err == nil {
