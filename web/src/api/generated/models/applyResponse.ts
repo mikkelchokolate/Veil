@@ -40,23 +40,23 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyPlanResponse } from "./applyPlanResponse.ts";
-import type { ConfigValidationResult } from "./configValidationResult.ts";
-import type { ServiceActionResult } from "./serviceActionResult.ts";
-import type { ServiceHealthResult } from "./serviceHealthResult.ts";
+import type { ApplyPlanResponse } from './applyPlanResponse.ts';
+import type { ConfigValidationResult } from './configValidationResult.ts';
+import type { ServiceActionResult } from './serviceActionResult.ts';
+import type { ServiceHealthResult } from './serviceHealthResult.ts';
 
 export interface ApplyResponse {
-	applied: boolean;
-	liveApplied: boolean;
-	servicesApplied: boolean;
-	rolledBack?: boolean;
-	plan: ApplyPlanResponse;
-	writtenFiles: string[];
-	liveFiles?: string[];
-	backupFiles?: string[];
-	rollbackFiles?: string[];
-	validations?: ConfigValidationResult[];
-	serviceActions?: ServiceActionResult[];
-	healthChecks?: ServiceHealthResult[];
-	rollbackActions?: ServiceActionResult[];
+  applied: boolean;
+  liveApplied: boolean;
+  servicesApplied: boolean;
+  rolledBack?: boolean;
+  plan: ApplyPlanResponse;
+  writtenFiles: string[];
+  liveFiles?: string[];
+  backupFiles?: string[];
+  rollbackFiles?: string[];
+  validations?: ConfigValidationResult[];
+  serviceActions?: ServiceActionResult[];
+  healthChecks?: ServiceHealthResult[];
+  rollbackActions?: ServiceActionResult[];
 }

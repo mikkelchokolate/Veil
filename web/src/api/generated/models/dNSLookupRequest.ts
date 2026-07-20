@@ -42,5 +42,5 @@
  */
 
 export interface DNSLookupRequest {
-	hostname: string;
+  hostname: string;
 }

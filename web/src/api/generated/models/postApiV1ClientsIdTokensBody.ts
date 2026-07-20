@@ -42,6 +42,6 @@
  */
 
 export type PostApiV1ClientsIdTokensBody = {
-	label?: string;
-	expiresAt?: number;
+  label?: string;
+  expiresAt?: number;
 };

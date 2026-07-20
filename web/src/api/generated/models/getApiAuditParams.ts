@@ -42,13 +42,13 @@
  */
 
 export type GetApiAuditParams = {
-	/**
-	 * @minimum 1
-	 * @maximum 500
-	 */
-	limit?: number;
-	/**
-	 * Return records strictly older than this RFC3339 timestamp.
-	 */
-	before?: string;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * Return records strictly older than this RFC3339 timestamp.
+ */
+before?: string;
 };

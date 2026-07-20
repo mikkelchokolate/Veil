@@ -40,62 +40,58 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	EmptyObject,
-	ForbiddenResponse,
-	KeyRotationResponse,
-	PrivilegedFailureResponse,
-	UnauthorizedResponse,
-} from "../models";
+  BadRequestResponse,
+  EmptyObject,
+  ForbiddenResponse,
+  KeyRotationResponse,
+  PrivilegedFailureResponse,
+  UnauthorizedResponse
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type postApiAdminRotateKeyResponse200 = {
-	data: KeyRotationResponse;
-	status: 200;
-};
+  data: KeyRotationResponse
+  status: 200
+}
 
 export type postApiAdminRotateKeyResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
-};
+  data: BadRequestResponse
+  status: 400
+}
 
 export type postApiAdminRotateKeyResponse401 = {
-	data: UnauthorizedResponse;
-	status: 401;
-};
+  data: UnauthorizedResponse
+  status: 401
+}
 
 export type postApiAdminRotateKeyResponse403 = {
-	data: ForbiddenResponse;
-	status: 403;
-};
+  data: ForbiddenResponse
+  status: 403
+}
 
 export type postApiAdminRotateKeyResponse500 = {
-	data: PrivilegedFailureResponse;
-	status: 500;
+  data: PrivilegedFailureResponse
+  status: 500
+}
+
+export type postApiAdminRotateKeyResponseSuccess = (postApiAdminRotateKeyResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse500) & {
+  headers: Headers;
 };
 
-export type postApiAdminRotateKeyResponseSuccess =
-	postApiAdminRotateKeyResponse200 & {
-		headers: Headers;
-	};
-export type postApiAdminRotateKeyResponseError = (
-	| postApiAdminRotateKeyResponse400
-	| postApiAdminRotateKeyResponse401
-	| postApiAdminRotateKeyResponse403
-	| postApiAdminRotateKeyResponse500
-) & {
-	headers: Headers;
-};
-
-export type postApiAdminRotateKeyResponse =
-	| postApiAdminRotateKeyResponseSuccess
-	| postApiAdminRotateKeyResponseError;
+export type postApiAdminRotateKeyResponse = (postApiAdminRotateKeyResponseSuccess | postApiAdminRotateKeyResponseError)
 
 export const getPostApiAdminRotateKeyUrl = () => {
-	return `/api/admin/rotate-key`;
-};
+
+
+
+
+  return `/api/admin/rotate-key`
+}
 
 /**
  * Re-encrypts management state with a newly generated root-managed key.
@@ -103,17 +99,15 @@ export const getPostApiAdminRotateKeyUrl = () => {
  * except the initiating session are revoked after a successful rotation.
  * @summary Rotate the state-encryption key
  */
-export const postApiAdminRotateKey = async (
-	emptyObject?: EmptyObject,
-	options?: RequestInit,
-): Promise<postApiAdminRotateKeyResponse> => {
-	return apiFetch<postApiAdminRotateKeyResponse>(
-		getPostApiAdminRotateKeyUrl(),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(emptyObject),
-		},
-	);
-};
+export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?: RequestInit): Promise<postApiAdminRotateKeyResponse> => {
+
+  return apiFetch<postApiAdminRotateKeyResponse>(getPostApiAdminRotateKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(emptyObject)
+  }
+);}
+
+

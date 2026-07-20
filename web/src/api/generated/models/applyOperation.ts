@@ -40,15 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyOperationInterruptionRisk } from "./applyOperationInterruptionRisk.ts";
-import type { ApplyOperationType } from "./applyOperationType.ts";
+import type { ApplyOperationInterruptionRisk } from './applyOperationInterruptionRisk.ts';
+import type { ApplyOperationType } from './applyOperationType.ts';
 
 export interface ApplyOperation {
-	type: ApplyOperationType;
-	source?: string;
-	destination?: string;
-	unit?: string;
-	interruptionRisk: ApplyOperationInterruptionRisk;
-	rollbackAvailable: boolean;
-	validationSource: string;
+  type: ApplyOperationType;
+  source?: string;
+  destination?: string;
+  unit?: string;
+  interruptionRisk: ApplyOperationInterruptionRisk;
+  rollbackAvailable: boolean;
+  validationSource: string;
 }

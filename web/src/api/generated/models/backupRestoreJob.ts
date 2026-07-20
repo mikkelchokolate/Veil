@@ -40,17 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BackupRestoreJobStatus } from "./backupRestoreJobStatus.ts";
+import type { BackupRestoreJobStatus } from './backupRestoreJobStatus.ts';
 
 export interface BackupRestoreJob {
-	/** @pattern ^[0-9a-f]{32}$ */
-	id: string;
-	archive: string;
-	status: BackupRestoreJobStatus;
-	createdAt: string;
-	startedAt?: string;
-	finishedAt?: string;
-	error?: string;
-	safetyStatePath?: string;
-	safetyKeyPath?: string;
+  /** @pattern ^[0-9a-f]{32}$ */
+  id: string;
+  archive: string;
+  status: BackupRestoreJobStatus;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string;
+  safetyStatePath?: string;
+  safetyKeyPath?: string;
 }

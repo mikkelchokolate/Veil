@@ -40,73 +40,87 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type {
+  BadRequestResponse,
+  WarpConfig
+} from '../models';
 
-import { apiFetch } from "../../fetcher.ts";
-import type { BadRequestResponse, WarpConfig } from "../models";
+import { apiFetch } from '../../fetcher.ts';
 
 export type getApiWarpResponse200 = {
-	data: WarpConfig;
-	status: 200;
-};
+  data: WarpConfig
+  status: 200
+}
 
-export type getApiWarpResponseSuccess = getApiWarpResponse200 & {
-	headers: Headers;
+export type getApiWarpResponseSuccess = (getApiWarpResponse200) & {
+  headers: Headers;
 };
+;
 
-export type getApiWarpResponse = getApiWarpResponseSuccess;
+export type getApiWarpResponse = (getApiWarpResponseSuccess)
 
 export const getGetApiWarpUrl = () => {
-	return `/api/warp`;
-};
+
+
+
+
+  return `/api/warp`
+}
 
 /**
  * @summary Read WARP state with secrets redacted
  */
-export const getApiWarp = async (
-	options?: RequestInit,
-): Promise<getApiWarpResponse> => {
-	return apiFetch<getApiWarpResponse>(getGetApiWarpUrl(), {
-		...options,
-		method: "GET",
-	});
-};
+export const getApiWarp = async ( options?: RequestInit): Promise<getApiWarpResponse> => {
+
+  return apiFetch<getApiWarpResponse>(getGetApiWarpUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type putApiWarpResponse200 = {
-	data: WarpConfig;
-	status: 200;
-};
+  data: WarpConfig
+  status: 200
+}
 
 export type putApiWarpResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
+  data: BadRequestResponse
+  status: 400
+}
+
+export type putApiWarpResponseSuccess = (putApiWarpResponse200) & {
+  headers: Headers;
+};
+export type putApiWarpResponseError = (putApiWarpResponse400) & {
+  headers: Headers;
 };
 
-export type putApiWarpResponseSuccess = putApiWarpResponse200 & {
-	headers: Headers;
-};
-export type putApiWarpResponseError = putApiWarpResponse400 & {
-	headers: Headers;
-};
-
-export type putApiWarpResponse =
-	| putApiWarpResponseSuccess
-	| putApiWarpResponseError;
+export type putApiWarpResponse = (putApiWarpResponseSuccess | putApiWarpResponseError)
 
 export const getPutApiWarpUrl = () => {
-	return `/api/warp`;
-};
+
+
+
+
+  return `/api/warp`
+}
 
 /**
  * @summary Update WARP state
  */
-export const putApiWarp = async (
-	warpConfig: WarpConfig,
-	options?: RequestInit,
-): Promise<putApiWarpResponse> => {
-	return apiFetch<putApiWarpResponse>(getPutApiWarpUrl(), {
-		...options,
-		method: "PUT",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(warpConfig),
-	});
-};
+export const putApiWarp = async (warpConfig: WarpConfig, options?: RequestInit): Promise<putApiWarpResponse> => {
+
+  return apiFetch<putApiWarpResponse>(getPutApiWarpUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(warpConfig)
+  }
+);}
+
+

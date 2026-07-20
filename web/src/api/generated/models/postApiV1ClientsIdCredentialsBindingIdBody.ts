@@ -42,6 +42,6 @@
  */
 
 export type PostApiV1ClientsIdCredentialsBindingIdBody = {
-	kind?: string;
-	value?: string;
+  kind?: string;
+  value?: string;
 };

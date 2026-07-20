@@ -40,10 +40,10 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { SetupStatusResponsePanelAccess } from "./setupStatusResponsePanelAccess.ts";
+import type { SetupStatusResponsePanelAccess } from './setupStatusResponsePanelAccess.ts';
 
 export interface SetupStatusResponse {
-	required: boolean;
-	allowed: boolean;
-	panelAccess: SetupStatusResponsePanelAccess;
+  required: boolean;
+  allowed: boolean;
+  panelAccess: SetupStatusResponsePanelAccess;
 }

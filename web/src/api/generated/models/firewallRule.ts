@@ -40,10 +40,10 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { FirewallRuleProtocol } from "./firewallRuleProtocol.ts";
+import type { FirewallRuleProtocol } from './firewallRuleProtocol.ts';
 
 export interface FirewallRule {
-	port: number;
-	protocol: FirewallRuleProtocol;
-	service: string;
+  port: number;
+  protocol: FirewallRuleProtocol;
+  service: string;
 }

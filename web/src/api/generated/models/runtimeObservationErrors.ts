@@ -41,4 +41,4 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type RuntimeObservationErrors = { [key: string]: string };
+export type RuntimeObservationErrors = {[key: string]: string};

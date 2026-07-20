@@ -42,8 +42,8 @@
  */
 
 export interface ClientProfile {
-	name: string;
-	username?: string;
-	password?: string;
-	enabled: boolean;
+  name: string;
+  username?: string;
+  password?: string;
+  enabled: boolean;
 }

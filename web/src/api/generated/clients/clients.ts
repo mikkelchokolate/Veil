@@ -40,639 +40,660 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	ClientListResponse,
-	ClientUpsertRequest,
-	ClientView,
-	PatchApiV1ClientsIdBindingsBindingIdBody,
-	PostApiV1ClientsBulkBody,
-	PostApiV1ClientsIdBindingsBody,
-	PostApiV1ClientsIdCredentialsBindingIdBody,
-	PostApiV1ClientsIdCredentialsBindingIdRotateBody,
-	PostApiV1ClientsIdTokensBody,
-	SubscriptionTokenResponse,
-} from "../models";
+  BadRequestResponse,
+  ClientListResponse,
+  ClientUpsertRequest,
+  ClientView,
+  PatchApiV1ClientsIdBindingsBindingIdBody,
+  PostApiV1ClientsBulkBody,
+  PostApiV1ClientsIdBindingsBody,
+  PostApiV1ClientsIdCredentialsBindingIdBody,
+  PostApiV1ClientsIdCredentialsBindingIdRotateBody,
+  PostApiV1ClientsIdTokensBody,
+  SubscriptionTokenResponse
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type getApiV1ClientsResponse200 = {
-	data: ClientListResponse;
-	status: 200;
-};
+  data: ClientListResponse
+  status: 200
+}
 
-export type getApiV1ClientsResponseSuccess = getApiV1ClientsResponse200 & {
-	headers: Headers;
+export type getApiV1ClientsResponseSuccess = (getApiV1ClientsResponse200) & {
+  headers: Headers;
 };
+;
 
-export type getApiV1ClientsResponse = getApiV1ClientsResponseSuccess;
+export type getApiV1ClientsResponse = (getApiV1ClientsResponseSuccess)
 
 export const getGetApiV1ClientsUrl = () => {
-	return `/api/v1/clients`;
-};
+
+
+
+
+  return `/api/v1/clients`
+}
 
 /**
  * @summary List clients with effective status
  */
-export const getApiV1Clients = async (
-	options?: RequestInit,
-): Promise<getApiV1ClientsResponse> => {
-	return apiFetch<getApiV1ClientsResponse>(getGetApiV1ClientsUrl(), {
-		...options,
-		method: "GET",
-	});
-};
+export const getApiV1Clients = async ( options?: RequestInit): Promise<getApiV1ClientsResponse> => {
+
+  return apiFetch<getApiV1ClientsResponse>(getGetApiV1ClientsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type postApiV1ClientsResponse201 = {
-	data: ClientView;
-	status: 201;
-};
+  data: ClientView
+  status: 201
+}
 
 export type postApiV1ClientsResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
+  data: BadRequestResponse
+  status: 400
+}
+
+export type postApiV1ClientsResponseSuccess = (postApiV1ClientsResponse201) & {
+  headers: Headers;
+};
+export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400) & {
+  headers: Headers;
 };
 
-export type postApiV1ClientsResponseSuccess = postApiV1ClientsResponse201 & {
-	headers: Headers;
-};
-export type postApiV1ClientsResponseError = postApiV1ClientsResponse400 & {
-	headers: Headers;
-};
-
-export type postApiV1ClientsResponse =
-	| postApiV1ClientsResponseSuccess
-	| postApiV1ClientsResponseError;
+export type postApiV1ClientsResponse = (postApiV1ClientsResponseSuccess | postApiV1ClientsResponseError)
 
 export const getPostApiV1ClientsUrl = () => {
-	return `/api/v1/clients`;
-};
+
+
+
+
+  return `/api/v1/clients`
+}
 
 /**
  * @summary Create a client
  */
-export const postApiV1Clients = async (
-	clientUpsertRequest: ClientUpsertRequest,
-	options?: RequestInit,
-): Promise<postApiV1ClientsResponse> => {
-	return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(clientUpsertRequest),
-	});
-};
+export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<postApiV1ClientsResponse> => {
+
+  return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientUpsertRequest)
+  }
+);}
+
 
 export type postApiV1ClientsBulkResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type postApiV1ClientsBulkResponseSuccess = (postApiV1ClientsBulkResponse200) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsBulkResponseSuccess =
-	postApiV1ClientsBulkResponse200 & {
-		headers: Headers;
-	};
-
-export type postApiV1ClientsBulkResponse = postApiV1ClientsBulkResponseSuccess;
+export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess)
 
 export const getPostApiV1ClientsBulkUrl = () => {
-	return `/api/v1/clients/bulk`;
-};
+
+
+
+
+  return `/api/v1/clients/bulk`
+}
 
 /**
  * @summary Bulk action across clients; per-client results
  */
-export const postApiV1ClientsBulk = async (
-	postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody,
-	options?: RequestInit,
-): Promise<postApiV1ClientsBulkResponse> => {
-	return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(postApiV1ClientsBulkBody),
-	});
-};
+export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: RequestInit): Promise<postApiV1ClientsBulkResponse> => {
+
+  return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsBulkBody)
+  }
+);}
+
 
 export type getApiV1ClientsIdBindingsResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type getApiV1ClientsIdBindingsResponseSuccess = (getApiV1ClientsIdBindingsResponse200) & {
+  headers: Headers;
 };
+;
 
-export type getApiV1ClientsIdBindingsResponseSuccess =
-	getApiV1ClientsIdBindingsResponse200 & {
-		headers: Headers;
-	};
+export type getApiV1ClientsIdBindingsResponse = (getApiV1ClientsIdBindingsResponseSuccess)
 
-export type getApiV1ClientsIdBindingsResponse =
-	getApiV1ClientsIdBindingsResponseSuccess;
+export const getGetApiV1ClientsIdBindingsUrl = (id: string,) => {
 
-export const getGetApiV1ClientsIdBindingsUrl = (id: string) => {
-	return `/api/v1/clients/${id}/bindings`;
-};
+
+
+
+  return `/api/v1/clients/${id}/bindings`
+}
 
 /**
  * @summary List client bindings
  */
-export const getApiV1ClientsIdBindings = async (
-	id: string,
-	options?: RequestInit,
-): Promise<getApiV1ClientsIdBindingsResponse> => {
-	return apiFetch<getApiV1ClientsIdBindingsResponse>(
-		getGetApiV1ClientsIdBindingsUrl(id),
-		{
-			...options,
-			method: "GET",
-		},
-	);
-};
+export const getApiV1ClientsIdBindings = async (id: string, options?: RequestInit): Promise<getApiV1ClientsIdBindingsResponse> => {
+
+  return apiFetch<getApiV1ClientsIdBindingsResponse>(getGetApiV1ClientsIdBindingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type postApiV1ClientsIdBindingsResponse201 = {
-	data: void;
-	status: 201;
+  data: void
+  status: 201
+}
+
+export type postApiV1ClientsIdBindingsResponseSuccess = (postApiV1ClientsIdBindingsResponse201) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsIdBindingsResponseSuccess =
-	postApiV1ClientsIdBindingsResponse201 & {
-		headers: Headers;
-	};
+export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess)
 
-export type postApiV1ClientsIdBindingsResponse =
-	postApiV1ClientsIdBindingsResponseSuccess;
+export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 
-export const getPostApiV1ClientsIdBindingsUrl = (id: string) => {
-	return `/api/v1/clients/${id}/bindings`;
-};
+
+
+
+  return `/api/v1/clients/${id}/bindings`
+}
 
 /**
  * @summary Add a binding (optional credential)
  */
-export const postApiV1ClientsIdBindings = async (
-	id: string,
-	postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody,
-	options?: RequestInit,
-): Promise<postApiV1ClientsIdBindingsResponse> => {
-	return apiFetch<postApiV1ClientsIdBindingsResponse>(
-		getPostApiV1ClientsIdBindingsUrl(id),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(postApiV1ClientsIdBindingsBody),
-		},
-	);
-};
+export const postApiV1ClientsIdBindings = async (id: string,
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: RequestInit): Promise<postApiV1ClientsIdBindingsResponse> => {
+
+  return apiFetch<postApiV1ClientsIdBindingsResponse>(getPostApiV1ClientsIdBindingsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdBindingsBody)
+  }
+);}
+
 
 export type patchApiV1ClientsIdBindingsBindingIdResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponseSuccess = (patchApiV1ClientsIdBindingsBindingIdResponse200) & {
+  headers: Headers;
 };
+;
 
-export type patchApiV1ClientsIdBindingsBindingIdResponseSuccess =
-	patchApiV1ClientsIdBindingsBindingIdResponse200 & {
-		headers: Headers;
-	};
+export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess)
 
-export type patchApiV1ClientsIdBindingsBindingIdResponse =
-	patchApiV1ClientsIdBindingsBindingIdResponseSuccess;
+export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    bindingId: string,) => {
 
-export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (
-	id: string,
-	bindingId: string,
-) => {
-	return `/api/v1/clients/${id}/bindings/${bindingId}`;
-};
+
+
+
+  return `/api/v1/clients/${id}/bindings/${bindingId}`
+}
 
 /**
  * @summary Update a binding (toggle enabled, optimistic locking)
  */
-export const patchApiV1ClientsIdBindingsBindingId = async (
-	id: string,
-	bindingId: string,
-	patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody,
-	options?: RequestInit,
-): Promise<patchApiV1ClientsIdBindingsBindingIdResponse> => {
-	return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(
-		getPatchApiV1ClientsIdBindingsBindingIdUrl(id, bindingId),
-		{
-			...options,
-			method: "PATCH",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(patchApiV1ClientsIdBindingsBindingIdBody),
-		},
-	);
-};
+export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
+    bindingId: string,
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: RequestInit): Promise<patchApiV1ClientsIdBindingsBindingIdResponse> => {
+
+  return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(getPatchApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(patchApiV1ClientsIdBindingsBindingIdBody)
+  }
+);}
+
 
 export type deleteApiV1ClientsIdBindingsBindingIdResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponseSuccess = (deleteApiV1ClientsIdBindingsBindingIdResponse200) & {
+  headers: Headers;
 };
+;
 
-export type deleteApiV1ClientsIdBindingsBindingIdResponseSuccess =
-	deleteApiV1ClientsIdBindingsBindingIdResponse200 & {
-		headers: Headers;
-	};
+export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess)
 
-export type deleteApiV1ClientsIdBindingsBindingIdResponse =
-	deleteApiV1ClientsIdBindingsBindingIdResponseSuccess;
+export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    bindingId: string,) => {
 
-export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (
-	id: string,
-	bindingId: string,
-) => {
-	return `/api/v1/clients/${id}/bindings/${bindingId}`;
-};
+
+
+
+  return `/api/v1/clients/${id}/bindings/${bindingId}`
+}
 
 /**
  * @summary Remove a binding
  */
-export const deleteApiV1ClientsIdBindingsBindingId = async (
-	id: string,
-	bindingId: string,
-	options?: RequestInit,
-): Promise<deleteApiV1ClientsIdBindingsBindingIdResponse> => {
-	return apiFetch<deleteApiV1ClientsIdBindingsBindingIdResponse>(
-		getDeleteApiV1ClientsIdBindingsBindingIdUrl(id, bindingId),
-		{
-			...options,
-			method: "DELETE",
-		},
-	);
-};
+export const deleteApiV1ClientsIdBindingsBindingId = async (id: string,
+    bindingId: string, options?: RequestInit): Promise<deleteApiV1ClientsIdBindingsBindingIdResponse> => {
+
+  return apiFetch<deleteApiV1ClientsIdBindingsBindingIdResponse>(getDeleteApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
 
 export type postApiV1ClientsIdCredentialsBindingIdResponse201 = {
-	data: void;
-	status: 201;
+  data: void
+  status: 201
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdResponse201) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsIdCredentialsBindingIdResponseSuccess =
-	postApiV1ClientsIdCredentialsBindingIdResponse201 & {
-		headers: Headers;
-	};
+export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess)
 
-export type postApiV1ClientsIdCredentialsBindingIdResponse =
-	postApiV1ClientsIdCredentialsBindingIdResponseSuccess;
+export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
+    bindingId: string,) => {
 
-export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (
-	id: string,
-	bindingId: string,
-) => {
-	return `/api/v1/clients/${id}/credentials/${bindingId}`;
-};
+
+
+
+  return `/api/v1/clients/${id}/credentials/${bindingId}`
+}
 
 /**
  * @summary Set a binding credential
  */
-export const postApiV1ClientsIdCredentialsBindingId = async (
-	id: string,
-	bindingId: string,
-	postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody,
-	options?: RequestInit,
-): Promise<postApiV1ClientsIdCredentialsBindingIdResponse> => {
-	return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(
-		getPostApiV1ClientsIdCredentialsBindingIdUrl(id, bindingId),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(postApiV1ClientsIdCredentialsBindingIdBody),
-		},
-	);
-};
+export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: RequestInit): Promise<postApiV1ClientsIdCredentialsBindingIdResponse> => {
+
+  return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(getPostApiV1ClientsIdCredentialsBindingIdUrl(id,bindingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdCredentialsBindingIdBody)
+  }
+);}
+
 
 export type postApiV1ClientsIdCredentialsBindingIdRotateResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdRotateResponse200) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess =
-	postApiV1ClientsIdCredentialsBindingIdRotateResponse200 & {
-		headers: Headers;
-	};
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess)
 
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse =
-	postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess;
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
+    bindingId: string,) => {
 
-export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (
-	id: string,
-	bindingId: string,
-) => {
-	return `/api/v1/clients/${id}/credentials/${bindingId}/rotate`;
-};
+
+
+
+  return `/api/v1/clients/${id}/credentials/${bindingId}/rotate`
+}
 
 /**
  * @summary Rotate a binding credential
  */
-export const postApiV1ClientsIdCredentialsBindingIdRotate = async (
-	id: string,
-	bindingId: string,
-	postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody,
-	options?: RequestInit,
-): Promise<postApiV1ClientsIdCredentialsBindingIdRotateResponse> => {
-	return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(
-		getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id, bindingId),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(postApiV1ClientsIdCredentialsBindingIdRotateBody),
-		},
-	);
-};
+export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
+    bindingId: string,
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: RequestInit): Promise<postApiV1ClientsIdCredentialsBindingIdRotateResponse> => {
+
+  return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id,bindingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdCredentialsBindingIdRotateBody)
+  }
+);}
+
 
 export type postApiV1ClientsMigrateLegacyResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type postApiV1ClientsMigrateLegacyResponseSuccess = (postApiV1ClientsMigrateLegacyResponse200) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsMigrateLegacyResponseSuccess =
-	postApiV1ClientsMigrateLegacyResponse200 & {
-		headers: Headers;
-	};
-
-export type postApiV1ClientsMigrateLegacyResponse =
-	postApiV1ClientsMigrateLegacyResponseSuccess;
+export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess)
 
 export const getPostApiV1ClientsMigrateLegacyUrl = () => {
-	return `/api/v1/clients/migrate-legacy`;
-};
+
+
+
+
+  return `/api/v1/clients/migrate-legacy`
+}
 
 /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
  */
-export const postApiV1ClientsMigrateLegacy = async (
-	options?: RequestInit,
-): Promise<postApiV1ClientsMigrateLegacyResponse> => {
-	return apiFetch<postApiV1ClientsMigrateLegacyResponse>(
-		getPostApiV1ClientsMigrateLegacyUrl(),
-		{
-			...options,
-			method: "POST",
-		},
-	);
-};
+export const postApiV1ClientsMigrateLegacy = async ( options?: RequestInit): Promise<postApiV1ClientsMigrateLegacyResponse> => {
+
+  return apiFetch<postApiV1ClientsMigrateLegacyResponse>(getPostApiV1ClientsMigrateLegacyUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
 
 export type getApiV1ClientsIdResponse200 = {
-	data: ClientView;
-	status: 200;
-};
+  data: ClientView
+  status: 200
+}
 
 export type getApiV1ClientsIdResponse404 = {
-	data: void;
-	status: 404;
+  data: void
+  status: 404
+}
+
+export type getApiV1ClientsIdResponseSuccess = (getApiV1ClientsIdResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdResponseError = (getApiV1ClientsIdResponse404) & {
+  headers: Headers;
 };
 
-export type getApiV1ClientsIdResponseSuccess = getApiV1ClientsIdResponse200 & {
-	headers: Headers;
-};
-export type getApiV1ClientsIdResponseError = getApiV1ClientsIdResponse404 & {
-	headers: Headers;
-};
+export type getApiV1ClientsIdResponse = (getApiV1ClientsIdResponseSuccess | getApiV1ClientsIdResponseError)
 
-export type getApiV1ClientsIdResponse =
-	| getApiV1ClientsIdResponseSuccess
-	| getApiV1ClientsIdResponseError;
+export const getGetApiV1ClientsIdUrl = (id: string,) => {
 
-export const getGetApiV1ClientsIdUrl = (id: string) => {
-	return `/api/v1/clients/${id}`;
-};
+
+
+
+  return `/api/v1/clients/${id}`
+}
 
 /**
  * @summary Get a client with bindings and effective status
  */
-export const getApiV1ClientsId = async (
-	id: string,
-	options?: RequestInit,
-): Promise<getApiV1ClientsIdResponse> => {
-	return apiFetch<getApiV1ClientsIdResponse>(getGetApiV1ClientsIdUrl(id), {
-		...options,
-		method: "GET",
-	});
-};
+export const getApiV1ClientsId = async (id: string, options?: RequestInit): Promise<getApiV1ClientsIdResponse> => {
+
+  return apiFetch<getApiV1ClientsIdResponse>(getGetApiV1ClientsIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type putApiV1ClientsIdResponse200 = {
-	data: ClientView;
-	status: 200;
-};
+  data: ClientView
+  status: 200
+}
 
 export type putApiV1ClientsIdResponse409 = {
-	data: void;
-	status: 409;
+  data: void
+  status: 409
+}
+
+export type putApiV1ClientsIdResponseSuccess = (putApiV1ClientsIdResponse200) & {
+  headers: Headers;
+};
+export type putApiV1ClientsIdResponseError = (putApiV1ClientsIdResponse409) & {
+  headers: Headers;
 };
 
-export type putApiV1ClientsIdResponseSuccess = putApiV1ClientsIdResponse200 & {
-	headers: Headers;
-};
-export type putApiV1ClientsIdResponseError = putApiV1ClientsIdResponse409 & {
-	headers: Headers;
-};
+export type putApiV1ClientsIdResponse = (putApiV1ClientsIdResponseSuccess | putApiV1ClientsIdResponseError)
 
-export type putApiV1ClientsIdResponse =
-	| putApiV1ClientsIdResponseSuccess
-	| putApiV1ClientsIdResponseError;
+export const getPutApiV1ClientsIdUrl = (id: string,) => {
 
-export const getPutApiV1ClientsIdUrl = (id: string) => {
-	return `/api/v1/clients/${id}`;
-};
+
+
+
+  return `/api/v1/clients/${id}`
+}
 
 /**
  * @summary Update a client (optimistic concurrency via version)
  */
-export const putApiV1ClientsId = async (
-	id: string,
-	clientUpsertRequest: ClientUpsertRequest,
-	options?: RequestInit,
-): Promise<putApiV1ClientsIdResponse> => {
-	return apiFetch<putApiV1ClientsIdResponse>(getPutApiV1ClientsIdUrl(id), {
-		...options,
-		method: "PUT",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(clientUpsertRequest),
-	});
-};
+export const putApiV1ClientsId = async (id: string,
+    clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<putApiV1ClientsIdResponse> => {
+
+  return apiFetch<putApiV1ClientsIdResponse>(getPutApiV1ClientsIdUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientUpsertRequest)
+  }
+);}
+
 
 export type deleteApiV1ClientsIdResponse200 = {
-	data: void;
-	status: 200;
-};
+  data: void
+  status: 200
+}
 
 export type deleteApiV1ClientsIdResponse404 = {
-	data: void;
-	status: 404;
+  data: void
+  status: 404
+}
+
+export type deleteApiV1ClientsIdResponseSuccess = (deleteApiV1ClientsIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404) & {
+  headers: Headers;
 };
 
-export type deleteApiV1ClientsIdResponseSuccess =
-	deleteApiV1ClientsIdResponse200 & {
-		headers: Headers;
-	};
-export type deleteApiV1ClientsIdResponseError =
-	deleteApiV1ClientsIdResponse404 & {
-		headers: Headers;
-	};
+export type deleteApiV1ClientsIdResponse = (deleteApiV1ClientsIdResponseSuccess | deleteApiV1ClientsIdResponseError)
 
-export type deleteApiV1ClientsIdResponse =
-	| deleteApiV1ClientsIdResponseSuccess
-	| deleteApiV1ClientsIdResponseError;
+export const getDeleteApiV1ClientsIdUrl = (id: string,) => {
 
-export const getDeleteApiV1ClientsIdUrl = (id: string) => {
-	return `/api/v1/clients/${id}`;
-};
+
+
+
+  return `/api/v1/clients/${id}`
+}
 
 /**
  * @summary Delete a client
  */
-export const deleteApiV1ClientsId = async (
-	id: string,
-	options?: RequestInit,
-): Promise<deleteApiV1ClientsIdResponse> => {
-	return apiFetch<deleteApiV1ClientsIdResponse>(
-		getDeleteApiV1ClientsIdUrl(id),
-		{
-			...options,
-			method: "DELETE",
-		},
-	);
-};
+export const deleteApiV1ClientsId = async (id: string, options?: RequestInit): Promise<deleteApiV1ClientsIdResponse> => {
+
+  return apiFetch<deleteApiV1ClientsIdResponse>(getDeleteApiV1ClientsIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
 
 export type getApiV1ClientsIdTokensResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type getApiV1ClientsIdTokensResponseSuccess = (getApiV1ClientsIdTokensResponse200) & {
+  headers: Headers;
 };
+;
 
-export type getApiV1ClientsIdTokensResponseSuccess =
-	getApiV1ClientsIdTokensResponse200 & {
-		headers: Headers;
-	};
+export type getApiV1ClientsIdTokensResponse = (getApiV1ClientsIdTokensResponseSuccess)
 
-export type getApiV1ClientsIdTokensResponse =
-	getApiV1ClientsIdTokensResponseSuccess;
+export const getGetApiV1ClientsIdTokensUrl = (id: string,) => {
 
-export const getGetApiV1ClientsIdTokensUrl = (id: string) => {
-	return `/api/v1/clients/${id}/tokens`;
-};
+
+
+
+  return `/api/v1/clients/${id}/tokens`
+}
 
 /**
  * @summary List a client's subscription tokens (redacted)
  */
-export const getApiV1ClientsIdTokens = async (
-	id: string,
-	options?: RequestInit,
-): Promise<getApiV1ClientsIdTokensResponse> => {
-	return apiFetch<getApiV1ClientsIdTokensResponse>(
-		getGetApiV1ClientsIdTokensUrl(id),
-		{
-			...options,
-			method: "GET",
-		},
-	);
-};
+export const getApiV1ClientsIdTokens = async (id: string, options?: RequestInit): Promise<getApiV1ClientsIdTokensResponse> => {
+
+  return apiFetch<getApiV1ClientsIdTokensResponse>(getGetApiV1ClientsIdTokensUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type postApiV1ClientsIdTokensResponse201 = {
-	data: SubscriptionTokenResponse;
-	status: 201;
+  data: SubscriptionTokenResponse
+  status: 201
+}
+
+export type postApiV1ClientsIdTokensResponseSuccess = (postApiV1ClientsIdTokensResponse201) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsIdTokensResponseSuccess =
-	postApiV1ClientsIdTokensResponse201 & {
-		headers: Headers;
-	};
+export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess)
 
-export type postApiV1ClientsIdTokensResponse =
-	postApiV1ClientsIdTokensResponseSuccess;
+export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 
-export const getPostApiV1ClientsIdTokensUrl = (id: string) => {
-	return `/api/v1/clients/${id}/tokens`;
-};
+
+
+
+  return `/api/v1/clients/${id}/tokens`
+}
 
 /**
  * @summary Issue a subscription token; plaintext returned once
  */
-export const postApiV1ClientsIdTokens = async (
-	id: string,
-	postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody,
-	options?: RequestInit,
-): Promise<postApiV1ClientsIdTokensResponse> => {
-	return apiFetch<postApiV1ClientsIdTokensResponse>(
-		getPostApiV1ClientsIdTokensUrl(id),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(postApiV1ClientsIdTokensBody),
-		},
-	);
-};
+export const postApiV1ClientsIdTokens = async (id: string,
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: RequestInit): Promise<postApiV1ClientsIdTokensResponse> => {
+
+  return apiFetch<postApiV1ClientsIdTokensResponse>(getPostApiV1ClientsIdTokensUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdTokensBody)
+  }
+);}
+
 
 export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
-	data: void;
-	status: 200;
+  data: void
+  status: 200
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponseSuccess = (deleteApiV1ClientsIdTokensTokenIdResponse200) & {
+  headers: Headers;
 };
+;
 
-export type deleteApiV1ClientsIdTokensTokenIdResponseSuccess =
-	deleteApiV1ClientsIdTokensTokenIdResponse200 & {
-		headers: Headers;
-	};
+export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess)
 
-export type deleteApiV1ClientsIdTokensTokenIdResponse =
-	deleteApiV1ClientsIdTokensTokenIdResponseSuccess;
+export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (id: string,
+    tokenId: string,) => {
 
-export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (
-	id: string,
-	tokenId: string,
-) => {
-	return `/api/v1/clients/${id}/tokens/${tokenId}`;
-};
+
+
+
+  return `/api/v1/clients/${id}/tokens/${tokenId}`
+}
 
 /**
  * @summary Revoke a subscription token
  */
-export const deleteApiV1ClientsIdTokensTokenId = async (
-	id: string,
-	tokenId: string,
-	options?: RequestInit,
-): Promise<deleteApiV1ClientsIdTokensTokenIdResponse> => {
-	return apiFetch<deleteApiV1ClientsIdTokensTokenIdResponse>(
-		getDeleteApiV1ClientsIdTokensTokenIdUrl(id, tokenId),
-		{
-			...options,
-			method: "DELETE",
-		},
-	);
-};
+export const deleteApiV1ClientsIdTokensTokenId = async (id: string,
+    tokenId: string, options?: RequestInit): Promise<deleteApiV1ClientsIdTokensTokenIdResponse> => {
+
+  return apiFetch<deleteApiV1ClientsIdTokensTokenIdResponse>(getDeleteApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
 
 export type postApiV1ClientsIdTokensTokenIdRotateResponse200 = {
-	data: SubscriptionTokenResponse;
-	status: 200;
+  data: SubscriptionTokenResponse
+  status: 200
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponseSuccess = (postApiV1ClientsIdTokensTokenIdRotateResponse200) & {
+  headers: Headers;
 };
+;
 
-export type postApiV1ClientsIdTokensTokenIdRotateResponseSuccess =
-	postApiV1ClientsIdTokensTokenIdRotateResponse200 & {
-		headers: Headers;
-	};
+export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess)
 
-export type postApiV1ClientsIdTokensTokenIdRotateResponse =
-	postApiV1ClientsIdTokensTokenIdRotateResponseSuccess;
+export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
+    tokenId: string,) => {
 
-export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (
-	id: string,
-	tokenId: string,
-) => {
-	return `/api/v1/clients/${id}/tokens/${tokenId}/rotate`;
-};
+
+
+
+  return `/api/v1/clients/${id}/tokens/${tokenId}/rotate`
+}
 
 /**
  * @summary Rotate a subscription token; new plaintext returned once
  */
-export const postApiV1ClientsIdTokensTokenIdRotate = async (
-	id: string,
-	tokenId: string,
-	options?: RequestInit,
-): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
-	return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(
-		getPostApiV1ClientsIdTokensTokenIdRotateUrl(id, tokenId),
-		{
-			...options,
-			method: "POST",
-		},
-	);
-};
+export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
+    tokenId: string, options?: RequestInit): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
+
+  return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+

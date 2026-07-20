@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { NetworkInterface } from "./networkInterface.ts";
+import type { NetworkInterface } from './networkInterface.ts';
 
 export interface NetworkStats {
-	interfaces: NetworkInterface[];
+  interfaces: NetworkInterface[];
 }

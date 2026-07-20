@@ -42,9 +42,9 @@
  */
 
 export interface ProcessInfo {
-	pid: number;
-	name: string;
-	cpuPercent: number;
-	memoryMB: number;
-	uptimeSeconds: number;
+  pid: number;
+  name: string;
+  cpuPercent: number;
+  memoryMB: number;
+  uptimeSeconds: number;
 }

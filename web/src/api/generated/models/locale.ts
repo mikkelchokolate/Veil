@@ -44,9 +44,10 @@
 /**
  * Persisted Panel display language.
  */
-export type Locale = (typeof Locale)[keyof typeof Locale];
+export type Locale = typeof Locale[keyof typeof Locale];
+
 
 export const Locale = {
-	en: "en",
-	ru: "ru",
+  en: 'en',
+  ru: 'ru',
 } as const;

@@ -40,15 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { FieldSchema } from "./fieldSchema.ts";
+import type { FieldSchema } from './fieldSchema.ts';
 
 export interface ProtocolInfo {
-	protocol: string;
-	displayName: string;
-	transports: string[];
-	requiresCaddy?: boolean;
-	firewallService?: string;
-	maxEnabled?: number;
-	inboundFieldSchema?: FieldSchema[];
-	settingsFieldSchema?: FieldSchema[];
+  protocol: string;
+  displayName: string;
+  transports: string[];
+  requiresCaddy?: boolean;
+  firewallService?: string;
+  maxEnabled?: number;
+  inboundFieldSchema?: FieldSchema[];
+  settingsFieldSchema?: FieldSchema[];
 }

@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type BackupArchiveFileName =
-	(typeof BackupArchiveFileName)[keyof typeof BackupArchiveFileName];
+export type BackupArchiveFileName = typeof BackupArchiveFileName[keyof typeof BackupArchiveFileName];
+
 
 export const BackupArchiveFileName = {
-	statejson: "state.json",
-	statekey: "state.key",
+  statejson: 'state.json',
+  statekey: 'state.key',
 } as const;

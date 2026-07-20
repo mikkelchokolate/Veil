@@ -42,9 +42,9 @@
  */
 
 export interface SessionDeleteRequest {
-	/**
-	 * @minLength 16
-	 * @maxLength 16
-	 */
-	id: string;
+  /**
+     * @minLength 16
+     * @maxLength 16
+     */
+  id: string;
 }

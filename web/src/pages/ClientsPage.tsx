@@ -137,11 +137,12 @@ export function ClientsPage() {
 				action: args.action as never,
 				clientIds: args.ids,
 			}),
-		onSuccess: (res) => {
+		onSuccess: (data) => {
 			setSelected(new Set());
 			setBulkError(null);
 			setConfirmDelete(false);
-			const data = res.data as
+			// apiFetch returns the parsed body directly.
+			const body = data as
 				| {
 						succeeded?: number;
 						skipped?: number;
@@ -150,7 +151,7 @@ export function ClientsPage() {
 				  }
 				| undefined;
 			// S3: per-client bulk result, not just an aggregate.
-			setBulkResults(data?.results ?? null);
+			setBulkResults(body?.results ?? null);
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},

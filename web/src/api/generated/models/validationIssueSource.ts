@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ValidationIssueSource =
-	(typeof ValidationIssueSource)[keyof typeof ValidationIssueSource];
+export type ValidationIssueSource = typeof ValidationIssueSource[keyof typeof ValidationIssueSource];
+
 
 export const ValidationIssueSource = {
-	candidate: "candidate",
-	"live-host": "live-host",
-	render: "render",
-	"managed-unit-catalog": "managed-unit-catalog",
+  candidate: 'candidate',
+  'live-host': 'live-host',
+  render: 'render',
+  'managed-unit-catalog': 'managed-unit-catalog',
 } as const;

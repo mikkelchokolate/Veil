@@ -42,7 +42,7 @@
  */
 
 export interface DirSizeInfo {
-	path: string;
-	sizeBytes: number;
-	sizeHuman: string;
+  path: string;
+  sizeBytes: number;
+  sizeHuman: string;
 }

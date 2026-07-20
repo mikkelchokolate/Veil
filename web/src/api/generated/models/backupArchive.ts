@@ -42,11 +42,11 @@
  */
 
 export interface BackupArchive {
-	name: string;
-	/** Absolute server-side archive path. */
-	path: string;
-	/** @minimum 0 */
-	size: number;
-	createdAt: string;
-	encrypted: boolean;
+  name: string;
+  /** Absolute server-side archive path. */
+  path: string;
+  /** @minimum 0 */
+  size: number;
+  createdAt: string;
+  encrypted: boolean;
 }

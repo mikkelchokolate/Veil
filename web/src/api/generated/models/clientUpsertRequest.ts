@@ -40,17 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ClientUpsertRequestQuotaResetPolicy } from "./clientUpsertRequestQuotaResetPolicy.ts";
+import type { ClientUpsertRequestQuotaResetPolicy } from './clientUpsertRequestQuotaResetPolicy.ts';
 
 export interface ClientUpsertRequest {
-	name: string;
-	email?: string;
-	enabled?: boolean;
-	quotaBytes?: number;
-	quotaResetPolicy?: ClientUpsertRequestQuotaResetPolicy;
-	expiresAt?: number;
-	deviceLimit?: number;
-	notes?: string;
-	/** Required on update for optimistic concurrency. */
-	version?: number;
+  name: string;
+  email?: string;
+  enabled?: boolean;
+  quotaBytes?: number;
+  quotaResetPolicy?: ClientUpsertRequestQuotaResetPolicy;
+  expiresAt?: number;
+  deviceLimit?: number;
+  notes?: string;
+  /** Required on update for optimistic concurrency. */
+  version?: number;
 }

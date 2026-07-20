@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { Inbound } from "./inbound.ts";
-import type { Settings } from "./settings.ts";
-import type { WarpConfig } from "./warpConfig.ts";
+import type { Inbound } from './inbound.ts';
+import type { Settings } from './settings.ts';
+import type { WarpConfig } from './warpConfig.ts';
 
 export interface ValidationRequest {
-	settings: Settings;
-	inbounds: Inbound[];
-	warp: WarpConfig;
+  settings: Settings;
+  inbounds: Inbound[];
+  warp: WarpConfig;
 }

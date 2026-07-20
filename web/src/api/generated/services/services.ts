@@ -40,63 +40,59 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	ServiceActionRequest,
-	ServiceActionResponse,
-} from "../models";
+  BadRequestResponse,
+  ServiceActionRequest,
+  ServiceActionResponse
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type postApiServicesNameRestartResponse200 = {
-	data: ServiceActionResponse;
-	status: 200;
-};
+  data: ServiceActionResponse
+  status: 200
+}
 
 export type postApiServicesNameRestartResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
-};
+  data: BadRequestResponse
+  status: 400
+}
 
 export type postApiServicesNameRestartResponse500 = {
-	data: ServiceActionResponse;
-	status: 500;
+  data: ServiceActionResponse
+  status: 500
+}
+
+export type postApiServicesNameRestartResponseSuccess = (postApiServicesNameRestartResponse200) & {
+  headers: Headers;
+};
+export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse500) & {
+  headers: Headers;
 };
 
-export type postApiServicesNameRestartResponseSuccess =
-	postApiServicesNameRestartResponse200 & {
-		headers: Headers;
-	};
-export type postApiServicesNameRestartResponseError = (
-	| postApiServicesNameRestartResponse400
-	| postApiServicesNameRestartResponse500
-) & {
-	headers: Headers;
-};
+export type postApiServicesNameRestartResponse = (postApiServicesNameRestartResponseSuccess | postApiServicesNameRestartResponseError)
 
-export type postApiServicesNameRestartResponse =
-	| postApiServicesNameRestartResponseSuccess
-	| postApiServicesNameRestartResponseError;
+export const getPostApiServicesNameRestartUrl = (name: string,) => {
 
-export const getPostApiServicesNameRestartUrl = (name: string) => {
-	return `/api/services/${name}/restart`;
-};
+
+
+
+  return `/api/services/${name}/restart`
+}
 
 /**
  * @summary Restart a managed systemd unit
  */
-export const postApiServicesNameRestart = async (
-	name: string,
-	serviceActionRequest: ServiceActionRequest,
-	options?: RequestInit,
-): Promise<postApiServicesNameRestartResponse> => {
-	return apiFetch<postApiServicesNameRestartResponse>(
-		getPostApiServicesNameRestartUrl(name),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(serviceActionRequest),
-		},
-	);
-};
+export const postApiServicesNameRestart = async (name: string,
+    serviceActionRequest: ServiceActionRequest, options?: RequestInit): Promise<postApiServicesNameRestartResponse> => {
+
+  return apiFetch<postApiServicesNameRestartResponse>(getPostApiServicesNameRestartUrl(name),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(serviceActionRequest)
+  }
+);}
+
+

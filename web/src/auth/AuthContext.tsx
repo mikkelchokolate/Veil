@@ -7,12 +7,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { setCsrfToken } from "../api/fetcher";
-import {
-	getApiAuthStatus,
-	postApiAuthLogin,
-	postApiAuthLogout,
-} from "../api/generated/auth/auth";
+import { apiFetch, setCsrfToken } from "../api/fetcher";
 import type { UserRole } from "../api/generated/models";
 
 export interface Session {
@@ -20,6 +15,7 @@ export interface Session {
 	username?: string;
 	role?: UserRole;
 	locale?: string;
+	csrfToken?: string;
 }
 
 interface AuthContextValue {
@@ -38,9 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	const refresh = useCallback(async () => {
 		try {
-			const res = await getApiAuthStatus();
-			const status = res.status === 200 ? res.data : { authenticated: false };
-			setSession(status as Session);
+			// apiFetch returns the parsed body directly and throws on non-2xx.
+			const status = await apiFetch<Session>("/api/auth/status");
+			setSession(status);
 			setCsrfToken(status.authenticated ? (status.csrfToken ?? null) : null);
 		} catch {
 			setSession({ authenticated: false });
@@ -56,11 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	const login = useCallback(
 		async (username: string, password: string) => {
-			const res = await postApiAuthLogin({ username, password });
-			if (res.status !== 200) {
-				throw new Error("login failed");
-			}
-			const data = res.data as { csrfToken?: string };
+			const data = await apiFetch<{ csrfToken?: string }>("/api/auth/login", {
+				method: "POST",
+				body: JSON.stringify({ username, password }),
+			});
 			if (data?.csrfToken) {
 				setCsrfToken(data.csrfToken);
 			}
@@ -71,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	const logout = useCallback(async () => {
 		try {
-			await postApiAuthLogout();
+			await apiFetch("/api/auth/logout", { method: "POST" });
 		} finally {
 			setSession({ authenticated: false });
 			setCsrfToken(null);

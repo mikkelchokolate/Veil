@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { PostApiV1ClientsBulkBodyAction } from "./postApiV1ClientsBulkBodyAction.ts";
+import type { PostApiV1ClientsBulkBodyAction } from './postApiV1ClientsBulkBodyAction.ts';
 
 export type PostApiV1ClientsBulkBody = {
-	action: PostApiV1ClientsBulkBodyAction;
-	clientIds: string[];
-	days?: number;
-	quotaBytes?: number;
-	inboundId?: string;
+  action: PostApiV1ClientsBulkBodyAction;
+  clientIds: string[];
+  days?: number;
+  quotaBytes?: number;
+  inboundId?: string;
 };

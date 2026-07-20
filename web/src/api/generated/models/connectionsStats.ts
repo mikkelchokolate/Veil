@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ConnectionListener } from "./connectionListener.ts";
+import type { ConnectionListener } from './connectionListener.ts';
 
 export interface ConnectionsStats {
-	listeners: ConnectionListener[];
+  listeners: ConnectionListener[];
 }

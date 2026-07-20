@@ -42,9 +42,9 @@
  */
 
 export interface SubscriptionTokenResponse {
-	/** Full plaintext token, returned only once at issuance. */
-	token: string;
-	/** Public prefix used to identify the token. */
-	prefix: string;
-	expiresAt?: number;
+  /** Full plaintext token, returned only once at issuance. */
+  token: string;
+  /** Public prefix used to identify the token. */
+  prefix: string;
+  expiresAt?: number;
 }

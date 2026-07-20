@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type FirewallRuleProtocol =
-	(typeof FirewallRuleProtocol)[keyof typeof FirewallRuleProtocol];
+export type FirewallRuleProtocol = typeof FirewallRuleProtocol[keyof typeof FirewallRuleProtocol];
+
 
 export const FirewallRuleProtocol = {
-	tcp: "tcp",
-	udp: "udp",
+  tcp: 'tcp',
+  udp: 'udp',
 } as const;

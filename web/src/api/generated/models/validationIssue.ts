@@ -40,15 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ValidationIssueSeverity } from "./validationIssueSeverity.ts";
-import type { ValidationIssueSource } from "./validationIssueSource.ts";
+import type { ValidationIssueSeverity } from './validationIssueSeverity.ts';
+import type { ValidationIssueSource } from './validationIssueSource.ts';
 
 export interface ValidationIssue {
-	code: string;
-	severity: ValidationIssueSeverity;
-	field?: string;
-	inboundId?: string;
-	message: string;
-	remediation?: string;
-	source: ValidationIssueSource;
+  code: string;
+  severity: ValidationIssueSeverity;
+  field?: string;
+  inboundId?: string;
+  message: string;
+  remediation?: string;
+  source: ValidationIssueSource;
 }

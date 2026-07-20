@@ -42,6 +42,6 @@
  */
 
 export interface LogResult {
-	unit: string;
-	output: string;
+  unit: string;
+  output: string;
 }

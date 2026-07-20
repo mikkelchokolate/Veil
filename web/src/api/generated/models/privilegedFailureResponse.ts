@@ -40,7 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { PrivilegedErrorEnvelope } from "./privilegedErrorEnvelope.ts";
+import type { PrivilegedErrorEnvelope } from './privilegedErrorEnvelope.ts';
 
 /**
  * The allowlisted root helper rejected or could not complete the operation.

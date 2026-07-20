@@ -42,9 +42,9 @@
  */
 
 export interface ServiceHealthResult {
-	name: string;
-	command: string[];
-	healthy: boolean;
-	output?: string;
-	error?: string;
+  name: string;
+  command: string[];
+  healthy: boolean;
+  output?: string;
+  error?: string;
 }

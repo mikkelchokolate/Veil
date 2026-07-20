@@ -40,17 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { Locale } from "./locale.ts";
+import type { Locale } from './locale.ts';
 
 export interface SetupCompleteRequest {
-	/**
-	 * @minLength 3
-	 * @maxLength 64
-	 * @pattern ^[\p{L}\p{N}._-]+$
-	 */
-	username: string;
-	/** @minLength 12 */
-	password: string;
-	backupAcknowledged: true;
-	locale?: Locale;
+  /**
+     * @minLength 3
+     * @maxLength 64
+     * @pattern ^[\p{L}\p{N}._-]+$
+     */
+  username: string;
+  /** @minLength 12 */
+  password: string;
+  backupAcknowledged: true;
+  locale?: Locale;
 }

@@ -40,31 +40,31 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ClientProfile } from "./clientProfile.ts";
-import type { InboundProtocol } from "./inboundProtocol.ts";
-import type { InboundProtocolFields } from "./inboundProtocolFields.ts";
-import type { InboundTransport } from "./inboundTransport.ts";
+import type { ClientProfile } from './clientProfile.ts';
+import type { InboundProtocol } from './inboundProtocol.ts';
+import type { InboundProtocolFields } from './inboundProtocolFields.ts';
+import type { InboundTransport } from './inboundTransport.ts';
 
 export interface Inbound {
-	name: string;
-	protocol: InboundProtocol;
-	transport: InboundTransport;
-	/**
-	 * @minimum 1
-	 * @maximum 65535
-	 */
-	port: number;
-	enabled: boolean;
-	password?: string;
-	profiles?: ClientProfile[];
-	naiveUsername?: string;
-	naivePassword?: string;
-	hysteria2Password?: string;
-	masqueradeURL?: string;
-	fallbackRoot?: string;
-	olcrtcAuth?: string;
-	olcrtcTransport?: string;
-	olcrtcRoomID?: string;
-	/** Protocol-specific inbound fields keyed by field identifier. */
-	protocolFields?: InboundProtocolFields;
+  name: string;
+  protocol: InboundProtocol;
+  transport: InboundTransport;
+  /**
+     * @minimum 1
+     * @maximum 65535
+     */
+  port: number;
+  enabled: boolean;
+  password?: string;
+  profiles?: ClientProfile[];
+  naiveUsername?: string;
+  naivePassword?: string;
+  hysteria2Password?: string;
+  masqueradeURL?: string;
+  fallbackRoot?: string;
+  olcrtcAuth?: string;
+  olcrtcTransport?: string;
+  olcrtcRoomID?: string;
+  /** Protocol-specific inbound fields keyed by field identifier. */
+  protocolFields?: InboundProtocolFields;
 }

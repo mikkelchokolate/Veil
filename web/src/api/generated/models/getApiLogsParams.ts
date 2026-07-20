@@ -42,10 +42,10 @@
  */
 
 export type GetApiLogsParams = {
-	unit?: string;
-	/**
-	 * @minimum 1
-	 * @maximum 500
-	 */
-	lines?: number;
+unit?: string;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+lines?: number;
 };

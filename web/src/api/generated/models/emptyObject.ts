@@ -41,6 +41,4 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export interface EmptyObject {
-	[key: string]: unknown;
-}
+export interface EmptyObject { [key: string]: unknown }

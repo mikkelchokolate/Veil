@@ -42,7 +42,7 @@
  */
 
 export interface ApplyRequest {
-	confirm: boolean;
-	applyLive: boolean;
-	applyServices: boolean;
+  confirm: boolean;
+  applyLive: boolean;
+  applyServices: boolean;
 }

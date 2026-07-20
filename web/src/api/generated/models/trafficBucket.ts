@@ -42,7 +42,7 @@
  */
 
 export interface TrafficBucket {
-	at: number;
-	uploadBytes: number;
-	downloadBytes: number;
+  at: number;
+  uploadBytes: number;
+  downloadBytes: number;
 }

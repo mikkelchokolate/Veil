@@ -40,113 +40,115 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	EmptyObject,
-	ErrorText,
-	PrivilegedFailureResponse,
-	ServiceUnavailableResponse,
-	UnauthorizedResponse,
-	UpdateResponse,
-	VersionResponse,
-} from "../models";
+  BadRequestResponse,
+  EmptyObject,
+  ErrorText,
+  PrivilegedFailureResponse,
+  ServiceUnavailableResponse,
+  UnauthorizedResponse,
+  UpdateResponse,
+  VersionResponse
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type getApiVersionResponse200 = {
-	data: VersionResponse;
-	status: 200;
-};
+  data: VersionResponse
+  status: 200
+}
 
 export type getApiVersionResponse401 = {
-	data: UnauthorizedResponse;
-	status: 401;
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiVersionResponseSuccess = (getApiVersionResponse200) & {
+  headers: Headers;
+};
+export type getApiVersionResponseError = (getApiVersionResponse401) & {
+  headers: Headers;
 };
 
-export type getApiVersionResponseSuccess = getApiVersionResponse200 & {
-	headers: Headers;
-};
-export type getApiVersionResponseError = getApiVersionResponse401 & {
-	headers: Headers;
-};
-
-export type getApiVersionResponse =
-	| getApiVersionResponseSuccess
-	| getApiVersionResponseError;
+export type getApiVersionResponse = (getApiVersionResponseSuccess | getApiVersionResponseError)
 
 export const getGetApiVersionUrl = () => {
-	return `/api/version`;
-};
+
+
+
+
+  return `/api/version`
+}
 
 /**
  * @summary Current Veil version
  */
-export const getApiVersion = async (
-	options?: RequestInit,
-): Promise<getApiVersionResponse> => {
-	return apiFetch<getApiVersionResponse>(getGetApiVersionUrl(), {
-		...options,
-		method: "GET",
-	});
-};
+export const getApiVersion = async ( options?: RequestInit): Promise<getApiVersionResponse> => {
+
+  return apiFetch<getApiVersionResponse>(getGetApiVersionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
 
 export type postApiVersionUpdateResponse200 = {
-	data: UpdateResponse;
-	status: 200;
-};
+  data: UpdateResponse
+  status: 200
+}
 
 export type postApiVersionUpdateResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
-};
+  data: BadRequestResponse
+  status: 400
+}
 
 export type postApiVersionUpdateResponse500 = {
-	data: PrivilegedFailureResponse;
-	status: 500;
-};
+  data: PrivilegedFailureResponse
+  status: 500
+}
 
 export type postApiVersionUpdateResponse502 = {
-	data: ErrorText;
-	status: 502;
-};
+  data: ErrorText
+  status: 502
+}
 
 export type postApiVersionUpdateResponse503 = {
-	data: ServiceUnavailableResponse;
-	status: 503;
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse200) & {
+  headers: Headers;
+};
+export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
+  headers: Headers;
 };
 
-export type postApiVersionUpdateResponseSuccess =
-	postApiVersionUpdateResponse200 & {
-		headers: Headers;
-	};
-export type postApiVersionUpdateResponseError = (
-	| postApiVersionUpdateResponse400
-	| postApiVersionUpdateResponse500
-	| postApiVersionUpdateResponse502
-	| postApiVersionUpdateResponse503
-) & {
-	headers: Headers;
-};
-
-export type postApiVersionUpdateResponse =
-	| postApiVersionUpdateResponseSuccess
-	| postApiVersionUpdateResponseError;
+export type postApiVersionUpdateResponse = (postApiVersionUpdateResponseSuccess | postApiVersionUpdateResponseError)
 
 export const getPostApiVersionUpdateUrl = () => {
-	return `/api/version/update`;
-};
+
+
+
+
+  return `/api/version/update`
+}
 
 /**
  * @summary Trigger a staged self-update to the latest release
  */
-export const postApiVersionUpdate = async (
-	emptyObject?: EmptyObject,
-	options?: RequestInit,
-): Promise<postApiVersionUpdateResponse> => {
-	return apiFetch<postApiVersionUpdateResponse>(getPostApiVersionUpdateUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(emptyObject),
-	});
-};
+export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: RequestInit): Promise<postApiVersionUpdateResponse> => {
+
+  return apiFetch<postApiVersionUpdateResponse>(getPostApiVersionUpdateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(emptyObject)
+  }
+);}
+
+

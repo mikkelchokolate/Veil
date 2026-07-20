@@ -42,9 +42,9 @@
  */
 
 export interface SpeedtestResult {
-	server?: string;
-	pingMs: number;
-	downloadMbps: number;
-	uploadMbps: number;
-	raw?: string;
+  server?: string;
+  pingMs: number;
+  downloadMbps: number;
+  uploadMbps: number;
+  raw?: string;
 }

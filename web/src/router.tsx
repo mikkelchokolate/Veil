@@ -6,6 +6,7 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { AppShell } from "./shell/AppShell";
 
 // The router basepath matches the panel WebBasePath so client-side nav works
 // under "/<secret>" too. Read from the <base href> the server rewrites.
@@ -85,7 +86,18 @@ const ApplyJobDetailPage = lazy(() =>
 	})),
 );
 
-const rootRoute = createRootRoute({ component: Outlet });
+// AppShell renders inside the router so its navigation hooks (useRouterState,
+// Link) resolve against router context. Previously the shell wrapped the
+// RouterProvider, which crashed useRouterState with a null router store.
+function RootLayout() {
+	return (
+		<AppShell>
+			<Outlet />
+		</AppShell>
+	);
+}
+
+const rootRoute = createRootRoute({ component: RootLayout });
 
 const overviewRoute = createRoute({
 	getParentRoute: () => rootRoute,

@@ -40,7 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from "./errorText.ts";
+import type { ErrorText } from './errorText.ts';
 
 /**
  * Authenticated principal is not allowed to perform the operation.

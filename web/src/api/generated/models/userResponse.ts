@@ -40,11 +40,11 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { Locale } from "./locale.ts";
-import type { UserRole } from "./userRole.ts";
+import type { Locale } from './locale.ts';
+import type { UserRole } from './userRole.ts';
 
 export interface UserResponse {
-	username: string;
-	role: UserRole;
-	locale: Locale;
+  username: string;
+  role: UserRole;
+  locale: Locale;
 }

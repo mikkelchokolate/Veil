@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type GetApiClientLinksSubscriptionFormat =
-	(typeof GetApiClientLinksSubscriptionFormat)[keyof typeof GetApiClientLinksSubscriptionFormat];
+export type GetApiClientLinksSubscriptionFormat = typeof GetApiClientLinksSubscriptionFormat[keyof typeof GetApiClientLinksSubscriptionFormat];
+
 
 export const GetApiClientLinksSubscriptionFormat = {
-	base64: "base64",
-	raw: "raw",
+  base64: 'base64',
+  raw: 'raw',
 } as const;

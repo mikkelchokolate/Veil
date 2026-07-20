@@ -42,8 +42,8 @@
  */
 
 export interface RoutingRule {
-	name: string;
-	match: string;
-	outbound: string;
-	enabled: boolean;
+  name: string;
+  match: string;
+  outbound: string;
+  enabled: boolean;
 }

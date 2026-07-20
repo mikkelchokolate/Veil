@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type GetSTokenFormat =
-	(typeof GetSTokenFormat)[keyof typeof GetSTokenFormat];
+export type GetSTokenFormat = typeof GetSTokenFormat[keyof typeof GetSTokenFormat];
+
 
 export const GetSTokenFormat = {
-	base64: "base64",
-	raw: "raw",
+  base64: 'base64',
+  raw: 'raw',
 } as const;

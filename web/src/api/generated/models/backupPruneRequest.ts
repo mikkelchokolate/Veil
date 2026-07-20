@@ -42,19 +42,19 @@
  */
 
 export interface BackupPruneRequest {
-	/**
-	 * @minimum 0
-	 * @maximum 365
-	 */
-	daily?: number;
-	/**
-	 * @minimum 0
-	 * @maximum 104
-	 */
-	weekly?: number;
-	/**
-	 * @minimum 0
-	 * @maximum 120
-	 */
-	monthly?: number;
+  /**
+     * @minimum 0
+     * @maximum 365
+     */
+  daily?: number;
+  /**
+     * @minimum 0
+     * @maximum 104
+     */
+  weekly?: number;
+  /**
+     * @minimum 0
+     * @maximum 120
+     */
+  monthly?: number;
 }

@@ -41,11 +41,11 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ValidationIssueSeverity =
-	(typeof ValidationIssueSeverity)[keyof typeof ValidationIssueSeverity];
+export type ValidationIssueSeverity = typeof ValidationIssueSeverity[keyof typeof ValidationIssueSeverity];
+
 
 export const ValidationIssueSeverity = {
-	error: "error",
-	warning: "warning",
-	info: "info",
+  error: 'error',
+  warning: 'warning',
+  info: 'info',
 } as const;

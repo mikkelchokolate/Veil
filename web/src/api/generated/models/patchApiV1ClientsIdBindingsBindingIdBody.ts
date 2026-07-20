@@ -42,6 +42,6 @@
  */
 
 export type PatchApiV1ClientsIdBindingsBindingIdBody = {
-	enabled: boolean;
-	version?: number;
+  enabled: boolean;
+  version?: number;
 };

@@ -44,11 +44,11 @@
 /**
  * Zero for unencrypted archives.
  */
-export type BackupVerificationReportEncryptionVersion =
-	(typeof BackupVerificationReportEncryptionVersion)[keyof typeof BackupVerificationReportEncryptionVersion];
+export type BackupVerificationReportEncryptionVersion = typeof BackupVerificationReportEncryptionVersion[keyof typeof BackupVerificationReportEncryptionVersion];
+
 
 export const BackupVerificationReportEncryptionVersion = {
-	NUMBER_0: 0,
-	NUMBER_1: 1,
-	NUMBER_2: 2,
+  NUMBER_0: 0,
+  NUMBER_1: 1,
+  NUMBER_2: 2,
 } as const;

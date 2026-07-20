@@ -40,10 +40,10 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ValidationIssue } from "./validationIssue.ts";
+import type { ValidationIssue } from './validationIssue.ts';
 
 export interface ValidationResponse {
-	valid: boolean;
-	issues: ValidationIssue[];
-	checkedAt: string;
+  valid: boolean;
+  issues: ValidationIssue[];
+  checkedAt: string;
 }

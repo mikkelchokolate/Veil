@@ -40,54 +40,52 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	ForbiddenResponse,
-	UnauthorizedResponse,
-	ValidationRequest,
-	ValidationResponse,
-} from "../models";
+  BadRequestResponse,
+  ForbiddenResponse,
+  UnauthorizedResponse,
+  ValidationRequest,
+  ValidationResponse
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type postApiValidationResponse200 = {
-	data: ValidationResponse;
-	status: 200;
-};
+  data: ValidationResponse
+  status: 200
+}
 
 export type postApiValidationResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
-};
+  data: BadRequestResponse
+  status: 400
+}
 
 export type postApiValidationResponse401 = {
-	data: UnauthorizedResponse;
-	status: 401;
-};
+  data: UnauthorizedResponse
+  status: 401
+}
 
 export type postApiValidationResponse403 = {
-	data: ForbiddenResponse;
-	status: 403;
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type postApiValidationResponseSuccess = (postApiValidationResponse200) & {
+  headers: Headers;
+};
+export type postApiValidationResponseError = (postApiValidationResponse400 | postApiValidationResponse401 | postApiValidationResponse403) & {
+  headers: Headers;
 };
 
-export type postApiValidationResponseSuccess = postApiValidationResponse200 & {
-	headers: Headers;
-};
-export type postApiValidationResponseError = (
-	| postApiValidationResponse400
-	| postApiValidationResponse401
-	| postApiValidationResponse403
-) & {
-	headers: Headers;
-};
-
-export type postApiValidationResponse =
-	| postApiValidationResponseSuccess
-	| postApiValidationResponseError;
+export type postApiValidationResponse = (postApiValidationResponseSuccess | postApiValidationResponseError)
 
 export const getPostApiValidationUrl = () => {
-	return `/api/validation`;
-};
+
+
+
+
+  return `/api/validation`
+}
 
 /**
  * Performs the same candidate and live-host checks used authoritatively
@@ -96,14 +94,15 @@ export const getPostApiValidationUrl = () => {
  * again immediately before mutation.
  * @summary Validate a candidate configuration against live host state
  */
-export const postApiValidation = async (
-	validationRequest: ValidationRequest,
-	options?: RequestInit,
-): Promise<postApiValidationResponse> => {
-	return apiFetch<postApiValidationResponse>(getPostApiValidationUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(validationRequest),
-	});
-};
+export const postApiValidation = async (validationRequest: ValidationRequest, options?: RequestInit): Promise<postApiValidationResponse> => {
+
+  return apiFetch<postApiValidationResponse>(getPostApiValidationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(validationRequest)
+  }
+);}
+
+

@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from "./trafficBucket.ts";
+import type { TrafficBucket } from './trafficBucket.ts';
 
 export interface TrafficHistoryResponse {
-	clientId: string;
-	from: number;
-	to: number;
-	bucket: number;
-	items: TrafficBucket[];
+  clientId: string;
+  from: number;
+  to: number;
+  bucket: number;
+  items: TrafficBucket[];
 }

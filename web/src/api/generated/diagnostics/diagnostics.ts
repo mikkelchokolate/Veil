@@ -40,152 +40,147 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
-import { apiFetch } from "../../fetcher.ts";
 import type {
-	BadRequestResponse,
-	DNSLookupRequest,
-	DNSLookupResult,
-	EmptyObject,
-	PingRequest,
-	PingResult,
-	ServiceUnavailableResponse,
-	SpeedtestResult,
-} from "../models";
+  BadRequestResponse,
+  DNSLookupRequest,
+  DNSLookupResult,
+  EmptyObject,
+  PingRequest,
+  PingResult,
+  ServiceUnavailableResponse,
+  SpeedtestResult
+} from '../models';
+
+import { apiFetch } from '../../fetcher.ts';
 
 export type postApiToolsDnsLookupResponse200 = {
-	data: DNSLookupResult;
-	status: 200;
-};
+  data: DNSLookupResult
+  status: 200
+}
 
 export type postApiToolsDnsLookupResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
+  data: BadRequestResponse
+  status: 400
+}
+
+export type postApiToolsDnsLookupResponseSuccess = (postApiToolsDnsLookupResponse200) & {
+  headers: Headers;
+};
+export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400) & {
+  headers: Headers;
 };
 
-export type postApiToolsDnsLookupResponseSuccess =
-	postApiToolsDnsLookupResponse200 & {
-		headers: Headers;
-	};
-export type postApiToolsDnsLookupResponseError =
-	postApiToolsDnsLookupResponse400 & {
-		headers: Headers;
-	};
-
-export type postApiToolsDnsLookupResponse =
-	| postApiToolsDnsLookupResponseSuccess
-	| postApiToolsDnsLookupResponseError;
+export type postApiToolsDnsLookupResponse = (postApiToolsDnsLookupResponseSuccess | postApiToolsDnsLookupResponseError)
 
 export const getPostApiToolsDnsLookupUrl = () => {
-	return `/api/tools/dns-lookup`;
-};
+
+
+
+
+  return `/api/tools/dns-lookup`
+}
 
 /**
  * @summary DNS lookup diagnostic
  */
-export const postApiToolsDnsLookup = async (
-	dNSLookupRequest: DNSLookupRequest,
-	options?: RequestInit,
-): Promise<postApiToolsDnsLookupResponse> => {
-	return apiFetch<postApiToolsDnsLookupResponse>(
-		getPostApiToolsDnsLookupUrl(),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(dNSLookupRequest),
-		},
-	);
-};
+export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, options?: RequestInit): Promise<postApiToolsDnsLookupResponse> => {
+
+  return apiFetch<postApiToolsDnsLookupResponse>(getPostApiToolsDnsLookupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dNSLookupRequest)
+  }
+);}
+
 
 export type postApiToolsPingResponse200 = {
-	data: PingResult;
-	status: 200;
-};
+  data: PingResult
+  status: 200
+}
 
 export type postApiToolsPingResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
+  data: BadRequestResponse
+  status: 400
+}
+
+export type postApiToolsPingResponseSuccess = (postApiToolsPingResponse200) & {
+  headers: Headers;
+};
+export type postApiToolsPingResponseError = (postApiToolsPingResponse400) & {
+  headers: Headers;
 };
 
-export type postApiToolsPingResponseSuccess = postApiToolsPingResponse200 & {
-	headers: Headers;
-};
-export type postApiToolsPingResponseError = postApiToolsPingResponse400 & {
-	headers: Headers;
-};
-
-export type postApiToolsPingResponse =
-	| postApiToolsPingResponseSuccess
-	| postApiToolsPingResponseError;
+export type postApiToolsPingResponse = (postApiToolsPingResponseSuccess | postApiToolsPingResponseError)
 
 export const getPostApiToolsPingUrl = () => {
-	return `/api/tools/ping`;
-};
+
+
+
+
+  return `/api/tools/ping`
+}
 
 /**
  * @summary Ping diagnostic
  */
-export const postApiToolsPing = async (
-	pingRequest: PingRequest,
-	options?: RequestInit,
-): Promise<postApiToolsPingResponse> => {
-	return apiFetch<postApiToolsPingResponse>(getPostApiToolsPingUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(pingRequest),
-	});
-};
+export const postApiToolsPing = async (pingRequest: PingRequest, options?: RequestInit): Promise<postApiToolsPingResponse> => {
+
+  return apiFetch<postApiToolsPingResponse>(getPostApiToolsPingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pingRequest)
+  }
+);}
+
 
 export type postApiToolsSpeedtestResponse200 = {
-	data: SpeedtestResult;
-	status: 200;
-};
+  data: SpeedtestResult
+  status: 200
+}
 
 export type postApiToolsSpeedtestResponse400 = {
-	data: BadRequestResponse;
-	status: 400;
-};
+  data: BadRequestResponse
+  status: 400
+}
 
 export type postApiToolsSpeedtestResponse503 = {
-	data: ServiceUnavailableResponse;
-	status: 503;
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type postApiToolsSpeedtestResponseSuccess = (postApiToolsSpeedtestResponse200) & {
+  headers: Headers;
+};
+export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse503) & {
+  headers: Headers;
 };
 
-export type postApiToolsSpeedtestResponseSuccess =
-	postApiToolsSpeedtestResponse200 & {
-		headers: Headers;
-	};
-export type postApiToolsSpeedtestResponseError = (
-	| postApiToolsSpeedtestResponse400
-	| postApiToolsSpeedtestResponse503
-) & {
-	headers: Headers;
-};
-
-export type postApiToolsSpeedtestResponse =
-	| postApiToolsSpeedtestResponseSuccess
-	| postApiToolsSpeedtestResponseError;
+export type postApiToolsSpeedtestResponse = (postApiToolsSpeedtestResponseSuccess | postApiToolsSpeedtestResponseError)
 
 export const getPostApiToolsSpeedtestUrl = () => {
-	return `/api/tools/speedtest`;
-};
+
+
+
+
+  return `/api/tools/speedtest`
+}
 
 /**
  * @summary Speedtest diagnostic
  */
-export const postApiToolsSpeedtest = async (
-	emptyObject?: EmptyObject,
-	options?: RequestInit,
-): Promise<postApiToolsSpeedtestResponse> => {
-	return apiFetch<postApiToolsSpeedtestResponse>(
-		getPostApiToolsSpeedtestUrl(),
-		{
-			...options,
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...options?.headers },
-			body: JSON.stringify(emptyObject),
-		},
-	);
-};
+export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?: RequestInit): Promise<postApiToolsSpeedtestResponse> => {
+
+  return apiFetch<postApiToolsSpeedtestResponse>(getPostApiToolsSpeedtestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(emptyObject)
+  }
+);}
+
+

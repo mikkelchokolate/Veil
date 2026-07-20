@@ -41,13 +41,13 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ApplyJobStatus =
-	(typeof ApplyJobStatus)[keyof typeof ApplyJobStatus];
+export type ApplyJobStatus = typeof ApplyJobStatus[keyof typeof ApplyJobStatus];
+
 
 export const ApplyJobStatus = {
-	pending: "pending",
-	running: "running",
-	success: "success",
-	failed: "failed",
-	rolled_back: "rolled_back",
+  pending: 'pending',
+  running: 'running',
+  success: 'success',
+  failed: 'failed',
+  rolled_back: 'rolled_back',
 } as const;

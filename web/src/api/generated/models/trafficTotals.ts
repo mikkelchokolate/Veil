@@ -42,11 +42,11 @@
  */
 
 export interface TrafficTotals {
-	clientId: string;
-	uploadBytes: number;
-	downloadBytes: number;
-	totalBytes: number;
-	quotaBytes?: number;
-	remainingBytes?: number;
-	depleted: boolean;
+  clientId: string;
+  uploadBytes: number;
+  downloadBytes: number;
+  totalBytes: number;
+  quotaBytes?: number;
+  remainingBytes?: number;
+  depleted: boolean;
 }

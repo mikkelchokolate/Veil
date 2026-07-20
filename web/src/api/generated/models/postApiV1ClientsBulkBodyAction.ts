@@ -41,16 +41,16 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type PostApiV1ClientsBulkBodyAction =
-	(typeof PostApiV1ClientsBulkBodyAction)[keyof typeof PostApiV1ClientsBulkBodyAction];
+export type PostApiV1ClientsBulkBodyAction = typeof PostApiV1ClientsBulkBodyAction[keyof typeof PostApiV1ClientsBulkBodyAction];
+
 
 export const PostApiV1ClientsBulkBodyAction = {
-	enable: "enable",
-	disable: "disable",
-	delete: "delete",
-	extend_expiry: "extend_expiry",
-	set_quota: "set_quota",
-	reset_traffic: "reset_traffic",
-	attach_inbound: "attach_inbound",
-	detach_inbound: "detach_inbound",
+  enable: 'enable',
+  disable: 'disable',
+  delete: 'delete',
+  extend_expiry: 'extend_expiry',
+  set_quota: 'set_quota',
+  reset_traffic: 'reset_traffic',
+  attach_inbound: 'attach_inbound',
+  detach_inbound: 'detach_inbound',
 } as const;

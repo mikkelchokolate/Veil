@@ -40,11 +40,11 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { FieldOptionAttributes } from "./fieldOptionAttributes.ts";
+import type { FieldOptionAttributes } from './fieldOptionAttributes.ts';
 
 export interface FieldOption {
-	value: string;
-	label: string;
-	/** Optional HTML data attributes for the option element. */
-	attributes?: FieldOptionAttributes;
+  value: string;
+  label: string;
+  /** Optional HTML data attributes for the option element. */
+  attributes?: FieldOptionAttributes;
 }

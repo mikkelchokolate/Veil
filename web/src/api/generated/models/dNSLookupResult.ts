@@ -42,8 +42,8 @@
  */
 
 export interface DNSLookupResult {
-	hostname: string;
-	addresses: string[];
-	cname?: string;
-	error?: string;
+  hostname: string;
+  addresses: string[];
+  cname?: string;
+  error?: string;
 }

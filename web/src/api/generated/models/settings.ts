@@ -40,27 +40,27 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { SettingsPanelAccess } from "./settingsPanelAccess.ts";
-import type { SettingsProtocolFields } from "./settingsProtocolFields.ts";
+import type { SettingsPanelAccess } from './settingsPanelAccess.ts';
+import type { SettingsProtocolFields } from './settingsProtocolFields.ts';
 
 export interface Settings {
-	panelListen: string;
-	panelAccess?: SettingsPanelAccess;
-	webBasePath?: string;
-	mode: string;
-	domain?: string;
-	email?: string;
-	naiveUsername?: string;
-	/** Plain value on write; redacted as `[REDACTED]` on read when present. */
-	naivePassword?: string;
-	hysteria2Password?: string;
-	masqueradeURL?: string;
-	fallbackRoot?: string;
-	olcrtcAuth?: string;
-	olcrtcTransport?: string;
-	olcrtcRoomID?: string;
-	/** Protocol-specific settings keyed by field identifier. */
-	protocolFields?: SettingsProtocolFields;
-	/** When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. */
-	firewallManagement?: boolean;
+  panelListen: string;
+  panelAccess?: SettingsPanelAccess;
+  webBasePath?: string;
+  mode: string;
+  domain?: string;
+  email?: string;
+  naiveUsername?: string;
+  /** Plain value on write; redacted as `[REDACTED]` on read when present. */
+  naivePassword?: string;
+  hysteria2Password?: string;
+  masqueradeURL?: string;
+  fallbackRoot?: string;
+  olcrtcAuth?: string;
+  olcrtcTransport?: string;
+  olcrtcRoomID?: string;
+  /** Protocol-specific settings keyed by field identifier. */
+  protocolFields?: SettingsProtocolFields;
+  /** When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. */
+  firewallManagement?: boolean;
 }

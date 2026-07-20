@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type SetupStatusResponsePanelAccess =
-	(typeof SetupStatusResponsePanelAccess)[keyof typeof SetupStatusResponsePanelAccess];
+export type SetupStatusResponsePanelAccess = typeof SetupStatusResponsePanelAccess[keyof typeof SetupStatusResponsePanelAccess];
+
 
 export const SetupStatusResponsePanelAccess = {
-	local: "local",
-	direct: "direct",
-	caddy: "caddy",
-	"": "",
+  local: 'local',
+  direct: 'direct',
+  caddy: 'caddy',
+  '': '',
 } as const;

@@ -40,7 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from "./errorText.ts";
+import type { ErrorText } from './errorText.ts';
 
 /**
  * Missing or invalid token/session.

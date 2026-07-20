@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { DirSizeInfo } from "./dirSizeInfo.ts";
+import type { DirSizeInfo } from './dirSizeInfo.ts';
 
 export interface DiskStats {
-	dirs: DirSizeInfo[];
+  dirs: DirSizeInfo[];
 }

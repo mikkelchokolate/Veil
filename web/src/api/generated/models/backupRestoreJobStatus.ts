@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type BackupRestoreJobStatus =
-	(typeof BackupRestoreJobStatus)[keyof typeof BackupRestoreJobStatus];
+export type BackupRestoreJobStatus = typeof BackupRestoreJobStatus[keyof typeof BackupRestoreJobStatus];
+
 
 export const BackupRestoreJobStatus = {
-	queued: "queued",
-	running: "running",
-	succeeded: "succeeded",
-	failed: "failed",
+  queued: 'queued',
+  running: 'running',
+  succeeded: 'succeeded',
+  failed: 'failed',
 } as const;
