@@ -5,23 +5,6 @@ import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
 import { NAV_ENTRIES } from "./nav";
 
-function NavIcon({ path }: { path: string }) {
-	return (
-		<svg
-			className="icon"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			aria-hidden="true"
-		>
-			<path d={path} />
-		</svg>
-	);
-}
-
 export function AppShell({ children }: { children?: ReactNode }) {
 	const { session, logout } = useAuth();
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -43,7 +26,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 									to={entry.to}
 									className={`nav-item${active ? " active" : ""}`}
 								>
-									<NavIcon path={entry.icon} />
+									<entry.icon className="icon" aria-hidden="true" />
 									<span>{t(entry.labelKey)}</span>
 								</Link>
 							</li>
