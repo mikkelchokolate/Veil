@@ -91,6 +91,7 @@ type managementState struct {
 	applyRunner       *apply.Runner
 	clientService     *client.Service
 	clientRepo        *client.Repository
+	clientCreds       *client.CredentialStore
 	clientMigrator    *client.Migrator
 	tokenStore        *client.TokenStore
 	subRenderer       *client.SubscriptionRenderer

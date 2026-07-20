@@ -265,6 +265,83 @@ func TestClientMutationSnapshotContainsClient(t *testing.T) {
 // stateOf is unused placeholder retained for API symmetry; see
 // newApplyTrackedRouterWithState below.
 
+// TestClientCreateIssuesGeneratedCredentials (S2) verifies that creating a
+// client with bindings and no explicit credential returns the generated
+// plaintext exactly once in issuedCredentials, that the plaintext is NOT the
+// stored (encrypted) form, and that the credential actually works (is in the
+// snapshot so the apply renders it).
+func TestClientCreateIssuesGeneratedCredentials(t *testing.T) {
+	r, st := newApplyTrackedRouterWithState(t)
+	w := postJSON(t, r, "/api/inbounds", `{"name":"iss-inbound","protocol":"hysteria2","transport":"udp","port":14433,"enabled":true}`)
+	if w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", w.Code, w.Body.String())
+	}
+	w = postJSON(t, r, "/api/v1/clients", `{"name":"iss-client","bindings":[{"inboundId":"iss-inbound"}]}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Client struct {
+			ID string `json:"id"`
+		} `json:"client"`
+		Issued []struct {
+			BindingID string `json:"bindingId"`
+			InboundID string `json:"inboundId"`
+			Kind      string `json:"kind"`
+			Plaintext string `json:"plaintext"`
+		} `json:"issuedCredentials"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v (%s)", err, w.Body.String())
+	}
+	if len(resp.Issued) != 1 {
+		t.Fatalf("issuedCredentials len = %d, want 1: %s", len(resp.Issued), w.Body.String())
+	}
+	iss := resp.Issued[0]
+	if iss.Plaintext == "" {
+		t.Errorf("issued credential has empty plaintext")
+	}
+	if iss.InboundID != "iss-inbound" {
+		t.Errorf("issued inboundId = %q, want iss-inbound", iss.InboundID)
+	}
+	if iss.BindingID == "" {
+		t.Errorf("issued bindingId empty")
+	}
+	// The stored credential must be the encrypted form, not the plaintext, and
+	// must decrypt back to the issued plaintext (proves encrypted at rest and
+	// retrievable). Use the credential store directly.
+	if st.clientCreds == nil {
+		t.Fatalf("credential store unavailable")
+	}
+	cred, err := st.clientCreds.ActiveForBinding(iss.BindingID, "password")
+	if err != nil {
+		t.Fatalf("active credential: %v", err)
+	}
+	if len(cred.EncryptedValue) == 0 {
+		t.Errorf("credential has no encrypted value (stored as plaintext?)")
+	}
+	if string(cred.EncryptedValue) == iss.Plaintext {
+		t.Errorf("credential stored as plaintext, must be encrypted")
+	}
+	revealed, err := st.clientCreds.Reveal(cred.ID)
+	if err != nil {
+		t.Fatalf("reveal: %v", err)
+	}
+	if revealed != iss.Plaintext {
+		t.Errorf("revealed plaintext does not match issued plaintext")
+	}
+	// The immutable snapshot for the client's revision must contain it. The
+	// client create is the second mutation (inbound create was revision 1).
+	env := decodeEnvelope(t, w.Body.Bytes())
+	payload, err := st.applySnapshots.Load(env.Revision.Desired)
+	if err != nil {
+		t.Fatalf("load snapshot: %v", err)
+	}
+	if !strings.Contains(string(payload), "iss-client") {
+		t.Errorf("snapshot missing created client")
+	}
+}
+
 // newApplyTrackedRouterWithState mirrors newApplyTrackedRouter but also
 // returns the managementState so tests can inspect the snapshot store
 // directly (the same store the apply executor pins from).

@@ -371,7 +371,7 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		}
 		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, Credential: b.Credential})
 	}
-	final, err := s.clientService.CreateWithBindings(c, bindings)
+	final, issued, err := s.clientService.CreateWithBindingsIssued(c, bindings)
 	if err != nil {
 		s.logUserAction(r, "create_client", req.Name, false, err.Error())
 		s.writeV1ClientError(w, err)
@@ -382,7 +382,15 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 	// the just-committed client+bindings+credentials) and exactly one apply
 	// job. The response carries THIS mutation's revision and job.
 	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
-	s.writeMutationResponse(w, http.StatusCreated, final, outcome)
+	// S2: response shape { client, issuedCredentials, revision, applyJob,
+	// success }. The generated plaintext appears exactly once here; it is
+	// never persisted (only the encrypted form is stored).
+	resp := map[string]any{"client": final}
+	if len(issued) > 0 {
+		resp["issuedCredentials"] = issued
+	}
+	s.mergeOutcomeInto(resp, outcome)
+	writeJSONStatus(w, http.StatusCreated, resp)
 }
 
 func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Request) {

@@ -78,6 +78,7 @@ func initClientSubsystem(s *managementState) {
 	clientRepo := client.NewRepository(s.db)
 	s.clientRepo = clientRepo
 	clientCreds := client.NewCredentialStore(s.db, s.cipher)
+	s.clientCreds = clientCreds
 	// No ApplyNotifier: mutations never fire-and-forget applies from inside
 	// the service. The HTTP handler runs the unified orchestration exactly
 	// once per committed mutation (revision bump + snapshot + one job) and

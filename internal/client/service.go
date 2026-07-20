@@ -125,15 +125,37 @@ type BindingInput struct {
 // compensating deletes are used. This is the required path for client create;
 // the separate Create/AddBinding/SetCredential sequence is legacy.
 func (s *Service) CreateWithBindings(c Client, bindings []BindingInput) (View, error) {
+	view, _, err := s.CreateWithBindingsIssued(c, bindings)
+	return view, err
+}
+
+// IssuedCredential is a credential generated server-side during client
+// creation. The plaintext is returned exactly once (never persisted; only the
+// encrypted form is stored) so the operator can deliver it to the end user.
+type IssuedCredential struct {
+	BindingID string `json:"bindingId"`
+	InboundID string `json:"inboundId"`
+	Kind      string `json:"kind"`
+	Plaintext string `json:"plaintext"`
+}
+
+// CreateWithBindingsIssued is CreateWithBindings plus server-side credential
+// generation: for every binding whose credential is empty a protocol-
+// compatible high-entropy secret is generated, encrypted, and persisted inside
+// the SAME SQL transaction, and its plaintext is returned exactly once in the
+// IssuedCredential list. Errors never suppress a partial create — any failure
+// rolls the whole transaction back.
+func (s *Service) CreateWithBindingsIssued(c Client, bindings []BindingInput) (View, []IssuedCredential, error) {
 	if err := validate(c); err != nil {
-		return View{}, err
+		return View{}, nil, err
 	}
 	for _, b := range bindings {
 		if b.InboundID == "" {
-			return View{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
+			return View{}, nil, fmt.Errorf("%w: inboundId is required", ErrValidation)
 		}
 	}
 	var createdID string
+	issued := []IssuedCredential{}
 	err := s.repo.WithTx(func(tx *Tx) error {
 		created, err := tx.CreateClient(c)
 		if err != nil {
@@ -145,18 +167,37 @@ func (s *Service) CreateWithBindings(c Client, bindings []BindingInput) (View, e
 			if err != nil {
 				return err
 			}
-			if b.Credential != "" {
-				if _, err := tx.SetCredential(s.creds, bind.ID, "password", b.Credential); err != nil {
+			plaintext := b.Credential
+			generated := false
+			if plaintext == "" {
+				plaintext, err = generateCredentialPlaintext()
+				if err != nil {
 					return err
 				}
+				generated = true
+			}
+			if _, err := tx.SetCredential(s.creds, bind.ID, "password", plaintext); err != nil {
+				return err
+			}
+			if generated {
+				issued = append(issued, IssuedCredential{
+					BindingID: bind.ID,
+					InboundID: bind.InboundID,
+					Kind:      "password",
+					Plaintext: plaintext,
+				})
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return View{}, err
+		return View{}, nil, err
 	}
-	return s.Get(createdID)
+	view, err := s.Get(createdID)
+	if err != nil {
+		return View{}, nil, err
+	}
+	return view, issued, nil
 }
 
 // Get returns one client with computed status.

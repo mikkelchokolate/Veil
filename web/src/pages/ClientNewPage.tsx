@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 
 interface InboundOption {
@@ -14,14 +14,26 @@ interface BindingDraft {
 	credential: string;
 }
 
-interface CreatedCredential {
+interface IssuedCredential {
 	bindingId: string;
 	inboundId: string;
-	plaintext?: string | undefined;
+	kind: string;
+	plaintext: string;
 }
 
+interface CreateClientResponse {
+	client: { id: string };
+	issuedCredentials?: IssuedCredential[];
+}
+
+/** How long the one-time credential dialog stays before auto-clearing. */
+const ISSUED_CRED_TIMEOUT_MS = 5 * 60 * 1000;
+
 /** B6/B7: create form with General / Limits / Access (bindings+credentials) /
- * Review steps. Server-generated credentials are shown once in the review. */
+ * Review steps. Server-generated credentials arrive in the create response
+ * (issuedCredentials) and are shown once in a modal; they are held only in
+ * component state — never in the Query cache, URL, or web storage — and are
+ * cleared on close, navigation, unmount, and after a timeout. */
 export function ClientNewPage() {
 	const navigate = useNavigate();
 	const qc = useQueryClient();
@@ -38,8 +50,22 @@ export function ClientNewPage() {
 	const [quotaBytes, setQuotaBytes] = useState("");
 	const [expiresAt, setExpiresAt] = useState("");
 	const [bindings, setBindings] = useState<BindingDraft[]>([]);
-	const [createdCreds, setCreatedCreds] = useState<CreatedCredential[]>([]);
+	// One-time issued credentials. Held ONLY in local state, cleared eagerly.
+	const [issuedCreds, setIssuedCreds] = useState<IssuedCredential[]>([]);
 	const [error, setError] = useState<string | null>(null);
+
+	const clearIssued = () => setIssuedCreds([]);
+
+	// Clear issued credentials on unmount (navigation away) and after a
+	// timeout, so the one-time secret never lingers in memory.
+	useEffect(() => {
+		if (issuedCreds.length === 0) return;
+		const t = setTimeout(() => setIssuedCreds([]), ISSUED_CRED_TIMEOUT_MS);
+		return () => {
+			clearTimeout(t);
+			setIssuedCreds([]);
+		};
+	}, [issuedCreds.length]);
 
 	const inboundList: InboundOption[] = Array.isArray(inbounds.data)
 		? inbounds.data
@@ -62,34 +88,17 @@ export function ClientNewPage() {
 					...(b.credential ? { credential: b.credential } : {}),
 				}));
 			}
-			return apiFetch<{ id: string }>("/api/v1/clients", {
+			return apiFetch<CreateClientResponse>("/api/v1/clients", {
 				method: "POST",
 				body: JSON.stringify(body),
 			});
 		},
-		onSuccess: async (client) => {
-			// Rotate server-side to obtain one-time plaintext for each credential
-			// we did not explicitly set, so the operator can hand it to the user.
-			const revealed: CreatedCredential[] = [];
-			for (const b of bindings) {
-				if (b.credential) continue; // operator-provided; already known to them
-				try {
-					const res = await apiFetch<
-						CreatedCredential & { plaintext?: string }
-					>(
-						`/api/v1/clients/${client.id}/credentials/${encodeURIComponent(b.inboundId)}/rotate`,
-						{ method: "POST", body: JSON.stringify({}) },
-					);
-					revealed.push({
-						bindingId: b.inboundId,
-						inboundId: b.inboundId,
-						plaintext: res.plaintext,
-					});
-				} catch {
-					// non-fatal: credential exists, just not revealed here
-				}
-			}
-			setCreatedCreds(revealed);
+		onSuccess: (resp) => {
+			// S2: the backend generated any missing credentials inside the create
+			// transaction and returned their plaintext exactly once here. Do NOT
+			// call the rotate endpoint (and never with inboundId) — the plaintext
+			// is already in the response. Surface it in the one-time modal.
+			setIssuedCreds(resp.issuedCredentials ?? []);
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 			setStep(3);
@@ -258,20 +267,24 @@ export function ClientNewPage() {
 					{create.isSuccess ? (
 						<>
 							<p className="badge badge-success">Client created</p>
-							{createdCreds.length > 0 ? (
-								<div className="card" style={{ marginTop: 12 }}>
+							{issuedCreds.length > 0 ? (
+								<div
+									className="card"
+									style={{ marginTop: 12, borderColor: "var(--warn, #b7791f)" }}
+									role="dialog"
+									aria-label="One-time credentials"
+								>
 									<h2 style={{ fontSize: 14 }}>One-time credentials</h2>
 									<p className="muted" style={{ fontSize: 13 }}>
-										Copy these now — they are shown only once.
+										Copy these now — they are shown only once and will be
+										cleared when you leave or after a few minutes.
 									</p>
-									{createdCreds.map((c) => (
-										<div key={c.inboundId} style={{ marginBottom: 8 }}>
+									{issuedCreds.map((c) => (
+										<div key={c.bindingId} style={{ marginBottom: 8 }}>
 											<div className="muted" style={{ fontSize: 12 }}>
-												{c.inboundId}
+												{c.inboundId} ({c.kind})
 											</div>
-											<code className="mono">
-												{c.plaintext ?? "(unavailable)"}
-											</code>
+											<code className="mono">{c.plaintext}</code>
 										</div>
 									))}
 								</div>
@@ -280,7 +293,10 @@ export function ClientNewPage() {
 								<button
 									type="button"
 									className="btn btn-primary"
-									onClick={() => void navigate({ to: "/clients" })}
+									onClick={() => {
+										clearIssued();
+										void navigate({ to: "/clients" });
+									}}
 								>
 									Done
 								</button>
