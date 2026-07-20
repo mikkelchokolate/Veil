@@ -3,13 +3,26 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { ApplyPage } from "../pages/ApplyPage";
 import { http, HttpResponse, server } from "./server";
+import { I18nProvider } from "../i18n/I18nContext";
+import { RouterProvider, createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
 
 function renderApply() {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+	const rootRoute = createRootRoute();
+	const route = createRoute({
+		getParentRoute: () => rootRoute,
+		path: "/",
+		component: ApplyPage,
+	});
+	const router = createRouter({
+		routeTree: rootRoute.addChildren([route]),
+	});
 	return render(
 		<QueryClientProvider client={qc}>
 			<AuthProvider>
-				<ApplyPage />
+				<I18nProvider>
+					<RouterProvider router={router} />
+				</I18nProvider>
 			</AuthProvider>
 		</QueryClientProvider>,
 	);
