@@ -25,7 +25,7 @@ func TestAutoMigrateLegacyOnReload(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
-	s.clientService = client.NewService(repo, creds, nil)
+	s.clientService = client.NewService(repo, creds)
 	s.clientRepo = repo
 	s.clientMigrator = client.NewMigrator(repo, creds)
 

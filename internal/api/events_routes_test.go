@@ -22,7 +22,7 @@ func TestV1EventsSSE(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
-	svc := client.NewService(repo, creds, nil)
+	svc := client.NewService(repo, creds)
 	s.clientService = svc
 	s.clientRepo = repo
 	s.trafficStore = client.NewTrafficStore(db)
@@ -104,7 +104,7 @@ func TestV1EventsSSETypeFilter(t *testing.T) {
 	s.settings = Settings{Domain: "x.example"}
 	db := openApplyTestDB(t)
 	s.trafficStore = client.NewTrafficStore(db)
-	s.clientService = client.NewService(client.NewRepository(db), client.NewCredentialStore(db, s.cipher), nil)
+	s.clientService = client.NewService(client.NewRepository(db), client.NewCredentialStore(db, s.cipher))
 
 	mux := http.NewServeMux()
 	s.registerEventsRoutes(mux)

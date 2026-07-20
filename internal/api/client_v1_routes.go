@@ -378,10 +378,11 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.logUserAction(r, "create_client", req.Name, true, "")
-	// A4: CreateWithBindings already triggered exactly one apply via the
-	// notifier (after the transaction committed). Do NOT run a second apply
-	// here — that would be the forbidden double-apply architecture.
-	s.writeMutationResponse(w, http.StatusCreated, final, autoApplyOutcome{})
+	// Unified orchestration: exactly one revision bump (immutable snapshot of
+	// the just-committed client+bindings+credentials) and exactly one apply
+	// job. The response carries THIS mutation's revision and job.
+	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	s.writeMutationResponse(w, http.StatusCreated, final, outcome)
 }
 
 func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Request) {

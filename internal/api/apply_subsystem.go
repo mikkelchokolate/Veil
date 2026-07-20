@@ -14,11 +14,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
-// applyNotifierFunc adapts a function to client.ApplyNotifier.
-type applyNotifierFunc func(kind, id string)
-
-func (f applyNotifierFunc) NotifyMutation(kind, id string) { f(kind, id) }
-
 // initApplySubsystem opens the normalized SQLite store next to the state file
 // and wires durable revisions and apply jobs. It is a no-op when no StatePath
 // is configured (in-memory/test servers) — revision/apply tracking then
@@ -83,11 +78,11 @@ func initClientSubsystem(s *managementState) {
 	clientRepo := client.NewRepository(s.db)
 	s.clientRepo = clientRepo
 	clientCreds := client.NewCredentialStore(s.db, s.cipher)
-	s.clientService = client.NewService(clientRepo, clientCreds, applyNotifierFunc(func(kind, id string) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.autoApplyResultLocked(nil, "system")
-	})).WithInboundLookup(s.bindingCapabilityForInbound)
+	// No ApplyNotifier: mutations never fire-and-forget applies from inside
+	// the service. The HTTP handler runs the unified orchestration exactly
+	// once per committed mutation (revision bump + snapshot + one job) and
+	// returns that exact revision/job in the response.
+	s.clientService = client.NewService(clientRepo, clientCreds).WithInboundLookup(s.bindingCapabilityForInbound)
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds)
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)

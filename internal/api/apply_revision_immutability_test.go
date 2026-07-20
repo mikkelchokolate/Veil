@@ -22,7 +22,7 @@ func TestPinnedRevisionRendersSnapshotCredentials(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
-	svc := client.NewService(repo, creds, nil)
+	svc := client.NewService(repo, creds)
 	s.clientService = svc
 	s.clientRepo = repo
 
@@ -122,7 +122,7 @@ func TestSnapshotIncludesNormalizedClientState(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
-	svc := client.NewService(repo, creds, nil)
+	svc := client.NewService(repo, creds)
 	s.clientService = svc
 	s.clientRepo = repo
 
@@ -185,7 +185,7 @@ func TestPinnedSnapshotDoesNotFallBackToMutableState(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
-	svc := client.NewService(repo, creds, nil)
+	svc := client.NewService(repo, creds)
 	s.clientService = svc
 	s.clientRepo = repo
 

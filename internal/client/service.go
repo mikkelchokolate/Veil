@@ -8,13 +8,17 @@ import (
 )
 
 // Service orchestrates client use-cases: CRUD, bindings, credentials, bulk
-// operations, and the computed effective status. It owns transactions and
-// coordinates with an apply notifier so mutations trigger config apply.
+// operations, and the computed effective status. It owns transactions.
+//
+// Apply orchestration (revision bump + immutable snapshot + exactly one apply
+// job) is owned by the HTTP layer (managementState), not by this service:
+// a fire-and-forget notifier caused double-applies and mutations whose
+// response carried no revision/job. Handlers call applyAfterClientMutation
+// exactly once after a successful commit.
 type Service struct {
-	repo     *Repository
-	creds    *CredentialStore
-	notifier ApplyNotifier
-	now      func() int64
+	repo  *Repository
+	creds *CredentialStore
+	now   func() int64
 	// inboundLookup resolves an inbound's protocol capabilities by inbound ID
 	// (name) for the enriched binding read model. Optional; when nil the
 	// view falls back to bare inboundIds.
@@ -28,15 +32,9 @@ func (s *Service) WithInboundLookup(fn func(inboundID string) *BindingCapability
 	return s
 }
 
-// ApplyNotifier is invoked after a mutation that changes desired config so a
-// durable apply can be triggered. It is optional (nil disables).
-type ApplyNotifier interface {
-	NotifyMutation(kind, clientID string)
-}
-
 // NewService builds the client service.
-func NewService(repo *Repository, creds *CredentialStore, notifier ApplyNotifier) *Service {
-	return &Service{repo: repo, creds: creds, notifier: notifier, now: nowUnix}
+func NewService(repo *Repository, creds *CredentialStore) *Service {
+	return &Service{repo: repo, creds: creds, now: nowUnix}
 }
 
 // View is the API-facing representation of a client with its computed status.
@@ -100,7 +98,8 @@ func validate(c Client) error {
 	return nil
 }
 
-// Create validates and creates a client, then triggers an apply.
+// Create validates and creates a client. The caller (HTTP layer) is
+// responsible for the post-commit apply orchestration.
 func (s *Service) Create(c Client) (View, error) {
 	if err := validate(c); err != nil {
 		return View{}, err
@@ -109,7 +108,6 @@ func (s *Service) Create(c Client) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	s.notify("create", created.ID)
 	return s.toView(created)
 }
 
@@ -121,7 +119,7 @@ type BindingInput struct {
 }
 
 // CreateWithBindings atomically creates a client plus its bindings and
-// credentials in ONE SQL transaction, then triggers exactly ONE apply. If any
+// credentials in ONE SQL transaction. If any
 // binding or credential fails the whole mutation rolls back — the client is
 // never persisted half-configured, no apply runs for a partial state, and no
 // compensating deletes are used. This is the required path for client create;
@@ -158,8 +156,6 @@ func (s *Service) CreateWithBindings(c Client, bindings []BindingInput) (View, e
 	if err != nil {
 		return View{}, err
 	}
-	// Exactly one apply for the committed, fully-configured client.
-	s.notify("create", createdID)
 	return s.Get(createdID)
 }
 
@@ -198,17 +194,12 @@ func (s *Service) Update(c Client, version int) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	s.notify("update", updated.ID)
 	return s.toView(updated)
 }
 
-// Delete removes a client (cascading bindings + credentials) and applies.
+// Delete removes a client (cascading bindings + credentials).
 func (s *Service) Delete(id string) error {
-	if err := s.repo.Delete(id); err != nil {
-		return err
-	}
-	s.notify("delete", id)
-	return nil
+	return s.repo.Delete(id)
 }
 
 // AddBinding binds a client to an inbound.
@@ -216,21 +207,12 @@ func (s *Service) AddBinding(clientID, inboundID string) (Binding, error) {
 	if inboundID == "" {
 		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
 	}
-	b, err := s.repo.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: true})
-	if err != nil {
-		return Binding{}, err
-	}
-	s.notify("bind", clientID)
-	return b, nil
+	return s.repo.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: true})
 }
 
 // RemoveBinding deletes a binding. The client survives as an orphan.
 func (s *Service) RemoveBinding(bindingID, clientID string) error {
-	if err := s.repo.DeleteBinding(bindingID); err != nil {
-		return err
-	}
-	s.notify("unbind", clientID)
-	return nil
+	return s.repo.DeleteBinding(bindingID)
 }
 
 // SetCredential encrypts and stores a credential for a binding.
@@ -238,12 +220,7 @@ func (s *Service) SetCredential(bindingID, kind, plaintext string) (Credential, 
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}
-	c, err := s.creds.Set(bindingID, kind, plaintext)
-	if err != nil {
-		return Credential{}, err
-	}
-	s.notify("credential", bindingID)
-	return c, nil
+	return s.creds.Set(bindingID, kind, plaintext)
 }
 
 // RotateCredential rotates a binding's credential to a new version.
@@ -251,12 +228,7 @@ func (s *Service) RotateCredential(bindingID, kind, plaintext string) (Credentia
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}
-	c, err := s.creds.Rotate(bindingID, kind, plaintext)
-	if err != nil {
-		return Credential{}, err
-	}
-	s.notify("credential-rotate", bindingID)
-	return c, nil
+	return s.creds.Rotate(bindingID, kind, plaintext)
 }
 
 // GeneratedCredential pairs the rotated credential metadata with the one-time
@@ -303,7 +275,6 @@ func (s *Service) SetBindingEnabled(bindingID string, enabled bool, version int)
 	if err != nil {
 		return Binding{}, err
 	}
-	s.notify("binding-update", bindingID)
 	return updated, nil
 }
 
@@ -391,8 +362,3 @@ func (s *Service) toView(c Client) (View, error) {
 	return View{Client: c, Status: status, InboundIDs: inbounds, HasCreds: hasCreds, Bindings: bindingViews}, nil
 }
 
-func (s *Service) notify(kind, id string) {
-	if s.notifier != nil {
-		s.notifier.NotifyMutation(kind, id)
-	}
-}

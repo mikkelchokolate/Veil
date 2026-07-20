@@ -24,7 +24,7 @@ func TestRendererIncludesNormalizedClientCredentials(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo = client.NewRepository(db)
 	creds = client.NewCredentialStore(db, s.cipher)
-	svc := client.NewService(repo, creds, nil)
+	svc := client.NewService(repo, creds)
 	s.clientService = svc
 
 	view, err := svc.Create(client.Client{Name: "alice", Enabled: true})
