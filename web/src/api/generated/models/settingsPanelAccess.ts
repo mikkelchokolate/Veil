@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type SettingsPanelAccess = typeof SettingsPanelAccess[keyof typeof SettingsPanelAccess];
-
+export type SettingsPanelAccess =
+	(typeof SettingsPanelAccess)[keyof typeof SettingsPanelAccess];
 
 export const SettingsPanelAccess = {
-  local: 'local',
-  direct: 'direct',
-  caddy: 'caddy',
-  '': '',
+	local: "local",
+	direct: "direct",
+	caddy: "caddy",
+	"": "",
 } as const;

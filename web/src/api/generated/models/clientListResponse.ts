@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ClientView } from './clientView.ts';
+import type { ClientView } from "./clientView.ts";
 
 export interface ClientListResponse {
-  items: ClientView[];
-  total: number;
+	items: ClientView[];
+	total: number;
 }

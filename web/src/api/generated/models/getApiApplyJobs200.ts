@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyJob } from './applyJob.ts';
+import type { ApplyJob } from "./applyJob.ts";
 
 export type GetApiApplyJobs200 = {
-  items: ApplyJob[];
+	items: ApplyJob[];
 };

@@ -42,8 +42,8 @@
  */
 
 export interface BindingCapability {
-  protocol: string;
-  transports: string[];
-  perClientCredentials: boolean;
-  requiresCaddy: boolean;
+	protocol: string;
+	transports: string[];
+	perClientCredentials: boolean;
+	requiresCaddy: boolean;
 }

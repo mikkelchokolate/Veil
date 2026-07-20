@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { apiFetch, ApiError } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
 import { QR } from "./QR";
 
@@ -55,30 +55,38 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Create failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Create failed"),
 	});
 
 	const rotate = useMutation({
 		mutationFn: (tokenId: string) =>
-			apiFetch<IssuedToken>(`/api/v1/clients/${clientId}/tokens/${tokenId}/rotate`, {
-				method: "POST",
-			}),
+			apiFetch<IssuedToken>(
+				`/api/v1/clients/${clientId}/tokens/${tokenId}/rotate`,
+				{
+					method: "POST",
+				},
+			),
 		onSuccess: (res) => {
 			setIssued(res);
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Rotate failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Rotate failed"),
 	});
 
 	const revoke = useMutation({
 		mutationFn: (tokenId: string) =>
-			apiFetch(`/api/v1/clients/${clientId}/tokens/${tokenId}`, { method: "DELETE" }),
+			apiFetch(`/api/v1/clients/${clientId}/tokens/${tokenId}`, {
+				method: "DELETE",
+			}),
 		onSuccess: () => {
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Revoke failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Revoke failed"),
 	});
 
 	const subURL = issued?.url ?? (issued ? `/s/${issued.plaintext}` : null);
@@ -99,28 +107,61 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 			{issued && subURL ? (
 				<div className="card" style={{ borderColor: "var(--border-hover)" }}>
-					<h2 style={{ fontSize: 14 }}>New subscription — copy now (shown once)</h2>
-					<div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-						<QR value={subURL.startsWith("http") ? subURL : `${location.origin}${subURL}`} />
+					<h2 style={{ fontSize: 14 }}>
+						New subscription — copy now (shown once)
+					</h2>
+					<div
+						style={{
+							display: "flex",
+							gap: 20,
+							alignItems: "flex-start",
+							flexWrap: "wrap",
+						}}
+					>
+						<QR
+							value={
+								subURL.startsWith("http")
+									? subURL
+									: `${location.origin}${subURL}`
+							}
+						/>
 						<div style={{ flex: 1, minWidth: 240 }}>
-							<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>Subscription URL</div>
-							<code className="mono" style={{ wordBreak: "break-all", fontSize: 12 }}>
-								{subURL.startsWith("http") ? subURL : `${location.origin}${subURL}`}
+							<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+								Subscription URL
+							</div>
+							<code
+								className="mono"
+								style={{ wordBreak: "break-all", fontSize: 12 }}
+							>
+								{subURL.startsWith("http")
+									? subURL
+									: `${location.origin}${subURL}`}
 							</code>
 							<div style={{ marginTop: 12, display: "flex", gap: 8 }}>
 								<button
 									type="button"
 									className="btn"
-									onClick={() => void copy(subURL.startsWith("http") ? subURL : `${location.origin}${subURL}`)}
+									onClick={() =>
+										void copy(
+											subURL.startsWith("http")
+												? subURL
+												: `${location.origin}${subURL}`,
+										)
+									}
 								>
 									{copied ? "Copied" : "Copy URL"}
 								</button>
-								<button type="button" className="btn" onClick={() => setIssued(null)}>
+								<button
+									type="button"
+									className="btn"
+									onClick={() => setIssued(null)}
+								>
 									Dismiss
 								</button>
 							</div>
 							<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-								The URL and QR are shown only now. Rotating a token invalidates the old URL.
+								The URL and QR are shown only now. Rotating a token invalidates
+								the old URL.
 							</p>
 						</div>
 					</div>

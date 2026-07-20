@@ -42,13 +42,13 @@
  */
 
 export interface SystemStats {
-  cpuPercent: number;
-  memoryUsedMB: number;
-  memoryTotalMB: number;
-  diskUsedGB: number;
-  diskTotalGB: number;
-  uptimeSeconds: number;
-  loadAvg1: number;
-  loadAvg5: number;
-  loadAvg15: number;
+	cpuPercent: number;
+	memoryUsedMB: number;
+	memoryTotalMB: number;
+	diskUsedGB: number;
+	diskTotalGB: number;
+	uptimeSeconds: number;
+	loadAvg1: number;
+	loadAvg5: number;
+	loadAvg15: number;
 }

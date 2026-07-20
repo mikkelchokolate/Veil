@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { RURecommendedPreviewResponsePanelAccess } from './rURecommendedPreviewResponsePanelAccess.ts';
+import type { RURecommendedPreviewResponsePanelAccess } from "./rURecommendedPreviewResponsePanelAccess.ts";
 
 export interface RURecommendedPreviewResponse {
-  domain: string;
-  email: string;
-  panelAccess: RURecommendedPreviewResponsePanelAccess;
-  panelUrl?: string;
-  caddyfile?: string;
+	domain: string;
+	email: string;
+	panelAccess: RURecommendedPreviewResponsePanelAccess;
+	panelUrl?: string;
+	caddyfile?: string;
 }

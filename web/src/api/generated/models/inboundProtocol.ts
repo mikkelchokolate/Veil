@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type InboundProtocol = typeof InboundProtocol[keyof typeof InboundProtocol];
-
+export type InboundProtocol =
+	(typeof InboundProtocol)[keyof typeof InboundProtocol];
 
 export const InboundProtocol = {
-  naiveproxy: 'naiveproxy',
-  hysteria2: 'hysteria2',
-  olcrtc: 'olcrtc',
-  mieru: 'mieru',
+	naiveproxy: "naiveproxy",
+	hysteria2: "hysteria2",
+	olcrtc: "olcrtc",
+	mieru: "mieru",
 } as const;

@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createContext, type ReactNode, useContext, useState } from "react";
 import { postApiAuthLocale } from "../api/generated/auth/auth";
 import type { Locale } from "../api/generated/models";
 
@@ -61,7 +61,13 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale }) {
+export function I18nProvider({
+	children,
+	initialLocale,
+}: {
+	children: ReactNode;
+	initialLocale?: Locale;
+}) {
 	const [locale, setLocaleState] = useState<Locale>(initialLocale ?? "en");
 	const qc = useQueryClient();
 

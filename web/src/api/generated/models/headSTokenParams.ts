@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { HeadSTokenFormat } from './headSTokenFormat.ts';
+import type { HeadSTokenFormat } from "./headSTokenFormat.ts";
 
 export type HeadSTokenParams = {
-format?: HeadSTokenFormat;
+	format?: HeadSTokenFormat;
 };

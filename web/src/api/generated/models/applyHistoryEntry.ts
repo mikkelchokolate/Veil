@@ -40,11 +40,11 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyResponse } from './applyResponse.ts';
+import type { ApplyResponse } from "./applyResponse.ts";
 
 export type ApplyHistoryEntry = ApplyResponse & {
-  id: string;
-  timestamp: string;
-  stage: string;
-  success: boolean;
+	id: string;
+	timestamp: string;
+	stage: string;
+	success: boolean;
 };

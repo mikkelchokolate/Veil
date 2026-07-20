@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { Inbound } from "../api/generated/models";
 
 /** B10: inbounds list. Legacy embedded profiles are no longer edited here —
@@ -17,7 +17,9 @@ export function InboundsPage() {
 				<p className="muted">Loading…</p>
 			) : inbounds.isError ? (
 				<p className="form-error">
-					{inbounds.error instanceof ApiError ? inbounds.error.message : "Failed to load inbounds"}
+					{inbounds.error instanceof ApiError
+						? inbounds.error.message
+						: "Failed to load inbounds"}
 				</p>
 			) : (
 				<div className="table-container">
@@ -46,7 +48,9 @@ export function InboundsPage() {
 										<td className="muted">{ib.transport ?? "—"}</td>
 										<td className="muted">{ib.port ?? "—"}</td>
 										<td>
-											<span className={`badge${ib.enabled ? " badge-success" : ""}`}>
+											<span
+												className={`badge${ib.enabled ? " badge-success" : ""}`}
+											>
 												{ib.enabled ? "enabled" : "disabled"}
 											</span>
 										</td>
@@ -58,8 +62,8 @@ export function InboundsPage() {
 				</div>
 			)}
 			<p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
-				Client credentials are managed per-client under Clients → Access, not by editing inbound
-				profiles (B10).
+				Client credentials are managed per-client under Clients → Access, not by
+				editing inbound profiles (B10).
 			</p>
 		</div>
 	);

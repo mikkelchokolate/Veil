@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useIsAdmin } from "../auth/AuthContext";
-import type { Settings } from "../api/generated/models";
 import { useState } from "react";
+import { ApiError, apiFetch } from "../api/fetcher";
+import type { Settings } from "../api/generated/models";
+import { useIsAdmin } from "../auth/AuthContext";
 
 /** Settings: view + edit mutations for safe fields (email, panel access). */
 export function SettingsPage() {
@@ -41,13 +41,19 @@ export function SettingsPage() {
 	}
 
 	if (settings.isLoading) {
-		return <div className="card"><p className="muted">Loading…</p></div>;
+		return (
+			<div className="card">
+				<p className="muted">Loading…</p>
+			</div>
+		);
 	}
 	if (settings.isError || !settings.data) {
 		return (
 			<div className="card">
 				<p className="form-error">
-					{settings.error instanceof ApiError ? settings.error.message : "Settings unavailable"}
+					{settings.error instanceof ApiError
+						? settings.error.message
+						: "Settings unavailable"}
 				</p>
 			</div>
 		);
@@ -83,7 +89,9 @@ export function SettingsPage() {
 							<select
 								className="input"
 								value={form.panelAccess}
-								onChange={(e) => setForm({ ...form, panelAccess: e.target.value })}
+								onChange={(e) =>
+									setForm({ ...form, panelAccess: e.target.value })
+								}
 							>
 								<option value="">—</option>
 								<option value="public">public</option>
@@ -96,20 +104,26 @@ export function SettingsPage() {
 								className="btn btn-primary"
 								disabled={save.isPending}
 								onClick={() => {
-								const patch: Record<string, string> = { email: form.email };
-								if (form.panelAccess) patch.panelAccess = form.panelAccess;
-								save.mutate(patch);
-							}}
+									const patch: Record<string, string> = { email: form.email };
+									if (form.panelAccess) patch.panelAccess = form.panelAccess;
+									save.mutate(patch);
+								}}
 							>
 								{save.isPending ? "Saving…" : "Save"}
 							</button>
-							<button type="button" className="btn" onClick={() => setEditing(false)}>
+							<button
+								type="button"
+								className="btn"
+								onClick={() => setEditing(false)}
+							>
 								Cancel
 							</button>
 						</div>
 						{save.isError ? (
 							<p className="form-error">
-								{save.error instanceof ApiError ? save.error.message : "Save failed"}
+								{save.error instanceof ApiError
+									? save.error.message
+									: "Save failed"}
 							</p>
 						) : null}
 					</div>
@@ -122,7 +136,9 @@ export function SettingsPage() {
 						<tbody>
 							{rows.map(([k, v]) => (
 								<tr key={k}>
-									<td style={{ width: 200 }}><strong>{k}</strong></td>
+									<td style={{ width: 200 }}>
+										<strong>{k}</strong>
+									</td>
 									<td className="muted">{v || "—"}</td>
 								</tr>
 							))}
@@ -130,8 +146,8 @@ export function SettingsPage() {
 					</table>
 				</div>
 				<p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-					Server settings are applied through the apply pipeline. Use the CLI / setup flow to change
-					listen address, domain, or base path safely.
+					Server settings are applied through the apply pipeline. Use the CLI /
+					setup flow to change listen address, domain, or base path safely.
 				</p>
 			</div>
 		</>

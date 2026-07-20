@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { GetSTokenFormat } from './getSTokenFormat.ts';
+import type { GetSTokenFormat } from "./getSTokenFormat.ts";
 
 export type GetSTokenParams = {
-format?: GetSTokenFormat;
+	format?: GetSTokenFormat;
 };

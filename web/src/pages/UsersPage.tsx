@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useAuth, useIsAdmin } from "../auth/AuthContext";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { UserResponse } from "../api/generated/models";
+import { useAuth, useIsAdmin } from "../auth/AuthContext";
 
 type PanelUser = UserResponse;
 
@@ -34,7 +34,8 @@ export function UsersPage() {
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["users"] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Create failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Create failed"),
 	});
 
 	function onSubmit(e: FormEvent) {
@@ -77,7 +78,9 @@ export function UsersPage() {
 											) : null}
 										</td>
 										<td>
-											<span className={`badge${u.role === "admin" ? " badge-success" : ""}`}>
+											<span
+												className={`badge${u.role === "admin" ? " badge-success" : ""}`}
+											>
 												{u.role}
 											</span>
 										</td>
@@ -127,7 +130,11 @@ export function UsersPage() {
 						</select>
 					</div>
 					{error ? <p className="form-error">{error}</p> : null}
-					<button type="submit" className="btn btn-primary" disabled={create.isPending}>
+					<button
+						type="submit"
+						className="btn btn-primary"
+						disabled={create.isPending}
+					>
 						{create.isPending ? "Creating…" : "Create user"}
 					</button>
 				</form>

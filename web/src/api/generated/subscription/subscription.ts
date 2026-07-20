@@ -40,52 +40,54 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  GetSTokenParams,
-  HeadSTokenParams
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type { GetSTokenParams, HeadSTokenParams } from "../models";
 
 export type getSTokenResponse200TextPlain = {
-  data: string
-  status: 200
-}
+	data: string;
+	status: 200;
+};
 
 export type getSTokenResponse200TextHtml = {
-  data: string
-  status: 200
-}
+	data: string;
+	status: 200;
+};
 
 export type getSTokenResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getSTokenResponseSuccess = (getSTokenResponse200TextPlain | getSTokenResponse200TextHtml) & {
-  headers: Headers;
-};
-export type getSTokenResponseError = (getSTokenResponse404) & {
-  headers: Headers;
+	data: void;
+	status: 404;
 };
 
-export type getSTokenResponse = (getSTokenResponseSuccess | getSTokenResponseError)
+export type getSTokenResponseSuccess = (
+	| getSTokenResponse200TextPlain
+	| getSTokenResponse200TextHtml
+) & {
+	headers: Headers;
+};
+export type getSTokenResponseError = getSTokenResponse404 & {
+	headers: Headers;
+};
 
-export const getGetSTokenUrl = (token: string,
-    params?: GetSTokenParams,) => {
-  const normalizedParams = new URLSearchParams();
+export type getSTokenResponse =
+	| getSTokenResponseSuccess
+	| getSTokenResponseError;
 
-  Object.entries(params || {}).forEach(([key, value]) => {
+export const getGetSTokenUrl = (token: string, params?: GetSTokenParams) => {
+	const normalizedParams = new URLSearchParams();
 
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined) {
+			normalizedParams.append(key, value === null ? "null" : String(value));
+		}
+	});
 
-  const stringifiedParams = normalizedParams.toString();
+	const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/s/${token}?${stringifiedParams}` : `/s/${token}`
-}
+	return stringifiedParams.length > 0
+		? `/s/${token}?${stringifiedParams}`
+		: `/s/${token}`;
+};
 
 /**
  * Unauthenticated; the token itself grants read access to the client's
@@ -94,67 +96,64 @@ export const getGetSTokenUrl = (token: string,
  * or raw; HTML user agents receive a landing page.
  * @summary Public subscription endpoint (token is the capability)
  */
-export const getSToken = async (token: string,
-    params?: GetSTokenParams, options?: RequestInit): Promise<getSTokenResponse> => {
-
-  return apiFetch<getSTokenResponse>(getGetSTokenUrl(token,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getSToken = async (
+	token: string,
+	params?: GetSTokenParams,
+	options?: RequestInit,
+): Promise<getSTokenResponse> => {
+	return apiFetch<getSTokenResponse>(getGetSTokenUrl(token, params), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type headSTokenResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type headSTokenResponse404 = {
-  data: void
-  status: 404
-}
-
-export type headSTokenResponseSuccess = (headSTokenResponse200) & {
-  headers: Headers;
-};
-export type headSTokenResponseError = (headSTokenResponse404) & {
-  headers: Headers;
+	data: void;
+	status: 404;
 };
 
-export type headSTokenResponse = (headSTokenResponseSuccess | headSTokenResponseError)
+export type headSTokenResponseSuccess = headSTokenResponse200 & {
+	headers: Headers;
+};
+export type headSTokenResponseError = headSTokenResponse404 & {
+	headers: Headers;
+};
 
-export const getHeadSTokenUrl = (token: string,
-    params?: HeadSTokenParams,) => {
-  const normalizedParams = new URLSearchParams();
+export type headSTokenResponse =
+	| headSTokenResponseSuccess
+	| headSTokenResponseError;
 
-  Object.entries(params || {}).forEach(([key, value]) => {
+export const getHeadSTokenUrl = (token: string, params?: HeadSTokenParams) => {
+	const normalizedParams = new URLSearchParams();
 
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined) {
+			normalizedParams.append(key, value === null ? "null" : String(value));
+		}
+	});
 
-  const stringifiedParams = normalizedParams.toString();
+	const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/s/${token}?${stringifiedParams}` : `/s/${token}`
-}
+	return stringifiedParams.length > 0
+		? `/s/${token}?${stringifiedParams}`
+		: `/s/${token}`;
+};
 
 /**
  * @summary HEAD variant of the public subscription endpoint (headers only)
  */
-export const headSToken = async (token: string,
-    params?: HeadSTokenParams, options?: RequestInit): Promise<headSTokenResponse> => {
-
-  return apiFetch<headSTokenResponse>(getHeadSTokenUrl(token,params),
-  {
-    ...options,
-    method: 'HEAD'
-
-
-  }
-);}
-
-
+export const headSToken = async (
+	token: string,
+	params?: HeadSTokenParams,
+	options?: RequestInit,
+): Promise<headSTokenResponse> => {
+	return apiFetch<headSTokenResponse>(getHeadSTokenUrl(token, params), {
+		...options,
+		method: "HEAD",
+	});
+};

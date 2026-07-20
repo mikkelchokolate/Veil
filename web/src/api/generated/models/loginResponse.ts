@@ -40,13 +40,13 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { Locale } from './locale.ts';
-import type { UserRole } from './userRole.ts';
+import type { Locale } from "./locale.ts";
+import type { UserRole } from "./userRole.ts";
 
 export interface LoginResponse {
-  success: boolean;
-  username: string;
-  role: UserRole;
-  locale: Locale;
-  csrfToken: string;
+	success: boolean;
+	username: string;
+	role: UserRole;
+	locale: Locale;
+	csrfToken: string;
 }

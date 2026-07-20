@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorObject } from './errorObject.ts';
+import type { ErrorObject } from "./errorObject.ts";
 
 export interface PrivilegedErrorEnvelope {
-  error: ErrorObject;
+	error: ErrorObject;
 }

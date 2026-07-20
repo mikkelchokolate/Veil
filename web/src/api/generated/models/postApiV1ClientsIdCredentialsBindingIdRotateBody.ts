@@ -42,7 +42,7 @@
  */
 
 export type PostApiV1ClientsIdCredentialsBindingIdRotateBody = {
-  kind?: string;
-  /** Optional; when empty the server generates a high-entropy secret returned once. */
-  value?: string;
+	kind?: string;
+	/** Optional; when empty the server generates a high-entropy secret returned once. */
+	value?: string;
 };

@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficTopEntry } from './trafficTopEntry.ts';
+import type { TrafficTopEntry } from "./trafficTopEntry.ts";
 
 export interface TrafficTopResponse {
-  items: TrafficTopEntry[];
+	items: TrafficTopEntry[];
 }

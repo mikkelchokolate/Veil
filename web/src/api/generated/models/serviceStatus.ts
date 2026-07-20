@@ -42,12 +42,12 @@
  */
 
 export interface ServiceStatus {
-  name: string;
-  managed: boolean;
-  transport?: string;
-  unit?: string;
-  loadState?: string;
-  activeState?: string;
-  subState?: string;
-  error?: string;
+	name: string;
+	managed: boolean;
+	transport?: string;
+	unit?: string;
+	loadState?: string;
+	activeState?: string;
+	subState?: string;
+	error?: string;
 }

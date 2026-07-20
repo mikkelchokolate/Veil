@@ -40,15 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyOperation } from './applyOperation.ts';
-import type { ValidationIssue } from './validationIssue.ts';
+import type { ApplyOperation } from "./applyOperation.ts";
+import type { ValidationIssue } from "./validationIssue.ts";
 
 export interface ApplyPlanResponse {
-  valid: boolean;
-  errors?: string[];
-  configs: string[];
-  actions: string[];
-  runtimes?: string[];
-  issues: ValidationIssue[];
-  operations: ApplyOperation[];
+	valid: boolean;
+	errors?: string[];
+	configs: string[];
+	actions: string[];
+	runtimes?: string[];
+	issues: ValidationIssue[];
+	operations: ApplyOperation[];
 }

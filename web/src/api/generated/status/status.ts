@@ -40,89 +40,85 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  FirewallRule,
-  HealthResponse,
-  StatusResponse,
-  UnauthorizedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	FirewallRule,
+	HealthResponse,
+	StatusResponse,
+	UnauthorizedResponse,
+} from "../models";
 
 export type getHealthzResponse200 = {
-  data: HealthResponse
-  status: 200
-}
+	data: HealthResponse;
+	status: 200;
+};
 
 export type getHealthzResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type getHealthzResponse503 = {
-  data: HealthResponse
-  status: 503
-}
-
-export type getHealthzResponseSuccess = (getHealthzResponse200) & {
-  headers: Headers;
-};
-export type getHealthzResponseError = (getHealthzResponse401 | getHealthzResponse503) & {
-  headers: Headers;
+	data: HealthResponse;
+	status: 503;
 };
 
-export type getHealthzResponse = (getHealthzResponseSuccess | getHealthzResponseError)
+export type getHealthzResponseSuccess = getHealthzResponse200 & {
+	headers: Headers;
+};
+export type getHealthzResponseError = (
+	| getHealthzResponse401
+	| getHealthzResponse503
+) & {
+	headers: Headers;
+};
+
+export type getHealthzResponse =
+	| getHealthzResponseSuccess
+	| getHealthzResponseError;
 
 export const getGetHealthzUrl = () => {
-
-
-
-
-  return `/healthz`
-}
+	return `/healthz`;
+};
 
 /**
  * Authenticated on public Panel listeners; public on loopback-only development listeners.
  * @summary Liveness/readiness probe
  */
-export const getHealthz = async ( options?: RequestInit): Promise<getHealthzResponse> => {
-
-  return apiFetch<getHealthzResponse>(getGetHealthzUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getHealthz = async (
+	options?: RequestInit,
+): Promise<getHealthzResponse> => {
+	return apiFetch<getHealthzResponse>(getGetHealthzUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getMetricsResponse200 = {
-  data: string
-  status: 200
-}
+	data: string;
+	status: 200;
+};
 
 export type getMetricsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getMetricsResponseSuccess = (getMetricsResponse200) & {
-  headers: Headers;
-};
-export type getMetricsResponseError = (getMetricsResponse401) & {
-  headers: Headers;
+	data: UnauthorizedResponse;
+	status: 401;
 };
 
-export type getMetricsResponse = (getMetricsResponseSuccess | getMetricsResponseError)
+export type getMetricsResponseSuccess = getMetricsResponse200 & {
+	headers: Headers;
+};
+export type getMetricsResponseError = getMetricsResponse401 & {
+	headers: Headers;
+};
+
+export type getMetricsResponse =
+	| getMetricsResponseSuccess
+	| getMetricsResponseError;
 
 export const getGetMetricsUrl = () => {
-
-
-
-
-  return `/metrics`
-}
+	return `/metrics`;
+};
 
 /**
  * Exposure is controlled independently with `--metrics-access` /
@@ -132,92 +128,75 @@ export const getGetMetricsUrl = () => {
  * only for loopback listeners.
  * @summary Prometheus metrics exposition
  */
-export const getMetrics = async ( options?: RequestInit): Promise<getMetricsResponse> => {
-
-  return apiFetch<getMetricsResponse>(getGetMetricsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getMetrics = async (
+	options?: RequestInit,
+): Promise<getMetricsResponse> => {
+	return apiFetch<getMetricsResponse>(getGetMetricsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiStatusResponse200 = {
-  data: StatusResponse
-  status: 200
-}
+	data: StatusResponse;
+	status: 200;
+};
 
 export type getApiStatusResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiStatusResponseSuccess = (getApiStatusResponse200) & {
-  headers: Headers;
-};
-export type getApiStatusResponseError = (getApiStatusResponse401) & {
-  headers: Headers;
+	data: UnauthorizedResponse;
+	status: 401;
 };
 
-export type getApiStatusResponse = (getApiStatusResponseSuccess | getApiStatusResponseError)
+export type getApiStatusResponseSuccess = getApiStatusResponse200 & {
+	headers: Headers;
+};
+export type getApiStatusResponseError = getApiStatusResponse401 & {
+	headers: Headers;
+};
+
+export type getApiStatusResponse =
+	| getApiStatusResponseSuccess
+	| getApiStatusResponseError;
 
 export const getGetApiStatusUrl = () => {
-
-
-
-
-  return `/api/status`
-}
+	return `/api/status`;
+};
 
 /**
  * @summary Service status snapshot for managed systemd units
  */
-export const getApiStatus = async ( options?: RequestInit): Promise<getApiStatusResponse> => {
-
-  return apiFetch<getApiStatusResponse>(getGetApiStatusUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiStatus = async (
+	options?: RequestInit,
+): Promise<getApiStatusResponse> => {
+	return apiFetch<getApiStatusResponse>(getGetApiStatusUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiFirewallResponse200 = {
-  data: FirewallRule[]
-  status: 200
-}
-
-export type getApiFirewallResponseSuccess = (getApiFirewallResponse200) & {
-  headers: Headers;
+	data: FirewallRule[];
+	status: 200;
 };
-;
 
-export type getApiFirewallResponse = (getApiFirewallResponseSuccess)
+export type getApiFirewallResponseSuccess = getApiFirewallResponse200 & {
+	headers: Headers;
+};
+
+export type getApiFirewallResponse = getApiFirewallResponseSuccess;
 
 export const getGetApiFirewallUrl = () => {
-
-
-
-
-  return `/api/firewall`
-}
+	return `/api/firewall`;
+};
 
 /**
  * @summary Firewall rule plan and status
  */
-export const getApiFirewall = async ( options?: RequestInit): Promise<getApiFirewallResponse> => {
-
-  return apiFetch<getApiFirewallResponse>(getGetApiFirewallUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
+export const getApiFirewall = async (
+	options?: RequestInit,
+): Promise<getApiFirewallResponse> => {
+	return apiFetch<getApiFirewallResponse>(getGetApiFirewallUrl(), {
+		...options,
+		method: "GET",
+	});
+};

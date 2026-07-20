@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ServiceStatus } from './serviceStatus.ts';
+import type { ServiceStatus } from "./serviceStatus.ts";
 
 export interface StatusResponse {
-  schemaVersion: string;
-  name: string;
-  version: string;
-  mode: string;
-  services: ServiceStatus[];
+	schemaVersion: string;
+	name: string;
+	version: string;
+	mode: string;
+	services: ServiceStatus[];
 }

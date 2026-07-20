@@ -40,13 +40,13 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { RoutingPreset } from './routingPreset.ts';
-import type { RoutingRule } from './routingRule.ts';
-import type { RoutingSource } from './routingSource.ts';
+import type { RoutingPreset } from "./routingPreset.ts";
+import type { RoutingRule } from "./routingRule.ts";
+import type { RoutingSource } from "./routingSource.ts";
 
 export interface RoutingPresetResponse {
-  activePreset?: string;
-  source: RoutingSource;
-  rules: RoutingRule[];
-  presets?: RoutingPreset[];
+	activePreset?: string;
+	source: RoutingSource;
+	rules: RoutingRule[];
+	presets?: RoutingPreset[];
 }

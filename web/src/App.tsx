@@ -3,9 +3,9 @@ import { apiFetch } from "./api/fetcher";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { LoginView } from "./auth/LoginView";
 import { SetupView } from "./auth/SetupView";
-import { AppShell } from "./shell/AppShell";
-import { RouterView } from "./router";
 import { I18nProvider } from "./i18n/I18nContext";
+import { RouterView } from "./router";
+import { AppShell } from "./shell/AppShell";
 
 interface SetupStatus {
 	required: boolean;
@@ -42,7 +42,9 @@ function Gate() {
 	}
 
 	return (
-		<I18nProvider initialLocale={(session?.locale as "en" | "ru" | undefined) ?? "en"}>
+		<I18nProvider
+			initialLocale={(session?.locale as "en" | "ru" | undefined) ?? "en"}
+		>
 			<AppShell>
 				<RouterView />
 			</AppShell>

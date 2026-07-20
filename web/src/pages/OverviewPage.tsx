@@ -31,7 +31,9 @@ export function OverviewPage() {
 		refetchInterval: 10000,
 	});
 
-	const drift = apply.data ? apply.data.desiredRevision !== apply.data.appliedRevision : false;
+	const drift = apply.data
+		? apply.data.desiredRevision !== apply.data.appliedRevision
+		: false;
 
 	return (
 		<>
@@ -40,7 +42,9 @@ export function OverviewPage() {
 				<p>
 					<strong>Apply state:</strong>{" "}
 					{apply.data ? (
-						<span className={`badge${drift ? " badge-warning" : " badge-success"}`}>
+						<span
+							className={`badge${drift ? " badge-warning" : " badge-success"}`}
+						>
 							{apply.data.state}
 						</span>
 					) : (
@@ -55,22 +59,31 @@ export function OverviewPage() {
 				) : null}
 				<p>
 					<strong>Clients:</strong>{" "}
-					{clients.data?.total != null ? clients.data.total : <span className="muted">—</span>}
+					{clients.data?.total != null ? (
+						clients.data.total
+					) : (
+						<span className="muted">—</span>
+					)}
 				</p>
 				<p>
-					<Link to="/clients">Manage clients</Link> · <Link to="/apply">Apply</Link> ·{" "}
-					<Link to="/traffic">Traffic</Link>
+					<Link to="/clients">Manage clients</Link> ·{" "}
+					<Link to="/apply">Apply</Link> · <Link to="/traffic">Traffic</Link>
 				</p>
 			</div>
 
 			{sys.data ? (
 				<div className="card">
 					<h2>System</h2>
-					<p><strong>CPU:</strong> {sys.data.cpuPercent.toFixed(1)}%</p>
 					<p>
-						<strong>Memory:</strong> {sys.data.memoryUsedMB} / {sys.data.memoryTotalMB} MiB
+						<strong>CPU:</strong> {sys.data.cpuPercent.toFixed(1)}%
 					</p>
-					<p><strong>Uptime:</strong> {fmtUptime(sys.data.uptimeSeconds)}</p>
+					<p>
+						<strong>Memory:</strong> {sys.data.memoryUsedMB} /{" "}
+						{sys.data.memoryTotalMB} MiB
+					</p>
+					<p>
+						<strong>Uptime:</strong> {fmtUptime(sys.data.uptimeSeconds)}
+					</p>
 				</div>
 			) : null}
 		</>

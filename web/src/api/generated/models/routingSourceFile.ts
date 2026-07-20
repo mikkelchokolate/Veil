@@ -42,7 +42,7 @@
  */
 
 export interface RoutingSourceFile {
-  name: string;
-  url: string;
-  sha256Url?: string;
+	name: string;
+	url: string;
+	sha256Url?: string;
 }

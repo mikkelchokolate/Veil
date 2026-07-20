@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { Locale } from './locale.ts';
+import type { Locale } from "./locale.ts";
 
 export interface LocaleUpdateRequest {
-  locale: Locale;
+	locale: Locale;
 }

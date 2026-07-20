@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ApplyOperationInterruptionRisk = typeof ApplyOperationInterruptionRisk[keyof typeof ApplyOperationInterruptionRisk];
-
+export type ApplyOperationInterruptionRisk =
+	(typeof ApplyOperationInterruptionRisk)[keyof typeof ApplyOperationInterruptionRisk];
 
 export const ApplyOperationInterruptionRisk = {
-  none: 'none',
-  reload: 'reload',
-  'connection-drop': 'connection-drop',
-  'lockout-risk': 'lockout-risk',
+	none: "none",
+	reload: "reload",
+	"connection-drop": "connection-drop",
+	"lockout-risk": "lockout-risk",
 } as const;

@@ -42,9 +42,9 @@
  */
 
 export interface ServiceActionResponse {
-  service: string;
-  action: string;
-  success: boolean;
-  output?: string;
-  error?: string;
+	service: string;
+	action: string;
+	success: boolean;
+	output?: string;
+	error?: string;
 }

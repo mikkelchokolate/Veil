@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useIsAdmin } from "../auth/AuthContext";
-import type { RoutingRule } from "../api/generated/models";
 import { useState } from "react";
+import { ApiError, apiFetch } from "../api/fetcher";
+import type { RoutingRule } from "../api/generated/models";
+import { useIsAdmin } from "../auth/AuthContext";
 
 /** Routing rules: list + create/edit/delete mutations. */
 export function RoutingPage() {
@@ -10,7 +10,12 @@ export function RoutingPage() {
 	const qc = useQueryClient();
 	const [editing, setEditing] = useState<RoutingRule | null>(null);
 	const [creating, setCreating] = useState(false);
-	const [form, setForm] = useState({ name: "", match: "", outbound: "", enabled: true });
+	const [form, setForm] = useState({
+		name: "",
+		match: "",
+		outbound: "",
+		enabled: true,
+	});
 
 	const rules = useQuery<RoutingRule[]>({
 		queryKey: ["routing", "rules"],
@@ -20,7 +25,10 @@ export function RoutingPage() {
 	const save = useMutation({
 		mutationFn: (rule: RoutingRule) => {
 			if (creating) {
-				return apiFetch("/api/routing/rules", { method: "POST", body: JSON.stringify(rule) });
+				return apiFetch("/api/routing/rules", {
+					method: "POST",
+					body: JSON.stringify(rule),
+				});
 			}
 			return apiFetch(`/api/routing/rules/${encodeURIComponent(rule.name)}`, {
 				method: "PUT",
@@ -37,14 +45,21 @@ export function RoutingPage() {
 
 	const del = useMutation({
 		mutationFn: (name: string) =>
-			apiFetch(`/api/routing/rules/${encodeURIComponent(name)}`, { method: "DELETE" }),
+			apiFetch(`/api/routing/rules/${encodeURIComponent(name)}`, {
+				method: "DELETE",
+			}),
 		onSuccess: () => void qc.invalidateQueries({ queryKey: ["routing"] }),
 	});
 
 	function startEdit(r: RoutingRule) {
 		setEditing(r);
 		setCreating(false);
-		setForm({ name: r.name, match: r.match, outbound: r.outbound, enabled: r.enabled });
+		setForm({
+			name: r.name,
+			match: r.match,
+			outbound: r.outbound,
+			enabled: r.enabled,
+		});
 	}
 
 	function startCreate() {
@@ -65,7 +80,11 @@ export function RoutingPage() {
 				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
 					<h2 style={{ margin: 0, flex: 1 }}>Routing rules</h2>
 					{isAdmin ? (
-						<button type="button" className="btn btn-primary" onClick={startCreate}>
+						<button
+							type="button"
+							className="btn btn-primary"
+							onClick={startCreate}
+						>
 							New rule
 						</button>
 					) : null}
@@ -105,7 +124,9 @@ export function RoutingPage() {
 							<input
 								type="checkbox"
 								checked={form.enabled}
-								onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+								onChange={(e) =>
+									setForm({ ...form, enabled: e.target.checked })
+								}
 							/>
 							Enabled
 						</label>
@@ -113,8 +134,17 @@ export function RoutingPage() {
 							<button
 								type="button"
 								className="btn btn-primary"
-								disabled={save.isPending || !form.name || !form.match || !form.outbound}
-								onClick={() => save.mutate({ name: form.name, match: form.match, outbound: form.outbound, enabled: form.enabled })}
+								disabled={
+									save.isPending || !form.name || !form.match || !form.outbound
+								}
+								onClick={() =>
+									save.mutate({
+										name: form.name,
+										match: form.match,
+										outbound: form.outbound,
+										enabled: form.enabled,
+									})
+								}
 							>
 								{save.isPending ? "Saving…" : "Save"}
 							</button>
@@ -124,7 +154,9 @@ export function RoutingPage() {
 						</div>
 						{save.isError ? (
 							<p className="form-error">
-								{save.error instanceof ApiError ? save.error.message : "Save failed"}
+								{save.error instanceof ApiError
+									? save.error.message
+									: "Save failed"}
 							</p>
 						) : null}
 					</div>
@@ -136,7 +168,9 @@ export function RoutingPage() {
 					<p className="muted">Loading…</p>
 				) : rules.isError ? (
 					<p className="form-error">
-						{rules.error instanceof ApiError ? rules.error.message : "Failed to load routing rules"}
+						{rules.error instanceof ApiError
+							? rules.error.message
+							: "Failed to load routing rules"}
 					</p>
 				) : (
 					<div className="table-container">
@@ -164,13 +198,19 @@ export function RoutingPage() {
 											<td className="muted">{r.match}</td>
 											<td className="muted">{r.outbound}</td>
 											<td>
-												<span className={`badge ${r.enabled ? "badge-success" : ""}`}>
+												<span
+													className={`badge ${r.enabled ? "badge-success" : ""}`}
+												>
 													{r.enabled ? "enabled" : "disabled"}
 												</span>
 											</td>
 											{isAdmin ? (
 												<td style={{ display: "flex", gap: 4 }}>
-													<button type="button" className="btn" onClick={() => startEdit(r)}>
+													<button
+														type="button"
+														className="btn"
+														onClick={() => startEdit(r)}
+													>
 														Edit
 													</button>
 													<button

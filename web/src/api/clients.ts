@@ -21,7 +21,9 @@ export interface ClientListResult<T = unknown> {
 	pageSize: number;
 }
 
-export function listClients(params: ClientListParams): Promise<ClientListResult> {
+export function listClients(
+	params: ClientListParams,
+): Promise<ClientListResult> {
 	const qs = new URLSearchParams();
 	if (params.page) qs.set("page", String(params.page));
 	if (params.pageSize) qs.set("pageSize", String(params.pageSize));

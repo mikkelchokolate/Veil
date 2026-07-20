@@ -1,5 +1,5 @@
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // The SPA is served both at "/" and under a secret WebBasePath ("/<secret>/").
@@ -28,7 +28,8 @@ export default defineConfig({
 			output: {
 				manualChunks(id: string) {
 					if (id.includes("node_modules")) {
-						if (id.includes("react-dom") || id.includes("/react/")) return "react";
+						if (id.includes("react-dom") || id.includes("/react/"))
+							return "react";
 						if (id.includes("@tanstack")) return "tanstack";
 						return "vendor";
 					}

@@ -42,7 +42,7 @@
  */
 
 export interface BackupPruneResult {
-  kept: string[];
-  deleted: string[];
-  dryRun: boolean;
+	kept: string[];
+	deleted: string[];
+	dryRun: boolean;
 }

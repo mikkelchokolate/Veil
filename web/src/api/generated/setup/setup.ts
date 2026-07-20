@@ -40,103 +40,97 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  BadRequestResponse,
-  ErrorText,
-  ForbiddenResponse,
-  SetupCompleteRequest,
-  SetupCompleteResponse,
-  SetupStatusResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	BadRequestResponse,
+	ErrorText,
+	ForbiddenResponse,
+	SetupCompleteRequest,
+	SetupCompleteResponse,
+	SetupStatusResponse,
+} from "../models";
 
 export type getApiSetupStatusResponse200 = {
-  data: SetupStatusResponse
-  status: 200
-}
-
-export type getApiSetupStatusResponseSuccess = (getApiSetupStatusResponse200) & {
-  headers: Headers;
+	data: SetupStatusResponse;
+	status: 200;
 };
-;
 
-export type getApiSetupStatusResponse = (getApiSetupStatusResponseSuccess)
+export type getApiSetupStatusResponseSuccess = getApiSetupStatusResponse200 & {
+	headers: Headers;
+};
+
+export type getApiSetupStatusResponse = getApiSetupStatusResponseSuccess;
 
 export const getGetApiSetupStatusUrl = () => {
-
-
-
-
-  return `/api/setup/status`
-}
+	return `/api/setup/status`;
+};
 
 /**
  * Available without authentication only on a local loopback listener.
  * @summary Inspect first-run setup state
  */
-export const getApiSetupStatus = async ( options?: RequestInit): Promise<getApiSetupStatusResponse> => {
-
-  return apiFetch<getApiSetupStatusResponse>(getGetApiSetupStatusUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiSetupStatus = async (
+	options?: RequestInit,
+): Promise<getApiSetupStatusResponse> => {
+	return apiFetch<getApiSetupStatusResponse>(getGetApiSetupStatusUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiSetupCompleteResponse201 = {
-  data: SetupCompleteResponse
-  status: 201
-}
+	data: SetupCompleteResponse;
+	status: 201;
+};
 
 export type postApiSetupCompleteResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type postApiSetupCompleteResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type postApiSetupCompleteResponse409 = {
-  data: ErrorText
-  status: 409
-}
-
-export type postApiSetupCompleteResponseSuccess = (postApiSetupCompleteResponse201) & {
-  headers: Headers;
-};
-export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409) & {
-  headers: Headers;
+	data: ErrorText;
+	status: 409;
 };
 
-export type postApiSetupCompleteResponse = (postApiSetupCompleteResponseSuccess | postApiSetupCompleteResponseError)
+export type postApiSetupCompleteResponseSuccess =
+	postApiSetupCompleteResponse201 & {
+		headers: Headers;
+	};
+export type postApiSetupCompleteResponseError = (
+	| postApiSetupCompleteResponse400
+	| postApiSetupCompleteResponse403
+	| postApiSetupCompleteResponse409
+) & {
+	headers: Headers;
+};
+
+export type postApiSetupCompleteResponse =
+	| postApiSetupCompleteResponseSuccess
+	| postApiSetupCompleteResponseError;
 
 export const getPostApiSetupCompleteUrl = () => {
-
-
-
-
-  return `/api/setup/complete`
-}
+	return `/api/setup/complete`;
+};
 
 /**
  * Single-use operation available only on an unconfigured local loopback listener.
  * @summary Create the initial administrator
  */
-export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRequest, options?: RequestInit): Promise<postApiSetupCompleteResponse> => {
-
-  return apiFetch<postApiSetupCompleteResponse>(getPostApiSetupCompleteUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(setupCompleteRequest)
-  }
-);}
-
-
+export const postApiSetupComplete = async (
+	setupCompleteRequest: SetupCompleteRequest,
+	options?: RequestInit,
+): Promise<postApiSetupCompleteResponse> => {
+	return apiFetch<postApiSetupCompleteResponse>(getPostApiSetupCompleteUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(setupCompleteRequest),
+	});
+};

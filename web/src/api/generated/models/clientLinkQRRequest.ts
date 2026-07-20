@@ -42,10 +42,10 @@
  */
 
 export interface ClientLinkQRRequest {
-  /**
-     * Client connection URI or config export string to encode as a QR image.
-     * @minLength 1
-     * @maxLength 4096
-     */
-  uri: string;
+	/**
+	 * Client connection URI or config export string to encode as a QR image.
+	 * @minLength 1
+	 * @maxLength 4096
+	 */
+	uri: string;
 }

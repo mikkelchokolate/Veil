@@ -40,58 +40,55 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  ForbiddenResponse,
-  ProtocolInfo,
-  UnauthorizedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	ForbiddenResponse,
+	ProtocolInfo,
+	UnauthorizedResponse,
+} from "../models";
 
 export type getApiProtocolsResponse200 = {
-  data: ProtocolInfo[]
-  status: 200
-}
+	data: ProtocolInfo[];
+	status: 200;
+};
 
 export type getApiProtocolsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type getApiProtocolsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiProtocolsResponseSuccess = (getApiProtocolsResponse200) & {
-  headers: Headers;
-};
-export type getApiProtocolsResponseError = (getApiProtocolsResponse401 | getApiProtocolsResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type getApiProtocolsResponse = (getApiProtocolsResponseSuccess | getApiProtocolsResponseError)
+export type getApiProtocolsResponseSuccess = getApiProtocolsResponse200 & {
+	headers: Headers;
+};
+export type getApiProtocolsResponseError = (
+	| getApiProtocolsResponse401
+	| getApiProtocolsResponse403
+) & {
+	headers: Headers;
+};
+
+export type getApiProtocolsResponse =
+	| getApiProtocolsResponseSuccess
+	| getApiProtocolsResponseError;
 
 export const getGetApiProtocolsUrl = () => {
-
-
-
-
-  return `/api/protocols`
-}
+	return `/api/protocols`;
+};
 
 /**
  * @summary List supported protocols and their UI/runtime metadata
  */
-export const getApiProtocols = async ( options?: RequestInit): Promise<getApiProtocolsResponse> => {
-
-  return apiFetch<getApiProtocolsResponse>(getGetApiProtocolsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
+export const getApiProtocols = async (
+	options?: RequestInit,
+): Promise<getApiProtocolsResponse> => {
+	return apiFetch<getApiProtocolsResponse>(getGetApiProtocolsUrl(), {
+		...options,
+		method: "GET",
+	});
+};

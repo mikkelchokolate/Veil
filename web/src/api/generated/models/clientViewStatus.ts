@@ -44,15 +44,15 @@
 /**
  * Effective status.
  */
-export type ClientViewStatus = typeof ClientViewStatus[keyof typeof ClientViewStatus];
-
+export type ClientViewStatus =
+	(typeof ClientViewStatus)[keyof typeof ClientViewStatus];
 
 export const ClientViewStatus = {
-  active: 'active',
-  disabled: 'disabled',
-  expired: 'expired',
-  depleted: 'depleted',
-  pending_apply: 'pending_apply',
-  apply_failed: 'apply_failed',
-  orphaned: 'orphaned',
+	active: "active",
+	disabled: "disabled",
+	expired: "expired",
+	depleted: "depleted",
+	pending_apply: "pending_apply",
+	apply_failed: "apply_failed",
+	orphaned: "orphaned",
 } as const;

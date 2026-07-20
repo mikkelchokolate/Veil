@@ -40,7 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ValidationFailure } from './validationFailure.ts';
+import type { ValidationFailure } from "./validationFailure.ts";
 
 /**
  * Candidate configuration failed authoritative validation and was not mutated.

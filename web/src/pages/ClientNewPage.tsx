@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { apiFetch, ApiError } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 
 interface InboundOption {
 	name: string;
@@ -54,7 +54,8 @@ export function ClientNewPage() {
 			if (email) body.email = email;
 			if (notes) body.notes = notes;
 			if (quotaBytes) body.quotaBytes = Number(quotaBytes);
-			if (expiresAt) body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
+			if (expiresAt)
+				body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
 			if (bindings.length > 0) {
 				body.bindings = bindings.map((b) => ({
 					inboundId: b.inboundId,
@@ -73,11 +74,17 @@ export function ClientNewPage() {
 			for (const b of bindings) {
 				if (b.credential) continue; // operator-provided; already known to them
 				try {
-					const res = await apiFetch<CreatedCredential & { plaintext?: string }>(
+					const res = await apiFetch<
+						CreatedCredential & { plaintext?: string }
+					>(
 						`/api/v1/clients/${client.id}/credentials/${encodeURIComponent(b.inboundId)}/rotate`,
 						{ method: "POST", body: JSON.stringify({}) },
 					);
-					revealed.push({ bindingId: b.inboundId, inboundId: b.inboundId, plaintext: res.plaintext });
+					revealed.push({
+						bindingId: b.inboundId,
+						inboundId: b.inboundId,
+						plaintext: res.plaintext,
+					});
 				} catch {
 					// non-fatal: credential exists, just not revealed here
 				}
@@ -88,7 +95,9 @@ export function ClientNewPage() {
 			setStep(3);
 		},
 		onError: (err) => {
-			setError(err instanceof ApiError ? err.message : "Failed to create client");
+			setError(
+				err instanceof ApiError ? err.message : "Failed to create client",
+			);
 		},
 	});
 
@@ -101,7 +110,9 @@ export function ClientNewPage() {
 	}
 
 	function setCred(inboundId: string, credential: string) {
-		setBindings((prev) => prev.map((b) => (b.inboundId === inboundId ? { ...b, credential } : b)));
+		setBindings((prev) =>
+			prev.map((b) => (b.inboundId === inboundId ? { ...b, credential } : b)),
+		);
 	}
 
 	function onSubmit(e: FormEvent) {
@@ -117,7 +128,13 @@ export function ClientNewPage() {
 			<h2>New client</h2>
 			<div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>
 				{steps.map((s, i) => (
-					<span key={s} style={{ fontWeight: i === step ? 700 : 400, color: i === step ? "var(--text-main)" : undefined }}>
+					<span
+						key={s}
+						style={{
+							fontWeight: i === step ? 700 : 400,
+							color: i === step ? "var(--text-main)" : undefined,
+						}}
+					>
 						{i > 0 ? " · " : ""}
 						{s}
 					</span>
@@ -128,15 +145,32 @@ export function ClientNewPage() {
 				<>
 					<div className="form-field">
 						<label htmlFor="nc-name">Name</label>
-						<input id="nc-name" className="input" value={name} onChange={(e) => setName(e.target.value)} required />
+						<input
+							id="nc-name"
+							className="input"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							required
+						/>
 					</div>
 					<div className="form-field">
 						<label htmlFor="nc-email">Email (optional)</label>
-						<input id="nc-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+						<input
+							id="nc-email"
+							className="input"
+							type="email"
+							value={email}
+							onChange={(e) => setEmail(e.target.value)}
+						/>
 					</div>
 					<div className="form-field">
 						<label htmlFor="nc-notes">Notes (optional)</label>
-						<textarea id="nc-notes" className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+						<textarea
+							id="nc-notes"
+							className="input"
+							value={notes}
+							onChange={(e) => setNotes(e.target.value)}
+						/>
 					</div>
 				</>
 			) : null}
@@ -145,11 +179,24 @@ export function ClientNewPage() {
 				<>
 					<div className="form-field">
 						<label htmlFor="nc-quota">Quota (bytes, optional)</label>
-						<input id="nc-quota" className="input" type="number" min="0" value={quotaBytes} onChange={(e) => setQuotaBytes(e.target.value)} />
+						<input
+							id="nc-quota"
+							className="input"
+							type="number"
+							min="0"
+							value={quotaBytes}
+							onChange={(e) => setQuotaBytes(e.target.value)}
+						/>
 					</div>
 					<div className="form-field">
 						<label htmlFor="nc-exp">Expiry date (optional)</label>
-						<input id="nc-exp" className="input" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+						<input
+							id="nc-exp"
+							className="input"
+							type="date"
+							value={expiresAt}
+							onChange={(e) => setExpiresAt(e.target.value)}
+						/>
 					</div>
 				</>
 			) : null}
@@ -163,11 +210,32 @@ export function ClientNewPage() {
 						inboundList.map((ib) => {
 							const bound = bindings.find((b) => b.inboundId === ib.name);
 							return (
-								<div key={ib.name} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: 12, marginBottom: 8 }}>
-									<label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-										<input type="checkbox" checked={!!bound} onChange={() => toggleBinding(ib.name)} />
+								<div
+									key={ib.name}
+									style={{
+										border: "1px solid var(--border)",
+										borderRadius: 6,
+										padding: 12,
+										marginBottom: 8,
+									}}
+								>
+									<label
+										style={{
+											display: "flex",
+											alignItems: "center",
+											gap: 8,
+											cursor: "pointer",
+										}}
+									>
+										<input
+											type="checkbox"
+											checked={!!bound}
+											onChange={() => toggleBinding(ib.name)}
+										/>
 										<span>{ib.name}</span>
-										<span className="muted" style={{ fontSize: 12 }}>{ib.protocol}</span>
+										<span className="muted" style={{ fontSize: 12 }}>
+											{ib.protocol}
+										</span>
 									</label>
 									{bound ? (
 										<input
@@ -198,14 +266,22 @@ export function ClientNewPage() {
 									</p>
 									{createdCreds.map((c) => (
 										<div key={c.inboundId} style={{ marginBottom: 8 }}>
-											<div className="muted" style={{ fontSize: 12 }}>{c.inboundId}</div>
-											<code className="mono">{c.plaintext ?? "(unavailable)"}</code>
+											<div className="muted" style={{ fontSize: 12 }}>
+												{c.inboundId}
+											</div>
+											<code className="mono">
+												{c.plaintext ?? "(unavailable)"}
+											</code>
 										</div>
 									))}
 								</div>
 							) : null}
 							<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-								<button type="button" className="btn btn-primary" onClick={() => void navigate({ to: "/clients" })}>
+								<button
+									type="button"
+									className="btn btn-primary"
+									onClick={() => void navigate({ to: "/clients" })}
+								>
 									Done
 								</button>
 							</div>
@@ -213,20 +289,43 @@ export function ClientNewPage() {
 					) : (
 						<>
 							<h2 style={{ fontSize: 14 }}>Review</h2>
-							<p><strong>Name:</strong> {name}</p>
-							{email ? <p><strong>Email:</strong> {email}</p> : null}
-							{quotaBytes ? <p><strong>Quota:</strong> {quotaBytes} bytes</p> : null}
-							{expiresAt ? <p><strong>Expires:</strong> {expiresAt}</p> : null}
-							<p><strong>Bindings:</strong> {bindings.length}</p>
+							<p>
+								<strong>Name:</strong> {name}
+							</p>
+							{email ? (
+								<p>
+									<strong>Email:</strong> {email}
+								</p>
+							) : null}
+							{quotaBytes ? (
+								<p>
+									<strong>Quota:</strong> {quotaBytes} bytes
+								</p>
+							) : null}
+							{expiresAt ? (
+								<p>
+									<strong>Expires:</strong> {expiresAt}
+								</p>
+							) : null}
+							<p>
+								<strong>Bindings:</strong> {bindings.length}
+							</p>
 						</>
 					)}
 				</div>
 			) : null}
 
-			{error ? <div className="form-error" role="alert" style={{ marginTop: 8 }}>{error}</div> : null}
+			{error ? (
+				<div className="form-error" role="alert" style={{ marginTop: 8 }}>
+					{error}
+				</div>
+			) : null}
 
 			{step < 3 || !create.isSuccess ? (
-				<form onSubmit={onSubmit} style={{ display: "flex", gap: 8, marginTop: 20 }}>
+				<form
+					onSubmit={onSubmit}
+					style={{ display: "flex", gap: 8, marginTop: 20 }}
+				>
 					<button
 						type="button"
 						className="btn"
@@ -245,11 +344,19 @@ export function ClientNewPage() {
 							Next
 						</button>
 					) : step === 2 ? (
-						<button type="button" className="btn btn-primary" onClick={() => setStep(3)}>
+						<button
+							type="button"
+							className="btn btn-primary"
+							onClick={() => setStep(3)}
+						>
 							Review
 						</button>
 					) : (
-						<button type="submit" className="btn btn-primary" disabled={create.isPending}>
+						<button
+							type="submit"
+							className="btn btn-primary"
+							disabled={create.isPending}
+						>
 							{create.isPending ? "Creating…" : "Create client"}
 						</button>
 					)}

@@ -42,20 +42,20 @@
  */
 
 export type GetApiV1TrafficIdHistoryParams = {
-/**
- * Unix start of the window (default 24h ago).
- */
-from?: number;
-/**
- * Unix end of the window (default now).
- */
-to?: number;
-/**
- * Bucket width in seconds. NOTE handler currently reads limit, not bucket.
- */
-bucket?: number;
-/**
- * Max buckets returned (default 500).
- */
-limit?: number;
+	/**
+	 * Unix start of the window (default 24h ago).
+	 */
+	from?: number;
+	/**
+	 * Unix end of the window (default now).
+	 */
+	to?: number;
+	/**
+	 * Bucket width in seconds. NOTE handler currently reads limit, not bucket.
+	 */
+	bucket?: number;
+	/**
+	 * Max buckets returned (default 500).
+	 */
+	limit?: number;
 };

@@ -42,14 +42,14 @@
  */
 
 export interface WarpConfig {
-  enabled: boolean;
-  licenseKey?: string;
-  endpoint: string;
-  privateKey?: string;
-  localAddress?: string;
-  peerPublicKey?: string;
-  reserved?: number[];
-  socksListen?: string;
-  socksPort?: number;
-  mtu?: number;
+	enabled: boolean;
+	licenseKey?: string;
+	endpoint: string;
+	privateKey?: string;
+	localAddress?: string;
+	peerPublicKey?: string;
+	reserved?: number[];
+	socksListen?: string;
+	socksPort?: number;
+	mtu?: number;
 }

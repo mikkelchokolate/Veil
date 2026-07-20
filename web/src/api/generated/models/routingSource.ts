@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { RoutingSourceFile } from './routingSourceFile.ts';
+import type { RoutingSourceFile } from "./routingSourceFile.ts";
 
 export interface RoutingSource {
-  repository?: string;
-  files?: RoutingSourceFile[];
+	repository?: string;
+	files?: RoutingSourceFile[];
 }

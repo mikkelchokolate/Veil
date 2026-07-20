@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BackupArchiveFileName } from './backupArchiveFileName.ts';
+import type { BackupArchiveFileName } from "./backupArchiveFileName.ts";
 
 export interface BackupArchiveFile {
-  name: BackupArchiveFileName;
-  /** @minimum 0 */
-  size: number;
-  /** @pattern ^[0-9a-f]{64}$ */
-  sha256: string;
+	name: BackupArchiveFileName;
+	/** @minimum 0 */
+	size: number;
+	/** @pattern ^[0-9a-f]{64}$ */
+	sha256: string;
 }

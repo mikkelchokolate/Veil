@@ -40,12 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BackupArchive } from './backupArchive.ts';
-import type { BackupPruneResult } from './backupPruneResult.ts';
-import type { BackupVerificationReport } from './backupVerificationReport.ts';
+import type { BackupArchive } from "./backupArchive.ts";
+import type { BackupPruneResult } from "./backupPruneResult.ts";
+import type { BackupVerificationReport } from "./backupVerificationReport.ts";
 
 export interface BackupCreateResponse {
-  archive: BackupArchive;
-  verification: BackupVerificationReport;
-  prune?: BackupPruneResult;
+	archive: BackupArchive;
+	verification: BackupVerificationReport;
+	prune?: BackupPruneResult;
 }

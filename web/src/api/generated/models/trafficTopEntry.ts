@@ -42,9 +42,9 @@
  */
 
 export interface TrafficTopEntry {
-  clientId: string;
-  name: string;
-  uploadBytes?: number;
-  downloadBytes?: number;
-  totalBytes: number;
+	clientId: string;
+	name: string;
+	uploadBytes?: number;
+	downloadBytes?: number;
+	totalBytes: number;
 }

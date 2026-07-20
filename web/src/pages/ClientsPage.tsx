@@ -1,17 +1,22 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import {
+	type ColumnDef,
+	flexRender,
+	getCoreRowModel,
+	useReactTable,
+} from "@tanstack/react-table";
 import { useState } from "react";
 import { listClients } from "../api/clients";
+import { ApiError } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
 import type { ClientView } from "../api/generated/models";
-import { ApiError } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
-import {
-	useReactTable,
-	getCoreRowModel,
-	flexRender,
-	type ColumnDef,
-} from "@tanstack/react-table";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 	active: { label: "active", cls: "badge-success" },
@@ -50,7 +55,10 @@ export function ClientsPage() {
 	const isAdmin = useIsAdmin();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
-	const search = useSearch({ strict: false }) as Record<string, string | undefined>;
+	const search = useSearch({ strict: false }) as Record<
+		string,
+		string | undefined
+	>;
 
 	const page = Number(search.page ?? "1") || 1;
 	const pageSize = Number(search.pageSize ?? "25") || 25;
@@ -86,7 +94,9 @@ export function ClientsPage() {
 		onSuccess: (res) => {
 			setSelected(new Set());
 			setBulkError(null);
-			const data = res.data as { succeeded?: number; skipped?: number; failed?: number } | undefined;
+			const data = res.data as
+				| { succeeded?: number; skipped?: number; failed?: number }
+				| undefined;
 			if (data) {
 				setBulkNotice(
 					`succeeded ${data.succeeded ?? 0}, skipped ${data.skipped ?? 0}, failed ${data.failed ?? 0}`,
@@ -97,7 +107,9 @@ export function ClientsPage() {
 		},
 		onError: (err) => {
 			setBulkNotice(null);
-			setBulkError(err instanceof ApiError ? err.message : "Bulk action failed");
+			setBulkError(
+				err instanceof ApiError ? err.message : "Bulk action failed",
+			);
 		},
 	});
 
@@ -139,7 +151,9 @@ export function ClientsPage() {
 				<div>
 					<div>{row.original.name}</div>
 					{row.original.email ? (
-						<div className="muted" style={{ fontSize: 12 }}>{row.original.email}</div>
+						<div className="muted" style={{ fontSize: 12 }}>
+							{row.original.email}
+						</div>
 					) : null}
 				</div>
 			),
@@ -152,17 +166,23 @@ export function ClientsPage() {
 		{
 			accessorKey: "inboundIds",
 			header: "Inbounds",
-			cell: ({ row }) => <span className="muted">{row.original.inboundIds?.length ?? 0}</span>,
+			cell: ({ row }) => (
+				<span className="muted">{row.original.inboundIds?.length ?? 0}</span>
+			),
 		},
 		{
 			accessorKey: "quotaBytes",
 			header: "Quota",
-			cell: ({ row }) => <span className="muted">{fmtBytes(row.original.quotaBytes)}</span>,
+			cell: ({ row }) => (
+				<span className="muted">{fmtBytes(row.original.quotaBytes)}</span>
+			),
 		},
 		{
 			accessorKey: "expiresAt",
 			header: "Expires",
-			cell: ({ row }) => <span className="muted">{fmtExpiry(row.original.expiresAt)}</span>,
+			cell: ({ row }) => (
+				<span className="muted">{fmtExpiry(row.original.expiresAt)}</span>
+			),
 		},
 	];
 
@@ -192,7 +212,14 @@ export function ClientsPage() {
 	return (
 		<>
 			<div className="card">
-				<div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+				<div
+					style={{
+						display: "flex",
+						gap: 12,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
 					<h2 style={{ margin: 0, flex: 1 }}>Clients</h2>
 					<input
 						className="input"
@@ -201,7 +228,10 @@ export function ClientsPage() {
 						defaultValue={searchText}
 						onKeyDown={(e) => {
 							if (e.key === "Enter") {
-								setParam({ search: (e.target as HTMLInputElement).value, page: "1" });
+								setParam({
+									search: (e.target as HTMLInputElement).value,
+									page: "1",
+								});
 							}
 						}}
 					/>
@@ -239,13 +269,18 @@ export function ClientsPage() {
 			</div>
 
 			{isAdmin && selected.size > 0 ? (
-				<div className="card" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+				<div
+					className="card"
+					style={{ display: "flex", gap: 8, alignItems: "center" }}
+				>
 					<span className="muted">{selected.size} selected</span>
 					<button
 						type="button"
 						className="btn"
 						disabled={bulk.isPending}
-						onClick={() => bulk.mutate({ action: "enable", ids: [...selected] })}
+						onClick={() =>
+							bulk.mutate({ action: "enable", ids: [...selected] })
+						}
 					>
 						Enable
 					</button>
@@ -253,7 +288,9 @@ export function ClientsPage() {
 						type="button"
 						className="btn"
 						disabled={bulk.isPending}
-						onClick={() => bulk.mutate({ action: "disable", ids: [...selected] })}
+						onClick={() =>
+							bulk.mutate({ action: "disable", ids: [...selected] })
+						}
 					>
 						Disable
 					</button>
@@ -261,7 +298,9 @@ export function ClientsPage() {
 						type="button"
 						className="btn"
 						disabled={bulk.isPending}
-						onClick={() => bulk.mutate({ action: "reset_traffic", ids: [...selected] })}
+						onClick={() =>
+							bulk.mutate({ action: "reset_traffic", ids: [...selected] })
+						}
 					>
 						Reset traffic
 					</button>
@@ -269,7 +308,9 @@ export function ClientsPage() {
 						type="button"
 						className="btn btn-danger"
 						disabled={bulk.isPending}
-						onClick={() => bulk.mutate({ action: "delete", ids: [...selected] })}
+						onClick={() =>
+							bulk.mutate({ action: "delete", ids: [...selected] })
+						}
 					>
 						Delete
 					</button>
@@ -283,7 +324,9 @@ export function ClientsPage() {
 					<p className="muted">Loading…</p>
 				) : query.isError ? (
 					<p className="form-error">
-						{query.error instanceof ApiError ? query.error.message : "Failed to load clients"}
+						{query.error instanceof ApiError
+							? query.error.message
+							: "Failed to load clients"}
 					</p>
 				) : (
 					<div className="table-container">
@@ -292,7 +335,12 @@ export function ClientsPage() {
 								{table.getHeaderGroups().map((hg) => (
 									<tr key={hg.id}>
 										{hg.headers.map((h) => (
-											<th key={h.id} style={{ width: h.getSize() !== 150 ? h.getSize() : undefined }}>
+											<th
+												key={h.id}
+												style={{
+													width: h.getSize() !== 150 ? h.getSize() : undefined,
+												}}
+											>
 												{flexRender(h.column.columnDef.header, h.getContext())}
 											</th>
 										))}
@@ -311,11 +359,16 @@ export function ClientsPage() {
 										<tr
 											key={row.id}
 											style={{ cursor: "pointer" }}
-											onClick={() => void navigate({ to: `/clients/${row.original.id}` })}
+											onClick={() =>
+												void navigate({ to: `/clients/${row.original.id}` })
+											}
 										>
 											{row.getVisibleCells().map((cell) => (
 												<td key={cell.id}>
-													{flexRender(cell.column.columnDef.cell, cell.getContext())}
+													{flexRender(
+														cell.column.columnDef.cell,
+														cell.getContext(),
+													)}
 												</td>
 											))}
 										</tr>
@@ -326,7 +379,14 @@ export function ClientsPage() {
 					</div>
 				)}
 
-				<div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16 }}>
+				<div
+					style={{
+						display: "flex",
+						gap: 12,
+						alignItems: "center",
+						marginTop: 16,
+					}}
+				>
 					<span className="muted">
 						{total} client{total === 1 ? "" : "s"} · page {page} of {totalPages}
 					</span>

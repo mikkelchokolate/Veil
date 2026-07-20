@@ -40,184 +40,172 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  AuthStatusResponse,
-  BadRequestResponse,
-  ForbiddenResponse,
-  LocaleResponse,
-  LocaleUpdateRequest,
-  LoginRequest,
-  LoginResponse,
-  NotFoundResponse,
-  SessionDeleteRequest,
-  SessionInfo,
-  SuccessResponse,
-  UnauthorizedResponse,
-  UserCreateRequest,
-  UserResponse,
-  UserUpdateRequest
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	AuthStatusResponse,
+	BadRequestResponse,
+	ForbiddenResponse,
+	LocaleResponse,
+	LocaleUpdateRequest,
+	LoginRequest,
+	LoginResponse,
+	NotFoundResponse,
+	SessionDeleteRequest,
+	SessionInfo,
+	SuccessResponse,
+	UnauthorizedResponse,
+	UserCreateRequest,
+	UserResponse,
+	UserUpdateRequest,
+} from "../models";
 
 export type postApiAuthLoginResponse200 = {
-  data: LoginResponse
-  status: 200
-}
+	data: LoginResponse;
+	status: 200;
+};
 
 export type postApiAuthLoginResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type postApiAuthLoginResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiAuthLoginResponseSuccess = (postApiAuthLoginResponse200) & {
-  headers: Headers;
-};
-export type postApiAuthLoginResponseError = (postApiAuthLoginResponse400 | postApiAuthLoginResponse401) & {
-  headers: Headers;
+	data: UnauthorizedResponse;
+	status: 401;
 };
 
-export type postApiAuthLoginResponse = (postApiAuthLoginResponseSuccess | postApiAuthLoginResponseError)
+export type postApiAuthLoginResponseSuccess = postApiAuthLoginResponse200 & {
+	headers: Headers;
+};
+export type postApiAuthLoginResponseError = (
+	| postApiAuthLoginResponse400
+	| postApiAuthLoginResponse401
+) & {
+	headers: Headers;
+};
+
+export type postApiAuthLoginResponse =
+	| postApiAuthLoginResponseSuccess
+	| postApiAuthLoginResponseError;
 
 export const getPostApiAuthLoginUrl = () => {
-
-
-
-
-  return `/api/auth/login`
-}
+	return `/api/auth/login`;
+};
 
 /**
  * @summary Create a browser session
  */
-export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: RequestInit): Promise<postApiAuthLoginResponse> => {
-
-  return apiFetch<postApiAuthLoginResponse>(getPostApiAuthLoginUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(loginRequest)
-  }
-);}
-
+export const postApiAuthLogin = async (
+	loginRequest: LoginRequest,
+	options?: RequestInit,
+): Promise<postApiAuthLoginResponse> => {
+	return apiFetch<postApiAuthLoginResponse>(getPostApiAuthLoginUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(loginRequest),
+	});
+};
 
 export type postApiAuthLogoutResponse200 = {
-  data: SuccessResponse
-  status: 200
-}
-
-export type postApiAuthLogoutResponseSuccess = (postApiAuthLogoutResponse200) & {
-  headers: Headers;
+	data: SuccessResponse;
+	status: 200;
 };
-;
 
-export type postApiAuthLogoutResponse = (postApiAuthLogoutResponseSuccess)
+export type postApiAuthLogoutResponseSuccess = postApiAuthLogoutResponse200 & {
+	headers: Headers;
+};
+
+export type postApiAuthLogoutResponse = postApiAuthLogoutResponseSuccess;
 
 export const getPostApiAuthLogoutUrl = () => {
-
-
-
-
-  return `/api/auth/logout`
-}
+	return `/api/auth/logout`;
+};
 
 /**
  * @summary Delete the browser session cookie
  */
-export const postApiAuthLogout = async ( options?: RequestInit): Promise<postApiAuthLogoutResponse> => {
-
-  return apiFetch<postApiAuthLogoutResponse>(getPostApiAuthLogoutUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
+export const postApiAuthLogout = async (
+	options?: RequestInit,
+): Promise<postApiAuthLogoutResponse> => {
+	return apiFetch<postApiAuthLogoutResponse>(getPostApiAuthLogoutUrl(), {
+		...options,
+		method: "POST",
+	});
+};
 
 export type getApiAuthStatusResponse200 = {
-  data: AuthStatusResponse
-  status: 200
-}
-
-export type getApiAuthStatusResponseSuccess = (getApiAuthStatusResponse200) & {
-  headers: Headers;
+	data: AuthStatusResponse;
+	status: 200;
 };
-;
 
-export type getApiAuthStatusResponse = (getApiAuthStatusResponseSuccess)
+export type getApiAuthStatusResponseSuccess = getApiAuthStatusResponse200 & {
+	headers: Headers;
+};
+
+export type getApiAuthStatusResponse = getApiAuthStatusResponseSuccess;
 
 export const getGetApiAuthStatusUrl = () => {
-
-
-
-
-  return `/api/auth/status`
-}
+	return `/api/auth/status`;
+};
 
 /**
  * @summary Inspect the current browser session
  */
-export const getApiAuthStatus = async ( options?: RequestInit): Promise<getApiAuthStatusResponse> => {
-
-  return apiFetch<getApiAuthStatusResponse>(getGetApiAuthStatusUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiAuthStatus = async (
+	options?: RequestInit,
+): Promise<getApiAuthStatusResponse> => {
+	return apiFetch<getApiAuthStatusResponse>(getGetApiAuthStatusUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiAuthLocaleResponse200 = {
-  data: LocaleResponse
-  status: 200
-}
+	data: LocaleResponse;
+	status: 200;
+};
 
 export type postApiAuthLocaleResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type postApiAuthLocaleResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type postApiAuthLocaleResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type postApiAuthLocaleResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiAuthLocaleResponseSuccess = (postApiAuthLocaleResponse200) & {
-  headers: Headers;
-};
-export type postApiAuthLocaleResponseError = (postApiAuthLocaleResponse400 | postApiAuthLocaleResponse401 | postApiAuthLocaleResponse403 | postApiAuthLocaleResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type postApiAuthLocaleResponse = (postApiAuthLocaleResponseSuccess | postApiAuthLocaleResponseError)
+export type postApiAuthLocaleResponseSuccess = postApiAuthLocaleResponse200 & {
+	headers: Headers;
+};
+export type postApiAuthLocaleResponseError = (
+	| postApiAuthLocaleResponse400
+	| postApiAuthLocaleResponse401
+	| postApiAuthLocaleResponse403
+	| postApiAuthLocaleResponse404
+) & {
+	headers: Headers;
+};
+
+export type postApiAuthLocaleResponse =
+	| postApiAuthLocaleResponseSuccess
+	| postApiAuthLocaleResponseError;
 
 export const getPostApiAuthLocaleUrl = () => {
-
-
-
-
-  return `/api/auth/locale`
-}
+	return `/api/auth/locale`;
+};
 
 /**
  * Self-service exception available to both `admin` and `viewer` browser
@@ -227,314 +215,323 @@ export const getPostApiAuthLocaleUrl = () => {
  * endpoint.
  * @summary Update the current browser user's locale
  */
-export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest, options?: RequestInit): Promise<postApiAuthLocaleResponse> => {
-
-  return apiFetch<postApiAuthLocaleResponse>(getPostApiAuthLocaleUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(localeUpdateRequest)
-  }
-);}
-
+export const postApiAuthLocale = async (
+	localeUpdateRequest: LocaleUpdateRequest,
+	options?: RequestInit,
+): Promise<postApiAuthLocaleResponse> => {
+	return apiFetch<postApiAuthLocaleResponse>(getPostApiAuthLocaleUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(localeUpdateRequest),
+	});
+};
 
 export type getApiAuthSessionsResponse200 = {
-  data: SessionInfo[]
-  status: 200
-}
+	data: SessionInfo[];
+	status: 200;
+};
 
 export type getApiAuthSessionsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type getApiAuthSessionsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiAuthSessionsResponseSuccess = (getApiAuthSessionsResponse200) & {
-  headers: Headers;
-};
-export type getApiAuthSessionsResponseError = (getApiAuthSessionsResponse401 | getApiAuthSessionsResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type getApiAuthSessionsResponse = (getApiAuthSessionsResponseSuccess | getApiAuthSessionsResponseError)
+export type getApiAuthSessionsResponseSuccess =
+	getApiAuthSessionsResponse200 & {
+		headers: Headers;
+	};
+export type getApiAuthSessionsResponseError = (
+	| getApiAuthSessionsResponse401
+	| getApiAuthSessionsResponse403
+) & {
+	headers: Headers;
+};
+
+export type getApiAuthSessionsResponse =
+	| getApiAuthSessionsResponseSuccess
+	| getApiAuthSessionsResponseError;
 
 export const getGetApiAuthSessionsUrl = () => {
-
-
-
-
-  return `/api/auth/sessions`
-}
+	return `/api/auth/sessions`;
+};
 
 /**
  * Requires an admin token or admin session.
  * @summary List active browser sessions
  */
-export const getApiAuthSessions = async ( options?: RequestInit): Promise<getApiAuthSessionsResponse> => {
-
-  return apiFetch<getApiAuthSessionsResponse>(getGetApiAuthSessionsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiAuthSessions = async (
+	options?: RequestInit,
+): Promise<getApiAuthSessionsResponse> => {
+	return apiFetch<getApiAuthSessionsResponse>(getGetApiAuthSessionsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type deleteApiAuthSessionsResponse200 = {
-  data: SuccessResponse
-  status: 200
-}
+	data: SuccessResponse;
+	status: 200;
+};
 
 export type deleteApiAuthSessionsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type deleteApiAuthSessionsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type deleteApiAuthSessionsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type deleteApiAuthSessionsResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiAuthSessionsResponseSuccess = (deleteApiAuthSessionsResponse200) & {
-  headers: Headers;
-};
-export type deleteApiAuthSessionsResponseError = (deleteApiAuthSessionsResponse400 | deleteApiAuthSessionsResponse401 | deleteApiAuthSessionsResponse403 | deleteApiAuthSessionsResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type deleteApiAuthSessionsResponse = (deleteApiAuthSessionsResponseSuccess | deleteApiAuthSessionsResponseError)
+export type deleteApiAuthSessionsResponseSuccess =
+	deleteApiAuthSessionsResponse200 & {
+		headers: Headers;
+	};
+export type deleteApiAuthSessionsResponseError = (
+	| deleteApiAuthSessionsResponse400
+	| deleteApiAuthSessionsResponse401
+	| deleteApiAuthSessionsResponse403
+	| deleteApiAuthSessionsResponse404
+) & {
+	headers: Headers;
+};
+
+export type deleteApiAuthSessionsResponse =
+	| deleteApiAuthSessionsResponseSuccess
+	| deleteApiAuthSessionsResponseError;
 
 export const getDeleteApiAuthSessionsUrl = () => {
-
-
-
-
-  return `/api/auth/sessions`
-}
+	return `/api/auth/sessions`;
+};
 
 /**
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Revoke an active browser session
  */
-export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteRequest, options?: RequestInit): Promise<deleteApiAuthSessionsResponse> => {
-
-  return apiFetch<deleteApiAuthSessionsResponse>(getDeleteApiAuthSessionsUrl(),
-  {
-    ...options,
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(sessionDeleteRequest)
-  }
-);}
-
+export const deleteApiAuthSessions = async (
+	sessionDeleteRequest: SessionDeleteRequest,
+	options?: RequestInit,
+): Promise<deleteApiAuthSessionsResponse> => {
+	return apiFetch<deleteApiAuthSessionsResponse>(
+		getDeleteApiAuthSessionsUrl(),
+		{
+			...options,
+			method: "DELETE",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(sessionDeleteRequest),
+		},
+	);
+};
 
 export type getApiUsersResponse200 = {
-  data: UserResponse[]
-  status: 200
-}
-
-export type getApiUsersResponseSuccess = (getApiUsersResponse200) & {
-  headers: Headers;
+	data: UserResponse[];
+	status: 200;
 };
-;
 
-export type getApiUsersResponse = (getApiUsersResponseSuccess)
+export type getApiUsersResponseSuccess = getApiUsersResponse200 & {
+	headers: Headers;
+};
+
+export type getApiUsersResponse = getApiUsersResponseSuccess;
 
 export const getGetApiUsersUrl = () => {
-
-
-
-
-  return `/api/users`
-}
+	return `/api/users`;
+};
 
 /**
  * @summary List registered Panel users
  */
-export const getApiUsers = async ( options?: RequestInit): Promise<getApiUsersResponse> => {
-
-  return apiFetch<getApiUsersResponse>(getGetApiUsersUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiUsers = async (
+	options?: RequestInit,
+): Promise<getApiUsersResponse> => {
+	return apiFetch<getApiUsersResponse>(getGetApiUsersUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiUsersResponse201 = {
-  data: UserResponse
-  status: 201
-}
+	data: UserResponse;
+	status: 201;
+};
 
 export type postApiUsersResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type postApiUsersResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type postApiUsersResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiUsersResponseSuccess = (postApiUsersResponse201) & {
-  headers: Headers;
-};
-export type postApiUsersResponseError = (postApiUsersResponse400 | postApiUsersResponse401 | postApiUsersResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type postApiUsersResponse = (postApiUsersResponseSuccess | postApiUsersResponseError)
+export type postApiUsersResponseSuccess = postApiUsersResponse201 & {
+	headers: Headers;
+};
+export type postApiUsersResponseError = (
+	| postApiUsersResponse400
+	| postApiUsersResponse401
+	| postApiUsersResponse403
+) & {
+	headers: Headers;
+};
+
+export type postApiUsersResponse =
+	| postApiUsersResponseSuccess
+	| postApiUsersResponseError;
 
 export const getPostApiUsersUrl = () => {
-
-
-
-
-  return `/api/users`
-}
+	return `/api/users`;
+};
 
 /**
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Create a Panel user
  */
-export const postApiUsers = async (userCreateRequest: UserCreateRequest, options?: RequestInit): Promise<postApiUsersResponse> => {
-
-  return apiFetch<postApiUsersResponse>(getPostApiUsersUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(userCreateRequest)
-  }
-);}
-
+export const postApiUsers = async (
+	userCreateRequest: UserCreateRequest,
+	options?: RequestInit,
+): Promise<postApiUsersResponse> => {
+	return apiFetch<postApiUsersResponse>(getPostApiUsersUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(userCreateRequest),
+	});
+};
 
 export type putApiUsersUsernameResponse200 = {
-  data: UserResponse
-  status: 200
-}
+	data: UserResponse;
+	status: 200;
+};
 
 export type putApiUsersUsernameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type putApiUsersUsernameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type putApiUsersUsernameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiUsersUsernameResponseSuccess = (putApiUsersUsernameResponse200) & {
-  headers: Headers;
-};
-export type putApiUsersUsernameResponseError = (putApiUsersUsernameResponse400 | putApiUsersUsernameResponse403 | putApiUsersUsernameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type putApiUsersUsernameResponse = (putApiUsersUsernameResponseSuccess | putApiUsersUsernameResponseError)
+export type putApiUsersUsernameResponseSuccess =
+	putApiUsersUsernameResponse200 & {
+		headers: Headers;
+	};
+export type putApiUsersUsernameResponseError = (
+	| putApiUsersUsernameResponse400
+	| putApiUsersUsernameResponse403
+	| putApiUsersUsernameResponse404
+) & {
+	headers: Headers;
+};
 
-export const getPutApiUsersUsernameUrl = (username: string,) => {
+export type putApiUsersUsernameResponse =
+	| putApiUsersUsernameResponseSuccess
+	| putApiUsersUsernameResponseError;
 
-
-
-
-  return `/api/users/${username}`
-}
+export const getPutApiUsersUsernameUrl = (username: string) => {
+	return `/api/users/${username}`;
+};
 
 /**
  * @summary Update a Panel user
  */
-export const putApiUsersUsername = async (username: string,
-    userUpdateRequest: UserUpdateRequest, options?: RequestInit): Promise<putApiUsersUsernameResponse> => {
-
-  return apiFetch<putApiUsersUsernameResponse>(getPutApiUsersUsernameUrl(username),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(userUpdateRequest)
-  }
-);}
-
+export const putApiUsersUsername = async (
+	username: string,
+	userUpdateRequest: UserUpdateRequest,
+	options?: RequestInit,
+): Promise<putApiUsersUsernameResponse> => {
+	return apiFetch<putApiUsersUsernameResponse>(
+		getPutApiUsersUsernameUrl(username),
+		{
+			...options,
+			method: "PUT",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(userUpdateRequest),
+		},
+	);
+};
 
 export type deleteApiUsersUsernameResponse204 = {
-  data: void
-  status: 204
-}
+	data: void;
+	status: 204;
+};
 
 export type deleteApiUsersUsernameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type deleteApiUsersUsernameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type deleteApiUsersUsernameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiUsersUsernameResponseSuccess = (deleteApiUsersUsernameResponse204) & {
-  headers: Headers;
-};
-export type deleteApiUsersUsernameResponseError = (deleteApiUsersUsernameResponse400 | deleteApiUsersUsernameResponse403 | deleteApiUsersUsernameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type deleteApiUsersUsernameResponse = (deleteApiUsersUsernameResponseSuccess | deleteApiUsersUsernameResponseError)
+export type deleteApiUsersUsernameResponseSuccess =
+	deleteApiUsersUsernameResponse204 & {
+		headers: Headers;
+	};
+export type deleteApiUsersUsernameResponseError = (
+	| deleteApiUsersUsernameResponse400
+	| deleteApiUsersUsernameResponse403
+	| deleteApiUsersUsernameResponse404
+) & {
+	headers: Headers;
+};
 
-export const getDeleteApiUsersUsernameUrl = (username: string,) => {
+export type deleteApiUsersUsernameResponse =
+	| deleteApiUsersUsernameResponseSuccess
+	| deleteApiUsersUsernameResponseError;
 
-
-
-
-  return `/api/users/${username}`
-}
+export const getDeleteApiUsersUsernameUrl = (username: string) => {
+	return `/api/users/${username}`;
+};
 
 /**
  * @summary Delete a Panel user
  */
-export const deleteApiUsersUsername = async (username: string, options?: RequestInit): Promise<deleteApiUsersUsernameResponse> => {
-
-  return apiFetch<deleteApiUsersUsernameResponse>(getDeleteApiUsersUsernameUrl(username),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
+export const deleteApiUsersUsername = async (
+	username: string,
+	options?: RequestInit,
+): Promise<deleteApiUsersUsernameResponse> => {
+	return apiFetch<deleteApiUsersUsernameResponse>(
+		getDeleteApiUsersUsernameUrl(username),
+		{
+			...options,
+			method: "DELETE",
+		},
+	);
+};

@@ -42,8 +42,8 @@
  */
 
 export interface ConnectionListener {
-  proto: string;
-  address: string;
-  port: number;
-  process?: string;
+	proto: string;
+	address: string;
+	port: number;
+	process?: string;
 }

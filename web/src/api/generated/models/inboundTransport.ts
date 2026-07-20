@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type InboundTransport = typeof InboundTransport[keyof typeof InboundTransport];
-
+export type InboundTransport =
+	(typeof InboundTransport)[keyof typeof InboundTransport];
 
 export const InboundTransport = {
-  tcp: 'tcp',
-  udp: 'udp',
+	tcp: "tcp",
+	udp: "udp",
 } as const;

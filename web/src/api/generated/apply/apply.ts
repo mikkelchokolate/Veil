@@ -40,379 +40,350 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  ApplyHistoryEntry,
-  ApplyPlanResponse,
-  ApplyRequest,
-  ApplyResponse,
-  BadRequestResponse,
-  GetApiApplyJobs200,
-  RURecommendedPreviewRequest,
-  RURecommendedPreviewResponse,
-  ValidationFailedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	ApplyHistoryEntry,
+	ApplyPlanResponse,
+	ApplyRequest,
+	ApplyResponse,
+	BadRequestResponse,
+	GetApiApplyJobs200,
+	RURecommendedPreviewRequest,
+	RURecommendedPreviewResponse,
+	ValidationFailedResponse,
+} from "../models";
 
 export type getApiApplyStateResponse200 = {
-  data: void
-  status: 200
-}
-
-export type getApiApplyStateResponseSuccess = (getApiApplyStateResponse200) & {
-  headers: Headers;
+	data: void;
+	status: 200;
 };
-;
 
-export type getApiApplyStateResponse = (getApiApplyStateResponseSuccess)
+export type getApiApplyStateResponseSuccess = getApiApplyStateResponse200 & {
+	headers: Headers;
+};
+
+export type getApiApplyStateResponse = getApiApplyStateResponseSuccess;
 
 export const getGetApiApplyStateUrl = () => {
-
-
-
-
-  return `/api/apply/state`
-}
+	return `/api/apply/state`;
+};
 
 /**
  * @summary Desired/applied revisions and derived system state
  */
-export const getApiApplyState = async ( options?: RequestInit): Promise<getApiApplyStateResponse> => {
-
-  return apiFetch<getApiApplyStateResponse>(getGetApiApplyStateUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiApplyState = async (
+	options?: RequestInit,
+): Promise<getApiApplyStateResponse> => {
+	return apiFetch<getApiApplyStateResponse>(getGetApiApplyStateUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiApplyJobsResponse200 = {
-  data: GetApiApplyJobs200
-  status: 200
-}
-
-export type getApiApplyJobsResponseSuccess = (getApiApplyJobsResponse200) & {
-  headers: Headers;
+	data: GetApiApplyJobs200;
+	status: 200;
 };
-;
 
-export type getApiApplyJobsResponse = (getApiApplyJobsResponseSuccess)
+export type getApiApplyJobsResponseSuccess = getApiApplyJobsResponse200 & {
+	headers: Headers;
+};
+
+export type getApiApplyJobsResponse = getApiApplyJobsResponseSuccess;
 
 export const getGetApiApplyJobsUrl = () => {
-
-
-
-
-  return `/api/apply/jobs`
-}
+	return `/api/apply/jobs`;
+};
 
 /**
  * @summary List apply jobs (newest first)
  */
-export const getApiApplyJobs = async ( options?: RequestInit): Promise<getApiApplyJobsResponse> => {
-
-  return apiFetch<getApiApplyJobsResponse>(getGetApiApplyJobsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiApplyJobs = async (
+	options?: RequestInit,
+): Promise<getApiApplyJobsResponse> => {
+	return apiFetch<getApiApplyJobsResponse>(getGetApiApplyJobsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiApplyJobsIdResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type getApiApplyJobsIdResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getApiApplyJobsIdResponseSuccess = (getApiApplyJobsIdResponse200) & {
-  headers: Headers;
-};
-export type getApiApplyJobsIdResponseError = (getApiApplyJobsIdResponse404) & {
-  headers: Headers;
+	data: void;
+	status: 404;
 };
 
-export type getApiApplyJobsIdResponse = (getApiApplyJobsIdResponseSuccess | getApiApplyJobsIdResponseError)
+export type getApiApplyJobsIdResponseSuccess = getApiApplyJobsIdResponse200 & {
+	headers: Headers;
+};
+export type getApiApplyJobsIdResponseError = getApiApplyJobsIdResponse404 & {
+	headers: Headers;
+};
 
-export const getGetApiApplyJobsIdUrl = (id: string,) => {
+export type getApiApplyJobsIdResponse =
+	| getApiApplyJobsIdResponseSuccess
+	| getApiApplyJobsIdResponseError;
 
-
-
-
-  return `/api/apply/jobs/${id}`
-}
+export const getGetApiApplyJobsIdUrl = (id: string) => {
+	return `/api/apply/jobs/${id}`;
+};
 
 /**
  * @summary Get one apply job
  */
-export const getApiApplyJobsId = async (id: string, options?: RequestInit): Promise<getApiApplyJobsIdResponse> => {
-
-  return apiFetch<getApiApplyJobsIdResponse>(getGetApiApplyJobsIdUrl(id),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiApplyJobsId = async (
+	id: string,
+	options?: RequestInit,
+): Promise<getApiApplyJobsIdResponse> => {
+	return apiFetch<getApiApplyJobsIdResponse>(getGetApiApplyJobsIdUrl(id), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiApplyJobsIdRetryResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type postApiApplyJobsIdRetryResponse404 = {
-  data: void
-  status: 404
-}
+	data: void;
+	status: 404;
+};
 
 export type postApiApplyJobsIdRetryResponse409 = {
-  data: void
-  status: 409
-}
-
-export type postApiApplyJobsIdRetryResponseSuccess = (postApiApplyJobsIdRetryResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyJobsIdRetryResponseError = (postApiApplyJobsIdRetryResponse404 | postApiApplyJobsIdRetryResponse409) & {
-  headers: Headers;
+	data: void;
+	status: 409;
 };
 
-export type postApiApplyJobsIdRetryResponse = (postApiApplyJobsIdRetryResponseSuccess | postApiApplyJobsIdRetryResponseError)
+export type postApiApplyJobsIdRetryResponseSuccess =
+	postApiApplyJobsIdRetryResponse200 & {
+		headers: Headers;
+	};
+export type postApiApplyJobsIdRetryResponseError = (
+	| postApiApplyJobsIdRetryResponse404
+	| postApiApplyJobsIdRetryResponse409
+) & {
+	headers: Headers;
+};
 
-export const getPostApiApplyJobsIdRetryUrl = (id: string,) => {
+export type postApiApplyJobsIdRetryResponse =
+	| postApiApplyJobsIdRetryResponseSuccess
+	| postApiApplyJobsIdRetryResponseError;
 
-
-
-
-  return `/api/apply/jobs/${id}/retry`
-}
+export const getPostApiApplyJobsIdRetryUrl = (id: string) => {
+	return `/api/apply/jobs/${id}/retry`;
+};
 
 /**
  * @summary Create a NEW apply job for the same desired revision
  */
-export const postApiApplyJobsIdRetry = async (id: string, options?: RequestInit): Promise<postApiApplyJobsIdRetryResponse> => {
-
-  return apiFetch<postApiApplyJobsIdRetryResponse>(getPostApiApplyJobsIdRetryUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
+export const postApiApplyJobsIdRetry = async (
+	id: string,
+	options?: RequestInit,
+): Promise<postApiApplyJobsIdRetryResponse> => {
+	return apiFetch<postApiApplyJobsIdRetryResponse>(
+		getPostApiApplyJobsIdRetryUrl(id),
+		{
+			...options,
+			method: "POST",
+		},
+	);
+};
 
 export type postApiApplyReconcileResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type postApiApplyReconcileResponse409 = {
-  data: void
-  status: 409
-}
-
-export type postApiApplyReconcileResponseSuccess = (postApiApplyReconcileResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyReconcileResponseError = (postApiApplyReconcileResponse409) & {
-  headers: Headers;
+	data: void;
+	status: 409;
 };
 
-export type postApiApplyReconcileResponse = (postApiApplyReconcileResponseSuccess | postApiApplyReconcileResponseError)
+export type postApiApplyReconcileResponseSuccess =
+	postApiApplyReconcileResponse200 & {
+		headers: Headers;
+	};
+export type postApiApplyReconcileResponseError =
+	postApiApplyReconcileResponse409 & {
+		headers: Headers;
+	};
+
+export type postApiApplyReconcileResponse =
+	| postApiApplyReconcileResponseSuccess
+	| postApiApplyReconcileResponseError;
 
 export const getPostApiApplyReconcileUrl = () => {
-
-
-
-
-  return `/api/apply/reconcile`
-}
+	return `/api/apply/reconcile`;
+};
 
 /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
  */
-export const postApiApplyReconcile = async ( options?: RequestInit): Promise<postApiApplyReconcileResponse> => {
-
-  return apiFetch<postApiApplyReconcileResponse>(getPostApiApplyReconcileUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
+export const postApiApplyReconcile = async (
+	options?: RequestInit,
+): Promise<postApiApplyReconcileResponse> => {
+	return apiFetch<postApiApplyReconcileResponse>(
+		getPostApiApplyReconcileUrl(),
+		{
+			...options,
+			method: "POST",
+		},
+	);
+};
 
 export type postApiApplyResponse200 = {
-  data: ApplyResponse
-  status: 200
-}
+	data: ApplyResponse;
+	status: 200;
+};
 
 export type postApiApplyResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiApplyResponseSuccess = (postApiApplyResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyResponseError = (postApiApplyResponse400) & {
-  headers: Headers;
+	data: BadRequestResponse;
+	status: 400;
 };
 
-export type postApiApplyResponse = (postApiApplyResponseSuccess | postApiApplyResponseError)
+export type postApiApplyResponseSuccess = postApiApplyResponse200 & {
+	headers: Headers;
+};
+export type postApiApplyResponseError = postApiApplyResponse400 & {
+	headers: Headers;
+};
+
+export type postApiApplyResponse =
+	| postApiApplyResponseSuccess
+	| postApiApplyResponseError;
 
 export const getPostApiApplyUrl = () => {
-
-
-
-
-  return `/api/apply`
-}
+	return `/api/apply`;
+};
 
 /**
  * @summary Stage and optionally promote current management state
  */
-export const postApiApply = async (applyRequest: ApplyRequest, options?: RequestInit): Promise<postApiApplyResponse> => {
-
-  return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(applyRequest)
-  }
-);}
-
+export const postApiApply = async (
+	applyRequest: ApplyRequest,
+	options?: RequestInit,
+): Promise<postApiApplyResponse> => {
+	return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(applyRequest),
+	});
+};
 
 export type postApiApplyPlanResponse200 = {
-  data: ApplyPlanResponse
-  status: 200
-}
+	data: ApplyPlanResponse;
+	status: 200;
+};
 
 export type postApiApplyPlanResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiApplyPlanResponseSuccess = (postApiApplyPlanResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyPlanResponseError = (postApiApplyPlanResponse422) & {
-  headers: Headers;
+	data: ValidationFailedResponse;
+	status: 422;
 };
 
-export type postApiApplyPlanResponse = (postApiApplyPlanResponseSuccess | postApiApplyPlanResponseError)
+export type postApiApplyPlanResponseSuccess = postApiApplyPlanResponse200 & {
+	headers: Headers;
+};
+export type postApiApplyPlanResponseError = postApiApplyPlanResponse422 & {
+	headers: Headers;
+};
+
+export type postApiApplyPlanResponse =
+	| postApiApplyPlanResponseSuccess
+	| postApiApplyPlanResponseError;
 
 export const getPostApiApplyPlanUrl = () => {
-
-
-
-
-  return `/api/apply/plan`
-}
+	return `/api/apply/plan`;
+};
 
 /**
  * @summary Preview the apply plan without writing live files
  */
-export const postApiApplyPlan = async ( options?: RequestInit): Promise<postApiApplyPlanResponse> => {
-
-  return apiFetch<postApiApplyPlanResponse>(getPostApiApplyPlanUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
+export const postApiApplyPlan = async (
+	options?: RequestInit,
+): Promise<postApiApplyPlanResponse> => {
+	return apiFetch<postApiApplyPlanResponse>(getPostApiApplyPlanUrl(), {
+		...options,
+		method: "POST",
+	});
+};
 
 export type getApiApplyHistoryResponse200 = {
-  data: ApplyHistoryEntry[]
-  status: 200
-}
-
-export type getApiApplyHistoryResponseSuccess = (getApiApplyHistoryResponse200) & {
-  headers: Headers;
+	data: ApplyHistoryEntry[];
+	status: 200;
 };
-;
 
-export type getApiApplyHistoryResponse = (getApiApplyHistoryResponseSuccess)
+export type getApiApplyHistoryResponseSuccess =
+	getApiApplyHistoryResponse200 & {
+		headers: Headers;
+	};
+
+export type getApiApplyHistoryResponse = getApiApplyHistoryResponseSuccess;
 
 export const getGetApiApplyHistoryUrl = () => {
-
-
-
-
-  return `/api/apply/history`
-}
+	return `/api/apply/history`;
+};
 
 /**
  * @summary Apply workflow history
  */
-export const getApiApplyHistory = async ( options?: RequestInit): Promise<getApiApplyHistoryResponse> => {
-
-  return apiFetch<getApiApplyHistoryResponse>(getGetApiApplyHistoryUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiApplyHistory = async (
+	options?: RequestInit,
+): Promise<getApiApplyHistoryResponse> => {
+	return apiFetch<getApiApplyHistoryResponse>(getGetApiApplyHistoryUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiProfilesRuRecommendedPreviewResponse200 = {
-  data: RURecommendedPreviewResponse
-  status: 200
-}
+	data: RURecommendedPreviewResponse;
+	status: 200;
+};
 
 export type postApiProfilesRuRecommendedPreviewResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiProfilesRuRecommendedPreviewResponseSuccess = (postApiProfilesRuRecommendedPreviewResponse200) & {
-  headers: Headers;
-};
-export type postApiProfilesRuRecommendedPreviewResponseError = (postApiProfilesRuRecommendedPreviewResponse400) & {
-  headers: Headers;
+	data: BadRequestResponse;
+	status: 400;
 };
 
-export type postApiProfilesRuRecommendedPreviewResponse = (postApiProfilesRuRecommendedPreviewResponseSuccess | postApiProfilesRuRecommendedPreviewResponseError)
+export type postApiProfilesRuRecommendedPreviewResponseSuccess =
+	postApiProfilesRuRecommendedPreviewResponse200 & {
+		headers: Headers;
+	};
+export type postApiProfilesRuRecommendedPreviewResponseError =
+	postApiProfilesRuRecommendedPreviewResponse400 & {
+		headers: Headers;
+	};
+
+export type postApiProfilesRuRecommendedPreviewResponse =
+	| postApiProfilesRuRecommendedPreviewResponseSuccess
+	| postApiProfilesRuRecommendedPreviewResponseError;
 
 export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
-
-
-
-
-  return `/api/profiles/ru-recommended/preview`
-}
+	return `/api/profiles/ru-recommended/preview`;
+};
 
 /**
  * @summary Preview the ru-recommended install profile
  */
-export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: RequestInit): Promise<postApiProfilesRuRecommendedPreviewResponse> => {
-
-  return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(getPostApiProfilesRuRecommendedPreviewUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(rURecommendedPreviewRequest)
-  }
-);}
-
-
+export const postApiProfilesRuRecommendedPreview = async (
+	rURecommendedPreviewRequest: RURecommendedPreviewRequest,
+	options?: RequestInit,
+): Promise<postApiProfilesRuRecommendedPreviewResponse> => {
+	return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(
+		getPostApiProfilesRuRecommendedPreviewUrl(),
+		{
+			...options,
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(rURecommendedPreviewRequest),
+		},
+	);
+};

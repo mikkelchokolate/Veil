@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useIsAdmin } from "../auth/AuthContext";
-import { useApplyState } from "../apply/ApplyStatusIndicator";
-import type { ApplyJob } from "../api/generated/models";
 import { Link } from "@tanstack/react-router";
+import { ApiError, apiFetch } from "../api/fetcher";
+import type { ApplyJob } from "../api/generated/models";
+import { useApplyState } from "../apply/ApplyStatusIndicator";
+import { useIsAdmin } from "../auth/AuthContext";
 
 function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({
@@ -41,7 +41,8 @@ export function ApplyPage() {
 	});
 
 	const retry = useMutation({
-		mutationFn: (jobId: string) => apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
+		mutationFn: (jobId: string) =>
+			apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
 		onSuccess: () => void qc.invalidateQueries({ queryKey: ["apply"] }),
 	});
 
@@ -60,22 +61,28 @@ export function ApplyPage() {
 					<>
 						<p>
 							<strong>State:</strong>{" "}
-							<span className={`badge ${STATUS_CLS[s.state] ?? ""}`}>{s.state}</span>
+							<span className={`badge ${STATUS_CLS[s.state] ?? ""}`}>
+								{s.state}
+							</span>
 						</p>
 						<p>
-							<strong>Desired revision:</strong> <span className="mono">{s.desiredRevision}</span>
+							<strong>Desired revision:</strong>{" "}
+							<span className="mono">{s.desiredRevision}</span>
 						</p>
 						<p>
-							<strong>Applied (runtime) revision:</strong> <span className="mono">{s.appliedRevision}</span>
+							<strong>Applied (runtime) revision:</strong>{" "}
+							<span className="mono">{s.appliedRevision}</span>
 						</p>
 						{drift ? (
 							<p className="badge badge-warning">
-								Runtime is behind desired — {s.appliedRevision} → {s.desiredRevision}
+								Runtime is behind desired — {s.appliedRevision} →{" "}
+								{s.desiredRevision}
 							</p>
 						) : null}
 						{s.lastError?.message ? (
 							<p className="form-error">
-								Last error{s.lastError.code ? ` (${s.lastError.code})` : ""}: {s.lastError.message}
+								Last error{s.lastError.code ? ` (${s.lastError.code})` : ""}:{" "}
+								{s.lastError.message}
 							</p>
 						) : null}
 						{isAdmin && drift ? (
@@ -90,7 +97,9 @@ export function ApplyPage() {
 						) : null}
 						{reconcile.isError ? (
 							<p className="form-error">
-								{reconcile.error instanceof ApiError ? reconcile.error.message : "Reconcile failed"}
+								{reconcile.error instanceof ApiError
+									? reconcile.error.message
+									: "Reconcile failed"}
 							</p>
 						) : null}
 					</>
@@ -128,13 +137,19 @@ export function ApplyPage() {
 										<tr key={j.id}>
 											<td className="muted">{fmtTime(j.createdAt)}</td>
 											<td className="mono">
-												<Link to="/apply/jobs/$jobId" params={{ jobId: j.id }} className="mono">
+												<Link
+													to="/apply/jobs/$jobId"
+													params={{ jobId: j.id }}
+													className="mono"
+												>
 													{j.baseRevision} → {j.desiredRevision}
 												</Link>
 											</td>
 											<td className="muted">{j.trigger}</td>
 											<td>
-												<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>{j.status}</span>
+												<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>
+													{j.status}
+												</span>
 											</td>
 											<td className="muted" style={{ maxWidth: 320 }}>
 												{j.errorMessage ? (

@@ -40,20 +40,20 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ConnectionsStats } from './connectionsStats.ts';
-import type { DiskStats } from './diskStats.ts';
-import type { NetworkStats } from './networkStats.ts';
-import type { ProcessesStats } from './processesStats.ts';
-import type { RuntimeObservationErrors } from './runtimeObservationErrors.ts';
-import type { SystemStats } from './systemStats.ts';
-import type { TLSCertInfo } from './tLSCertInfo.ts';
+import type { ConnectionsStats } from "./connectionsStats.ts";
+import type { DiskStats } from "./diskStats.ts";
+import type { NetworkStats } from "./networkStats.ts";
+import type { ProcessesStats } from "./processesStats.ts";
+import type { RuntimeObservationErrors } from "./runtimeObservationErrors.ts";
+import type { SystemStats } from "./systemStats.ts";
+import type { TLSCertInfo } from "./tLSCertInfo.ts";
 
 export interface RuntimeObservation {
-  system: SystemStats;
-  tls: TLSCertInfo;
-  network: NetworkStats;
-  connections: ConnectionsStats;
-  processes: ProcessesStats;
-  disk: DiskStats;
-  errors?: RuntimeObservationErrors;
+	system: SystemStats;
+	tls: TLSCertInfo;
+	network: NetworkStats;
+	connections: ConnectionsStats;
+	processes: ProcessesStats;
+	disk: DiskStats;
+	errors?: RuntimeObservationErrors;
 }

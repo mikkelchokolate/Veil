@@ -40,26 +40,26 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BackupArchiveFile } from './backupArchiveFile.ts';
-import type { BackupVerificationReportEncryptionVersion } from './backupVerificationReportEncryptionVersion.ts';
+import type { BackupArchiveFile } from "./backupArchiveFile.ts";
+import type { BackupVerificationReportEncryptionVersion } from "./backupVerificationReportEncryptionVersion.ts";
 
 export interface BackupVerificationReport {
-  /**
-     * Zero for legacy archives without a manifest.
-     * @minimum 0
-     */
-  formatVersion: number;
-  /** Zero for unencrypted archives. */
-  encryptionVersion: BackupVerificationReportEncryptionVersion;
-  encrypted: boolean;
-  legacy: boolean;
-  createdAt?: string;
-  veilVersion?: string;
-  /** @minimum 1 */
-  stateSchemaVersion: number;
-  /**
-     * @minItems 2
-     * @maxItems 2
-     */
-  files: BackupArchiveFile[];
+	/**
+	 * Zero for legacy archives without a manifest.
+	 * @minimum 0
+	 */
+	formatVersion: number;
+	/** Zero for unencrypted archives. */
+	encryptionVersion: BackupVerificationReportEncryptionVersion;
+	encrypted: boolean;
+	legacy: boolean;
+	createdAt?: string;
+	veilVersion?: string;
+	/** @minimum 1 */
+	stateSchemaVersion: number;
+	/**
+	 * @minItems 2
+	 * @maxItems 2
+	 */
+	files: BackupArchiveFile[];
 }

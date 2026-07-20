@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { AuditRecord } from './auditRecord.ts';
+import type { AuditRecord } from "./auditRecord.ts";
 
 export interface AuditListResponse {
-  items: AuditRecord[];
-  nextBefore?: string;
+	items: AuditRecord[];
+	nextBefore?: string;
 }

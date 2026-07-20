@@ -40,244 +40,242 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  BadRequestResponse,
-  ForbiddenResponse,
-  Inbound,
-  NotFoundResponse,
-  UnauthorizedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	BadRequestResponse,
+	ForbiddenResponse,
+	Inbound,
+	NotFoundResponse,
+	UnauthorizedResponse,
+} from "../models";
 
 export type getApiInboundsResponse200 = {
-  data: Inbound[]
-  status: 200
-}
+	data: Inbound[];
+	status: 200;
+};
 
 export type getApiInboundsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiInboundsResponseSuccess = (getApiInboundsResponse200) & {
-  headers: Headers;
-};
-export type getApiInboundsResponseError = (getApiInboundsResponse401) & {
-  headers: Headers;
+	data: UnauthorizedResponse;
+	status: 401;
 };
 
-export type getApiInboundsResponse = (getApiInboundsResponseSuccess | getApiInboundsResponseError)
+export type getApiInboundsResponseSuccess = getApiInboundsResponse200 & {
+	headers: Headers;
+};
+export type getApiInboundsResponseError = getApiInboundsResponse401 & {
+	headers: Headers;
+};
+
+export type getApiInboundsResponse =
+	| getApiInboundsResponseSuccess
+	| getApiInboundsResponseError;
 
 export const getGetApiInboundsUrl = () => {
-
-
-
-
-  return `/api/inbounds`
-}
+	return `/api/inbounds`;
+};
 
 /**
  * @summary List inbounds
  */
-export const getApiInbounds = async ( options?: RequestInit): Promise<getApiInboundsResponse> => {
-
-  return apiFetch<getApiInboundsResponse>(getGetApiInboundsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiInbounds = async (
+	options?: RequestInit,
+): Promise<getApiInboundsResponse> => {
+	return apiFetch<getApiInboundsResponse>(getGetApiInboundsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiInboundsResponse201 = {
-  data: Inbound
-  status: 201
-}
+	data: Inbound;
+	status: 201;
+};
 
 export type postApiInboundsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type postApiInboundsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiInboundsResponseSuccess = (postApiInboundsResponse201) & {
-  headers: Headers;
-};
-export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type postApiInboundsResponse = (postApiInboundsResponseSuccess | postApiInboundsResponseError)
+export type postApiInboundsResponseSuccess = postApiInboundsResponse201 & {
+	headers: Headers;
+};
+export type postApiInboundsResponseError = (
+	| postApiInboundsResponse400
+	| postApiInboundsResponse403
+) & {
+	headers: Headers;
+};
+
+export type postApiInboundsResponse =
+	| postApiInboundsResponseSuccess
+	| postApiInboundsResponseError;
 
 export const getPostApiInboundsUrl = () => {
-
-
-
-
-  return `/api/inbounds`
-}
+	return `/api/inbounds`;
+};
 
 /**
  * @summary Create an inbound
  */
-export const postApiInbounds = async (inbound: Inbound, options?: RequestInit): Promise<postApiInboundsResponse> => {
-
-  return apiFetch<postApiInboundsResponse>(getPostApiInboundsUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(inbound)
-  }
-);}
-
+export const postApiInbounds = async (
+	inbound: Inbound,
+	options?: RequestInit,
+): Promise<postApiInboundsResponse> => {
+	return apiFetch<postApiInboundsResponse>(getPostApiInboundsUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(inbound),
+	});
+};
 
 export type getApiInboundsNameResponse200 = {
-  data: Inbound
-  status: 200
-}
+	data: Inbound;
+	status: 200;
+};
 
 export type getApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiInboundsNameResponseSuccess = (getApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type getApiInboundsNameResponseError = (getApiInboundsNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type getApiInboundsNameResponse = (getApiInboundsNameResponseSuccess | getApiInboundsNameResponseError)
+export type getApiInboundsNameResponseSuccess =
+	getApiInboundsNameResponse200 & {
+		headers: Headers;
+	};
+export type getApiInboundsNameResponseError = getApiInboundsNameResponse404 & {
+	headers: Headers;
+};
 
-export const getGetApiInboundsNameUrl = (name: string,) => {
+export type getApiInboundsNameResponse =
+	| getApiInboundsNameResponseSuccess
+	| getApiInboundsNameResponseError;
 
-
-
-
-  return `/api/inbounds/${name}`
-}
+export const getGetApiInboundsNameUrl = (name: string) => {
+	return `/api/inbounds/${name}`;
+};
 
 /**
  * @summary Read one inbound
  */
-export const getApiInboundsName = async (name: string, options?: RequestInit): Promise<getApiInboundsNameResponse> => {
-
-  return apiFetch<getApiInboundsNameResponse>(getGetApiInboundsNameUrl(name),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiInboundsName = async (
+	name: string,
+	options?: RequestInit,
+): Promise<getApiInboundsNameResponse> => {
+	return apiFetch<getApiInboundsNameResponse>(getGetApiInboundsNameUrl(name), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type putApiInboundsNameResponse200 = {
-  data: Inbound
-  status: 200
-}
+	data: Inbound;
+	status: 200;
+};
 
 export type putApiInboundsNameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type putApiInboundsNameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type putApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiInboundsNameResponseSuccess = (putApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type putApiInboundsNameResponse = (putApiInboundsNameResponseSuccess | putApiInboundsNameResponseError)
+export type putApiInboundsNameResponseSuccess =
+	putApiInboundsNameResponse200 & {
+		headers: Headers;
+	};
+export type putApiInboundsNameResponseError = (
+	| putApiInboundsNameResponse400
+	| putApiInboundsNameResponse403
+	| putApiInboundsNameResponse404
+) & {
+	headers: Headers;
+};
 
-export const getPutApiInboundsNameUrl = (name: string,) => {
+export type putApiInboundsNameResponse =
+	| putApiInboundsNameResponseSuccess
+	| putApiInboundsNameResponseError;
 
-
-
-
-  return `/api/inbounds/${name}`
-}
+export const getPutApiInboundsNameUrl = (name: string) => {
+	return `/api/inbounds/${name}`;
+};
 
 /**
  * @summary Update an inbound
  */
-export const putApiInboundsName = async (name: string,
-    inbound: Inbound, options?: RequestInit): Promise<putApiInboundsNameResponse> => {
-
-  return apiFetch<putApiInboundsNameResponse>(getPutApiInboundsNameUrl(name),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(inbound)
-  }
-);}
-
+export const putApiInboundsName = async (
+	name: string,
+	inbound: Inbound,
+	options?: RequestInit,
+): Promise<putApiInboundsNameResponse> => {
+	return apiFetch<putApiInboundsNameResponse>(getPutApiInboundsNameUrl(name), {
+		...options,
+		method: "PUT",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(inbound),
+	});
+};
 
 export type deleteApiInboundsNameResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type deleteApiInboundsNameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
+	data: ForbiddenResponse;
+	status: 403;
+};
 
 export type deleteApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiInboundsNameResponseSuccess = (deleteApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type deleteApiInboundsNameResponse = (deleteApiInboundsNameResponseSuccess | deleteApiInboundsNameResponseError)
+export type deleteApiInboundsNameResponseSuccess =
+	deleteApiInboundsNameResponse200 & {
+		headers: Headers;
+	};
+export type deleteApiInboundsNameResponseError = (
+	| deleteApiInboundsNameResponse403
+	| deleteApiInboundsNameResponse404
+) & {
+	headers: Headers;
+};
 
-export const getDeleteApiInboundsNameUrl = (name: string,) => {
+export type deleteApiInboundsNameResponse =
+	| deleteApiInboundsNameResponseSuccess
+	| deleteApiInboundsNameResponseError;
 
-
-
-
-  return `/api/inbounds/${name}`
-}
+export const getDeleteApiInboundsNameUrl = (name: string) => {
+	return `/api/inbounds/${name}`;
+};
 
 /**
  * @summary Delete an inbound
  */
-export const deleteApiInboundsName = async (name: string, options?: RequestInit): Promise<deleteApiInboundsNameResponse> => {
-
-  return apiFetch<deleteApiInboundsNameResponse>(getDeleteApiInboundsNameUrl(name),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
+export const deleteApiInboundsName = async (
+	name: string,
+	options?: RequestInit,
+): Promise<deleteApiInboundsNameResponse> => {
+	return apiFetch<deleteApiInboundsNameResponse>(
+		getDeleteApiInboundsNameUrl(name),
+		{
+			...options,
+			method: "DELETE",
+		},
+	);
+};

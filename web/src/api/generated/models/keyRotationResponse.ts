@@ -42,7 +42,7 @@
  */
 
 export interface KeyRotationResponse {
-  success: true;
-  /** @minimum 0 */
-  revokedSessions: number;
+	success: true;
+	/** @minimum 0 */
+	revokedSessions: number;
 }

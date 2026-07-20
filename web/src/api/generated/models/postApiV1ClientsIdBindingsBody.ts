@@ -42,7 +42,7 @@
  */
 
 export type PostApiV1ClientsIdBindingsBody = {
-  inboundId?: string;
-  credential?: string;
-  enabled?: boolean;
+	inboundId?: string;
+	credential?: string;
+	enabled?: boolean;
 };

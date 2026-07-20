@@ -40,10 +40,10 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorObject } from './errorObject.ts';
-import type { ValidationIssue } from './validationIssue.ts';
+import type { ErrorObject } from "./errorObject.ts";
+import type { ValidationIssue } from "./validationIssue.ts";
 
 export interface ValidationFailure {
-  error: ErrorObject;
-  issues: ValidationIssue[];
+	error: ErrorObject;
+	issues: ValidationIssue[];
 }

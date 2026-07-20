@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
-import { apiFetch, ApiError } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { BindingView, ClientView } from "../api/generated/models";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -29,36 +29,53 @@ export function ClientDetailPage() {
 			),
 		onSuccess: (res, bindingId) => {
 			if (res.plaintext) {
-				setRevealed((prev) => ({ ...prev, [bindingId]: res.plaintext as string }));
+				setRevealed((prev) => ({
+					...prev,
+					[bindingId]: res.plaintext as string,
+				}));
 			}
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Rotate failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Rotate failed"),
 	});
 
 	const toggleBinding = useMutation({
 		mutationFn: async (b: BindingView) =>
-			apiFetch(`/api/v1/clients/${clientId}/bindings/${encodeURIComponent(b.id)}`, {
-				method: "PATCH",
-				body: JSON.stringify({ enabled: !b.enabled, version: b.version ?? 0 }),
-			}),
+			apiFetch(
+				`/api/v1/clients/${clientId}/bindings/${encodeURIComponent(b.id)}`,
+				{
+					method: "PATCH",
+					body: JSON.stringify({
+						enabled: !b.enabled,
+						version: b.version ?? 0,
+					}),
+				},
+			),
 		onSuccess: () => {
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
-		onError: (err) => setError(err instanceof ApiError ? err.message : "Update failed"),
+		onError: (err) =>
+			setError(err instanceof ApiError ? err.message : "Update failed"),
 	});
 
 	if (client.isLoading) {
-		return <div className="card"><p className="muted">Loading…</p></div>;
+		return (
+			<div className="card">
+				<p className="muted">Loading…</p>
+			</div>
+		);
 	}
 	if (client.isError || !client.data) {
 		return (
 			<div className="card">
 				<p className="form-error">
-					{client.error instanceof ApiError ? client.error.message : "Failed to load client"}
+					{client.error instanceof ApiError
+						? client.error.message
+						: "Failed to load client"}
 				</p>
 			</div>
 		);
@@ -91,17 +108,35 @@ export function ClientDetailPage() {
 			</div>
 
 			{error ? (
-				<div className="card"><p className="form-error">{error}</p></div>
+				<div className="card">
+					<p className="form-error">{error}</p>
+				</div>
 			) : null}
 
 			{tab === "overview" ? (
 				<div className="card">
 					<h2>Overview</h2>
-					<p><strong>Status:</strong> {c.status}</p>
-					{c.email ? <p><strong>Email:</strong> {c.email}</p> : null}
-					<p><strong>Enabled:</strong> {c.enabled ? "yes" : "no"}</p>
-					<p><strong>Quota:</strong> {c.quotaBytes != null ? `${c.quotaBytes} bytes` : "unlimited"}</p>
-					<p><strong>Expires:</strong> {c.expiresAt ? new Date(c.expiresAt * 1000).toLocaleString() : "never"}</p>
+					<p>
+						<strong>Status:</strong> {c.status}
+					</p>
+					{c.email ? (
+						<p>
+							<strong>Email:</strong> {c.email}
+						</p>
+					) : null}
+					<p>
+						<strong>Enabled:</strong> {c.enabled ? "yes" : "no"}
+					</p>
+					<p>
+						<strong>Quota:</strong>{" "}
+						{c.quotaBytes != null ? `${c.quotaBytes} bytes` : "unlimited"}
+					</p>
+					<p>
+						<strong>Expires:</strong>{" "}
+						{c.expiresAt
+							? new Date(c.expiresAt * 1000).toLocaleString()
+							: "never"}
+					</p>
 				</div>
 			) : null}
 
@@ -112,14 +147,24 @@ export function ClientDetailPage() {
 						<p className="muted">No bindings.</p>
 					) : (
 						(c.bindings ?? []).map((b) => (
-							<div key={b.id} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: 12, marginBottom: 8 }}>
+							<div
+								key={b.id}
+								style={{
+									border: "1px solid var(--border)",
+									borderRadius: 6,
+									padding: 12,
+									marginBottom: 8,
+								}}
+							>
 								<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
 									<strong>{b.inboundId}</strong>
 									<span className={`badge${b.enabled ? " badge-success" : ""}`}>
 										{b.enabled ? "enabled" : "disabled"}
 									</span>
 									{b.capability?.protocol ? (
-										<span className="muted" style={{ fontSize: 12 }}>{b.capability.protocol}</span>
+										<span className="muted" style={{ fontSize: 12 }}>
+											{b.capability.protocol}
+										</span>
 									) : null}
 									<div style={{ flex: 1 }} />
 									<button
@@ -141,13 +186,18 @@ export function ClientDetailPage() {
 								</div>
 								{b.credential ? (
 									<div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-										credential {b.credential.configured ? "configured" : "not set"}
-										{b.credential.version != null ? ` · v${b.credential.version}` : ""}
+										credential{" "}
+										{b.credential.configured ? "configured" : "not set"}
+										{b.credential.version != null
+											? ` · v${b.credential.version}`
+											: ""}
 									</div>
 								) : null}
 								{revealed[b.id] ? (
 									<div style={{ marginTop: 8 }}>
-										<div className="muted" style={{ fontSize: 12 }}>New credential (copy now — shown once):</div>
+										<div className="muted" style={{ fontSize: 12 }}>
+											New credential (copy now — shown once):
+										</div>
 										<code className="mono">{revealed[b.id]}</code>
 									</div>
 								) : null}
@@ -157,7 +207,9 @@ export function ClientDetailPage() {
 				</div>
 			) : null}
 
-			{tab === "subscription" ? <SubscriptionTokensPanel clientId={clientId} /> : null}
+			{tab === "subscription" ? (
+				<SubscriptionTokensPanel clientId={clientId} />
+			) : null}
 
 			{tab === "traffic" ? <ClientTrafficPanel clientId={clientId} /> : null}
 		</>

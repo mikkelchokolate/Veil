@@ -40,298 +40,291 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  BadRequestResponse,
-  NotFoundResponse,
-  RoutingPresetResponse,
-  RoutingRule
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	BadRequestResponse,
+	NotFoundResponse,
+	RoutingPresetResponse,
+	RoutingRule,
+} from "../models";
 
 export type getApiRoutingRulesResponse200 = {
-  data: RoutingRule[]
-  status: 200
-}
-
-export type getApiRoutingRulesResponseSuccess = (getApiRoutingRulesResponse200) & {
-  headers: Headers;
+	data: RoutingRule[];
+	status: 200;
 };
-;
 
-export type getApiRoutingRulesResponse = (getApiRoutingRulesResponseSuccess)
+export type getApiRoutingRulesResponseSuccess =
+	getApiRoutingRulesResponse200 & {
+		headers: Headers;
+	};
+
+export type getApiRoutingRulesResponse = getApiRoutingRulesResponseSuccess;
 
 export const getGetApiRoutingRulesUrl = () => {
-
-
-
-
-  return `/api/routing/rules`
-}
+	return `/api/routing/rules`;
+};
 
 /**
  * @summary List routing rules
  */
-export const getApiRoutingRules = async ( options?: RequestInit): Promise<getApiRoutingRulesResponse> => {
-
-  return apiFetch<getApiRoutingRulesResponse>(getGetApiRoutingRulesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiRoutingRules = async (
+	options?: RequestInit,
+): Promise<getApiRoutingRulesResponse> => {
+	return apiFetch<getApiRoutingRulesResponse>(getGetApiRoutingRulesUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiRoutingRulesResponse201 = {
-  data: RoutingRule
-  status: 201
-}
+	data: RoutingRule;
+	status: 201;
+};
 
 export type postApiRoutingRulesResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiRoutingRulesResponseSuccess = (postApiRoutingRulesResponse201) & {
-  headers: Headers;
-};
-export type postApiRoutingRulesResponseError = (postApiRoutingRulesResponse400) & {
-  headers: Headers;
+	data: BadRequestResponse;
+	status: 400;
 };
 
-export type postApiRoutingRulesResponse = (postApiRoutingRulesResponseSuccess | postApiRoutingRulesResponseError)
+export type postApiRoutingRulesResponseSuccess =
+	postApiRoutingRulesResponse201 & {
+		headers: Headers;
+	};
+export type postApiRoutingRulesResponseError =
+	postApiRoutingRulesResponse400 & {
+		headers: Headers;
+	};
+
+export type postApiRoutingRulesResponse =
+	| postApiRoutingRulesResponseSuccess
+	| postApiRoutingRulesResponseError;
 
 export const getPostApiRoutingRulesUrl = () => {
-
-
-
-
-  return `/api/routing/rules`
-}
+	return `/api/routing/rules`;
+};
 
 /**
  * @summary Create a routing rule
  */
-export const postApiRoutingRules = async (routingRule: RoutingRule, options?: RequestInit): Promise<postApiRoutingRulesResponse> => {
-
-  return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(routingRule)
-  }
-);}
-
+export const postApiRoutingRules = async (
+	routingRule: RoutingRule,
+	options?: RequestInit,
+): Promise<postApiRoutingRulesResponse> => {
+	return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(routingRule),
+	});
+};
 
 export type getApiRoutingRulesNameResponse200 = {
-  data: RoutingRule
-  status: 200
-}
+	data: RoutingRule;
+	status: 200;
+};
 
 export type getApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiRoutingRulesNameResponseSuccess = (getApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type getApiRoutingRulesNameResponseError = (getApiRoutingRulesNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type getApiRoutingRulesNameResponse = (getApiRoutingRulesNameResponseSuccess | getApiRoutingRulesNameResponseError)
+export type getApiRoutingRulesNameResponseSuccess =
+	getApiRoutingRulesNameResponse200 & {
+		headers: Headers;
+	};
+export type getApiRoutingRulesNameResponseError =
+	getApiRoutingRulesNameResponse404 & {
+		headers: Headers;
+	};
 
-export const getGetApiRoutingRulesNameUrl = (name: string,) => {
+export type getApiRoutingRulesNameResponse =
+	| getApiRoutingRulesNameResponseSuccess
+	| getApiRoutingRulesNameResponseError;
 
-
-
-
-  return `/api/routing/rules/${name}`
-}
+export const getGetApiRoutingRulesNameUrl = (name: string) => {
+	return `/api/routing/rules/${name}`;
+};
 
 /**
  * @summary Read a routing rule
  */
-export const getApiRoutingRulesName = async (name: string, options?: RequestInit): Promise<getApiRoutingRulesNameResponse> => {
-
-  return apiFetch<getApiRoutingRulesNameResponse>(getGetApiRoutingRulesNameUrl(name),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiRoutingRulesName = async (
+	name: string,
+	options?: RequestInit,
+): Promise<getApiRoutingRulesNameResponse> => {
+	return apiFetch<getApiRoutingRulesNameResponse>(
+		getGetApiRoutingRulesNameUrl(name),
+		{
+			...options,
+			method: "GET",
+		},
+	);
+};
 
 export type putApiRoutingRulesNameResponse200 = {
-  data: RoutingRule
-  status: 200
-}
+	data: RoutingRule;
+	status: 200;
+};
 
 export type putApiRoutingRulesNameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type putApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiRoutingRulesNameResponseSuccess = (putApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type putApiRoutingRulesNameResponseError = (putApiRoutingRulesNameResponse400 | putApiRoutingRulesNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type putApiRoutingRulesNameResponse = (putApiRoutingRulesNameResponseSuccess | putApiRoutingRulesNameResponseError)
+export type putApiRoutingRulesNameResponseSuccess =
+	putApiRoutingRulesNameResponse200 & {
+		headers: Headers;
+	};
+export type putApiRoutingRulesNameResponseError = (
+	| putApiRoutingRulesNameResponse400
+	| putApiRoutingRulesNameResponse404
+) & {
+	headers: Headers;
+};
 
-export const getPutApiRoutingRulesNameUrl = (name: string,) => {
+export type putApiRoutingRulesNameResponse =
+	| putApiRoutingRulesNameResponseSuccess
+	| putApiRoutingRulesNameResponseError;
 
-
-
-
-  return `/api/routing/rules/${name}`
-}
+export const getPutApiRoutingRulesNameUrl = (name: string) => {
+	return `/api/routing/rules/${name}`;
+};
 
 /**
  * @summary Update a routing rule
  */
-export const putApiRoutingRulesName = async (name: string,
-    routingRule: RoutingRule, options?: RequestInit): Promise<putApiRoutingRulesNameResponse> => {
-
-  return apiFetch<putApiRoutingRulesNameResponse>(getPutApiRoutingRulesNameUrl(name),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(routingRule)
-  }
-);}
-
+export const putApiRoutingRulesName = async (
+	name: string,
+	routingRule: RoutingRule,
+	options?: RequestInit,
+): Promise<putApiRoutingRulesNameResponse> => {
+	return apiFetch<putApiRoutingRulesNameResponse>(
+		getPutApiRoutingRulesNameUrl(name),
+		{
+			...options,
+			method: "PUT",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(routingRule),
+		},
+	);
+};
 
 export type deleteApiRoutingRulesNameResponse200 = {
-  data: void
-  status: 200
-}
+	data: void;
+	status: 200;
+};
 
 export type deleteApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiRoutingRulesNameResponseSuccess = (deleteApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type deleteApiRoutingRulesNameResponseError = (deleteApiRoutingRulesNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type deleteApiRoutingRulesNameResponse = (deleteApiRoutingRulesNameResponseSuccess | deleteApiRoutingRulesNameResponseError)
+export type deleteApiRoutingRulesNameResponseSuccess =
+	deleteApiRoutingRulesNameResponse200 & {
+		headers: Headers;
+	};
+export type deleteApiRoutingRulesNameResponseError =
+	deleteApiRoutingRulesNameResponse404 & {
+		headers: Headers;
+	};
 
-export const getDeleteApiRoutingRulesNameUrl = (name: string,) => {
+export type deleteApiRoutingRulesNameResponse =
+	| deleteApiRoutingRulesNameResponseSuccess
+	| deleteApiRoutingRulesNameResponseError;
 
-
-
-
-  return `/api/routing/rules/${name}`
-}
+export const getDeleteApiRoutingRulesNameUrl = (name: string) => {
+	return `/api/routing/rules/${name}`;
+};
 
 /**
  * @summary Delete a routing rule
  */
-export const deleteApiRoutingRulesName = async (name: string, options?: RequestInit): Promise<deleteApiRoutingRulesNameResponse> => {
-
-  return apiFetch<deleteApiRoutingRulesNameResponse>(getDeleteApiRoutingRulesNameUrl(name),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
+export const deleteApiRoutingRulesName = async (
+	name: string,
+	options?: RequestInit,
+): Promise<deleteApiRoutingRulesNameResponse> => {
+	return apiFetch<deleteApiRoutingRulesNameResponse>(
+		getDeleteApiRoutingRulesNameUrl(name),
+		{
+			...options,
+			method: "DELETE",
+		},
+	);
+};
 
 export type getApiRoutingPresetsResponse200 = {
-  data: RoutingPresetResponse
-  status: 200
-}
-
-export type getApiRoutingPresetsResponseSuccess = (getApiRoutingPresetsResponse200) & {
-  headers: Headers;
+	data: RoutingPresetResponse;
+	status: 200;
 };
-;
 
-export type getApiRoutingPresetsResponse = (getApiRoutingPresetsResponseSuccess)
+export type getApiRoutingPresetsResponseSuccess =
+	getApiRoutingPresetsResponse200 & {
+		headers: Headers;
+	};
+
+export type getApiRoutingPresetsResponse = getApiRoutingPresetsResponseSuccess;
 
 export const getGetApiRoutingPresetsUrl = () => {
-
-
-
-
-  return `/api/routing/presets`
-}
+	return `/api/routing/presets`;
+};
 
 /**
  * @summary List routing presets and source material
  */
-export const getApiRoutingPresets = async ( options?: RequestInit): Promise<getApiRoutingPresetsResponse> => {
-
-  return apiFetch<getApiRoutingPresetsResponse>(getGetApiRoutingPresetsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiRoutingPresets = async (
+	options?: RequestInit,
+): Promise<getApiRoutingPresetsResponse> => {
+	return apiFetch<getApiRoutingPresetsResponse>(getGetApiRoutingPresetsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type postApiRoutingPresetsNameResponse200 = {
-  data: RoutingPresetResponse
-  status: 200
-}
+	data: RoutingPresetResponse;
+	status: 200;
+};
 
 export type postApiRoutingPresetsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiRoutingPresetsNameResponseSuccess = (postApiRoutingPresetsNameResponse200) & {
-  headers: Headers;
-};
-export type postApiRoutingPresetsNameResponseError = (postApiRoutingPresetsNameResponse404) & {
-  headers: Headers;
+	data: NotFoundResponse;
+	status: 404;
 };
 
-export type postApiRoutingPresetsNameResponse = (postApiRoutingPresetsNameResponseSuccess | postApiRoutingPresetsNameResponseError)
+export type postApiRoutingPresetsNameResponseSuccess =
+	postApiRoutingPresetsNameResponse200 & {
+		headers: Headers;
+	};
+export type postApiRoutingPresetsNameResponseError =
+	postApiRoutingPresetsNameResponse404 & {
+		headers: Headers;
+	};
 
-export const getPostApiRoutingPresetsNameUrl = (name: string,) => {
+export type postApiRoutingPresetsNameResponse =
+	| postApiRoutingPresetsNameResponseSuccess
+	| postApiRoutingPresetsNameResponseError;
 
-
-
-
-  return `/api/routing/presets/${name}`
-}
+export const getPostApiRoutingPresetsNameUrl = (name: string) => {
+	return `/api/routing/presets/${name}`;
+};
 
 /**
  * @summary Apply a routing preset
  */
-export const postApiRoutingPresetsName = async (name: string, options?: RequestInit): Promise<postApiRoutingPresetsNameResponse> => {
-
-  return apiFetch<postApiRoutingPresetsNameResponse>(getPostApiRoutingPresetsNameUrl(name),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
+export const postApiRoutingPresetsName = async (
+	name: string,
+	options?: RequestInit,
+): Promise<postApiRoutingPresetsNameResponse> => {
+	return apiFetch<postApiRoutingPresetsNameResponse>(
+		getPostApiRoutingPresetsNameUrl(name),
+		{
+			...options,
+			method: "POST",
+		},
+	);
+};

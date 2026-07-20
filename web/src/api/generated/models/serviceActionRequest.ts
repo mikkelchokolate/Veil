@@ -42,5 +42,5 @@
  */
 
 export interface ServiceActionRequest {
-  confirm: boolean;
+	confirm: boolean;
 }

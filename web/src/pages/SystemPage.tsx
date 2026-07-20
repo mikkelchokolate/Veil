@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { SystemStats } from "../api/generated/models";
 
 function fmtUptime(sec: number): string {
@@ -15,15 +15,34 @@ function pct(used: number, total: number): number {
 	return total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
 }
 
-function Meter({ label, value, detail }: { label: string; value: number; detail: string }) {
+function Meter({
+	label,
+	value,
+	detail,
+}: {
+	label: string;
+	value: number;
+	detail: string;
+}) {
 	return (
 		<div style={{ marginBottom: 16 }}>
-			<div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					marginBottom: 4,
+				}}
+			>
 				<strong>{label}</strong>
 				<span className="muted">{detail}</span>
 			</div>
 			<div
-				style={{ height: 8, borderRadius: 4, border: "1px solid var(--border)", overflow: "hidden" }}
+				style={{
+					height: 8,
+					borderRadius: 4,
+					border: "1px solid var(--border)",
+					overflow: "hidden",
+				}}
 				role="progressbar"
 				aria-valuenow={value}
 				aria-valuemin={0}
@@ -50,13 +69,19 @@ export function SystemPage() {
 	});
 
 	if (sys.isLoading) {
-		return <div className="card"><p className="muted">Loading…</p></div>;
+		return (
+			<div className="card">
+				<p className="muted">Loading…</p>
+			</div>
+		);
 	}
 	if (sys.isError || !sys.data) {
 		return (
 			<div className="card">
 				<p className="form-error">
-					{sys.error instanceof ApiError ? sys.error.message : "System stats unavailable"}
+					{sys.error instanceof ApiError
+						? sys.error.message
+						: "System stats unavailable"}
 				</p>
 			</div>
 		);
@@ -66,7 +91,11 @@ export function SystemPage() {
 	return (
 		<div className="card">
 			<h2>System</h2>
-			<Meter label="CPU" value={Math.round(s.cpuPercent)} detail={`${s.cpuPercent.toFixed(1)}%`} />
+			<Meter
+				label="CPU"
+				value={Math.round(s.cpuPercent)}
+				detail={`${s.cpuPercent.toFixed(1)}%`}
+			/>
 			<Meter
 				label="Memory"
 				value={pct(s.memoryUsedMB, s.memoryTotalMB)}
@@ -77,8 +106,13 @@ export function SystemPage() {
 				value={pct(s.diskUsedGB, s.diskTotalGB)}
 				detail={`${s.diskUsedGB.toFixed(1)} / ${s.diskTotalGB.toFixed(1)} GiB`}
 			/>
-			<p><strong>Load average:</strong> {s.loadAvg1.toFixed(2)} · {s.loadAvg5.toFixed(2)} · {s.loadAvg15.toFixed(2)}</p>
-			<p><strong>Uptime:</strong> {fmtUptime(s.uptimeSeconds)}</p>
+			<p>
+				<strong>Load average:</strong> {s.loadAvg1.toFixed(2)} ·{" "}
+				{s.loadAvg5.toFixed(2)} · {s.loadAvg15.toFixed(2)}
+			</p>
+			<p>
+				<strong>Uptime:</strong> {fmtUptime(s.uptimeSeconds)}
+			</p>
 		</div>
 	);
 }

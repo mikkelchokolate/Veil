@@ -40,21 +40,21 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ClientArtifact } from './clientArtifact.ts';
-import type { ClientLink } from './clientLink.ts';
+import type { ClientArtifact } from "./clientArtifact.ts";
+import type { ClientLink } from "./clientLink.ts";
 
 export interface ClientLinksResponse {
-  schemaVersion: string;
-  domain: string;
-  subscriptionUrl: string;
-  base64SubscriptionUrl: string;
-  rawSubscriptionUrl: string;
-  defaultSubscriptionFormat: string;
-  base64SubscriptionFilename: string;
-  rawSubscriptionFilename: string;
-  subscriptionContentType: string;
-  subscriptionFormats: string[];
-  count: number;
-  links: ClientLink[];
-  artifacts?: ClientArtifact[];
+	schemaVersion: string;
+	domain: string;
+	subscriptionUrl: string;
+	base64SubscriptionUrl: string;
+	rawSubscriptionUrl: string;
+	defaultSubscriptionFormat: string;
+	base64SubscriptionFilename: string;
+	rawSubscriptionFilename: string;
+	subscriptionContentType: string;
+	subscriptionFormats: string[];
+	count: number;
+	links: ClientLink[];
+	artifacts?: ClientArtifact[];
 }

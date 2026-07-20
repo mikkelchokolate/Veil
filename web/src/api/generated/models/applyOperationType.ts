@@ -41,14 +41,14 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ApplyOperationType = typeof ApplyOperationType[keyof typeof ApplyOperationType];
-
+export type ApplyOperationType =
+	(typeof ApplyOperationType)[keyof typeof ApplyOperationType];
 
 export const ApplyOperationType = {
-  promote_file: 'promote_file',
-  remove_file: 'remove_file',
-  reload_service: 'reload_service',
-  restart_service: 'restart_service',
-  disable_service: 'disable_service',
-  update_firewall: 'update_firewall',
+	promote_file: "promote_file",
+	remove_file: "remove_file",
+	reload_service: "reload_service",
+	restart_service: "restart_service",
+	disable_service: "disable_service",
+	update_firewall: "update_firewall",
 } as const;

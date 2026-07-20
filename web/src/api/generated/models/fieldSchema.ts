@@ -40,17 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { FieldOption } from './fieldOption.ts';
+import type { FieldOption } from "./fieldOption.ts";
 
 export interface FieldSchema {
-  key: string;
-  label: string;
-  type: string;
-  placeholder?: string;
-  /** Protocol-defined default value for the field. */
-  default?: unknown;
-  generateAction?: string;
-  /** Field key that provides input for generateAction (e.g. the provider used by a room generator). */
-  generateActionField?: string;
-  options?: FieldOption[];
+	key: string;
+	label: string;
+	type: string;
+	placeholder?: string;
+	/** Protocol-defined default value for the field. */
+	default?: unknown;
+	generateAction?: string;
+	/** Field key that provides input for generateAction (e.g. the provider used by a room generator). */
+	generateActionField?: string;
+	options?: FieldOption[];
 }

@@ -17,5 +17,12 @@ export function QR({ value, size = 180 }: { value: string; size?: number }) {
 		});
 	}, [value, size]);
 
-	return <canvas ref={ref} width={size} height={size} aria-label="subscription QR code" />;
+	return (
+		<canvas
+			ref={ref}
+			width={size}
+			height={size}
+			aria-label="subscription QR code"
+		/>
+	);
 }

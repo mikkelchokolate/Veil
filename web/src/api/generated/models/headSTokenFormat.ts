@@ -41,10 +41,10 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type HeadSTokenFormat = typeof HeadSTokenFormat[keyof typeof HeadSTokenFormat];
-
+export type HeadSTokenFormat =
+	(typeof HeadSTokenFormat)[keyof typeof HeadSTokenFormat];
 
 export const HeadSTokenFormat = {
-  base64: 'base64',
-  raw: 'raw',
+	base64: "base64",
+	raw: "raw",
 } as const;

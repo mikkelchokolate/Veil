@@ -42,9 +42,9 @@
  */
 
 export interface NetworkInterface {
-  name: string;
-  rxBytes: number;
-  txBytes: number;
-  rxPackets: number;
-  txPackets: number;
+	name: string;
+	rxBytes: number;
+	txBytes: number;
+	rxPackets: number;
+	txPackets: number;
 }

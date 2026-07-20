@@ -42,8 +42,8 @@
  */
 
 export interface CredentialMeta {
-  configured: boolean;
-  kind?: string;
-  version?: number;
-  rotatedAt?: number;
+	configured: boolean;
+	kind?: string;
+	version?: number;
+	rotatedAt?: number;
 }

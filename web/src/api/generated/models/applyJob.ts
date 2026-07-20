@@ -40,18 +40,18 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ApplyJobStatus } from './applyJobStatus.ts';
+import type { ApplyJobStatus } from "./applyJobStatus.ts";
 
 export interface ApplyJob {
-  id: string;
-  desiredRevision: number;
-  baseRevision: number;
-  status: ApplyJobStatus;
-  trigger: string;
-  actorId?: string;
-  createdAt: number;
-  startedAt?: number;
-  finishedAt?: number;
-  errorCode?: string;
-  errorMessage?: string;
+	id: string;
+	desiredRevision: number;
+	baseRevision: number;
+	status: ApplyJobStatus;
+	trigger: string;
+	actorId?: string;
+	createdAt: number;
+	startedAt?: number;
+	finishedAt?: number;
+	errorCode?: string;
+	errorMessage?: string;
 }

@@ -40,312 +40,261 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  BadRequestResponse,
-  ConnectionsStats,
-  DiskStats,
-  GetApiLogsParams,
-  LogResult,
-  NetworkStats,
-  ProcessesStats,
-  RuntimeObservation,
-  SystemStats,
-  TLSCertInfo
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	BadRequestResponse,
+	ConnectionsStats,
+	DiskStats,
+	GetApiLogsParams,
+	LogResult,
+	NetworkStats,
+	ProcessesStats,
+	RuntimeObservation,
+	SystemStats,
+	TLSCertInfo,
+} from "../models";
 
 export type getApiSystemResponse200 = {
-  data: SystemStats
-  status: 200
-}
-
-export type getApiSystemResponseSuccess = (getApiSystemResponse200) & {
-  headers: Headers;
+	data: SystemStats;
+	status: 200;
 };
-;
 
-export type getApiSystemResponse = (getApiSystemResponseSuccess)
+export type getApiSystemResponseSuccess = getApiSystemResponse200 & {
+	headers: Headers;
+};
+
+export type getApiSystemResponse = getApiSystemResponseSuccess;
 
 export const getGetApiSystemUrl = () => {
-
-
-
-
-  return `/api/system`
-}
+	return `/api/system`;
+};
 
 /**
  * @summary System resource observation
  */
-export const getApiSystem = async ( options?: RequestInit): Promise<getApiSystemResponse> => {
-
-  return apiFetch<getApiSystemResponse>(getGetApiSystemUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiSystem = async (
+	options?: RequestInit,
+): Promise<getApiSystemResponse> => {
+	return apiFetch<getApiSystemResponse>(getGetApiSystemUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiTlsResponse200 = {
-  data: TLSCertInfo
-  status: 200
-}
-
-export type getApiTlsResponseSuccess = (getApiTlsResponse200) & {
-  headers: Headers;
+	data: TLSCertInfo;
+	status: 200;
 };
-;
 
-export type getApiTlsResponse = (getApiTlsResponseSuccess)
+export type getApiTlsResponseSuccess = getApiTlsResponse200 & {
+	headers: Headers;
+};
+
+export type getApiTlsResponse = getApiTlsResponseSuccess;
 
 export const getGetApiTlsUrl = () => {
-
-
-
-
-  return `/api/tls`
-}
+	return `/api/tls`;
+};
 
 /**
  * @summary Panel TLS observation
  */
-export const getApiTls = async ( options?: RequestInit): Promise<getApiTlsResponse> => {
-
-  return apiFetch<getApiTlsResponse>(getGetApiTlsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiTls = async (
+	options?: RequestInit,
+): Promise<getApiTlsResponse> => {
+	return apiFetch<getApiTlsResponse>(getGetApiTlsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiNetworkResponse200 = {
-  data: NetworkStats
-  status: 200
-}
-
-export type getApiNetworkResponseSuccess = (getApiNetworkResponse200) & {
-  headers: Headers;
+	data: NetworkStats;
+	status: 200;
 };
-;
 
-export type getApiNetworkResponse = (getApiNetworkResponseSuccess)
+export type getApiNetworkResponseSuccess = getApiNetworkResponse200 & {
+	headers: Headers;
+};
+
+export type getApiNetworkResponse = getApiNetworkResponseSuccess;
 
 export const getGetApiNetworkUrl = () => {
-
-
-
-
-  return `/api/network`
-}
+	return `/api/network`;
+};
 
 /**
  * @summary Network counters observation
  */
-export const getApiNetwork = async ( options?: RequestInit): Promise<getApiNetworkResponse> => {
-
-  return apiFetch<getApiNetworkResponse>(getGetApiNetworkUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiNetwork = async (
+	options?: RequestInit,
+): Promise<getApiNetworkResponse> => {
+	return apiFetch<getApiNetworkResponse>(getGetApiNetworkUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiConnectionsResponse200 = {
-  data: ConnectionsStats
-  status: 200
-}
-
-export type getApiConnectionsResponseSuccess = (getApiConnectionsResponse200) & {
-  headers: Headers;
+	data: ConnectionsStats;
+	status: 200;
 };
-;
 
-export type getApiConnectionsResponse = (getApiConnectionsResponseSuccess)
+export type getApiConnectionsResponseSuccess = getApiConnectionsResponse200 & {
+	headers: Headers;
+};
+
+export type getApiConnectionsResponse = getApiConnectionsResponseSuccess;
 
 export const getGetApiConnectionsUrl = () => {
-
-
-
-
-  return `/api/connections`
-}
+	return `/api/connections`;
+};
 
 /**
  * @summary Listening ports / connections observation
  */
-export const getApiConnections = async ( options?: RequestInit): Promise<getApiConnectionsResponse> => {
-
-  return apiFetch<getApiConnectionsResponse>(getGetApiConnectionsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiConnections = async (
+	options?: RequestInit,
+): Promise<getApiConnectionsResponse> => {
+	return apiFetch<getApiConnectionsResponse>(getGetApiConnectionsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiProcessesResponse200 = {
-  data: ProcessesStats
-  status: 200
-}
-
-export type getApiProcessesResponseSuccess = (getApiProcessesResponse200) & {
-  headers: Headers;
+	data: ProcessesStats;
+	status: 200;
 };
-;
 
-export type getApiProcessesResponse = (getApiProcessesResponseSuccess)
+export type getApiProcessesResponseSuccess = getApiProcessesResponse200 & {
+	headers: Headers;
+};
+
+export type getApiProcessesResponse = getApiProcessesResponseSuccess;
 
 export const getGetApiProcessesUrl = () => {
-
-
-
-
-  return `/api/processes`
-}
+	return `/api/processes`;
+};
 
 /**
  * @summary Managed processes observation
  */
-export const getApiProcesses = async ( options?: RequestInit): Promise<getApiProcessesResponse> => {
-
-  return apiFetch<getApiProcessesResponse>(getGetApiProcessesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiProcesses = async (
+	options?: RequestInit,
+): Promise<getApiProcessesResponse> => {
+	return apiFetch<getApiProcessesResponse>(getGetApiProcessesUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiDiskResponse200 = {
-  data: DiskStats
-  status: 200
-}
-
-export type getApiDiskResponseSuccess = (getApiDiskResponse200) & {
-  headers: Headers;
+	data: DiskStats;
+	status: 200;
 };
-;
 
-export type getApiDiskResponse = (getApiDiskResponseSuccess)
+export type getApiDiskResponseSuccess = getApiDiskResponse200 & {
+	headers: Headers;
+};
+
+export type getApiDiskResponse = getApiDiskResponseSuccess;
 
 export const getGetApiDiskUrl = () => {
-
-
-
-
-  return `/api/disk`
-}
+	return `/api/disk`;
+};
 
 /**
  * @summary Disk usage observation
  */
-export const getApiDisk = async ( options?: RequestInit): Promise<getApiDiskResponse> => {
-
-  return apiFetch<getApiDiskResponse>(getGetApiDiskUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiDisk = async (
+	options?: RequestInit,
+): Promise<getApiDiskResponse> => {
+	return apiFetch<getApiDiskResponse>(getGetApiDiskUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type getApiRuntimeObservationResponse200 = {
-  data: RuntimeObservation
-  status: 200
-}
-
-export type getApiRuntimeObservationResponseSuccess = (getApiRuntimeObservationResponse200) & {
-  headers: Headers;
+	data: RuntimeObservation;
+	status: 200;
 };
-;
 
-export type getApiRuntimeObservationResponse = (getApiRuntimeObservationResponseSuccess)
+export type getApiRuntimeObservationResponseSuccess =
+	getApiRuntimeObservationResponse200 & {
+		headers: Headers;
+	};
+
+export type getApiRuntimeObservationResponse =
+	getApiRuntimeObservationResponseSuccess;
 
 export const getGetApiRuntimeObservationUrl = () => {
-
-
-
-
-  return `/api/runtime/observation`
-}
+	return `/api/runtime/observation`;
+};
 
 /**
  * @summary Combined runtime observation
  */
-export const getApiRuntimeObservation = async ( options?: RequestInit): Promise<getApiRuntimeObservationResponse> => {
-
-  return apiFetch<getApiRuntimeObservationResponse>(getGetApiRuntimeObservationUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiRuntimeObservation = async (
+	options?: RequestInit,
+): Promise<getApiRuntimeObservationResponse> => {
+	return apiFetch<getApiRuntimeObservationResponse>(
+		getGetApiRuntimeObservationUrl(),
+		{
+			...options,
+			method: "GET",
+		},
+	);
+};
 
 export type getApiLogsResponse200 = {
-  data: LogResult
-  status: 200
-}
+	data: LogResult;
+	status: 200;
+};
 
 export type getApiLogsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type getApiLogsResponseSuccess = (getApiLogsResponse200) & {
-  headers: Headers;
-};
-export type getApiLogsResponseError = (getApiLogsResponse400) & {
-  headers: Headers;
+	data: BadRequestResponse;
+	status: 400;
 };
 
-export type getApiLogsResponse = (getApiLogsResponseSuccess | getApiLogsResponseError)
+export type getApiLogsResponseSuccess = getApiLogsResponse200 & {
+	headers: Headers;
+};
+export type getApiLogsResponseError = getApiLogsResponse400 & {
+	headers: Headers;
+};
 
-export const getGetApiLogsUrl = (params?: GetApiLogsParams,) => {
-  const normalizedParams = new URLSearchParams();
+export type getApiLogsResponse =
+	| getApiLogsResponseSuccess
+	| getApiLogsResponseError;
 
-  Object.entries(params || {}).forEach(([key, value]) => {
+export const getGetApiLogsUrl = (params?: GetApiLogsParams) => {
+	const normalizedParams = new URLSearchParams();
 
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined) {
+			normalizedParams.append(key, value === null ? "null" : String(value));
+		}
+	});
 
-  const stringifiedParams = normalizedParams.toString();
+	const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/logs?${stringifiedParams}` : `/api/logs`
-}
+	return stringifiedParams.length > 0
+		? `/api/logs?${stringifiedParams}`
+		: `/api/logs`;
+};
 
 /**
  * @summary Bounded journald reads for managed units
  */
-export const getApiLogs = async (params?: GetApiLogsParams, options?: RequestInit): Promise<getApiLogsResponse> => {
-
-  return apiFetch<getApiLogsResponse>(getGetApiLogsUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
+export const getApiLogs = async (
+	params?: GetApiLogsParams,
+	options?: RequestInit,
+): Promise<getApiLogsResponse> => {
+	return apiFetch<getApiLogsResponse>(getGetApiLogsUrl(params), {
+		...options,
+		method: "GET",
+	});
+};

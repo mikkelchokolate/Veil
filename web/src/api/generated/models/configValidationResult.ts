@@ -42,11 +42,11 @@
  */
 
 export interface ConfigValidationResult {
-  name: string;
-  config: string;
-  command: string[];
-  valid: boolean;
-  skipped?: boolean;
-  output?: string;
-  error?: string;
+	name: string;
+	config: string;
+	command: string[];
+	valid: boolean;
+	skipped?: boolean;
+	output?: string;
+	error?: string;
 }

@@ -42,6 +42,6 @@
  */
 
 export const BackupRestoreRequestValue = {
-  confirm: true,
+	confirm: true,
 } as const;
 export type BackupRestoreRequest = typeof BackupRestoreRequestValue;

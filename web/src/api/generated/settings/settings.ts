@@ -40,101 +40,96 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  BadRequestResponse,
-  ForbiddenResponse,
-  Settings,
-  UnauthorizedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	BadRequestResponse,
+	ForbiddenResponse,
+	Settings,
+	UnauthorizedResponse,
+} from "../models";
 
 export type getApiSettingsResponse200 = {
-  data: Settings
-  status: 200
-}
+	data: Settings;
+	status: 200;
+};
 
 export type getApiSettingsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiSettingsResponseSuccess = (getApiSettingsResponse200) & {
-  headers: Headers;
-};
-export type getApiSettingsResponseError = (getApiSettingsResponse401) & {
-  headers: Headers;
+	data: UnauthorizedResponse;
+	status: 401;
 };
 
-export type getApiSettingsResponse = (getApiSettingsResponseSuccess | getApiSettingsResponseError)
+export type getApiSettingsResponseSuccess = getApiSettingsResponse200 & {
+	headers: Headers;
+};
+export type getApiSettingsResponseError = getApiSettingsResponse401 & {
+	headers: Headers;
+};
+
+export type getApiSettingsResponse =
+	| getApiSettingsResponseSuccess
+	| getApiSettingsResponseError;
 
 export const getGetApiSettingsUrl = () => {
-
-
-
-
-  return `/api/settings`
-}
+	return `/api/settings`;
+};
 
 /**
  * @summary Read Panel settings with secrets redacted
  */
-export const getApiSettings = async ( options?: RequestInit): Promise<getApiSettingsResponse> => {
-
-  return apiFetch<getApiSettingsResponse>(getGetApiSettingsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
+export const getApiSettings = async (
+	options?: RequestInit,
+): Promise<getApiSettingsResponse> => {
+	return apiFetch<getApiSettingsResponse>(getGetApiSettingsUrl(), {
+		...options,
+		method: "GET",
+	});
+};
 
 export type putApiSettingsResponse200 = {
-  data: Settings
-  status: 200
-}
+	data: Settings;
+	status: 200;
+};
 
 export type putApiSettingsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type putApiSettingsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type putApiSettingsResponseSuccess = (putApiSettingsResponse200) & {
-  headers: Headers;
-};
-export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type putApiSettingsResponse = (putApiSettingsResponseSuccess | putApiSettingsResponseError)
+export type putApiSettingsResponseSuccess = putApiSettingsResponse200 & {
+	headers: Headers;
+};
+export type putApiSettingsResponseError = (
+	| putApiSettingsResponse400
+	| putApiSettingsResponse403
+) & {
+	headers: Headers;
+};
+
+export type putApiSettingsResponse =
+	| putApiSettingsResponseSuccess
+	| putApiSettingsResponseError;
 
 export const getPutApiSettingsUrl = () => {
-
-
-
-
-  return `/api/settings`
-}
+	return `/api/settings`;
+};
 
 /**
  * @summary Update Panel settings
  */
-export const putApiSettings = async (settings: Settings, options?: RequestInit): Promise<putApiSettingsResponse> => {
-
-  return apiFetch<putApiSettingsResponse>(getPutApiSettingsUrl(),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(settings)
-  }
-);}
-
-
+export const putApiSettings = async (
+	settings: Settings,
+	options?: RequestInit,
+): Promise<putApiSettingsResponse> => {
+	return apiFetch<putApiSettingsResponse>(getPutApiSettingsUrl(), {
+		...options,
+		method: "PUT",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(settings),
+	});
+};

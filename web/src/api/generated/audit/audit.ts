@@ -40,59 +40,66 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type {
-  AuditListResponse,
-  BadRequestResponse,
-  ForbiddenResponse,
-  GetApiAuditParams,
-  UnauthorizedResponse
-} from '../models';
 
-import { apiFetch } from '../../fetcher.ts';
+import { apiFetch } from "../../fetcher.ts";
+import type {
+	AuditListResponse,
+	BadRequestResponse,
+	ForbiddenResponse,
+	GetApiAuditParams,
+	UnauthorizedResponse,
+} from "../models";
 
 export type getApiAuditResponse200 = {
-  data: AuditListResponse
-  status: 200
-}
+	data: AuditListResponse;
+	status: 200;
+};
 
 export type getApiAuditResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
+	data: BadRequestResponse;
+	status: 400;
+};
 
 export type getApiAuditResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
+	data: UnauthorizedResponse;
+	status: 401;
+};
 
 export type getApiAuditResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiAuditResponseSuccess = (getApiAuditResponse200) & {
-  headers: Headers;
-};
-export type getApiAuditResponseError = (getApiAuditResponse400 | getApiAuditResponse401 | getApiAuditResponse403) & {
-  headers: Headers;
+	data: ForbiddenResponse;
+	status: 403;
 };
 
-export type getApiAuditResponse = (getApiAuditResponseSuccess | getApiAuditResponseError)
+export type getApiAuditResponseSuccess = getApiAuditResponse200 & {
+	headers: Headers;
+};
+export type getApiAuditResponseError = (
+	| getApiAuditResponse400
+	| getApiAuditResponse401
+	| getApiAuditResponse403
+) & {
+	headers: Headers;
+};
 
-export const getGetApiAuditUrl = (params?: GetApiAuditParams,) => {
-  const normalizedParams = new URLSearchParams();
+export type getApiAuditResponse =
+	| getApiAuditResponseSuccess
+	| getApiAuditResponseError;
 
-  Object.entries(params || {}).forEach(([key, value]) => {
+export const getGetApiAuditUrl = (params?: GetApiAuditParams) => {
+	const normalizedParams = new URLSearchParams();
 
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined) {
+			normalizedParams.append(key, value === null ? "null" : String(value));
+		}
+	});
 
-  const stringifiedParams = normalizedParams.toString();
+	const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/audit?${stringifiedParams}` : `/api/audit`
-}
+	return stringifiedParams.length > 0
+		? `/api/audit?${stringifiedParams}`
+		: `/api/audit`;
+};
 
 /**
  * Returns newest-first, redacted authentication and mutation events.
@@ -100,15 +107,12 @@ export const getGetApiAuditUrl = (params?: GetApiAuditParams,) => {
  * token, passwords, and authorization values are never returned.
  * @summary List structured Panel audit history
  */
-export const getApiAudit = async (params?: GetApiAuditParams, options?: RequestInit): Promise<getApiAuditResponse> => {
-
-  return apiFetch<getApiAuditResponse>(getGetApiAuditUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
+export const getApiAudit = async (
+	params?: GetApiAuditParams,
+	options?: RequestInit,
+): Promise<getApiAuditResponse> => {
+	return apiFetch<getApiAuditResponse>(getGetApiAuditUrl(params), {
+		...options,
+		method: "GET",
+	});
+};

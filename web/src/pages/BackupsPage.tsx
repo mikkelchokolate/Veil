@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useIsAdmin } from "../auth/AuthContext";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { BackupArchive } from "../api/generated/models";
+import { useIsAdmin } from "../auth/AuthContext";
 
 function fmtBytes(n: number): string {
 	const units = ["B", "KiB", "MiB", "GiB"];
@@ -25,7 +25,8 @@ export function BackupsPage() {
 	});
 
 	const create = useMutation({
-		mutationFn: () => apiFetch("/api/backups", { method: "POST", body: JSON.stringify({}) }),
+		mutationFn: () =>
+			apiFetch("/api/backups", { method: "POST", body: JSON.stringify({}) }),
 		onSuccess: () => void qc.invalidateQueries({ queryKey: ["backups"] }),
 	});
 
@@ -48,7 +49,9 @@ export function BackupsPage() {
 			) : null}
 			{create.isError ? (
 				<p className="form-error">
-					{create.error instanceof ApiError ? create.error.message : "Backup failed"}
+					{create.error instanceof ApiError
+						? create.error.message
+						: "Backup failed"}
 				</p>
 			) : null}
 			{backups.isLoading ? (
@@ -76,9 +79,13 @@ export function BackupsPage() {
 									<tr key={b.name}>
 										<td className="mono">{b.name}</td>
 										<td className="muted">{fmtBytes(b.size)}</td>
-										<td className="muted">{new Date(b.createdAt).toLocaleString()}</td>
+										<td className="muted">
+											{new Date(b.createdAt).toLocaleString()}
+										</td>
 										<td>
-											<span className={`badge${b.encrypted ? " badge-success" : ""}`}>
+											<span
+												className={`badge${b.encrypted ? " badge-success" : ""}`}
+											>
 												{b.encrypted ? "yes" : "no"}
 											</span>
 										</td>

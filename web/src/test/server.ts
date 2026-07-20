@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 
 // Default handlers for the Veil management API used by the SPA tests.
@@ -24,4 +24,4 @@ export const server = setupServer(
 	),
 );
 
-export { http, HttpResponse };
+export { HttpResponse, http };

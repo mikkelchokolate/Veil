@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ProcessInfo } from './processInfo.ts';
+import type { ProcessInfo } from "./processInfo.ts";
 
 export interface ProcessesStats {
-  processes: ProcessInfo[];
+	processes: ProcessInfo[];
 }

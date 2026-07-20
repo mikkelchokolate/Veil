@@ -2,9 +2,9 @@ import {
 	createRootRoute,
 	createRoute,
 	createRouter,
+	Outlet,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 
 // The router basepath matches the panel WebBasePath so client-side nav works
@@ -21,7 +21,9 @@ function RouteErrorBoundary({ error }: { error: Error }) {
 		<div className="card">
 			<h2>Something went wrong</h2>
 			<p className="muted">{error.message}</p>
-			<button type="button" onClick={() => window.location.reload()}>Reload</button>
+			<button type="button" onClick={() => window.location.reload()}>
+				Reload
+			</button>
 		</div>
 	);
 }
@@ -36,20 +38,52 @@ function RouteLoading() {
 }
 
 // Lazy-loaded pages (B-router: code splitting per route).
-const OverviewPage = lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
-const ClientsPage = lazy(() => import("./pages/ClientsPage").then((m) => ({ default: m.ClientsPage })));
-const ClientNewPage = lazy(() => import("./pages/ClientNewPage").then((m) => ({ default: m.ClientNewPage })));
-const ClientDetailPage = lazy(() => import("./pages/ClientDetailPage").then((m) => ({ default: m.ClientDetailPage })));
-const InboundsPage = lazy(() => import("./pages/InboundsPage").then((m) => ({ default: m.InboundsPage })));
-const RoutingPage = lazy(() => import("./pages/RoutingPage").then((m) => ({ default: m.RoutingPage })));
-const TrafficPage = lazy(() => import("./pages/TrafficPage").then((m) => ({ default: m.TrafficPage })));
-const WarpPage = lazy(() => import("./pages/WarpPage").then((m) => ({ default: m.WarpPage })));
-const SystemPage = lazy(() => import("./pages/SystemPage").then((m) => ({ default: m.SystemPage })));
-const BackupsPage = lazy(() => import("./pages/BackupsPage").then((m) => ({ default: m.BackupsPage })));
-const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default: m.UsersPage })));
-const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
-const ApplyPage = lazy(() => import("./pages/ApplyPage").then((m) => ({ default: m.ApplyPage })));
-const ApplyJobDetailPage = lazy(() => import("./pages/ApplyJobDetailPage").then((m) => ({ default: m.ApplyJobDetailPage })));
+const OverviewPage = lazy(() =>
+	import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })),
+);
+const ClientsPage = lazy(() =>
+	import("./pages/ClientsPage").then((m) => ({ default: m.ClientsPage })),
+);
+const ClientNewPage = lazy(() =>
+	import("./pages/ClientNewPage").then((m) => ({ default: m.ClientNewPage })),
+);
+const ClientDetailPage = lazy(() =>
+	import("./pages/ClientDetailPage").then((m) => ({
+		default: m.ClientDetailPage,
+	})),
+);
+const InboundsPage = lazy(() =>
+	import("./pages/InboundsPage").then((m) => ({ default: m.InboundsPage })),
+);
+const RoutingPage = lazy(() =>
+	import("./pages/RoutingPage").then((m) => ({ default: m.RoutingPage })),
+);
+const TrafficPage = lazy(() =>
+	import("./pages/TrafficPage").then((m) => ({ default: m.TrafficPage })),
+);
+const WarpPage = lazy(() =>
+	import("./pages/WarpPage").then((m) => ({ default: m.WarpPage })),
+);
+const SystemPage = lazy(() =>
+	import("./pages/SystemPage").then((m) => ({ default: m.SystemPage })),
+);
+const BackupsPage = lazy(() =>
+	import("./pages/BackupsPage").then((m) => ({ default: m.BackupsPage })),
+);
+const UsersPage = lazy(() =>
+	import("./pages/UsersPage").then((m) => ({ default: m.UsersPage })),
+);
+const SettingsPage = lazy(() =>
+	import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const ApplyPage = lazy(() =>
+	import("./pages/ApplyPage").then((m) => ({ default: m.ApplyPage })),
+);
+const ApplyJobDetailPage = lazy(() =>
+	import("./pages/ApplyJobDetailPage").then((m) => ({
+		default: m.ApplyJobDetailPage,
+	})),
+);
 
 const rootRoute = createRootRoute({ component: Outlet });
 

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import * as echarts from "echarts";
+import { useEffect, useRef } from "react";
 import { apiFetch } from "../api/fetcher";
 import type { TrafficTopEntry } from "../api/generated/models";
-import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
 
 interface TrafficSummary {
 	state: string;
@@ -58,7 +58,11 @@ export function TrafficPage() {
 				trigger: "axis",
 				axisPointer: { type: "shadow" },
 				formatter: (params: unknown) => {
-					const p = params as Array<{ name: string; value: number; seriesName: string }>;
+					const p = params as Array<{
+						name: string;
+						value: number;
+						seriesName: string;
+					}>;
 					if (!p.length) return "";
 					const name = p[0].name;
 					const up = p.find((x) => x.seriesName === "Upload")?.value ?? 0;
@@ -120,20 +124,32 @@ export function TrafficPage() {
 					<>
 						<p>
 							<strong>Telemetry state:</strong>{" "}
-							<span className={`badge${state === "collecting" ? " badge-success" : " badge-warning"}`}>
+							<span
+								className={`badge${state === "collecting" ? " badge-success" : " badge-warning"}`}
+							>
 								{state}
 							</span>
 						</p>
 						{state !== "collecting" ? (
 							<p className="muted">
-								No traffic source is feeding counters yet. Usage figures below are not real telemetry —
-								configure a runtime traffic provider to begin collecting.
+								No traffic source is feeding counters yet. Usage figures below
+								are not real telemetry — configure a runtime traffic provider to
+								begin collecting.
 							</p>
 						) : (
 							<>
-								<p><strong>Total upload:</strong> {fmtBytes(summary.data.uploadBytes)}</p>
-								<p><strong>Total download:</strong> {fmtBytes(summary.data.downloadBytes)}</p>
-								<p><strong>Total used:</strong> {fmtBytes(summary.data.usedBytes)}</p>
+								<p>
+									<strong>Total upload:</strong>{" "}
+									{fmtBytes(summary.data.uploadBytes)}
+								</p>
+								<p>
+									<strong>Total download:</strong>{" "}
+									{fmtBytes(summary.data.downloadBytes)}
+								</p>
+								<p>
+									<strong>Total used:</strong>{" "}
+									{fmtBytes(summary.data.usedBytes)}
+								</p>
 							</>
 						)}
 					</>

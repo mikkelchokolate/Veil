@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, Link } from "@tanstack/react-router";
-import { apiFetch, ApiError } from "../api/fetcher";
-import { useIsAdmin } from "../auth/AuthContext";
+import { Link, useParams } from "@tanstack/react-router";
+import { ApiError, apiFetch } from "../api/fetcher";
 import type { ApplyJob } from "../api/generated/models";
+import { useIsAdmin } from "../auth/AuthContext";
 
 function fmtTime(ts?: number): string {
 	if (!ts) return "—";
@@ -30,7 +30,8 @@ export function ApplyJobDetailPage() {
 	});
 
 	const retry = useMutation({
-		mutationFn: () => apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
+		mutationFn: () =>
+			apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
@@ -42,33 +43,63 @@ export function ApplyJobDetailPage() {
 		<>
 			<div className="card">
 				<p>
-					<Link to="/apply" className="muted">← Back to apply jobs</Link>
+					<Link to="/apply" className="muted">
+						← Back to apply jobs
+					</Link>
 				</p>
 				<h2>Apply job {jobId.slice(0, 8)}</h2>
 				{job.isLoading ? (
 					<p className="muted">Loading…</p>
 				) : job.isError ? (
 					<p className="form-error">
-						{job.error instanceof ApiError ? job.error.message : "Failed to load job"}
+						{job.error instanceof ApiError
+							? job.error.message
+							: "Failed to load job"}
 					</p>
 				) : j ? (
 					<>
 						<p>
 							<strong>Status:</strong>{" "}
-							<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>{j.status}</span>
+							<span className={`badge ${STATUS_CLS[j.status] ?? ""}`}>
+								{j.status}
+							</span>
 						</p>
 						<p>
 							<strong>Revision:</strong>{" "}
-							<span className="mono">{j.baseRevision} → {j.desiredRevision}</span>
+							<span className="mono">
+								{j.baseRevision} → {j.desiredRevision}
+							</span>
 						</p>
-						<p><strong>Trigger:</strong> <span className="muted">{j.trigger}</span></p>
-						{j.actorId ? <p><strong>Actor:</strong> <span className="muted">{j.actorId}</span></p> : null}
-						<p><strong>Created:</strong> <span className="muted">{fmtTime(j.createdAt)}</span></p>
-						{j.startedAt ? <p><strong>Started:</strong> <span className="muted">{fmtTime(j.startedAt)}</span></p> : null}
-						{j.finishedAt ? <p><strong>Finished:</strong> <span className="muted">{fmtTime(j.finishedAt)}</span></p> : null}
+						<p>
+							<strong>Trigger:</strong>{" "}
+							<span className="muted">{j.trigger}</span>
+						</p>
+						{j.actorId ? (
+							<p>
+								<strong>Actor:</strong>{" "}
+								<span className="muted">{j.actorId}</span>
+							</p>
+						) : null}
+						<p>
+							<strong>Created:</strong>{" "}
+							<span className="muted">{fmtTime(j.createdAt)}</span>
+						</p>
+						{j.startedAt ? (
+							<p>
+								<strong>Started:</strong>{" "}
+								<span className="muted">{fmtTime(j.startedAt)}</span>
+							</p>
+						) : null}
+						{j.finishedAt ? (
+							<p>
+								<strong>Finished:</strong>{" "}
+								<span className="muted">{fmtTime(j.finishedAt)}</span>
+							</p>
+						) : null}
 						{j.errorMessage ? (
 							<p className="form-error">
-								{j.errorCode ? `[${j.errorCode}] ` : ""}{j.errorMessage}
+								{j.errorCode ? `[${j.errorCode}] ` : ""}
+								{j.errorMessage}
 							</p>
 						) : null}
 						{isAdmin && j.status === "failed" ? (
@@ -83,11 +114,15 @@ export function ApplyJobDetailPage() {
 						) : null}
 						{retry.isError ? (
 							<p className="form-error">
-								{retry.error instanceof ApiError ? retry.error.message : "Retry failed"}
+								{retry.error instanceof ApiError
+									? retry.error.message
+									: "Retry failed"}
 							</p>
 						) : null}
 						{retry.isSuccess ? (
-							<p className="muted">Retry queued — the job will re-render the pinned revision.</p>
+							<p className="muted">
+								Retry queued — the job will re-render the pinned revision.
+							</p>
 						) : null}
 					</>
 				) : null}

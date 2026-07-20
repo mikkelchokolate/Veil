@@ -42,7 +42,7 @@
  */
 
 export interface VersionResponse {
-  version: string;
-  runtime: string;
-  name: string;
+	version: string;
+	runtime: string;
+	name: string;
 }

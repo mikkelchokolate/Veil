@@ -40,14 +40,14 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BindingCapability } from './bindingCapability.ts';
-import type { CredentialMeta } from './credentialMeta.ts';
+import type { BindingCapability } from "./bindingCapability.ts";
+import type { CredentialMeta } from "./credentialMeta.ts";
 
 export interface BindingView {
-  id: string;
-  inboundId: string;
-  enabled: boolean;
-  version: number;
-  capability?: BindingCapability;
-  credential?: CredentialMeta;
+	id: string;
+	inboundId: string;
+	enabled: boolean;
+	version: number;
+	capability?: BindingCapability;
+	credential?: CredentialMeta;
 }

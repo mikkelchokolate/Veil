@@ -42,9 +42,9 @@
  */
 
 export interface UpdateResponse {
-  success: true;
-  staged: boolean;
-  installed: boolean;
-  version: string;
-  message: string;
+	success: true;
+	staged: boolean;
+	installed: boolean;
+	version: string;
+	message: string;
 }

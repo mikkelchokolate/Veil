@@ -42,13 +42,13 @@
  */
 
 export interface TLSCertInfo {
-  path: string;
-  subject: string;
-  issuer: string;
-  notBefore: string;
-  notAfter: string;
-  daysRemaining: number;
-  dnsNames?: string[];
-  valid: boolean;
-  error?: string;
+	path: string;
+	subject: string;
+	issuer: string;
+	notBefore: string;
+	notAfter: string;
+	daysRemaining: number;
+	dnsNames?: string[];
+	valid: boolean;
+	error?: string;
 }

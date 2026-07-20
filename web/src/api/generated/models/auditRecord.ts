@@ -40,18 +40,18 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { AuditRecordDetails } from './auditRecordDetails.ts';
+import type { AuditRecordDetails } from "./auditRecordDetails.ts";
 
 export interface AuditRecord {
-  timestamp: string;
-  actor: string;
-  role?: string;
-  action: string;
-  target?: string;
-  ip?: string;
-  userAgent?: string;
-  requestId?: string;
-  success: boolean;
-  error?: string;
-  details?: AuditRecordDetails;
+	timestamp: string;
+	actor: string;
+	role?: string;
+	action: string;
+	target?: string;
+	ip?: string;
+	userAgent?: string;
+	requestId?: string;
+	success: boolean;
+	error?: string;
+	details?: AuditRecordDetails;
 }

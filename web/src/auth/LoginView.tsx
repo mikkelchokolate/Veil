@@ -49,8 +49,17 @@ export function LoginView() {
 						required
 					/>
 				</div>
-				{error ? <div className="form-error" role="alert">{error}</div> : null}
-				<button className="btn btn-primary" type="submit" disabled={busy} style={{ width: "100%", marginTop: 8 }}>
+				{error ? (
+					<div className="form-error" role="alert">
+						{error}
+					</div>
+				) : null}
+				<button
+					className="btn btn-primary"
+					type="submit"
+					disabled={busy}
+					style={{ width: "100%", marginTop: 8 }}
+				>
 					{busy ? "Signing in…" : "Sign in"}
 				</button>
 			</form>

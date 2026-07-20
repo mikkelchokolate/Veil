@@ -40,8 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { GetApiClientLinksSubscriptionFormat } from './getApiClientLinksSubscriptionFormat.ts';
+import type { GetApiClientLinksSubscriptionFormat } from "./getApiClientLinksSubscriptionFormat.ts";
 
 export type GetApiClientLinksSubscriptionParams = {
-format?: GetApiClientLinksSubscriptionFormat;
+	format?: GetApiClientLinksSubscriptionFormat;
 };

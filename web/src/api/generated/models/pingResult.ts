@@ -42,13 +42,13 @@
  */
 
 export interface PingResult {
-  host: string;
-  transmitted: number;
-  received: number;
-  lossPct: number;
-  minMs?: number;
-  avgMs?: number;
-  maxMs?: number;
-  stddevMs?: number;
-  error?: string;
+	host: string;
+	transmitted: number;
+	received: number;
+	lossPct: number;
+	minMs?: number;
+	avgMs?: number;
+	maxMs?: number;
+	stddevMs?: number;
+	error?: string;
 }

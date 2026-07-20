@@ -42,9 +42,9 @@
  */
 
 export interface ServiceActionResult {
-  name: string;
-  command: string[];
-  success: boolean;
-  output?: string;
-  error?: string;
+	name: string;
+	command: string[];
+	success: boolean;
+	output?: string;
+	error?: string;
 }

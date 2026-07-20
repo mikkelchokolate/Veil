@@ -42,8 +42,8 @@
  */
 
 export type GetApiV1EventsParams = {
-/**
- * Comma-separated event types to stream (traffic, apply). Default all.
- */
-types?: string;
+	/**
+	 * Comma-separated event types to stream (traffic, apply). Default all.
+	 */
+	types?: string;
 };

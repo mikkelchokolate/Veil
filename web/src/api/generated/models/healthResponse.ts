@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { HealthResponseStatus } from './healthResponseStatus.ts';
+import type { HealthResponseStatus } from "./healthResponseStatus.ts";
 
 export interface HealthResponse {
-  status: HealthResponseStatus;
-  error?: string;
+	status: HealthResponseStatus;
+	error?: string;
 }

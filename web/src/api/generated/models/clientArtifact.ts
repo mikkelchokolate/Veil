@@ -42,9 +42,9 @@
  */
 
 export interface ClientArtifact {
-  name: string;
-  protocol: string;
-  kind: string;
-  filename: string;
-  content: string;
+	name: string;
+	protocol: string;
+	kind: string;
+	filename: string;
+	content: string;
 }

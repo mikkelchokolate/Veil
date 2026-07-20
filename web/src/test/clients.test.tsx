@@ -9,7 +9,7 @@ import {
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { ClientsPage } from "../pages/ClientsPage";
-import { http, HttpResponse, server } from "./server";
+import { HttpResponse, http, server } from "./server";
 
 // Render a single page component inside a minimal router (clients list uses
 // useSearch/useNavigate) + react-query, against the MSW mock API.
@@ -67,6 +67,8 @@ describe("ClientsPage", () => {
 			),
 		);
 		renderClients();
-		await waitFor(() => expect(screen.getByText(/no clients/i)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/no clients/i)).toBeInTheDocument(),
+		);
 	});
 });

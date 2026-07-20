@@ -41,11 +41,11 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type RURecommendedPreviewResponsePanelAccess = typeof RURecommendedPreviewResponsePanelAccess[keyof typeof RURecommendedPreviewResponsePanelAccess];
-
+export type RURecommendedPreviewResponsePanelAccess =
+	(typeof RURecommendedPreviewResponsePanelAccess)[keyof typeof RURecommendedPreviewResponsePanelAccess];
 
 export const RURecommendedPreviewResponsePanelAccess = {
-  local: 'local',
-  direct: 'direct',
-  caddy: 'caddy',
+	local: "local",
+	direct: "direct",
+	caddy: "caddy",
 } as const;

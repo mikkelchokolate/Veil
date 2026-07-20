@@ -41,12 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type ClientUpsertRequestQuotaResetPolicy = typeof ClientUpsertRequestQuotaResetPolicy[keyof typeof ClientUpsertRequestQuotaResetPolicy];
-
+export type ClientUpsertRequestQuotaResetPolicy =
+	(typeof ClientUpsertRequestQuotaResetPolicy)[keyof typeof ClientUpsertRequestQuotaResetPolicy];
 
 export const ClientUpsertRequestQuotaResetPolicy = {
-  never: 'never',
-  daily: 'daily',
-  weekly: 'weekly',
-  monthly: 'monthly',
+	never: "never",
+	daily: "daily",
+	weekly: "weekly",
+	monthly: "monthly",
 } as const;

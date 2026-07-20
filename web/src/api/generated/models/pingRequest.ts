@@ -42,10 +42,10 @@
  */
 
 export interface PingRequest {
-  host: string;
-  /**
-     * @minimum 1
-     * @maximum 10
-     */
-  count?: number;
+	host: string;
+	/**
+	 * @minimum 1
+	 * @maximum 10
+	 */
+	count?: number;
 }

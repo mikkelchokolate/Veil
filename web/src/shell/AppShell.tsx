@@ -1,9 +1,9 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useAuth } from "../auth/AuthContext";
 import { ApplyStatusIndicator } from "../apply/ApplyStatusIndicator";
-import { NAV_ENTRIES } from "./nav";
+import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
+import { NAV_ENTRIES } from "./nav";
 
 function NavIcon({ path }: { path: string }) {
 	return (
@@ -34,10 +34,15 @@ export function AppShell({ children }: { children?: ReactNode }) {
 				<ul className="nav-menu">
 					{NAV_ENTRIES.map((entry) => {
 						const active =
-							entry.to === "/" ? pathname === "/" : pathname.startsWith(entry.to);
+							entry.to === "/"
+								? pathname === "/"
+								: pathname.startsWith(entry.to);
 						return (
 							<li key={entry.to}>
-								<Link to={entry.to} className={`nav-item${active ? " active" : ""}`}>
+								<Link
+									to={entry.to}
+									className={`nav-item${active ? " active" : ""}`}
+								>
 									<NavIcon path={entry.icon} />
 									<span>{t(entry.labelKey)}</span>
 								</Link>

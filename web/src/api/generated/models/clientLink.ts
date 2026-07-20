@@ -42,10 +42,10 @@
  */
 
 export interface ClientLink {
-  name: string;
-  protocol: string;
-  transport: string;
-  port: number;
-  uri: string;
-  config?: string;
+	name: string;
+	protocol: string;
+	transport: string;
+	port: number;
+	uri: string;
+	config?: string;
 }

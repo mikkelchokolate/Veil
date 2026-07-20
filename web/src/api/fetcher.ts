@@ -20,7 +20,12 @@ export class ApiError extends Error {
 	readonly code: string | undefined;
 	readonly details: unknown;
 
-	constructor(status: number, message: string, code?: string, details?: unknown) {
+	constructor(
+		status: number,
+		message: string,
+		code?: string,
+		details?: unknown,
+	) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
@@ -31,7 +36,8 @@ export class ApiError extends Error {
 
 /** Base path the SPA is mounted under ("" at root, "/<secret>" otherwise). */
 function panelBasePath(): string {
-	const el = typeof document !== "undefined" ? document.querySelector("base") : null;
+	const el =
+		typeof document !== "undefined" ? document.querySelector("base") : null;
 	const href = el?.getAttribute("href") ?? "/";
 	// href is like "/" or "/secret/". Strip trailing slash; "" means root.
 	return href.endsWith("/") ? href.slice(0, -1) : href;
@@ -46,7 +52,10 @@ function isMutating(method: string): boolean {
 	return m !== "GET" && m !== "HEAD" && m !== "OPTIONS";
 }
 
-function extractMessage(body: unknown, fallback: string): { message: string; code?: string } {
+function extractMessage(
+	body: unknown,
+	fallback: string,
+): { message: string; code?: string } {
 	if (body && typeof body === "object") {
 		const o = body as Record<string, unknown>;
 		const message =
@@ -59,7 +68,10 @@ function extractMessage(body: unknown, fallback: string): { message: string; cod
 	return { message: fallback };
 }
 
-export async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+	url: string,
+	options: RequestInit = {},
+): Promise<T> {
 	const method = (options.method ?? "GET").toUpperCase();
 	const headers = new Headers(options.headers);
 	if (options.body != null && !headers.has("Content-Type")) {
@@ -90,7 +102,10 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
 	}
 
 	if (!res.ok) {
-		const { message, code } = extractMessage(body, res.statusText || `HTTP ${res.status}`);
+		const { message, code } = extractMessage(
+			body,
+			res.statusText || `HTTP ${res.status}`,
+		);
 		throw new ApiError(res.status, message, code, body);
 	}
 

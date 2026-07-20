@@ -1,10 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+	createRootRoute,
+	createRoute,
+	createRouter,
+	RouterProvider,
+} from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
-import { ApplyPage } from "../pages/ApplyPage";
-import { http, HttpResponse, server } from "./server";
 import { I18nProvider } from "../i18n/I18nContext";
-import { RouterProvider, createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
+import { ApplyPage } from "../pages/ApplyPage";
+import { HttpResponse, http, server } from "./server";
 
 function renderApply() {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,19 +37,29 @@ describe("ApplyPage", () => {
 	it("shows drift and reconcile when applied is behind desired", async () => {
 		server.use(
 			http.get("/api/apply/state", () =>
-				HttpResponse.json({ desiredRevision: 3, appliedRevision: 1, state: "drift" }),
+				HttpResponse.json({
+					desiredRevision: 3,
+					appliedRevision: 1,
+					state: "drift",
+				}),
 			),
 			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
 		);
 		renderApply();
-		await waitFor(() => expect(screen.getByText(/behind desired/i)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/behind desired/i)).toBeInTheDocument(),
+		);
 		// Reconcile is admin-only; the drift indicator is the honest signal here.
 	});
 
 	it("renders job rows with status", async () => {
 		server.use(
 			http.get("/api/apply/state", () =>
-				HttpResponse.json({ desiredRevision: 2, appliedRevision: 2, state: "applied" }),
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 2,
+					state: "applied",
+				}),
 			),
 			http.get("/api/apply/jobs", () =>
 				HttpResponse.json({
@@ -63,7 +78,9 @@ describe("ApplyPage", () => {
 			),
 		);
 		renderApply();
-		await waitFor(() => expect(screen.getByText(/haproxy reload failed/i)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/haproxy reload failed/i)).toBeInTheDocument(),
+		);
 		expect(screen.getByText("failed")).toBeInTheDocument();
 	});
 });

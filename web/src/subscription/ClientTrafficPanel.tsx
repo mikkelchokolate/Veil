@@ -35,27 +35,45 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 	});
 
 	if (traffic.isLoading) {
-		return <div className="card"><p className="muted">Loading…</p></div>;
+		return (
+			<div className="card">
+				<p className="muted">Loading…</p>
+			</div>
+		);
 	}
 	if (traffic.isError || !traffic.data) {
-		return <div className="card"><p className="form-error">Traffic unavailable</p></div>;
+		return (
+			<div className="card">
+				<p className="form-error">Traffic unavailable</p>
+			</div>
+		);
 	}
 
 	const t = traffic.data;
 	const pct =
-		t.quotaBytes && t.quotaBytes > 0 ? Math.min(100, Math.round((t.usedBytes / t.quotaBytes) * 100)) : null;
+		t.quotaBytes && t.quotaBytes > 0
+			? Math.min(100, Math.round((t.usedBytes / t.quotaBytes) * 100))
+			: null;
 
 	return (
 		<div className="card">
 			<h2>Traffic usage</h2>
-			<p><strong>Upload:</strong> {fmtBytes(t.uploadBytes)}</p>
-			<p><strong>Download:</strong> {fmtBytes(t.downloadBytes)}</p>
-			<p><strong>Total used:</strong> {fmtBytes(t.usedBytes)}</p>
+			<p>
+				<strong>Upload:</strong> {fmtBytes(t.uploadBytes)}
+			</p>
+			<p>
+				<strong>Download:</strong> {fmtBytes(t.downloadBytes)}
+			</p>
+			<p>
+				<strong>Total used:</strong> {fmtBytes(t.usedBytes)}
+			</p>
 			{t.quotaBytes != null ? (
 				<>
 					<p>
 						<strong>Quota:</strong> {fmtBytes(t.quotaBytes)}
-						{t.remainingBytes != null ? ` · remaining ${fmtBytes(t.remainingBytes)}` : ""}
+						{t.remainingBytes != null
+							? ` · remaining ${fmtBytes(t.remainingBytes)}`
+							: ""}
 					</p>
 					<div
 						style={{
@@ -74,12 +92,16 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 							style={{
 								height: "100%",
 								width: `${pct ?? 0}%`,
-								background: t.depleted ? "var(--accent-danger)" : "var(--accent)",
+								background: t.depleted
+									? "var(--accent-danger)"
+									: "var(--accent)",
 							}}
 						/>
 					</div>
 					{t.depleted ? (
-						<p className="badge badge-danger" style={{ marginTop: 8 }}>quota depleted</p>
+						<p className="badge badge-danger" style={{ marginTop: 8 }}>
+							quota depleted
+						</p>
 					) : null}
 				</>
 			) : (
