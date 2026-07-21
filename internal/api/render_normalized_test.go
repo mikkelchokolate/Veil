@@ -17,13 +17,11 @@ func TestRendererIncludesNormalizedClientCredentials(t *testing.T) {
 	s.inbounds = []Inbound{{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "inbound-pass"}}
 
 	// Seed a normalized client bound to hy2 with a credential.
-	repo := client.NewRepository(openApplyTestDB(t))
-	s.cipher = newTestCipher(t)
-	creds := client.NewCredentialStore(openApplyTestDB(t), s.cipher)
 	// repo and creds must share the same DB.
+	s.cipher = newTestCipher(t)
 	db := openApplyTestDB(t)
-	repo = client.NewRepository(db)
-	creds = client.NewCredentialStore(db, s.cipher)
+	repo := client.NewRepository(db)
+	creds := client.NewCredentialStore(db, s.cipher)
 	svc := client.NewService(repo, creds)
 	s.clientService = svc
 

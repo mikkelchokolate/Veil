@@ -179,17 +179,6 @@ func (s *managementState) RefreshTrafficProviders() {
 	s.registerTrafficProvidersLocked()
 }
 
-// stopTrafficSubsystem halts the periodic collector/reconciler. Safe to call
-// multiple times.
-func (s *managementState) stopTrafficSubsystem() {
-	if s.trafficCollector != nil {
-		s.trafficCollector.Stop()
-	}
-	if s.trafficReconciler != nil {
-		s.trafficReconciler.Stop()
-	}
-}
-
 // applyTrackingEnabled reports whether durable revisions/jobs are available.
 func (s *managementState) applyTrackingEnabled() bool {
 	return s.applyRunner != nil && s.applyRevisions != nil && s.applyJobs != nil

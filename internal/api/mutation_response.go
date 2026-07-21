@@ -78,20 +78,3 @@ func (s *managementState) mergedRevisionView(outcome autoApplyOutcome) revisionV
 	}
 	return revisionView{Desired: rev.Desired, Applied: rev.Applied, State: deriveSystemState(rev, job)}
 }
-
-// currentRevisionView returns the revision view without running an apply.
-func (s *managementState) currentRevisionView() revisionView {
-	if !s.applyTrackingEnabled() {
-		return revisionView{State: apply.StateSynced}
-	}
-	rev, err := s.applyRevisions.Get()
-	if err != nil {
-		return revisionView{State: apply.StateSynced}
-	}
-	jobs, _ := s.applyJobs.List(1)
-	var latest *apply.Job
-	if len(jobs) > 0 {
-		latest = &jobs[0]
-	}
-	return revisionView{Desired: rev.Desired, Applied: rev.Applied, State: deriveSystemState(rev, latest)}
-}

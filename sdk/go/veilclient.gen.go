@@ -25,6 +25,15 @@ const (
 	VeilTokenScopes     = "veilToken.Scopes"
 )
 
+// Defines values for ApplyJobStatus.
+const (
+	ApplyJobStatusFailed     ApplyJobStatus = "failed"
+	ApplyJobStatusPending    ApplyJobStatus = "pending"
+	ApplyJobStatusRolledBack ApplyJobStatus = "rolled_back"
+	ApplyJobStatusRunning    ApplyJobStatus = "running"
+	ApplyJobStatusSuccess    ApplyJobStatus = "success"
+)
+
 // Defines values for ApplyOperationInterruptionRisk.
 const (
 	ConnectionDrop ApplyOperationInterruptionRisk = "connection-drop"
@@ -51,10 +60,10 @@ const (
 
 // Defines values for BackupRestoreJobStatus.
 const (
-	Failed    BackupRestoreJobStatus = "failed"
-	Queued    BackupRestoreJobStatus = "queued"
-	Running   BackupRestoreJobStatus = "running"
-	Succeeded BackupRestoreJobStatus = "succeeded"
+	BackupRestoreJobStatusFailed    BackupRestoreJobStatus = "failed"
+	BackupRestoreJobStatusQueued    BackupRestoreJobStatus = "queued"
+	BackupRestoreJobStatusRunning   BackupRestoreJobStatus = "running"
+	BackupRestoreJobStatusSucceeded BackupRestoreJobStatus = "succeeded"
 )
 
 // Defines values for BackupVerificationReportEncryptionVersion.
@@ -127,6 +136,13 @@ const (
 	RURecommendedPreviewResponsePanelAccessCaddy  RURecommendedPreviewResponsePanelAccess = "caddy"
 	RURecommendedPreviewResponsePanelAccessDirect RURecommendedPreviewResponsePanelAccess = "direct"
 	RURecommendedPreviewResponsePanelAccessLocal  RURecommendedPreviewResponsePanelAccess = "local"
+)
+
+// Defines values for RevisionViewState.
+const (
+	Failed  RevisionViewState = "failed"
+	Pending RevisionViewState = "pending"
+	Synced  RevisionViewState = "synced"
 )
 
 // Defines values for SettingsPanelAccess.
@@ -216,6 +232,24 @@ type ApplyHistoryEntry struct {
 	Validations     *[]ConfigValidationResult `json:"validations,omitempty"`
 	WrittenFiles    []string                  `json:"writtenFiles"`
 }
+
+// ApplyJob defines model for ApplyJob.
+type ApplyJob struct {
+	ActorId         *string        `json:"actorId,omitempty"`
+	BaseRevision    int            `json:"baseRevision"`
+	CreatedAt       int            `json:"createdAt"`
+	DesiredRevision int            `json:"desiredRevision"`
+	ErrorCode       *string        `json:"errorCode,omitempty"`
+	ErrorMessage    *string        `json:"errorMessage,omitempty"`
+	FinishedAt      *int           `json:"finishedAt,omitempty"`
+	Id              string         `json:"id"`
+	StartedAt       *int           `json:"startedAt,omitempty"`
+	Status          ApplyJobStatus `json:"status"`
+	Trigger         string         `json:"trigger"`
+}
+
+// ApplyJobStatus defines model for ApplyJob.Status.
+type ApplyJobStatus string
 
 // ApplyOperation defines model for ApplyOperation.
 type ApplyOperation struct {
@@ -391,6 +425,24 @@ type BackupVerificationReport struct {
 // BackupVerificationReportEncryptionVersion Zero for unencrypted archives.
 type BackupVerificationReportEncryptionVersion int
 
+// BindingCapability defines model for BindingCapability.
+type BindingCapability struct {
+	PerClientCredentials bool     `json:"perClientCredentials"`
+	Protocol             string   `json:"protocol"`
+	RequiresCaddy        bool     `json:"requiresCaddy"`
+	Transports           []string `json:"transports"`
+}
+
+// BindingView defines model for BindingView.
+type BindingView struct {
+	Capability *BindingCapability `json:"capability,omitempty"`
+	Credential *CredentialMeta    `json:"credential,omitempty"`
+	Enabled    bool               `json:"enabled"`
+	Id         string             `json:"id"`
+	InboundId  string             `json:"inboundId"`
+	Version    int                `json:"version"`
+}
+
 // ClientArtifact defines model for ClientArtifact.
 type ClientArtifact struct {
 	Content  string `json:"content"`
@@ -398,6 +450,23 @@ type ClientArtifact struct {
 	Kind     string `json:"kind"`
 	Name     string `json:"name"`
 	Protocol string `json:"protocol"`
+}
+
+// ClientBindingInput defines model for ClientBindingInput.
+type ClientBindingInput struct {
+	// Credential Optional explicit credential; server-generated when empty.
+	Credential *string `json:"credential,omitempty"`
+	Enabled    *bool   `json:"enabled,omitempty"`
+	InboundId  string  `json:"inboundId"`
+}
+
+// ClientCreateResponse Atomic create envelope: the committed client, any server-generated credentials (plaintext shown exactly once), the new desired revision, and the apply job that ran for that revision. success=false means the client committed but the apply did not finish cleanly.
+type ClientCreateResponse struct {
+	ApplyJob          *ApplyJob           `json:"applyJob,omitempty"`
+	Client            ClientView          `json:"client"`
+	IssuedCredentials *[]IssuedCredential `json:"issuedCredentials,omitempty"`
+	Revision          RevisionView        `json:"revision"`
+	Success           bool                `json:"success"`
 }
 
 // ClientLink defines model for ClientLink.
@@ -449,6 +518,8 @@ type ClientProfile struct {
 
 // ClientUpsertRequest defines model for ClientUpsertRequest.
 type ClientUpsertRequest struct {
+	// Bindings Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.
+	Bindings         *[]ClientBindingInput                `json:"bindings,omitempty"`
 	DeviceLimit      *int                                 `json:"deviceLimit,omitempty"`
 	Email            *string                              `json:"email,omitempty"`
 	Enabled          *bool                                `json:"enabled,omitempty"`
@@ -467,17 +538,18 @@ type ClientUpsertRequestQuotaResetPolicy string
 
 // ClientView defines model for ClientView.
 type ClientView struct {
-	CreatedAt        *int64    `json:"createdAt,omitempty"`
-	Depleted         *bool     `json:"depleted,omitempty"`
-	Email            *string   `json:"email,omitempty"`
-	Enabled          *bool     `json:"enabled,omitempty"`
-	ExpiresAt        *int64    `json:"expiresAt,omitempty"`
-	HasCreds         *bool     `json:"hasCreds,omitempty"`
-	Id               string    `json:"id"`
-	InboundIds       *[]string `json:"inboundIds,omitempty"`
-	Name             string    `json:"name"`
-	QuotaBytes       *int64    `json:"quotaBytes,omitempty"`
-	QuotaResetPolicy *string   `json:"quotaResetPolicy,omitempty"`
+	Bindings         *[]BindingView `json:"bindings,omitempty"`
+	CreatedAt        *int64         `json:"createdAt,omitempty"`
+	Depleted         *bool          `json:"depleted,omitempty"`
+	Email            *string        `json:"email,omitempty"`
+	Enabled          *bool          `json:"enabled,omitempty"`
+	ExpiresAt        *int64         `json:"expiresAt,omitempty"`
+	HasCreds         *bool          `json:"hasCreds,omitempty"`
+	Id               string         `json:"id"`
+	InboundIds       *[]string      `json:"inboundIds,omitempty"`
+	Name             string         `json:"name"`
+	QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
+	QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
 
 	// Status Effective status.
 	Status    ClientViewStatus `json:"status"`
@@ -510,6 +582,14 @@ type ConnectionListener struct {
 // ConnectionsStats defines model for ConnectionsStats.
 type ConnectionsStats struct {
 	Listeners []ConnectionListener `json:"listeners"`
+}
+
+// CredentialMeta defines model for CredentialMeta.
+type CredentialMeta struct {
+	Configured bool    `json:"configured"`
+	Kind       *string `json:"kind,omitempty"`
+	RotatedAt  *int64  `json:"rotatedAt,omitempty"`
+	Version    *int    `json:"version,omitempty"`
 }
 
 // DNSLookupRequest defines model for DNSLookupRequest.
@@ -618,6 +698,14 @@ type InboundProtocol string
 
 // InboundTransport defines model for Inbound.Transport.
 type InboundTransport string
+
+// IssuedCredential Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is never stored.
+type IssuedCredential struct {
+	BindingId string `json:"bindingId"`
+	InboundId string `json:"inboundId"`
+	Kind      string `json:"kind"`
+	Plaintext string `json:"plaintext"`
+}
 
 // KeyRotationResponse defines model for KeyRotationResponse.
 type KeyRotationResponse struct {
@@ -748,6 +836,16 @@ type RURecommendedPreviewResponse struct {
 
 // RURecommendedPreviewResponsePanelAccess defines model for RURecommendedPreviewResponse.PanelAccess.
 type RURecommendedPreviewResponsePanelAccess string
+
+// RevisionView defines model for RevisionView.
+type RevisionView struct {
+	Applied int               `json:"applied"`
+	Desired int               `json:"desired"`
+	State   RevisionViewState `json:"state"`
+}
+
+// RevisionViewState defines model for RevisionView.State.
+type RevisionViewState string
 
 // RoutingPreset defines model for RoutingPreset.
 type RoutingPreset struct {
@@ -1205,6 +1303,11 @@ type PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody struct {
 type PostApiV1ClientsIdTokensJSONBody struct {
 	ExpiresAt *int64  `json:"expiresAt,omitempty"`
 	Label     *string `json:"label,omitempty"`
+}
+
+// GetApiV1EventsParams defines parameters for GetApiV1Events.
+type GetApiV1EventsParams struct {
+	Types *string `form:"types,omitempty" json:"types,omitempty"`
 }
 
 // GetApiV1TrafficIdHistoryParams defines parameters for GetApiV1TrafficIdHistory.
@@ -1711,6 +1814,9 @@ type ClientInterface interface {
 
 	// PostApiV1ClientsIdTokensTokenIdRotate request
 	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1Events request
+	GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1TrafficStream request
 	GetApiV1TrafficStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3071,6 +3177,18 @@ func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id Clien
 
 func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1EventsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6164,6 +6282,55 @@ func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId,
 	return req, nil
 }
 
+// NewGetApiV1EventsRequest generates requests for GetApiV1Events
+func NewGetApiV1EventsRequest(server string, params *GetApiV1EventsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/events")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Types != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "types", runtime.ParamLocationQuery, *params.Types); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1TrafficStreamRequest generates requests for GetApiV1TrafficStream
 func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
 	var err error
@@ -7065,6 +7232,9 @@ type ClientWithResponsesInterface interface {
 	// PostApiV1ClientsIdTokensTokenIdRotateWithResponse request
 	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
 
+	// GetApiV1EventsWithResponse request
+	GetApiV1EventsWithResponse(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*GetApiV1EventsResponse, error)
+
 	// GetApiV1TrafficStreamWithResponse request
 	GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error)
 
@@ -7184,6 +7354,9 @@ func (r GetApiApplyHistoryResponse) StatusCode() int {
 type GetApiApplyJobsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *struct {
+		Items []ApplyJob `json:"items"`
+	}
 }
 
 // Status returns HTTPResponse.Status
@@ -8495,7 +8668,7 @@ func (r GetApiV1ClientsResponse) StatusCode() int {
 type PostApiV1ClientsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *ClientView
+	JSON201      *ClientCreateResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -8827,6 +9000,27 @@ func (r PostApiV1ClientsIdTokensTokenIdRotateResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiV1ClientsIdTokensTokenIdRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1EventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1EventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1EventsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -10097,6 +10291,15 @@ func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(
 	return ParsePostApiV1ClientsIdTokensTokenIdRotateResponse(rsp)
 }
 
+// GetApiV1EventsWithResponse request returning *GetApiV1EventsResponse
+func (c *ClientWithResponses) GetApiV1EventsWithResponse(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*GetApiV1EventsResponse, error) {
+	rsp, err := c.GetApiV1Events(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1EventsResponse(rsp)
+}
+
 // GetApiV1TrafficStreamWithResponse request returning *GetApiV1TrafficStreamResponse
 func (c *ClientWithResponses) GetApiV1TrafficStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1TrafficStreamResponse, error) {
 	rsp, err := c.GetApiV1TrafficStream(ctx, reqEditors...)
@@ -10343,6 +10546,18 @@ func ParseGetApiApplyJobsResponse(rsp *http.Response) (*GetApiApplyJobsResponse,
 	response := &GetApiApplyJobsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []ApplyJob `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -11811,7 +12026,7 @@ func ParsePostApiV1ClientsResponse(rsp *http.Response) (*PostApiV1ClientsRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ClientView
+		var dest ClientCreateResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -12097,6 +12312,22 @@ func ParsePostApiV1ClientsIdTokensTokenIdRotateResponse(rsp *http.Response) (*Po
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1EventsResponse parses an HTTP response from a GetApiV1EventsWithResponse call
+func ParseGetApiV1EventsResponse(rsp *http.Response) (*GetApiV1EventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1EventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
