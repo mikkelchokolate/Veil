@@ -255,7 +255,24 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 		}
 	}
 
-	// Boot 2: marker fast path — no new backup, no duplicate clients.
+	// Issue 1: the migration ran through the mutation orchestration — a
+	// desired revision and its immutable snapshot exist after boot 1, so the
+	// system can never report synced while migrated state differs from the
+	// runtime.
+	rev, err := st1.applyRevisions.Get()
+	if err != nil {
+		t.Fatalf("read revisions: %v", err)
+	}
+	if rev.Desired < 1 {
+		t.Fatalf("migration created no desired revision: %+v", rev)
+	}
+	snap := st1.applySnapshots.Has(rev.Desired)
+	if !snap {
+		t.Fatalf("immutable snapshot missing for revision %d", rev.Desired)
+	}
+
+	// Boot 2: all current legacy profiles already represented — no new
+	// backup, no duplicate clients, no new revision (fingerprint fast path).
 	st2 := newManagementState(info)
 	_, total, err = st2.clientRepo.List(client.ListFilter{})
 	if err != nil {
@@ -267,5 +284,90 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	backups2, err := filepath.Glob(filepath.Join(dir, "backups", "migrations", "legacy-profiles-*"))
 	if err != nil || len(backups2) != 1 {
 		t.Fatalf("second boot created another backup: %v (err %v)", backups2, err)
+	}
+	rev2, err := st2.applyRevisions.Get()
+	if err != nil {
+		t.Fatalf("read revisions after second boot: %v", err)
+	}
+	if rev2.Desired != rev.Desired {
+		t.Fatalf("second boot bumped revision with nothing to migrate: %d -> %d", rev.Desired, rev2.Desired)
+	}
+}
+
+// TestStartupMigrateLegacyRestoredStateMigratesNewProfiles is the issue-2
+// scenario: the migration marker exists, but the state file is then replaced
+// by a restored older copy that carries legacy profiles the marker never
+// represented. The next startup must fingerprint the CURRENT set, find the
+// unrepresented profile, and migrate it — the marker must not act as a skip
+// gate.
+func TestStartupMigrateLegacyRestoredStateMigratesNewProfiles(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+	info := ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath, ApplyRoot: filepath.Join(dir, "apply")}
+
+	writeState := func(profiles string) {
+		t.Helper()
+		doc := `{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"legacy.example.com"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[` + profiles + `]}]}`
+		if err := atomicfile.Write(statePath, []byte(doc), 0o600, 0o700); err != nil {
+			t.Fatalf("write state: %v", err)
+		}
+	}
+
+	// Boot 1: migrate alice + bob; marker is recorded.
+	writeState(`{"username":"alice","password":"alice-pass","enabled":true},{"username":"bob","password":"bob-pass","enabled":true}`)
+	st1 := newManagementState(info)
+	_, total, err := st1.clientRepo.List(client.ListFilter{})
+	if err != nil || total != 2 {
+		t.Fatalf("boot 1: expected 2 migrated clients, got %d (err %v)", total, err)
+	}
+	marker, err := st1.clientRepo.GetMigrationMarker(legacyProfilesMarkerKey)
+	if err != nil || marker == nil {
+		t.Fatalf("boot 1: marker not recorded: %v", err)
+	}
+	rev1, err := st1.applyRevisions.Get()
+	if err != nil {
+		t.Fatalf("boot 1: read revisions: %v", err)
+	}
+
+	// Restore an older state file that also contains carol — a profile the
+	// marker never represented. The marker row from boot 1 is still in the DB.
+	writeState(`{"username":"alice","password":"alice-pass","enabled":true},{"username":"bob","password":"bob-pass","enabled":true},{"username":"carol","password":"carol-pass","enabled":true}`)
+	st2 := newManagementState(info)
+	_, total, err = st2.clientRepo.List(client.ListFilter{})
+	if err != nil {
+		t.Fatalf("boot 2: list clients: %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("boot 2: restored profile was not migrated despite existing marker: got %d clients, want 3", total)
+	}
+	if _, err := st2.clientRepo.Get(client.StableClientID("hy2", "carol")); err != nil {
+		t.Fatalf("boot 2: carol missing: %v", err)
+	}
+	// The incremental migration went through the orchestration: exactly one
+	// new revision with its snapshot, and one new backup.
+	rev2, err := st2.applyRevisions.Get()
+	if err != nil {
+		t.Fatalf("boot 2: read revisions: %v", err)
+	}
+	if rev2.Desired != rev1.Desired+1 {
+		t.Fatalf("boot 2: expected exactly one new revision: %d -> %d", rev1.Desired, rev2.Desired)
+	}
+	if !st2.applySnapshots.Has(rev2.Desired) {
+		t.Fatalf("boot 2: snapshot missing for revision %d", rev2.Desired)
+	}
+	backups, err := filepath.Glob(filepath.Join(dir, "backups", "migrations", "legacy-profiles-*"))
+	if err != nil || len(backups) != 2 {
+		t.Fatalf("boot 2: expected 2 migration backups (one per migration run), got %v (err %v)", backups, err)
+	}
+
+	// Boot 3: everything represented again — fast path, no further revision.
+	st3 := newManagementState(info)
+	rev3, err := st3.applyRevisions.Get()
+	if err != nil {
+		t.Fatalf("boot 3: read revisions: %v", err)
+	}
+	if rev3.Desired != rev2.Desired {
+		t.Fatalf("boot 3: revision churn with nothing to migrate: %d -> %d", rev2.Desired, rev3.Desired)
 	}
 }

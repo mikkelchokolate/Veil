@@ -485,9 +485,27 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	if err := restoreChmod(tempPath, 0o600); err != nil {
+	// Preserve the original file's mode and ownership: the restore may run as
+	// root (privileged helper) while the panel process runs unprivileged. A
+	// replacement written root-owned 0600 would leave the panel unable to
+	// re-read its own state/key after restore (the reload step then fails and
+	// the whole restore job is reported as failed despite state on disk being
+	// correct).
+	mode := os.FileMode(0o600)
+	var info os.FileInfo
+	if existing, statErr := os.Stat(target); statErr == nil {
+		info = existing
+		mode = existing.Mode().Perm()
+	}
+	if err := restoreChmod(tempPath, mode); err != nil {
 		_ = restoreRemove(tempPath)
 		return nil, err
+	}
+	if info != nil {
+		if err := restoreChownToMatch(tempPath, info); err != nil {
+			_ = restoreRemove(tempPath)
+			return nil, err
+		}
 	}
 	_, statErr := os.Stat(target)
 	return &stagedRestoreFile{

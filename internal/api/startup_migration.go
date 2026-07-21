@@ -1,12 +1,15 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,19 +22,23 @@ import (
 // migrated until an operator reloaded by hand. The startup path here is
 // idempotent and self-protecting:
 //
-//   - BACKUP: before the first migration run, a consistent copy of the state
-//     file and the SQLite store is written under
-//     backupDir/migrations/legacy-profiles-<ts>/ (the DB copy uses
-//     VACUUM INTO, which is consistent even on a live database).
-//   - MARKER: a migration_markers row (key "legacy_profiles", version 1)
-//     records completion; later boots with the marker present take the fast
-//     path and skip both backup and migration.
-//   - VERIFICATION: inside the same transaction, every migratable legacy
-//     profile is verified to have a normalized client + binding + active
-//     credential; any mismatch rolls the migration back instead of marking
-//     success over a broken state.
-//   - IDEMPOTENT: stable derived client IDs make re-runs no-ops even when the
-//     marker table is unavailable (e.g. tests without a StatePath).
+//   - FINGERPRINT EVERY BOOT: the CURRENT legacy profile set is checked for
+//     representation (stable derived client ID + binding) on every startup.
+//     A restored older state file may carry profiles that were not
+//     represented when the marker was written, so the marker is an audit
+//     record, never a skip gate.
+//   - BACKUP: before migrating, a consistent copy of the state file and the
+//     SQLite store is written under backupDir/migrations/legacy-profiles-<ts>/
+//     (the DB copy uses VACUUM INTO, consistent even on a live database).
+//   - ORCHESTRATION: the migration runs through commitClientMutationLocked —
+//     normalized clients, the desired-revision bump, and the immutable
+//     snapshot commit in ONE transaction, and one apply job runs for the new
+//     revision. The system can never report synced while migrated state
+//     differs from the runtime.
+//   - VERIFICATION: inside the same transaction, every newly migrated profile
+//     is verified to have a normalized client + binding + active credential;
+//     any mismatch rolls the migration (and the revision) back.
+//   - IDEMPOTENT: stable derived client IDs make re-runs no-ops.
 
 const (
 	legacyProfilesMarkerKey     = "legacy_profiles"
@@ -49,15 +56,6 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		return nil
 	}
 	pending := l.legacyProfileInbounds()
-	markerAvailable := s.clientRepo != nil && s.db != nil
-	var marker *client.MigrationMarker
-	if markerAvailable {
-		m, err := s.clientRepo.GetMigrationMarker(legacyProfilesMarkerKey)
-		if err != nil {
-			return fmt.Errorf("read migration marker: %w", err)
-		}
-		marker = m
-	}
 	if len(pending) == 0 {
 		// Nothing to migrate. Deliberately no marker write here: the marker is
 		// a record of a completed migration, and must never suppress a future
@@ -65,10 +63,37 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		// from an older backup after this boot).
 		return nil
 	}
-	if marker != nil && marker.Version >= legacyProfilesMarkerVersion {
-		// Already migrated by a previous boot. Legacy profiles intentionally
-		// remain in the state file (they render from normalized clients), so
-		// there is nothing further to do.
+	if s.clientRepo == nil {
+		return fmt.Errorf("client store unavailable for legacy migration")
+	}
+
+	// Fingerprint the CURRENT legacy set: find profiles with no normalized
+	// representation yet. Read-only pass; runs on every startup.
+	type inboundMissing struct {
+		Name     string
+		Protocol string
+		Profiles []client.LegacyProfile
+	}
+	var missing []inboundMissing
+	missingCount := 0
+	if err := s.clientRepo.WithTx(func(tx *client.Tx) error {
+		for _, in := range pending {
+			m, err := s.clientMigrator.MissingInboundProfiles(tx, in.Name, in.Profiles)
+			if err != nil {
+				return err
+			}
+			if len(m) > 0 {
+				missing = append(missing, inboundMissing{Name: in.Name, Protocol: in.Protocol, Profiles: m})
+				missingCount += len(m)
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("verify legacy profile representation: %w", err)
+	}
+	if missingCount == 0 {
+		// Every current legacy profile is already represented (regardless of
+		// what the marker says) — nothing to do.
 		return nil
 	}
 
@@ -79,21 +104,18 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		return fmt.Errorf("pre-migration backup: %w", err)
 	}
 
-	// Migrate + verify + marker in ONE transaction: either every migratable
-	// profile is normalized and verified, or nothing is committed.
+	// Migrate + verify + marker + desired-revision bump + immutable snapshot
+	// in ONE transaction through the unified mutation orchestration.
 	created := 0
-	if s.clientRepo == nil {
-		return fmt.Errorf("client store unavailable for legacy migration")
-	}
-	err = s.clientRepo.WithTx(func(tx *client.Tx) error {
-		for _, in := range pending {
+	if _, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
+		for _, in := range missing {
 			res, err := s.clientMigrator.MigrateInboundProfilesTx(tx, in.Name, in.Protocol, in.Profiles)
 			if err != nil {
 				return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
 			}
 			created += res.ClientsCreated
 		}
-		for _, in := range pending {
+		for _, in := range missing {
 			if err := s.clientMigrator.VerifyInboundProfiles(tx, in.Name, in.Profiles); err != nil {
 				return err
 			}
@@ -101,6 +123,7 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		details, _ := json.Marshal(map[string]any{
 			"clientsCreated": created,
 			"backup":         backupPath,
+			"fingerprint":    l.legacyProfileFingerprint(pending),
 		})
 		return tx.PutMigrationMarker(client.MigrationMarker{
 			Key:       legacyProfilesMarkerKey,
@@ -108,14 +131,40 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 			AppliedAt: time.Now().Unix(),
 			Details:   string(details),
 		})
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
+
+	// One apply job for the new revision: the runtime must converge to the
+	// migrated state before anything can report synced.
+	s.autoApplyResultLocked(nil, "system")
+
 	if created > 0 {
 		log.Printf("startup: migrated %d legacy profiles to normalized clients (backup: %s)", created, backupPath)
 	}
 	return nil
+}
+
+// legacyProfileFingerprint hashes the sorted stable client IDs of the current
+// legacy profile set. Recorded in the migration marker details so operators
+// can tell WHICH set a migration covered; never used as a skip gate.
+func (l ManagementStateLifecycle) legacyProfileFingerprint(pending []struct {
+	Name     string
+	Protocol string
+	Profiles []client.LegacyProfile
+}) string {
+	var ids []string
+	for _, in := range pending {
+		for _, p := range in.Profiles {
+			if p.Username == "" || p.Password == "" {
+				continue
+			}
+			ids = append(ids, client.StableClientID(in.Name, p.Username))
+		}
+	}
+	sort.Strings(ids)
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	return hex.EncodeToString(sum[:16])
 }
 
 // legacyProfileInbounds collects inbounds that still carry legacy embedded

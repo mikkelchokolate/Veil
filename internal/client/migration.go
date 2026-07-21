@@ -117,6 +117,48 @@ func (m *Migrator) MigrateInboundProfilesTx(tx *Tx, inboundID, protocol string, 
 	return res, nil
 }
 
+// MissingInboundProfiles returns the subset of migratable legacy profiles
+// whose normalized representation (a client with the stable derived ID AND a
+// binding to this inbound) does not exist yet. Startup uses it to fingerprint
+// the CURRENT legacy profile set on every boot: a restored older state file
+// may carry profiles that were not represented when the migration marker was
+// written, and the marker alone must never suppress their migration.
+//
+// Credential state is deliberately NOT part of "represented": operators
+// rotate/revoke credentials of migrated clients during normal operation, and
+// treating that as a migration gap would re-migrate forever.
+func (m *Migrator) MissingInboundProfiles(tx *Tx, inboundID string, profiles []LegacyProfile) ([]LegacyProfile, error) {
+	var missing []LegacyProfile
+	for _, p := range profiles {
+		if !p.Enabled && !m.opts.includeDisabled {
+			continue
+		}
+		if p.Password == "" || p.Username == "" {
+			continue
+		}
+		clientID := stableClientID(inboundID, p.Username)
+		if _, err := tx.Get(clientID); err != nil {
+			missing = append(missing, p)
+			continue
+		}
+		bindings, err := tx.BindingsForClient(clientID)
+		if err != nil {
+			return nil, fmt.Errorf("read bindings for profile %q: %w", p.Username, err)
+		}
+		represented := false
+		for _, b := range bindings {
+			if b.InboundID == inboundID {
+				represented = true
+				break
+			}
+		}
+		if !represented {
+			missing = append(missing, p)
+		}
+	}
+	return missing, nil
+}
+
 // VerifyInboundProfiles checks that every migratable legacy profile of the
 // inbound has a corresponding normalized client (stable derived ID) with a
 // binding to this inbound and an active credential. It returns an error
@@ -163,4 +205,11 @@ func stableClientID(inboundID, username string) string {
 	sum := sha256.Sum256([]byte(inboundID + "|" + username))
 	h := hex.EncodeToString(sum[:16])
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
+}
+
+// StableClientID exposes the deterministic migration client ID so callers
+// (e.g. startup-migration fingerprinting) can reason about which legacy
+// profiles are already represented without duplicating the derivation.
+func StableClientID(inboundID, username string) string {
+	return stableClientID(inboundID, username)
 }
