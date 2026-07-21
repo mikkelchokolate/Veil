@@ -14,7 +14,10 @@ import re
 import sys
 from pathlib import Path
 
-SRC = Path("/root/projects/Veil/web/src")
+# Repository-relative: resolve src from the script's own location
+# (web/scripts/i18n_check.py -> web/src), never from the caller's CWD or an
+# absolute developer-machine path.
+SRC = Path(__file__).resolve().parent.parent / "src"
 
 def load_catalog(path: Path) -> set[str]:
     return set(re.findall(r'^\s*"([^"]+)":', path.read_text(), re.M))
