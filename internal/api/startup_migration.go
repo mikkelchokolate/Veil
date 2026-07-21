@@ -207,7 +207,16 @@ func (l ManagementStateLifecycle) backupForLegacyMigration() (string, error) {
 	if s.backupDir == "" {
 		return "", nil
 	}
-	dir := filepath.Join(s.backupDir, "migrations", fmt.Sprintf("legacy-profiles-%d", time.Now().Unix()))
+	// Second-granularity timestamps collide when two migrations run within
+	// the same second (e.g. boot 2 right after a state restore): VACUUM INTO
+	// refuses to overwrite the existing file and the migration would abort
+	// before touching any data. Nanoseconds + a short random suffix keep the
+	// name unique while staying sortable.
+	suffix, err := generateRandomHex(4)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(s.backupDir, "migrations", fmt.Sprintf("legacy-profiles-%d-%s", time.Now().UnixNano(), suffix))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

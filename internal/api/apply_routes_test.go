@@ -21,12 +21,18 @@ func newApplyTrackedRouter(t *testing.T) (http.Handler, *[][]string) {
 	origRunner := serviceActionRunner
 	origHealth := serviceHealthChecker
 	origAutoApply := autoApplyAfterMutation
+	origFirewall := firewallApplierInstance
 	t.Cleanup(func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		serviceHealthChecker = origHealth
 		autoApplyAfterMutation = origAutoApply
+		firewallApplierInstance = origFirewall
 	})
+	// Unit tests must never touch the host firewall: the local applier shells
+	// out to ufw, which fails outright for a non-root test process (CI) and
+	// would mutate the host ruleset as root.
+	firewallApplierInstance = &fakeFirewallApplier{}
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		out := make([]ConfigValidationResult, 0, len(paths))
 		for _, p := range paths {
