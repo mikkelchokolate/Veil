@@ -79,3 +79,58 @@ verify-release: release-check verify-openapi verify-sdk
 docker:
 	docker build -t $(DOCKER_IMAGE):$(VERSION) .
 	@echo "Built $(DOCKER_IMAGE):$(VERSION)"
+
+# ---------------------------------------------------------------------------
+# Local CI (see docs/development/ci.md)
+#
+#   make ci-fast    quick pre-commit checks on the host (NOT a full CI)
+#   make ci         authoritative pre-push gate, runs in a VM (smolvm)
+#   make ci-full    every job incl. protocol E2E, packages, systemd
+#   make ci-pr      ci-full on the temporary merge with origin/main
+#   make ci-host    diagnostic: run the standard job set directly on the host
+#   make ci-job JOB=<job>        one job in a VM
+#   make ci-job-host JOB=<job>   one job directly on the host (diagnostic)
+#   make ci-stress  race/shuffle stress for historically flaky tests
+#   make ci-image   build/refresh the CI OCI images (content-keyed)
+#   make ci-clean   remove artifacts, temp VMs/worktrees (images: --images)
+#
+# Backend: CI_BACKEND=smolvm (default, authoritative; requires KVM).
+# CI_BACKEND=docker is an explicit diagnostic fallback for hosts without
+# virtualization — it is never selected automatically.
+# Resources: CI_CPUS (4), CI_MEMORY (8GiB), CI_VM_TIMEOUT (5400s).
+# Clean run:  CI_CLEAN=1 (dependency caches off; images rebuild only via
+#             `make ci-image CI_CLEAN=1`).
+# ---------------------------------------------------------------------------
+.PHONY: ci-fast ci ci-full ci-pr ci-host ci-job ci-job-host ci-stress ci-image ci-clean
+
+ci-fast:
+	bash scripts/ci/fast.sh
+
+ci:
+	bash scripts/ci/run-job.sh standard
+
+ci-full:
+	bash scripts/ci/run-job.sh full
+
+ci-pr:
+	bash scripts/ci/pr-merge.sh
+
+ci-host:
+	bash scripts/ci/host-run.sh standard
+
+ci-job:
+	@test -n "$(JOB)" || (echo "usage: make ci-job JOB=<frontend|test|lint|browser-e2e|privilege-boundary|e2e|package-smoke|image-build|full|stress>" >&2; exit 1)
+	bash scripts/ci/run-job.sh $(JOB)
+
+ci-job-host:
+	@test -n "$(JOB)" || (echo "usage: make ci-job-host JOB=<job>" >&2; exit 1)
+	bash scripts/ci/host-run.sh $(JOB)
+
+ci-stress:
+	bash scripts/ci/run-job.sh stress
+
+ci-image:
+	bash scripts/ci/vm-build.sh
+
+ci-clean:
+	bash scripts/ci/cleanup.sh $(CI_CLEAN_ARGS)

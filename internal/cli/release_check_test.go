@@ -49,10 +49,17 @@ func TestCiWorkflowRunsE2ESuite(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{"e2e:", "go test -tags e2e ./test/e2e/..."} {
+	for _, want := range []string{"e2e:", "scripts/ci/e2e.sh"} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("ci.yml missing required e2e gate %q:\n%s", want, workflow)
 		}
+	}
+	e2eScript, err := os.ReadFile("../../scripts/ci/e2e.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(e2eScript), "go test -tags e2e ./test/e2e/...") {
+		t.Fatalf("scripts/ci/e2e.sh missing required e2e gate %q", "go test -tags e2e ./test/e2e/...")
 	}
 }
 

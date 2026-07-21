@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
 // test hooks; replaced by tests to inject errors without changing logic.
@@ -15,6 +17,7 @@ var (
 )
 
 func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) error {
+	testguard.CheckPath(path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return err

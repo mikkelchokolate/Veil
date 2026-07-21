@@ -7,8 +7,14 @@ import (
 )
 
 func TestDockerWorkflowsInjectAndVerifyBuildVersion(t *testing.T) {
+	// The version-injection contract lives in the shared CI script (single
+	// source of truth for local VMs and GitHub Actions); the workflow only
+	// has to route to it.
 	contracts := map[string][]string{
 		"../../.github/workflows/ci.yml": {
+			"scripts/ci/image-build.sh",
+		},
+		"../../scripts/ci/image-build.sh": {
 			`--build-arg "VERSION=${version}"`,
 			`docker run --rm veil:ci version`,
 			`grep -F "${version}"`,

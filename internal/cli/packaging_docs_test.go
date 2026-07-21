@@ -77,9 +77,18 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	ciWorkflow := strings.ReplaceAll(string(ci), "\r\n", "\n")
-	for _, want := range []string{"docker-build:", "Docker image build", "docker build", "veil:ci"} {
+	for _, want := range []string{"image-build:", "scripts/ci/image-build.sh"} {
 		if !strings.Contains(ciWorkflow, want) {
 			t.Fatalf("ci.yml missing Docker build verification %q", want)
+		}
+	}
+	imageBuild, err := os.ReadFile("../../scripts/ci/image-build.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"docker build", "veil:ci"} {
+		if !strings.Contains(string(imageBuild), want) {
+			t.Fatalf("scripts/ci/image-build.sh missing Docker build verification %q", want)
 		}
 	}
 

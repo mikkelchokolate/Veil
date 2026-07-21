@@ -1,0 +1,12 @@
+[Unit]
+Description=Veil CI socket-activation proof-of-concept service
+
+[Service]
+# Proves activation by state transition: systemd starts this unit when a
+# connection arrives on veil-ci-echo.socket. Type=oneshot + RemainAfterExit
+# keeps the unit observable as "active (exited)" for the PoC assertion and
+# the journal check. The pending connection itself is irrelevant — the start
+# event is what proves socket activation works.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo veil-ci-socket-activated'

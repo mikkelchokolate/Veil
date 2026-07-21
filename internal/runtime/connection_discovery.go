@@ -23,7 +23,10 @@ func newConnectionDiscoveryWithSource(source connectionSource) ConnectionDiscove
 }
 
 func (d ConnectionDiscovery) Read() (ConnectionsStats, error) {
-	var stats ConnectionsStats
+	// Listeners must serialize as [] (never null): clean minimal environments
+	// (CI containers without any host listener) otherwise emit
+	// "listeners": null and break API consumers.
+	stats := ConnectionsStats{Listeners: []ConnectionListener{}}
 	tcp, _ := d.listeningSockets("tcp")
 	stats.Listeners = append(stats.Listeners, tcp...)
 	udp, _ := d.listeningSockets("udp")

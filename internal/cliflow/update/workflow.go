@@ -26,6 +26,11 @@ type WorkflowDependencies struct {
 	Executable               func() (string, error)
 	ReplaceBinaryFromArchive func(currentPath string, archive []byte, yes bool) (string, error)
 	RestartUpdated           func(currentPath string, backupPath string, opts WorkflowOptions) error
+	// DefaultExecutablePath is the fallback install path used when Executable
+	// fails. Empty means the production default (/usr/local/bin/veil). Tests
+	// must inject an isolated path — a unit test must never write to
+	// /usr/local/bin.
+	DefaultExecutablePath string
 }
 
 func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies) error {
@@ -85,7 +90,10 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 
 	currentPath, err := deps.Executable()
 	if err != nil {
-		currentPath = "/usr/local/bin/veil"
+		currentPath = deps.DefaultExecutablePath
+		if currentPath == "" {
+			currentPath = "/usr/local/bin/veil"
+		}
 	}
 	backupPath := currentPath + ".backup"
 	fmt.Fprintln(out, "Extracting binary...")

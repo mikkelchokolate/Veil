@@ -313,7 +313,13 @@ make e2e     # end-to-end tests: real veil binary launched over a socket
 
 The end-to-end suite (`test/e2e/`, guarded by the `e2e` build tag) compiles the `veil` binary, runs `veil serve` as a subprocess bound to a real port, and drives it over HTTP — covering the readiness lifecycle, API auth gating, graceful shutdown, state persistence across restarts, the full inbound-to-apply flow, and the CLI subcommands. It requires a Linux systemd host with root access; do not run it against a live production install.
 
-A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. It needs Node.js 20+ and is separate from the Go test suites:
+Before pushing, run `make ci` — it executes the same scripts as GitHub Actions inside a local microVM on a clean Ubuntu 24.04 user-space.
+
+Before opening or updating a pull request, run `make ci-pr` — it validates the temporary merge of your branch with `origin/main` without touching your working copy.
+
+See [docs/development/ci.md](docs/development/ci.md) for the full local-CI guide.
+
+A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. The frontend and browser suites use the repository-pinned Node.js v26.5.0 (not Node.js 20) and are separate from the Go test suites:
 
 ```bash
 cd test/browser && npm install && npm test

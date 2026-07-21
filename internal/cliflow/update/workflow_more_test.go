@@ -138,11 +138,15 @@ func TestRunWorkflowFallsBackToDefaultExecutable(t *testing.T) {
 	var out bytes.Buffer
 	deps, _ := newValidWorkflowDeps(t)
 	deps.Executable = func() (string, error) { return "", errors.New("cannot find executable") }
+	// The default-path fallback must run against an isolated path: a unit test
+	// must never write to the production /usr/local/bin location.
+	fallback := filepath.Join(t.TempDir(), "veil")
+	deps.DefaultExecutablePath = fallback
 	err := RunWorkflow(WorkflowOptions{CurrentVersion: "v1.2.3", Yes: true}, &out, deps)
 	if err != nil {
 		t.Fatalf("RunWorkflow: %v", err)
 	}
-	if !strings.Contains(out.String(), "/usr/local/bin/veil") {
+	if !strings.Contains(out.String(), fallback) {
 		t.Fatalf("output = %q", out.String())
 	}
 }

@@ -284,11 +284,33 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 }
 
 func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
-	body, err := os.ReadFile("../../.github/workflows/ci.yml")
-	if err != nil {
-		t.Fatal(err)
+	// The gate commands live in the shared CI scripts (single source of truth
+	// for local VMs and GitHub Actions). ci.yml must route each job to its
+	// script, and the scripts must contain the gates.
+	read := func(path string) string {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.ReplaceAll(string(body), "\r\n", "\n")
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	workflow := read("../../.github/workflows/ci.yml")
+	for _, want := range []string{
+		"scripts/ci/frontend.sh",
+		"scripts/ci/test.sh",
+		"scripts/ci/lint.sh",
+		"scripts/ci/privilege-boundary.sh",
+		"scripts/ci/e2e.sh",
+		"scripts/ci/browser-e2e.sh",
+		"scripts/ci/package-smoke.sh",
+		"scripts/ci/image-build.sh",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml does not route to shared CI script %q:\n%s", want, workflow)
+		}
+	}
+
+	testScript := read("../../scripts/ci/test.sh")
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
@@ -296,17 +318,29 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
+	} {
+		if !strings.Contains(testScript, want) {
+			t.Fatalf("scripts/ci/test.sh missing required gate %q", want)
+		}
+	}
+
+	lintScript := read("../../scripts/ci/lint.sh")
+	for _, want := range []string{
 		"staticcheck",
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
 		"bash -n scripts/install.sh scripts/uninstall.sh",
 		"bash scripts/install.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
-		"git diff --check",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("ci.yml missing required gate %q:\n%s", want, workflow)
+		if !strings.Contains(lintScript, want) {
+			t.Fatalf("scripts/ci/lint.sh missing required gate %q", want)
 		}
+	}
+
+	fastScript := read("../../scripts/ci/fast.sh")
+	if !strings.Contains(fastScript, "git diff --check") {
+		t.Fatalf("scripts/ci/fast.sh missing required gate %q", "git diff --check")
 	}
 }
 

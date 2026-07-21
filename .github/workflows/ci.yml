@@ -8,473 +8,230 @@ on:
 permissions:
   contents: read
 
+# All job logic lives in scripts/ci/*.sh — this workflow only provisions the
+# toolchain versions from the single source of truth (scripts/ci/versions.sh)
+# and invokes the shared scripts. Local runs (`make ci`, `make ci-pr`) execute
+# the very same scripts inside a VM on the same Ubuntu 24.04 user-space.
+
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "node_version=${CI_NODE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "pnpm_version=${CI_PNPM_VERSION}" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
         with:
-          version: 11.10.0
+          version: ${{ steps.versions.outputs.pnpm_version }}
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
         with:
-          node-version: '24'
+          node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-      - name: Regenerate API clients and verify no drift
-        run: |
-          pnpm gen
-          git diff --exit-code -- src/api/generated
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Biome check
-        run: pnpm check
-      - name: i18n catalog parity and leak scan
-        run: pnpm i18n:check
-      - name: Unit tests
-        run: pnpm test
-      - name: Browser-mode tests (Chromium)
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          pnpm test:browser
-      - name: Build
-        run: pnpm build
-
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: '1.26.5'
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
-        with:
-          version: 11.10.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Verify go.mod is tidy
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
-      - name: gofmt
-        run: |
-          unformatted="$(gofmt -l $(git ls-files '*.go'))"
-          if [ -n "${unformatted}" ]; then
-            echo "These files are not gofmt-clean:" >&2
-            echo "${unformatted}" >&2
-            exit 1
-          fi
-      - run: go vet ./...
-      - name: Validate OpenAPI
-        run: make verify-openapi
-      - name: Verify generated Go SDK
-        run: make verify-sdk
-      - run: make build
-      - name: Install Caddy runtime for unit tests
-        run: |
-          mkdir -p /tmp/veil-runtime
-          ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
-          echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
-          /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
-      - name: Test generated SDK with race detector
-        run: go test ./sdk/go -race -count=1
-      - name: Test product code with race detector and coverage
-        run: |
-          set -o pipefail
-          packages="$(go list ./... | grep -v '/sdk/go$')"
-          go test ${packages} -race -count=1 -coverprofile=coverage.out 2>&1 | tee product-test.log
-      - name: Archive failed product test log
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: product-test-log
-          path: product-test.log
-      - name: Verify coverage threshold (min 70%)
-        run: |
-          total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
-          echo "Total statement coverage is $total_coverage%"
-          awk -v cov="$total_coverage" 'BEGIN { if (cov < 70.0) { print "Error: coverage " cov "% is below threshold (70.0%)"; exit 1 } }'
-      - name: Archive code coverage results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: code-coverage-report
-          path: coverage.out
-      - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
-      - run: sh -n packaging/scripts/*.sh
-      - run: bash scripts/install.sh --help >/dev/null
-      - run: bash scripts/uninstall.sh --help >/dev/null
-      - run: git diff --check
-
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: '1.26.5'
-      - name: Stub web/dist for analysis (go:embed must resolve)
-        run: |
-          mkdir -p web/dist
-          echo '<!doctype html><title>analysis stub</title>' > web/dist/index.html
-      - name: staticcheck
-        uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
-        with:
-          version: '2026.1'
-          install-go: false
-      - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          govulncheck ./...
-      - name: shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          shellcheck scripts/*.sh packaging/scripts/*.sh
-
-  privilege-boundary:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: '1.26.5'
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
-        with:
-          version: 11.10.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Verify systemd socket activation
-        run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
-      - name: Verify helper socket and filesystem access matrix
-        run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
-      - name: Validate hardened systemd units
-        run: |
-          go build -o /tmp/veil-unit-verify ./cmd/veil
-          sudo install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil
-          for bin in caddy hysteria mita olcrtc sing-box; do
-            sudo ln -sf /usr/local/bin/veil "/usr/local/bin/${bin}"
-          done
-          systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
-
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: '1.26.5'
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
-        with:
-          version: 11.10.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Build and install Veil
-        run: |
-          go build -o /tmp/veil-e2e ./cmd/veil
-          sudo install -m 0755 /tmp/veil-e2e /usr/local/bin/veil
-      - name: Install real server protocol runtimes
-        run: |
-          set -euo pipefail
-          sudo veil runtime install --only hysteria2
-          sudo veil runtime install --only naiveproxy
-          sudo veil runtime install --only mieru
-          /usr/local/bin/caddy list-modules | grep -Fx http.handlers.forward_proxy
-          command -v hysteria
-          command -v caddy
-          command -v mita
-      - name: Install real Mieru client
-        run: |
-          set -euo pipefail
-          arch=amd64
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/enfein/mieru/releases/latest)"
-          asset_url="$(jq -er --arg arch "$arch" '.assets[] | select(.name | test("^mieru_.*_linux_" + $arch + "\\.tar\\.gz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/mieru-client.tar.gz
-          rm -rf /tmp/mieru-client && mkdir -p /tmp/mieru-client
-          tar -xzf /tmp/mieru-client.tar.gz -C /tmp/mieru-client
-          client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
-          test -n "$client_bin"
-          sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
-          mieru version
-      - name: Install real NaiveProxy client
-        run: |
-          set -euo pipefail
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/klzgrad/naiveproxy/releases/latest)"
-          asset_url="$(jq -er '.assets[] | select(.name | test("^naiveproxy-v.*-linux-x64\\.tar\\.xz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/naiveproxy.tar.xz
-          rm -rf /tmp/naiveproxy && mkdir -p /tmp/naiveproxy
-          tar -xJf /tmp/naiveproxy.tar.xz -C /tmp/naiveproxy
-          naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
-          test -n "$naive_bin"
-          sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
-          naive --version
-      - name: Assert protocol binaries are real
-        run: |
-          set -euo pipefail
-          for bin in caddy naive mita mieru hysteria; do
-            command -v "$bin"
-            test "$(readlink -f "$(command -v "$bin")")" != /usr/local/bin/veil
-          done
-      - name: Hysteria2 through panel-generated configuration
-        run: |
-          set -o pipefail
-          go test -tags e2e ./test/e2e/... -run '^TestRequiredHysteria2DataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/hysteria2.log
-      - name: Mieru TCP through panel-generated configuration
-        run: |
-          set -o pipefail
-          go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-tcp.log
-      - name: Mieru UDP through panel-generated configuration
-        run: |
-          set -o pipefail
-          go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/mieru-udp.log
-      - name: NaiveProxy through panel-generated configuration
-        run: |
-          set -o pipefail
-          go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s 2>&1 | tee /tmp/naiveproxy.log
-      - name: Archive real protocol diagnostics
+      - name: frontend job
+        run: bash scripts/ci/frontend.sh
+      - name: Upload CI artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: real-protocol-e2e-diagnostics
-          path: |
-            /tmp/hysteria2.log
-            /tmp/mieru-tcp.log
-            /tmp/mieru-udp.log
-            /tmp/naiveproxy.log
-          if-no-files-found: error
+          name: ci-frontend
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: test job
+        run: bash scripts/ci/test.sh
+      - name: Upload CI artifacts (incl. product-test.log and coverage)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-test
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: shellcheck (runner package)
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: lint job
+        run: bash scripts/ci/lint.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-lint
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  privilege-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: privilege-boundary job
+        run: bash scripts/ci/privilege-boundary.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-privilege-boundary
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: e2e job (real pinned protocol runtimes)
+        run: bash scripts/ci/e2e.sh
+      - name: Upload CI artifacts (incl. protocol logs)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-e2e
+          path: .artifacts/ci/
+          if-no-files-found: ignore
 
   browser-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.5'
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
         with:
-          version: 11.10.0
+          version: ${{ steps.versions.outputs.pnpm_version }}
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
         with:
-          node-version: '24'
+          node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Build Veil browser-test binary
-        run: |
-          mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=browser-e2e" -o dist/veil ./cmd/veil
-      - name: Install pinned Playwright
+      - name: Provision Chromium (runner-side provisioning, pinned version)
         working-directory: test/browser
         run: |
           npm install --ignore-scripts
           npx playwright install --with-deps chromium
-      - name: Start authenticated Panel
-        run: |
-          set -euo pipefail
-          browser_root="${RUNNER_TEMP}/veil-browser"
-          mkdir -p "${browser_root}/state" "${browser_root}/etc" "${browser_root}/apply" "${browser_root}/live"
-          export VEIL_STATE_PATH="${browser_root}/state/state.json"
-          export VEIL_KEY_PATH="${browser_root}/etc/state.key"
-          export VEIL_APPLY_ROOT="${browser_root}/apply"
-          export VEIL_LIVE_ROOT="${browser_root}/live"
-          ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
-          VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2096 >"${RUNNER_TEMP}/veil-browser.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/veil-browser.pid"
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then exit 0; fi
-            sleep 1
-          done
-          cat "${RUNNER_TEMP}/veil-browser.log" >&2
-          exit 1
-      - name: Start WebBasePath Panel (deep-link refresh coverage)
-        run: |
-          set -euo pipefail
-          path_root="${RUNNER_TEMP}/veil-browser-path"
-          mkdir -p "${path_root}/state" "${path_root}/etc" "${path_root}/apply" "${path_root}/live"
-          export VEIL_STATE_PATH="${path_root}/state/state.json"
-          export VEIL_KEY_PATH="${path_root}/etc/state.key"
-          export VEIL_APPLY_ROOT="${path_root}/apply"
-          export VEIL_LIVE_ROOT="${path_root}/live"
-          ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
-          VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2097 --web-base-path /e2e-base-x9/ >"${RUNNER_TEMP}/veil-browser-path.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/veil-browser-path.pid"
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2097/e2e-base-x9/healthz >/dev/null; then exit 0; fi
-            sleep 1
-          done
-          cat "${RUNNER_TEMP}/veil-browser-path.log" >&2
-          exit 1
-      - name: Start helper-backed Panel (backup verify/restore coverage)
-        run: |
-          set -euo pipefail
-          # Backup operations are privileged: the helper only speaks the
-          # production layout (veil system user, /var/lib/veil state, root
-          # helper on /run/veil/helper.sock). Reproduce it faithfully instead
-          # of mocking the helper away.
-          sudo useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin veil || true
-          sudo mkdir -p /var/lib/veil/backups /etc/veil /run/veil
-          sudo chown -R veil:veil /var/lib/veil /etc/veil
-          openssl rand -hex 32 | sudo tee /etc/veil/backup.passphrase >/dev/null
-          sudo chown veil:veil /etc/veil/backup.passphrase
-          sudo chmod 600 /etc/veil/backup.passphrase
-          sudo -u veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin \
-            --state /var/lib/veil/state.json --key-path /etc/veil/state.key
-          # GH runner sudoers covers (ALL) but not (ALL:ALL), so `sudo -g veil`
-          # would prompt for a password. Start the helper as plain root and
-          # group-adjust the socket afterwards instead (the panel dials it as
-          # the veil user and needs group access).
-          sudo ./dist/veil helper serve --socket /run/veil/helper.sock >"${RUNNER_TEMP}/veil-helper.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/veil-helper.pid"
-          for attempt in $(seq 1 30); do
-            [ -S /run/veil/helper.sock ] && break
-            sleep 1
-          done
-          sudo chgrp veil /run/veil/helper.sock
-          sudo -u veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
-            VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
-            VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${RUNNER_TEMP}/veil-browser-backup.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/veil-browser-backup.pid"
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2098/healthz >/dev/null; then break; fi
-            sleep 1
-          done
-          # The health probe only proves the panel is up; the helper must also
-          # be serving. Surface both logs in the step output so a dead helper
-          # is diagnosable without artifacts.
-          head -30 "${RUNNER_TEMP}/veil-helper.log" || true
-          ls -la /run/veil/ || true
-          if ! curl --fail --silent -X POST -H 'X-Veil-Token: browser-e2e-token' -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:2098/api/backups >/dev/null; then
-            echo "helper-backed backup probe failed" >&2
-            cat "${RUNNER_TEMP}/veil-helper.log" >&2 || true
-            cat "${RUNNER_TEMP}/veil-browser-backup.log" >&2 || true
-            exit 1
-          fi
-      - name: Browser end-to-end tests
-        working-directory: test/browser
-        env:
-          VEIL_BROWSER_BASE_URL: http://127.0.0.1:2096
-          VEIL_BROWSER_BASE_URL_PATHED: http://127.0.0.1:2097/e2e-base-x9/
-          VEIL_BROWSER_BACKUP_URL: http://127.0.0.1:2098
-          VEIL_BROWSER_USERNAME: browser-admin
-          VEIL_BROWSER_PASSWORD: Browser-E2E-Password-123!
-          VEIL_BROWSER_API_TOKEN: browser-e2e-token
-        run: npm test
-      - name: Stop Panel
+      - name: browser-e2e job
+        run: bash scripts/ci/browser-e2e.sh
+      - name: Upload CI artifacts (incl. panel logs and Playwright reports)
         if: always()
-        run: |
-          if [ -f "${RUNNER_TEMP}/veil-browser.pid" ]; then
-            kill "$(cat "${RUNNER_TEMP}/veil-browser.pid")" 2>/dev/null || true
-          fi
-          if [ -f "${RUNNER_TEMP}/veil-browser-path.pid" ]; then
-            kill "$(cat "${RUNNER_TEMP}/veil-browser-path.pid")" 2>/dev/null || true
-          fi
-          if [ -f "${RUNNER_TEMP}/veil-browser-backup.pid" ]; then
-            sudo kill "$(cat "${RUNNER_TEMP}/veil-browser-backup.pid")" 2>/dev/null || true
-          fi
-          if [ -f "${RUNNER_TEMP}/veil-helper.pid" ]; then
-            sudo kill "$(cat "${RUNNER_TEMP}/veil-helper.pid")" 2>/dev/null || true
-          fi
-      - name: Archive browser diagnostics
-        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: browser-e2e-diagnostics
-          path: |
-            test/browser/playwright-report
-            test/browser/test-results
-            ${{ runner.temp }}/veil-browser.log
-            ${{ runner.temp }}/veil-browser-path.log
-            ${{ runner.temp }}/veil-browser-backup.log
-            ${{ runner.temp }}/veil-helper.log
+          name: ci-browser-e2e
+          path: .artifacts/ci/
           if-no-files-found: ignore
 
   package-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.5'
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
         with:
-          version: 11.10.0
+          version: ${{ steps.versions.outputs.pnpm_version }}
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
         with:
-          node-version: '24'
+          node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Build package payload
-        run: |
-          mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=package-smoke" -o dist/veil ./cmd/veil
-      - name: Install pinned nfpm
-        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.40.0
-      - name: Install and upgrade native packages in clean distributions
-        run: |
-          set -o pipefail
-          bash scripts/package-smoke.sh 2>&1 | tee package-smoke.log
-      - name: Archive package smoke diagnostics
-        if: failure()
+      - name: package-smoke job
+        run: bash scripts/ci/package-smoke.sh
+      - name: Upload CI artifacts
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-smoke-diagnostics
-          path: |
-            package-smoke.log
-            dist/package-smoke
+          name: ci-package-smoke
+          path: .artifacts/ci/
           if-no-files-found: ignore
 
-  docker-build:
-    runs-on: ubuntu-latest
+  image-build:
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - name: Docker image build and version verification
-        run: |
-          version="ci-${GITHUB_SHA}"
-          docker build --pull --build-arg "VERSION=${version}" --tag veil:ci .
-          docker run --rm veil:ci version | tee /tmp/veil-version.txt
-          grep -F "${version}" /tmp/veil-version.txt
+      - name: image-build job
+        run: bash scripts/ci/image-build.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-image-build
+          path: .artifacts/ci/
+          if-no-files-found: ignore

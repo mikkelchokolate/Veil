@@ -13,6 +13,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
 type ManagedRuntime = service.ManagedRuntime
@@ -213,6 +214,7 @@ func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 		} else {
 			statePath = "/var/lib/veil/state.json"
 		}
+		testguard.CheckProductionPath(statePath)
 	}
 	keyPath := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH"))
 	if keyPath == "" {
@@ -225,6 +227,7 @@ func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 		} else {
 			keyPath = "/etc/veil/state.key"
 		}
+		testguard.CheckProductionPath(keyPath)
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestPanelHTMLForCatalogEscapesCSRFInInlineJavaScript(t *testing.T) {
+	isolateCatalogEnv(t)
 	token := "csrf'</script>\\\nnext"
 	html := panelHTMLForCatalog("/", token, panel.LocaleEnglish, NewVisibleManagedRuntimeCatalogForState(nil))
 	escaped := panel.EscapeJavaScriptString(token)
@@ -24,6 +25,7 @@ func TestPanelHTMLForCatalogEscapesCSRFInInlineJavaScript(t *testing.T) {
 }
 
 func TestPanelCSPDoesNotAllowThirdPartyQRService(t *testing.T) {
+	isolateCatalogEnv(t)
 	if strings.Contains(panelHTMLForCatalog("/", "", panel.LocaleEnglish, NewVisibleManagedRuntimeCatalogForState(nil)), "api.qrserver.com") {
 		t.Fatal("rendered Panel still references the retired third-party QR service")
 	}

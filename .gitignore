@@ -29,3 +29,4 @@ web/tsconfig.tsbuildinfo
 
 # Runtime artifacts written by api package tests (apply history/state fixtures)
 internal/api/generated/
+.artifacts/

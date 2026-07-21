@@ -1,0 +1,5 @@
+# ci/vm/image.lock — pinned OCI base images for the CI image chain.
+# Consumed by scripts/ci/vm-build.sh and ci/vm/Containerfile (via build args).
+# Update with: docker buildx imagetools inspect ubuntu:24.04
+
+UBUNTU_24_04_DIGEST=sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90

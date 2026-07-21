@@ -1,0 +1,9 @@
+[Unit]
+Description=Veil CI socket-activation proof-of-concept socket
+
+[Socket]
+ListenStream=/run/veil-ci-echo.sock
+Accept=no
+
+[Install]
+WantedBy=sockets.target

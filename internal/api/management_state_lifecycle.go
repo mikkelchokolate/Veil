@@ -13,6 +13,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
 type ManagementStateLifecycle struct {
@@ -28,23 +29,48 @@ func newManagementState(info ServerInfo) *managementState {
 	if keyPath == "" && info.StatePath != "" {
 		keyPath = filepath.Join(filepath.Dir(info.StatePath), "state.key")
 	}
+	applyRoot := info.ApplyRoot
+	if applyRoot == "" && info.StatePath != "" {
+		// An explicit state file with no apply root is a dev/test-style isolated
+		// instance. Keep generated/live files beside that state rather than
+		// falling through to the production /etc/veil default. Production serve
+		// resolves and passes ApplyRoot explicitly.
+		applyRoot = filepath.Join(filepath.Dir(info.StatePath), "staging")
+	}
 	if keyPath == "" {
-		if runtime.GOOS == "windows" {
-			pd := os.Getenv("ProgramData")
-			if pd == "" {
-				pd = `C:\ProgramData`
-			}
-			keyPath = filepath.Join(pd, "Veil", "state.key")
-		} else {
+		// No StatePath and no KeyPath: this is an ephemeral dev/test state.
+		// Production serve always passes explicit paths resolved from
+		// flags/VEIL_* env in cliflow/serve, so reaching this branch means an
+		// in-memory style state — give it a per-instance isolated key file
+		// instead of the live-system default /etc/veil/state.key. Unit tests
+		// constructing bare ServerInfo{} stay hermetic even under -shuffle and
+		// can never clobber a production key when run as root.
+		tmp, err := os.MkdirTemp("", "veil-dev-state-*")
+		if err != nil {
+			// Extremely unusual (TMPDIR broken); keep the historical default
+			// but let the test guard catch it if armed.
 			keyPath = "/etc/veil/state.key"
+			if runtime.GOOS == "windows" {
+				pd := os.Getenv("ProgramData")
+				if pd == "" {
+					pd = `C:\ProgramData`
+				}
+				keyPath = filepath.Join(pd, "Veil", "state.key")
+			}
+			testguard.CheckProductionPath(keyPath)
+		} else {
+			keyPath = filepath.Join(tmp, "state.key")
 		}
 	}
-	if info.StatePath != "" {
-		os.Setenv("VEIL_STATE_PATH", info.StatePath)
+	if applyRoot == "" {
+		// Bare ServerInfo{} instances receive an ephemeral key above. Keep their
+		// generated and live trees under that same isolated root as well.
+		applyRoot = filepath.Join(filepath.Dir(keyPath), "staging")
 	}
-	if keyPath != "" {
-		os.Setenv("VEIL_KEY_PATH", keyPath)
-	}
+	// NOTE: do not os.Setenv(VEIL_STATE_PATH/VEIL_KEY_PATH) here. Those
+	// process-global side effects leak production default paths into unrelated
+	// tests (and, when tests run as root, let them modify live state). All
+	// in-process consumers must read paths from this state's own fields.
 	model := managementstate.BuildDefaultState(managementstate.DefaultInput{
 		PanelListen: info.PanelListen,
 		PanelAccess: info.PanelAccess,
@@ -60,7 +86,7 @@ func newManagementState(info ServerInfo) *managementState {
 	}
 	state := &managementState{
 		statePath:                      info.StatePath,
-		applyRoot:                      defaultApplyRoot(info.ApplyRoot),
+		applyRoot:                      defaultApplyRoot(applyRoot),
 		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,
 		authToken:                      info.AuthToken,

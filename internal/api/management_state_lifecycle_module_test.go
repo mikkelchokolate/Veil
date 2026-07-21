@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestManagementStateWithoutPathsUsesEphemeralRuntimeRoots(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev"})
+	if state.applyRoot == "/etc/veil" || state.liveRoot == "/etc/veil/live" {
+		t.Fatalf("bare state used production roots: apply=%q live=%q", state.applyRoot, state.liveRoot)
+	}
+	if filepath.Dir(state.applyRoot) != filepath.Dir(state.keyPath) {
+		t.Fatalf("ephemeral apply root %q is not beside key %q", state.applyRoot, state.keyPath)
+	}
+}
+
+func TestManagementStateWithExplicitStatePathDerivesIsolatedRuntimeRoots(t *testing.T) {
+	dir := t.TempDir()
+	state := newManagementState(ServerInfo{StatePath: filepath.Join(dir, "state.json"), Mode: "dev"})
+
+	wantApplyRoot := filepath.Join(dir, "staging")
+	if state.applyRoot != wantApplyRoot {
+		t.Fatalf("applyRoot = %q, want %q", state.applyRoot, wantApplyRoot)
+	}
+	wantLiveRoot := filepath.Join(wantApplyRoot, "live")
+	if state.liveRoot != wantLiveRoot {
+		t.Fatalf("liveRoot = %q, want %q", state.liveRoot, wantLiveRoot)
+	}
+}
+
 func TestManagementStateLifecycleSavesAndLoadsSnapshot(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
