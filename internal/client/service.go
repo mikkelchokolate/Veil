@@ -53,10 +53,10 @@ type View struct {
 // protocol capabilities of the bound inbound, so the UI/API consumer knows
 // what a client on this inbound supports (per-client credentials, transports).
 type BindingView struct {
-	ID         string           `json:"id"`
-	InboundID  string           `json:"inboundId"`
-	Enabled    bool             `json:"enabled"`
-	Version    int              `json:"version"`
+	ID         string             `json:"id"`
+	InboundID  string             `json:"inboundId"`
+	Enabled    bool               `json:"enabled"`
+	Version    int                `json:"version"`
 	Capability *BindingCapability `json:"capability,omitempty"`
 	// Credential is metadata-only (configured/kind/version/rotatedAt); never
 	// any encrypted or plaintext material.
@@ -74,10 +74,10 @@ type CredentialMeta struct {
 
 // BindingCapability captures the protocol capabilities of a bound inbound.
 type BindingCapability struct {
-	Protocol              string   `json:"protocol"`
-	Transports            []string `json:"transports"`
-	PerClientCredentials  bool     `json:"perClientCredentials"`
-	RequiresCaddy         bool     `json:"requiresCaddy"`
+	Protocol             string   `json:"protocol"`
+	Transports           []string `json:"transports"`
+	PerClientCredentials bool     `json:"perClientCredentials"`
+	RequiresCaddy        bool     `json:"requiresCaddy"`
 }
 
 // ErrValidation marks a 400-class client-side validation failure.
@@ -512,4 +512,3 @@ func (s *Service) viewWith(c Client,
 	status := ComputeStatus(c, timeFromUnix(s.now()), false, false, len(bindings) == 0)
 	return View{Client: c, Status: status, InboundIDs: inbounds, HasCreds: hasCreds, Bindings: bindingViews}, nil
 }
-

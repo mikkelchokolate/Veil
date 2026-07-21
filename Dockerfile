@@ -30,6 +30,18 @@
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
+FROM node:24-alpine AS webbuilder
+
+# The Go binary embeds web/dist (see web/web.go); build the SPA first so the
+# image ships the real panel UI.
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
+
+WORKDIR /web
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
+
 FROM golang:1.26.5-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
@@ -39,6 +51,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+COPY --from=webbuilder /web/dist ./web/dist
 ARG VERSION=dev
 RUN test -n "${VERSION}" \
     && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /veil ./cmd/veil

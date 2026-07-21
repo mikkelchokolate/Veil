@@ -29,13 +29,6 @@ func (s *CredentialStore) Set(bindingID, kind, plaintext string) (Credential, er
 	return insertCredentialQ(s.db, s.cipher, bindingID, kind, plaintext, nextVersionForQ(s.db, bindingID, kind))
 }
 
-func (s *CredentialStore) insert(bindingID, kind, plaintext string, version int) (Credential, error) {
-	if s.cipher == nil {
-		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
-	}
-	return insertCredentialQ(s.db, s.cipher, bindingID, kind, plaintext, version)
-}
-
 // insertCredentialQ is the querier-based insert shared by the autocommit store
 // and the transactional Tx path.
 func insertCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext string, version int) (Credential, error) {
@@ -202,10 +195,6 @@ func scanCredential(row scanner, withValue bool) (Credential, error) {
 		c.EncryptedValue = enc
 	}
 	return c, nil
-}
-
-func nextVersionFor(db *sql.DB, bindingID, kind string) int {
-	return nextVersionForQ(db, bindingID, kind)
 }
 
 // nextVersionForQ computes the next credential version on any querier. When

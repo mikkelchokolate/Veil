@@ -85,7 +85,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/v1/traffic/{id}":                                {"get"},
 		"/api/v1/traffic/{id}/history":                        {"get"},
 		"/api/v1/traffic/stream":                              {"get"},
-		"/api/v1/events":                                       {"get"},
+		"/api/v1/events":                                      {"get"},
 		"/s/{token}":                                          {"get", "head"},
 	}
 	for path := range expected {

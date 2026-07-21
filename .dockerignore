@@ -6,3 +6,7 @@ bin/
 coverage.out
 *.prof
 *.test
+
+# Built inside the image (webbuilder stage); never copy host artifacts
+web/node_modules
+web/dist

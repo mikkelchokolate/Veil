@@ -71,6 +71,19 @@ jobs:
         run: make verify-openapi
       - name: Verify generated Go SDK
         run: make verify-sdk
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - run: make build
       - name: Install Caddy runtime for unit tests
         run: |
@@ -138,6 +151,19 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Verify systemd socket activation
         run: go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
       - name: Verify helper socket and filesystem access matrix
@@ -159,6 +185,19 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Build and install Veil
         run: |
           go build -o /tmp/veil-e2e ./cmd/veil
@@ -321,11 +360,20 @@ jobs:
             VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${RUNNER_TEMP}/veil-browser-backup.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/veil-browser-backup.pid"
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:2098/healthz >/dev/null; then exit 0; fi
+            if curl --fail --silent http://127.0.0.1:2098/healthz >/dev/null; then break; fi
             sleep 1
           done
-          cat "${RUNNER_TEMP}/veil-browser-backup.log" >&2
-          exit 1
+          # The health probe only proves the panel is up; the helper must also
+          # be serving. Surface both logs in the step output so a dead helper
+          # is diagnosable without artifacts.
+          head -30 "${RUNNER_TEMP}/veil-helper.log" || true
+          ls -la /run/veil/ || true
+          if ! curl --fail --silent -X POST -H 'X-Veil-Token: browser-e2e-token' -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:2098/api/backups >/dev/null; then
+            echo "helper-backed backup probe failed" >&2
+            cat "${RUNNER_TEMP}/veil-helper.log" >&2 || true
+            cat "${RUNNER_TEMP}/veil-browser-backup.log" >&2 || true
+            exit 1
+          fi
       - name: Browser end-to-end tests
         working-directory: test/browser
         env:
@@ -360,6 +408,9 @@ jobs:
             test/browser/playwright-report
             test/browser/test-results
             ${{ runner.temp }}/veil-browser.log
+            ${{ runner.temp }}/veil-browser-path.log
+            ${{ runner.temp }}/veil-browser-backup.log
+            ${{ runner.temp }}/veil-helper.log
           if-no-files-found: ignore
 
   package-smoke:
@@ -370,6 +421,19 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Build package payload
         run: |
           mkdir -p dist
