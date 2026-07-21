@@ -230,17 +230,23 @@ func parseInt64Default(v string, def int64) int64 {
 	return n
 }
 
-// parseLimitParam parses an int64 query value and clamps it to [1, max]
-// BEFORE narrowing to int: a huge ?limit= (e.g. 2^60) must not overflow the
-// conversion, and non-positive values are meaningless for LIMIT clauses. The
-// int(n) conversion stays lexically inside the bounds-checked branch so
-// static analysis (CodeQL go/incorrect-integer-conversion) can prove it.
+// parseLimitParam parses an int64 query value and narrows it to int only
+// inside a branch guarded by a COMPILE-TIME-CONSTANT bound: a huge ?limit=
+// (e.g. 2^60) can never reach the conversion, and non-positive values are
+// meaningless for LIMIT clauses. (CodeQL go/incorrect-integer-conversion
+// proves the guard only against constants — parameter-derived bounds are not
+// accepted.)
 func parseLimitParam(v string, def, max int) int {
+	const ceiling = 10000 // fits int32 with orders of magnitude to spare
 	n := parseInt64Default(v, int64(def))
-	if n >= 1 && n <= int64(max) {
-		return int(n)
+	if n >= 1 && n <= ceiling {
+		m := int(n)
+		if m > max {
+			return max
+		}
+		return m
 	}
-	if n > int64(max) {
+	if n > ceiling {
 		return max
 	}
 	return def
