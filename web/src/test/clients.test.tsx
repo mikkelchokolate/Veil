@@ -1,30 +1,24 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
 	createMemoryHistory,
-	createRootRoute,
-	createRoute,
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
-import { ClientsPage } from "../pages/ClientsPage";
+import { routeTree } from "../routeTree.gen";
 import { HttpResponse, http, server } from "./server";
 
-// Render a single page component inside a minimal router (clients list uses
-// useSearch/useNavigate) + react-query, against the MSW mock API.
+// Render the app inside its REAL generated route tree (blocker W6: the page
+// reads typed search via Route.useSearch() from the /clients/ file route with
+// its Zod validateSearch — file routes are pre-linked to the app root, so a
+// hand-built tree would duplicate __root__) + react-query, against the MSW
+// mock API.
 function renderClients(initialPath = "/clients") {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-	const root = createRootRoute();
-	const route = createRoute({
-		getParentRoute: () => root,
-		path: "/clients",
-		component: ClientsPage,
-		validateSearch: (s: Record<string, unknown>) => s,
-	});
 	const router = createRouter({
-		routeTree: root.addChildren([route]),
+		routeTree,
 		history: createMemoryHistory({ initialEntries: [initialPath] }),
 	});
 	return render(

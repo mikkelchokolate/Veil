@@ -4,7 +4,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
 	type ColumnDef,
 	flexRender,
@@ -13,7 +13,6 @@ import {
 	type VisibilityState,
 } from "@tanstack/react-table";
 import { useEffect, useMemo, useState } from "react";
-import { z } from "zod";
 import { listClients } from "../api/clients";
 import { ApiError } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
@@ -50,6 +49,7 @@ import {
 } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
+import { Route } from "../routes/clients.index";
 
 const STATUS_VARIANT: Record<
 	string,
@@ -77,18 +77,6 @@ function fmtExpiry(ts?: number): string {
 	return new Date(ts * 1000).toLocaleDateString();
 }
 
-/** S3: search params validated with Zod — every value the URL carries is
- * parsed/coerced/defaulted here so a hand-edited or stale URL can never put
- * the page in an invalid state. */
-const searchSchema = z.object({
-	page: z.coerce.number().int().positive().catch(1),
-	pageSize: z.coerce.number().int().positive().max(200).catch(25),
-	search: z.string().catch(""),
-	status: z.string().catch(""),
-	inboundId: z.string().catch(""),
-	sort: z.string().catch("created"),
-});
-
 const DEBOUNCE_MS = 300;
 
 interface BulkResult {
@@ -102,29 +90,32 @@ export function ClientsPage() {
 	const { t } = useI18n();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
-	const rawSearch = useSearch({ strict: false }) as Record<string, unknown>;
-	const parsed = searchSchema.parse(rawSearch);
+	// Blocker W6: typed, route-validated search params. The Zod schema lives
+	// in the file route (routes/clients.index.tsx) — the page never sees
+	// unvalidated URL input. Absent params arrive undefined; defaults here.
+	const parsed = Route.useSearch();
 
-	const page = parsed.page;
-	const pageSize = parsed.pageSize;
-	const status = parsed.status;
-	const inboundId = parsed.inboundId;
-	const sort = parsed.sort;
+	const page = parsed.page ?? 1;
+	const pageSize = parsed.pageSize ?? 25;
+	const status = parsed.status ?? "";
+	const inboundId = parsed.inboundId ?? "";
+	const sort = parsed.sort ?? "created";
+	const searchParam = parsed.search ?? "";
 
 	// S3: debounced server-side search. The input is uncontrolled-local; the
 	// debounced value is what actually reaches the query and the URL.
-	const [searchInput, setSearchInput] = useState(parsed.search);
-	const [searchText, setSearchText] = useState(parsed.search);
+	const [searchInput, setSearchInput] = useState(searchParam);
+	const [searchText, setSearchText] = useState(searchParam);
 	useEffect(() => {
 		const t = setTimeout(() => setSearchText(searchInput.trim()), DEBOUNCE_MS);
 		return () => clearTimeout(t);
 	}, [searchInput]);
 	// Push the debounced value into the URL so it is shareable/restorable.
 	useEffect(() => {
-		if (searchText !== parsed.search) {
+		if (searchText !== searchParam) {
 			void navigate({
 				to: "/clients",
-				search: (prev: Record<string, unknown>) => ({
+				search: (prev) => ({
 					...prev,
 					search: searchText || undefined,
 					page: 1,
@@ -133,7 +124,7 @@ export function ClientsPage() {
 			});
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [searchText, parsed.search, navigate]);
+	}, [searchText, searchParam, navigate]);
 
 	const query = useQuery({
 		queryKey: [
@@ -163,7 +154,7 @@ export function ClientsPage() {
 	function setParam(patch: Record<string, string | undefined>) {
 		void navigate({
 			to: "/clients",
-			search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }),
+			search: (prev) => ({ ...prev, ...patch }),
 			replace: true,
 		});
 	}
