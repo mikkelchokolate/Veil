@@ -61,6 +61,7 @@ import type {
 
 import type {
   BadRequestResponse,
+  ClientCreateResponse,
   ClientListResponse,
   ClientUpsertRequest,
   ClientView,
@@ -71,7 +72,7 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
   SubscriptionTokenResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 
@@ -208,7 +209,7 @@ export function useGetApiV1Clients<TData = Awaited<ReturnType<typeof getApiV1Cli
 
 
 export type postApiV1ClientsResponse201 = {
-  data: ClientView
+  data: ClientCreateResponse
   status: 201
 }
 

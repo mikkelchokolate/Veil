@@ -59,7 +59,7 @@ import type {
   PingResult,
   ServiceUnavailableResponse,
   SpeedtestResult
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

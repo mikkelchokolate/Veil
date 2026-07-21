@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
+// Generated from docs/openapi.yaml via Orval — do NOT hand-write DTOs for the
+// client create contract (blocker W4).
+import type {
+	ClientCreateResponse,
+	IssuedCredential,
+} from "../api/generated/models";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -26,18 +32,6 @@ interface InboundOption {
 interface BindingDraft {
 	inboundId: string;
 	credential: string;
-}
-
-interface IssuedCredential {
-	bindingId: string;
-	inboundId: string;
-	kind: string;
-	plaintext: string;
-}
-
-interface CreateClientResponse {
-	client: { id: string };
-	issuedCredentials?: IssuedCredential[];
 }
 
 /** How long the one-time credential dialog stays before auto-clearing. */
@@ -103,7 +97,7 @@ export function ClientNewPage() {
 					...(b.credential ? { credential: b.credential } : {}),
 				}));
 			}
-			return apiFetch<CreateClientResponse>("/api/v1/clients", {
+			return apiFetch<ClientCreateResponse>("/api/v1/clients", {
 				method: "POST",
 				body: JSON.stringify(body),
 			});
@@ -137,12 +131,6 @@ export function ClientNewPage() {
 		setBindings((prev) =>
 			prev.map((b) => (b.inboundId === inboundId ? { ...b, credential } : b)),
 		);
-	}
-
-	function onSubmit(e: FormEvent) {
-		e.preventDefault();
-		setError(null);
-		create.mutate();
 	}
 
 	const steps = [
@@ -370,10 +358,11 @@ export function ClientNewPage() {
 			) : null}
 
 			{step < 3 || !create.isSuccess ? (
-				<form
-					onSubmit={onSubmit}
-					style={{ display: "flex", gap: 8, marginTop: 20 }}
-				>
+				// A <div>, not a <form>: with a form, clicking "Review" advanced the
+				// step and the SAME cursor position turned into the submit button, so
+				// the trailing mouse-up submitted the create — the user never saw the
+				// review screen. Explicit onClick keeps each action deliberate.
+				<div style={{ display: "flex", gap: 8, marginTop: 20 }}>
 					<Button
 						type="button"
 						disabled={step === 0 || create.isPending}
@@ -395,13 +384,21 @@ export function ClientNewPage() {
 							{t("clientNew.reviewButton")}
 						</Button>
 					) : (
-						<Button type="submit" variant="primary" disabled={create.isPending}>
+						<Button
+							type="button"
+							variant="primary"
+							disabled={create.isPending}
+							onClick={() => {
+								setError(null);
+								create.mutate();
+							}}
+						>
 							{create.isPending
 								? t("clientNew.creating")
 								: t("clientNew.createClient")}
 						</Button>
 					)}
-				</form>
+				</div>
 			) : null}
 		</div>
 	);

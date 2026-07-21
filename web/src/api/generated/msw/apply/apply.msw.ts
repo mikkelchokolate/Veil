@@ -69,7 +69,7 @@ import type {
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
   ValidationFailedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

@@ -96,10 +96,16 @@ export const PostApiV1ClientsBody = zod.object({
   "expiresAt": zod.number().optional(),
   "deviceLimit": zod.number().optional(),
   "notes": zod.string().optional(),
-  "version": zod.number().optional().describe('Required on update for optimistic concurrency.')
+  "version": zod.number().optional().describe('Required on update for optimistic concurrency.'),
+  "bindings": zod.array(zod.object({
+  "inboundId": zod.string(),
+  "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
+  "enabled": zod.boolean().optional()
+})).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
 })
 
 export const PostApiV1ClientsResponse = zod.object({
+  "client": zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
@@ -132,7 +138,33 @@ export const PostApiV1ClientsResponse = zod.object({
   "rotatedAt": zod.number().optional()
 }).optional()
 })).optional()
-})
+}),
+  "issuedCredentials": zod.array(zod.object({
+  "bindingId": zod.string(),
+  "inboundId": zod.string(),
+  "kind": zod.string(),
+  "plaintext": zod.string()
+}).describe('Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is never stored.')).optional(),
+  "revision": zod.object({
+  "desired": zod.number(),
+  "applied": zod.number(),
+  "state": zod.enum(['synced', 'pending', 'failed'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.number(),
+  "baseRevision": zod.number(),
+  "status": zod.enum(['pending', 'running', 'success', 'failed', 'rolled_back']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.number(),
+  "startedAt": zod.number().optional(),
+  "finishedAt": zod.number().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional()
+}).optional(),
+  "success": zod.boolean()
+}).describe('Atomic create envelope: the committed client, any server-generated credentials (plaintext shown exactly once), the new desired revision, and the apply job that ran for that revision. success=false means the client committed but the apply did not finish cleanly.')
 
 /**
  * @summary Bulk action across clients; per-client results
@@ -313,7 +345,12 @@ export const PutApiV1ClientsIdBody = zod.object({
   "expiresAt": zod.number().optional(),
   "deviceLimit": zod.number().optional(),
   "notes": zod.string().optional(),
-  "version": zod.number().optional().describe('Required on update for optimistic concurrency.')
+  "version": zod.number().optional().describe('Required on update for optimistic concurrency.'),
+  "bindings": zod.array(zod.object({
+  "inboundId": zod.string(),
+  "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
+  "enabled": zod.boolean().optional()
+})).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
 })
 
 export const PutApiV1ClientsIdResponse = zod.object({

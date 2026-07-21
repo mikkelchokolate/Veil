@@ -61,6 +61,7 @@ import type {
 
 import type {
   BadRequestResponse,
+  ClientCreateResponse,
   ClientListResponse,
   ClientUpsertRequest,
   ClientView,
@@ -178,7 +179,7 @@ export const useGetApiV1Clients = <TError = unknown,
       return useMutation(getGetApiV1ClientsMutationOptions(options), queryClient);
     }
     export type postApiV1ClientsResponse201 = {
-  data: ClientView
+  data: ClientCreateResponse
   status: 201
 }
 

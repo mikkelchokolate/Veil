@@ -60,7 +60,7 @@ import type {
   HealthResponse,
   StatusResponse,
   UnauthorizedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

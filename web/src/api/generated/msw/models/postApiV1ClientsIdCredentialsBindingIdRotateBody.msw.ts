@@ -40,17 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ClientUpsertRequestQuotaResetPolicy } from './clientUpsertRequestQuotaResetPolicy.msw.ts';
 
-export interface ClientUpsertRequest {
-  name: string;
-  email?: string;
-  enabled?: boolean;
-  quotaBytes?: number;
-  quotaResetPolicy?: ClientUpsertRequestQuotaResetPolicy;
-  expiresAt?: number;
-  deviceLimit?: number;
-  notes?: string;
-  /** Required on update for optimistic concurrency. */
-  version?: number;
-}
+export type PostApiV1ClientsIdCredentialsBindingIdRotateBody = {
+  kind?: string;
+  /** Optional; when empty the server generates a high-entropy secret returned once. */
+  value?: string;
+};

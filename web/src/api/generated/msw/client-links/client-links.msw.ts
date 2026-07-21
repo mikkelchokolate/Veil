@@ -66,7 +66,7 @@ import type {
   ErrorText,
   GetApiClientLinksSubscriptionParams,
   UnauthorizedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

@@ -61,7 +61,7 @@ import type {
   ForbiddenResponse,
   GetApiAuditParams,
   UnauthorizedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

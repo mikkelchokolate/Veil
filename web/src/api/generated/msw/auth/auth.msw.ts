@@ -75,7 +75,7 @@ import type {
   UserCreateRequest,
   UserResponse,
   UserUpdateRequest
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

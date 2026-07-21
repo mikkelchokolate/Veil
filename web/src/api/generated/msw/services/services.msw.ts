@@ -54,7 +54,7 @@ import type {
   BadRequestResponse,
   ServiceActionRequest,
   ServiceActionResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

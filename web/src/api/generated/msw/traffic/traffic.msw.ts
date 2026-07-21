@@ -61,7 +61,7 @@ import type {
   TrafficHistoryResponse,
   TrafficTopResponse,
   TrafficTotals
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

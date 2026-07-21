@@ -65,7 +65,7 @@ import type {
   Inbound,
   NotFoundResponse,
   UnauthorizedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

@@ -66,7 +66,7 @@ import type {
   RuntimeObservation,
   SystemStats,
   TLSCertInfo
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

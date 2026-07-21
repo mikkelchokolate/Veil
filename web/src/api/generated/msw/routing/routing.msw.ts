@@ -64,7 +64,7 @@ import type {
   NotFoundResponse,
   RoutingPresetResponse,
   RoutingRule
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

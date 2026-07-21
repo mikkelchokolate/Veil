@@ -66,7 +66,7 @@ import type {
   SetupCompleteRequest,
   SetupCompleteResponse,
   SetupStatusResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

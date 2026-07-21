@@ -1832,11 +1832,11 @@ paths:
               $ref: "#/components/schemas/ClientUpsertRequest"
       responses:
         "201":
-          description: Created client.
+          description: Created client with issued credentials and apply outcome.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientView"
+                $ref: "#/components/schemas/ClientCreateResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
   /api/v1/clients/bulk:
@@ -3883,6 +3883,73 @@ components:
         version:
           type: integer
           description: Required on update for optimistic concurrency.
+        bindings:
+          type: array
+          description: >-
+            Create-only: bind the client to inbounds atomically with the
+            create. When credential is empty the server generates a
+            high-entropy secret and returns its plaintext once in
+            issuedCredentials.
+          items:
+            $ref: "#/components/schemas/ClientBindingInput"
+    ClientBindingInput:
+      type: object
+      required: [inboundId]
+      properties:
+        inboundId:
+          type: string
+        credential:
+          type: string
+          description: Optional explicit credential; server-generated when empty.
+        enabled:
+          type: boolean
+    IssuedCredential:
+      type: object
+      required: [bindingId, inboundId, kind, plaintext]
+      description: >-
+        Server-generated credential returned exactly once at creation time.
+        Only the encrypted form is persisted; the plaintext is never stored.
+      properties:
+        bindingId:
+          type: string
+        inboundId:
+          type: string
+        kind:
+          type: string
+        plaintext:
+          type: string
+    RevisionView:
+      type: object
+      required: [desired, applied, state]
+      properties:
+        desired:
+          type: integer
+        applied:
+          type: integer
+        state:
+          type: string
+          enum: [synced, pending, failed]
+    ClientCreateResponse:
+      type: object
+      required: [client, revision, success]
+      description: >-
+        Atomic create envelope: the committed client, any server-generated
+        credentials (plaintext shown exactly once), the new desired revision,
+        and the apply job that ran for that revision. success=false means the
+        client committed but the apply did not finish cleanly.
+      properties:
+        client:
+          $ref: "#/components/schemas/ClientView"
+        issuedCredentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssuedCredential"
+        revision:
+          $ref: "#/components/schemas/RevisionView"
+        applyJob:
+          $ref: "#/components/schemas/ApplyJob"
+        success:
+          type: boolean
     ClientView:
       type: object
       required: [id, name, status]

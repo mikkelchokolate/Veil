@@ -68,7 +68,7 @@ import type {
   UnauthorizedResponse,
   UpdateResponse,
   VersionResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

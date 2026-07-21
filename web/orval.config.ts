@@ -21,21 +21,13 @@ export default defineConfig({
 					path: "./src/api/fetcher.ts",
 					name: "apiFetch",
 				},
-				// S7: generate TanStack Query hooks, Zod schemas, and MSW mocks
-				// from the OpenAPI contract so tests can mock at the network edge.
+				// S7: generate TanStack Query hooks from the OpenAPI contract.
+				// Zod schemas and MSW mocks live in their OWN projects below
+				// (veilZod / veilMsw) with separate output trees — this project
+				// emits production DTOs and hooks only.
 				query: {
 					useQuery: true,
 					useMutation: true,
-				},
-				zod: {
-					generate: true,
-					strict: { response: false },
-					target: "./src/api/generated/endpoints.zod.ts",
-				},
-				mock: {
-					enabled: true,
-					type: "msw",
-					target: "./src/api/generated/endpoints.msw.ts",
 				},
 			},
 		},
@@ -56,6 +48,10 @@ export default defineConfig({
 	// S7: MSW handlers so browser/component tests mock the API at the network
 	// edge instead of stubbing fetch. Generated as a mock override on the main
 	// react-query project below (client "msw" is not a standalone output).
+	// Blocker W5: the MSW project owns a SEPARATE output tree (generated/msw/**,
+	// including its own schemas dir) and must never clean or rewrite the
+	// production DTOs in generated/models — previously it clobbered them with
+	// *.msw.ts rewrites.
 	veilMsw: {
 		input: { target: "../docs/openapi.yaml" },
 		output: {
@@ -63,7 +59,7 @@ export default defineConfig({
 			target: "./src/api/generated/msw/endpoints.ts",
 			mode: "tags-split",
 			fileExtension: ".msw.ts",
-			schemas: "./src/api/generated/models",
+			schemas: "./src/api/generated/msw/models",
 			clean: true,
 			prettier: false,
 			override: {

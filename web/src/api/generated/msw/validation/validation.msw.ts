@@ -56,7 +56,7 @@ import type {
   UnauthorizedResponse,
   ValidationRequest,
   ValidationResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

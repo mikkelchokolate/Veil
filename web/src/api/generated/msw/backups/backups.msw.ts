@@ -75,7 +75,7 @@ import type {
   NotFoundResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 

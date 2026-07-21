@@ -62,7 +62,7 @@ import type {
 import type {
   GetSTokenParams,
   HeadSTokenParams
-} from '../../models';
+} from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
 
