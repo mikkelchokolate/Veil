@@ -281,10 +281,57 @@ jobs:
           done
           cat "${RUNNER_TEMP}/veil-browser.log" >&2
           exit 1
+      - name: Start WebBasePath Panel (deep-link refresh coverage)
+        run: |
+          set -euo pipefail
+          path_root="${RUNNER_TEMP}/veil-browser-path"
+          mkdir -p "${path_root}/state" "${path_root}/etc" "${path_root}/apply" "${path_root}/live"
+          export VEIL_STATE_PATH="${path_root}/state/state.json"
+          export VEIL_KEY_PATH="${path_root}/etc/state.key"
+          export VEIL_APPLY_ROOT="${path_root}/apply"
+          export VEIL_LIVE_ROOT="${path_root}/live"
+          ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
+          VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2097 --web-base-path /e2e-base-x9/ >"${RUNNER_TEMP}/veil-browser-path.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/veil-browser-path.pid"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:2097/e2e-base-x9/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/veil-browser-path.log" >&2
+          exit 1
+      - name: Start helper-backed Panel (backup verify/restore coverage)
+        run: |
+          set -euo pipefail
+          # Backup operations are privileged: the helper only speaks the
+          # production layout (veil system user, /var/lib/veil state, root
+          # helper on /run/veil/helper.sock). Reproduce it faithfully instead
+          # of mocking the helper away.
+          sudo useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin veil || true
+          sudo mkdir -p /var/lib/veil/backups /etc/veil /run/veil
+          sudo chown -R veil:veil /var/lib/veil /etc/veil
+          openssl rand -hex 32 | sudo tee /etc/veil/backup.passphrase >/dev/null
+          sudo chown veil:veil /etc/veil/backup.passphrase
+          sudo chmod 600 /etc/veil/backup.passphrase
+          sudo -u veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin \
+            --state /var/lib/veil/state.json --key-path /etc/veil/state.key
+          sudo -g veil ./dist/veil helper serve --socket /run/veil/helper.sock >"${RUNNER_TEMP}/veil-helper.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/veil-helper.pid"
+          sudo -u veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
+            VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
+            VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${RUNNER_TEMP}/veil-browser-backup.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/veil-browser-backup.pid"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:2098/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/veil-browser-backup.log" >&2
+          exit 1
       - name: Browser end-to-end tests
         working-directory: test/browser
         env:
           VEIL_BROWSER_BASE_URL: http://127.0.0.1:2096
+          VEIL_BROWSER_BASE_URL_PATHED: http://127.0.0.1:2097/e2e-base-x9/
+          VEIL_BROWSER_BACKUP_URL: http://127.0.0.1:2098
           VEIL_BROWSER_USERNAME: browser-admin
           VEIL_BROWSER_PASSWORD: Browser-E2E-Password-123!
           VEIL_BROWSER_API_TOKEN: browser-e2e-token
@@ -294,6 +341,15 @@ jobs:
         run: |
           if [ -f "${RUNNER_TEMP}/veil-browser.pid" ]; then
             kill "$(cat "${RUNNER_TEMP}/veil-browser.pid")" 2>/dev/null || true
+          fi
+          if [ -f "${RUNNER_TEMP}/veil-browser-path.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/veil-browser-path.pid")" 2>/dev/null || true
+          fi
+          if [ -f "${RUNNER_TEMP}/veil-browser-backup.pid" ]; then
+            sudo kill "$(cat "${RUNNER_TEMP}/veil-browser-backup.pid")" 2>/dev/null || true
+          fi
+          if [ -f "${RUNNER_TEMP}/veil-helper.pid" ]; then
+            sudo kill "$(cat "${RUNNER_TEMP}/veil-helper.pid")" 2>/dev/null || true
           fi
       - name: Archive browser diagnostics
         if: failure()
