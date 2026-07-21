@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite";
 
 // The SPA is served both at "/" and under a secret WebBasePath ("/<secret>/").
@@ -16,10 +17,40 @@ export default defineConfig({
 		tailwindcss(),
 	],
 	test: {
-		environment: "jsdom",
-		setupFiles: ["./src/test/setup.ts"],
-		globals: true,
-		css: false,
+		// Two projects (blocker W8): the default jsdom suite, and a real-browser
+		// Chromium suite (*.browser.test.*) that runs the app through an actual
+		// browser engine with the MSW Service Worker. `pnpm test` stays jsdom-
+		// only; `pnpm test:browser` runs the browser project in CI.
+		projects: [
+			{
+				extends: true,
+				test: {
+					name: "jsdom",
+					environment: "jsdom",
+					setupFiles: ["./src/test/setup.ts"],
+					globals: true,
+					css: false,
+					include: ["src/**/*.test.{ts,tsx}"],
+					exclude: ["src/**/*.browser.test.{ts,tsx}"],
+				},
+			},
+			{
+				extends: true,
+				// pretty-format (via @testing-library) references Node's `global`;
+				// shim it for the real-browser engine.
+				define: { global: "globalThis" },
+				test: {
+					name: "browser",
+					include: ["src/**/*.browser.test.{ts,tsx}"],
+					browser: {
+						enabled: true,
+						provider: playwright(),
+						headless: true,
+						instances: [{ browser: "chromium" }],
+					},
+				},
+			},
+		],
 	},
 	server: {
 		proxy: {

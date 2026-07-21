@@ -35,8 +35,14 @@ jobs:
         run: pnpm typecheck
       - name: Biome check
         run: pnpm check
+      - name: i18n catalog parity and leak scan
+        run: pnpm i18n:check
       - name: Unit tests
         run: pnpm test
+      - name: Browser-mode tests (Chromium)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:browser
       - name: Build
         run: pnpm build
 
@@ -235,6 +241,19 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Build Veil browser-test binary
         run: |
           mkdir -p dist
@@ -268,6 +287,7 @@ jobs:
           VEIL_BROWSER_BASE_URL: http://127.0.0.1:2096
           VEIL_BROWSER_USERNAME: browser-admin
           VEIL_BROWSER_PASSWORD: Browser-E2E-Password-123!
+          VEIL_BROWSER_API_TOKEN: browser-e2e-token
         run: npm test
       - name: Stop Panel
         if: always()

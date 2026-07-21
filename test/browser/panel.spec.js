@@ -70,20 +70,95 @@ test.describe('Veil Panel — React SPA', () => {
     // Step 0: identity. The name field is required to advance.
     await page.locator('#nc-name').fill(name);
     await page.getByRole('button', { name: /^next$/i }).click();
-    // Step 1: inbounds (may be empty on a fresh panel).
+    // Step 1: limits.
     await page.getByRole('button', { name: /^next$/i }).click();
-    // Step 2: credentials -> review. The Review action submits the create and
-    // lands on the issued-credentials screen ("Client created" + Done).
+    // Step 2: bindings -> review screen.
     await page.getByRole('button', { name: /^review$/i }).click();
+    // Step 3: review -> submit the create.
+    await page.getByRole('button', { name: /create client/i }).click();
     const done = page.getByRole('button', { name: /^done$/i }).first();
     await expect(done).toBeVisible({ timeout: 15_000 });
     await done.click();
 
     // Return to the clients list and confirm the client appears.
-    await page.getByRole('link', { name: /clients/i }).first().click();
+    await expect(page).toHaveURL(/\/clients/);
     await expect(
       page.getByRole('row', { name: new RegExp(name) }),
     ).toBeVisible({ timeout: 10_000 });
+  });
+
+  // Critical flow (blocker W8): the atomic create — client + binding +
+  // server-generated credential committed in one transaction, with the
+  // plaintext surfaced exactly once in the one-time credentials dialog.
+  test('client bound to an inbound receives one-time credentials', async ({ page, request }) => {
+    const apiToken = process.env.VEIL_BROWSER_API_TOKEN || 'browser-e2e-token';
+    const stamp = Date.now();
+    const inboundName = `e2e-inbound-${stamp}`;
+    // Unique port per run: a reused panel state dir must never collide.
+    const port = 20000 + (stamp % 20000);
+    const resp = await request.post('/api/inbounds', {
+      headers: { 'X-Veil-Token': apiToken, 'Content-Type': 'application/json' },
+      data: { name: inboundName, protocol: 'hysteria2', transport: 'udp', port, enabled: false },
+    });
+    expect(resp.status(), `inbound seed failed: ${resp.status()} ${await resp.text()}`).toBeLessThan(300);
+
+    await login(page, adminUsername, adminPassword);
+    await page.getByRole('link', { name: /clients/i }).first().click();
+    const name = `e2e-bound-${Date.now()}`;
+    await page.getByRole('button', { name: /new client/i }).click();
+    await page.locator('#nc-name').fill(name);
+    await page.getByRole('button', { name: /^next$/i }).click();
+    await page.getByRole('button', { name: /^next$/i }).click();
+    // Step 2: bind to the seeded inbound; leave the credential empty so the
+    // server generates one.
+    await page.getByRole('checkbox', { name: new RegExp(inboundName) }).check();
+    await page.getByRole('button', { name: /^review$/i }).click();
+    await page.getByRole('button', { name: /create client/i }).click();
+
+    // The one-time credentials dialog shows the generated plaintext exactly
+    // once, labeled with the inbound.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toContainText(inboundName);
+    const plaintext = dialog.locator('code.mono').first();
+    await expect(plaintext).toBeVisible();
+    await expect(plaintext).not.toBeEmpty();
+    await dialog.getByRole('button', { name: /^done$/i }).click();
+
+    // The new client is listed.
+    await expect(page).toHaveURL(/\/clients/);
+    await expect(
+      page.getByRole('row', { name: new RegExp(name) }),
+    ).toBeVisible({ timeout: 10_000 });
+  });
+
+  // Critical flow (blocker W8): the atomic update — rename persists through
+  // the client detail page and survives a reload (committed, not cached).
+  test('rename a client persists through the atomic update path', async ({ page }) => {
+    await login(page, adminUsername, adminPassword);
+    await page.getByRole('link', { name: /clients/i }).first().click();
+    const name = `e2e-rename-${Date.now()}`;
+    await page.getByRole('button', { name: /new client/i }).click();
+    await page.locator('#nc-name').fill(name);
+    await page.getByRole('button', { name: /^next$/i }).click();
+    await page.getByRole('button', { name: /^next$/i }).click();
+    await page.getByRole('button', { name: /^review$/i }).click();
+    await page.getByRole('button', { name: /create client/i }).click();
+    const done = page.getByRole('button', { name: /^done$/i }).first();
+    await expect(done).toBeVisible({ timeout: 15_000 });
+    await done.click();
+
+    // Open the client detail from the list and rename it.
+    await page.getByRole('row', { name: new RegExp(name) }).click();
+    await expect(page).toHaveURL(/\/clients\/.+/);
+    const renamed = `${name}-renamed`;
+    await page.locator('#cd-name').fill(renamed);
+    await page.getByRole('button', { name: /save changes/i }).click();
+    await expect(page.locator('#cd-name')).toHaveValue(renamed, { timeout: 10_000 });
+
+    // A hard reload proves the rename committed (not just local state).
+    await page.reload();
+    await expect(page.locator('#cd-name')).toHaveValue(renamed, { timeout: 10_000 });
   });
 
   test('sign out returns to the login form', async ({ page }) => {

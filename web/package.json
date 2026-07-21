@@ -12,8 +12,8 @@
 		"check": "node_modules/.bin/biome check .",
 		"check:fix": "node_modules/.bin/biome check --write .",
 		"gen": "node node_modules/orval/dist/bin/orval.mjs --config orval.config.ts",
-		"test": "vitest run",
-		"test:browser": "node_modules/.bin/vitest run --browser.enabled",
+		"test": "vitest run --project=jsdom",
+		"test:browser": "node_modules/.bin/vitest run --project=browser",
 		"test:e2e": "node_modules/.bin/playwright test",
 		"test:watch": "vitest"
 	},
@@ -53,12 +53,19 @@
 		"@types/react": "^19.2.0",
 		"@types/react-dom": "^19.2.0",
 		"@vitejs/plugin-react": "^6.0.3",
+		"@vitest/browser-playwright": "^4.1.10",
 		"jsdom": "^29.1.1",
 		"msw": "^2.15.0",
 		"orval": "^8.22.0",
+		"playwright": "^1.61.1",
 		"tailwindcss": "^4.3.3",
 		"typescript": "^7.0.2",
 		"vite": "^8.1.5",
 		"vitest": "^4.1.10"
+	},
+	"msw": {
+		"workerDirectory": [
+			"public"
+		]
 	}
 }
