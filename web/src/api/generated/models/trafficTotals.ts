@@ -46,6 +46,10 @@ export interface TrafficTotals {
   uploadBytes: number;
   downloadBytes: number;
   totalBytes: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
   quotaBytes?: number;
   remainingBytes?: number;
   depleted: boolean;

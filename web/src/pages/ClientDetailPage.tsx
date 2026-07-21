@@ -42,7 +42,11 @@ import {
 } from "../components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useI18n } from "../i18n/I18nContext";
-import { fmtBytes } from "../lib/bytes";
+import {
+	decimalWithinSafeInteger,
+	fmtBytes,
+	parseQuotaDecimal,
+} from "../lib/bytes";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
 
@@ -73,6 +77,13 @@ function buildEditSchema(t: (key: string) => string) {
 			.refine(
 				(v) => v === "" || /^\d+$/.test(v),
 				t("clientDetail.validation.wholeBytes"),
+			)
+			.refine(
+				// Issue 3: reject values the JSON/API round-trip cannot
+				// represent exactly (Number.MAX_SAFE_INTEGER). Compare as
+				// decimal strings to stay exact beyond float precision.
+				(v) => v === "" || decimalWithinSafeInteger(v),
+				t("clientDetail.validation.quotaTooLarge"),
 			),
 		expiresAt: z.string(),
 		notes: z.string(),
@@ -180,9 +191,11 @@ export function ClientDetailPage() {
 		mutationFn: async (v: EditValues) => {
 			const c = client.data;
 			if (!c) throw new Error("client not loaded");
-			// Integer-parse the byte string; empty means clear/unlimited.
+			// Integer-parse the byte string; empty means clear/unlimited. The
+			// Zod schema already rejected anything above MAX_SAFE_INTEGER, so
+			// this conversion is exact.
 			const quota =
-				v.quotaBytes === "" ? undefined : Number.parseInt(v.quotaBytes, 10);
+				v.quotaBytes === "" ? undefined : parseQuotaDecimal(v.quotaBytes);
 			const expires = v.expiresAt
 				? Math.floor(new Date(v.expiresAt).getTime() / 1000)
 				: undefined;
@@ -383,11 +396,10 @@ export function ClientDetailPage() {
 								<AlertDialogContent>
 									<AlertDialogHeader>
 										<AlertDialogTitle>
-											Really delete this client?
+											{t("clientDetail.deleteTitle")}
 										</AlertDialogTitle>
 										<AlertDialogDescription>
-											This action cannot be undone. All bindings and credentials
-											will be removed.
+											{t("clientDetail.deleteDescription")}
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<AlertDialogFooter>
@@ -396,7 +408,7 @@ export function ClientDetailPage() {
 											disabled={remove.isPending}
 											onClick={() => remove.mutate()}
 										>
-											Confirm delete
+											{t("clientDetail.confirmDelete")}
 										</AlertDialogAction>
 									</AlertDialogFooter>
 								</AlertDialogContent>
@@ -439,8 +451,14 @@ export function ClientDetailPage() {
 						</Badge>
 						{feedback.revision ? (
 							<FormDescription style={{ fontSize: 13 }}>
-								desired rev {feedback.revision.desired ?? "—"} · applied{" "}
-								{feedback.revision.applied ?? "—"} ·{" "}
+								{t("clientDetail.feedback.desiredRev", {
+									n: feedback.revision.desired ?? "—",
+								})}
+								{" · "}
+								{t("clientDetail.feedback.applied", {
+									n: feedback.revision.applied ?? "—",
+								})}
+								{" · "}
 								{feedback.revision.state ?? ""}
 							</FormDescription>
 						) : null}
@@ -457,7 +475,7 @@ export function ClientDetailPage() {
 							style={{ marginLeft: "auto" }}
 							onClick={() => setFeedback(null)}
 						>
-							Dismiss
+							{t("common.dismiss")}
 						</Button>
 					</div>
 				</div>
@@ -501,9 +519,7 @@ export function ClientDetailPage() {
 								</FormMessage>
 							</FormItem>
 							<FormItem>
-								<Label htmlFor="cd-quota">
-									Quota (bytes, blank = unlimited)
-								</Label>
+								<Label htmlFor="cd-quota">{t("clientDetail.quotaLabel")}</Label>
 								<Input
 									id="cd-quota"
 									inputMode="numeric"
@@ -600,22 +616,24 @@ export function ClientDetailPage() {
 												disabled={rotate.isPending}
 												onClick={() => rotate.mutate(b.id)}
 											>
-												Rotate credential
+												{t("clientDetail.rotateCredential")}
 											</Button>
 											<Button
 												variant="danger"
 												disabled={detach.isPending}
 												onClick={() => detach.mutate(b.id)}
 											>
-												Detach
+												{t("clientDetail.detach")}
 											</Button>
 										</>
 									) : null}
 								</div>
 								{b.credential ? (
 									<FormDescription style={{ fontSize: 12, marginTop: 6 }}>
-										credential{" "}
-										{b.credential.configured ? "configured" : "not set"}
+										{t("clientDetail.credential")}{" "}
+										{b.credential.configured
+											? t("clientDetail.credentialConfigured")
+											: t("clientDetail.credentialNotSet")}
 										{b.credential.version != null
 											? ` · v${b.credential.version}`
 											: ""}
@@ -653,7 +671,7 @@ export function ClientDetailPage() {
 								disabled={!attachInbound || attach.isPending}
 								onClick={() => attach.mutate(attachInbound)}
 							>
-								Attach
+								{t("clientDetail.attach")}
 							</Button>
 						</div>
 					) : null}

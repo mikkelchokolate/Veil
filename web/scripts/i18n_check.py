@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""i18n leak checker for the Veil web SPA.
+"""i18n catalog checker for the Veil web SPA.
 
 Checks:
  1. en/ru catalogs contain exactly the same keys.
  2. Every t("key") referenced in src exists in the en catalog (dynamic
     t(`ns.${var}`) templates are checked by prefix against catalog keys).
- 3. Leak scan: JSX text nodes and user-facing string props (placeholder,
-    title, aria-label, label) that still contain hardcoded English.
+
+Hardcoded-string leak detection lives in scripts/i18n_leaks.mjs (AST-based,
+@babel/parser): the regex approach used here previously matched only
+single-line `>text<` and silently missed every multiline JSX text node.
+pnpm i18n:check runs both.
 
 Usage: python3 i18n_check.py  (exit 0 = clean)
 """
@@ -30,48 +33,6 @@ def iter_tsx():
         if p.name.endswith((".test.tsx", ".test.ts")):
             continue
         yield p
-
-def strip_comments_and_code_strings(src: str) -> str:
-    # Remove line + block comments to reduce false positives.
-    src = re.sub(r"//[^\n]*", "", src)
-    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
-    return src
-
-ALLOW_TEXT = re.compile(
-    r"^[\s\d.,:;·—–\-+/%()|→×?!'’\"’&=<>@#_*~\[\]{}$\\`|^…MiB|GiB|CPU|EN|RU|Veil|WARP]*$"
-)
-# Tokens that are fine as literal text (brands, units, single glyphs).
-ALLOW_WORDS = {
-    "Veil", "WARP", "CPU", "MiB", "GiB", "EN", "RU", "ok", "OK", "yes", "no",
-    "synced", "pending", "applying", "failed", "clean", "dirty",
-    # code identifiers caught by the crude regex (generics like apiFetch<T>)
-    "apiFetch", "Promise", "Panel",
-}
-
-def find_leaks(path: Path):
-    src = strip_comments_and_code_strings(path.read_text())
-    leaks = []
-    # JSX text: >text<
-    for m in re.finditer(r">([^<>{}\n]*[A-Za-z][^<>{}\n]*)<", src):
-        text = m.group(1).strip()
-        if not text or len(text) < 2:
-            continue
-        if ALLOW_TEXT.match(text):
-            continue
-        words = re.findall(r"[A-Za-z][A-Za-z'’-]*", text)
-        if all(w in ALLOW_WORDS for w in words):
-            continue
-        # skip obvious code remnants (rare in JSX text)
-        leaks.append((m.start(), f"text: {text[:80]!r}"))
-    # props
-    for m in re.finditer(
-        r'(?:placeholder|title|aria-label|alt)="([^"]*[A-Za-z][^"]*)"', src
-    ):
-        val = m.group(1).strip()
-        if ALLOW_TEXT.match(val):
-            continue
-        leaks.append((m.start(), f"prop: {val[:80]!r}"))
-    return leaks
 
 def main():
     en = load_catalog(SRC / "i18n/locales/en.ts")
@@ -103,18 +64,6 @@ def main():
         if not any(k.startswith(prefix + ".") for k in en):
             problems += 1
             print(f"DYNAMIC PREFIX with no catalog keys: {prefix}.*")
-
-    leaks_total = 0
-    for p in iter_tsx():
-        leaks = find_leaks(p)
-        if leaks:
-            leaks_total += len(leaks)
-            print(f"\nLEAKS {p.relative_to(SRC)} ({len(leaks)}):")
-            for _, desc in leaks[:20]:
-                print(f"  {desc}")
-    if leaks_total:
-        problems += 1
-        print(f"\nTOTAL LEAKS: {leaks_total}")
 
     print("\nCLEAN" if problems == 0 else f"\n{problems} PROBLEM GROUPS")
     return 0 if problems == 0 else 1

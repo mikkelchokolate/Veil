@@ -46,13 +46,18 @@ import * as zod from 'zod';
 /**
  * @summary List clients with effective status
  */
+export const getApiV1ClientsResponseItemsItemQuotaBytesMin = 0;
+export const getApiV1ClientsResponseItemsItemQuotaBytesMax = 9007199254740991;
+
+
+
 export const GetApiV1ClientsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(getApiV1ClientsResponseItemsItemQuotaBytesMin).max(getApiV1ClientsResponseItemsItemQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
   "expiresAt": zod.number().optional(),
   "depleted": zod.boolean().optional(),
@@ -87,11 +92,16 @@ export const GetApiV1ClientsResponse = zod.object({
 /**
  * @summary Create a client
  */
+export const postApiV1ClientsBodyQuotaBytesMin = 0;
+export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
+
+
+
 export const PostApiV1ClientsBody = zod.object({
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(postApiV1ClientsBodyQuotaBytesMin).max(postApiV1ClientsBodyQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
   "expiresAt": zod.number().optional(),
   "deviceLimit": zod.number().optional(),
@@ -104,13 +114,18 @@ export const PostApiV1ClientsBody = zod.object({
 })).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
 })
 
+export const postApiV1ClientsResponseClientQuotaBytesMin = 0;
+export const postApiV1ClientsResponseClientQuotaBytesMax = 9007199254740991;
+
+
+
 export const PostApiV1ClientsResponse = zod.object({
   "client": zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(postApiV1ClientsResponseClientQuotaBytesMin).max(postApiV1ClientsResponseClientQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
   "expiresAt": zod.number().optional(),
   "depleted": zod.boolean().optional(),
@@ -169,11 +184,16 @@ export const PostApiV1ClientsResponse = zod.object({
 /**
  * @summary Bulk action across clients; per-client results
  */
+export const postApiV1ClientsBulkBodyQuotaBytesMin = 0;
+export const postApiV1ClientsBulkBodyQuotaBytesMax = 9007199254740991;
+
+
+
 export const PostApiV1ClientsBulkBody = zod.object({
   "action": zod.enum(['enable', 'disable', 'delete', 'extend_expiry', 'set_quota', 'reset_traffic', 'attach_inbound', 'detach_inbound']),
   "clientIds": zod.array(zod.string()),
   "days": zod.number().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(postApiV1ClientsBulkBodyQuotaBytesMin).max(postApiV1ClientsBulkBodyQuotaBytesMax).optional(),
   "inboundId": zod.string().optional()
 })
 
@@ -291,12 +311,17 @@ export const GetApiV1ClientsIdParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const getApiV1ClientsIdResponseQuotaBytesMin = 0;
+export const getApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
+
+
+
 export const GetApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(getApiV1ClientsIdResponseQuotaBytesMin).max(getApiV1ClientsIdResponseQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
   "expiresAt": zod.number().optional(),
   "depleted": zod.boolean().optional(),
@@ -336,11 +361,16 @@ export const PutApiV1ClientsIdParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const putApiV1ClientsIdBodyQuotaBytesMin = 0;
+export const putApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
+
+
+
 export const PutApiV1ClientsIdBody = zod.object({
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(putApiV1ClientsIdBodyQuotaBytesMin).max(putApiV1ClientsIdBodyQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
   "expiresAt": zod.number().optional(),
   "deviceLimit": zod.number().optional(),
@@ -353,12 +383,17 @@ export const PutApiV1ClientsIdBody = zod.object({
 })).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
 })
 
+export const putApiV1ClientsIdResponseQuotaBytesMin = 0;
+export const putApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
+
+
+
 export const PutApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(putApiV1ClientsIdResponseQuotaBytesMin).max(putApiV1ClientsIdResponseQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
   "expiresAt": zod.number().optional(),
   "depleted": zod.boolean().optional(),

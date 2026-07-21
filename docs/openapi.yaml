@@ -1868,6 +1868,10 @@ paths:
                 quotaBytes:
                   type: integer
                   format: int64
+                  minimum: 0
+                  # Values above Number.MAX_SAFE_INTEGER cannot be represented
+                  # exactly by JSON consumers (the SPA); rejected end-to-end.
+                  maximum: 9007199254740991
                 inboundId:
                   type: string
       responses:
@@ -3870,6 +3874,10 @@ components:
         quotaBytes:
           type: integer
           format: int64
+          minimum: 0
+          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
+          # JS number; larger int64s would lose precision silently.
+          maximum: 9007199254740991
         quotaResetPolicy:
           type: string
           enum: [never, daily, weekly, monthly]
@@ -3965,6 +3973,10 @@ components:
         quotaBytes:
           type: integer
           format: int64
+          minimum: 0
+          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
+          # JS number; larger int64s would lose precision silently.
+          maximum: 9007199254740991
         quotaResetPolicy:
           type: string
         expiresAt:
@@ -4078,6 +4090,10 @@ components:
         quotaBytes:
           type: integer
           format: int64
+          minimum: 0
+          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
+          # JS number; larger int64s would lose precision silently.
+          maximum: 9007199254740991
         remainingBytes:
           type: integer
           format: int64

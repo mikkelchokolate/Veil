@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "node_modules/.bin/vite",
 		"build": "node_modules/.bin/tsr generate && node_modules/.bin/tsc -b && node_modules/.bin/vite build",
-		"i18n:check": "python3 scripts/i18n_check.py",
+		"i18n:check": "python3 scripts/i18n_check.py && node scripts/i18n_leaks.mjs",
 		"typecheck": "node_modules/.bin/tsr generate && node_modules/.bin/tsc -b --noEmit",
 		"router:gen": "node_modules/.bin/tsr generate",
 		"check": "node_modules/.bin/biome check .",
@@ -42,6 +42,7 @@
 		"zod": "^4.1.0"
 	},
 	"devDependencies": {
+		"@babel/parser": "7.29.7",
 		"@biomejs/biome": "^2.5.4",
 		"@tailwindcss/vite": "^4.3.3",
 		"@tanstack/router-cli": "^1.167.21",

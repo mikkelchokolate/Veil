@@ -211,7 +211,7 @@ func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1Bulk
 		c.Depleted = false
 		c.QuotaResetAt = nil
 	case "set_quota":
-		if req.QuotaBytes == nil || *req.QuotaBytes < 0 {
+		if req.QuotaBytes == nil || *req.QuotaBytes < 0 || *req.QuotaBytes > client.MaxQuotaBytes {
 			return false, false, client.ErrValidation
 		}
 		c.QuotaBytes = req.QuotaBytes

@@ -22,6 +22,7 @@ import { FormItem, FormMessage } from "../components/ui/form";
 import { Input, Textarea } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useI18n } from "../i18n/I18nContext";
+import { decimalWithinSafeInteger, parseQuotaDecimal } from "../lib/bytes";
 
 interface InboundOption {
 	name: string;
@@ -80,15 +81,32 @@ export function ClientNewPage() {
 		? inbounds.data
 		: (inbounds.data?.items ?? []);
 
+	// Issue 3: quotaBytes crosses the wire as a JSON number — reject anything
+	// above Number.MAX_SAFE_INTEGER (compared as an exact decimal string) and
+	// any non-whole-byte input before it can reach the API.
+	const quotaError = !quotaBytes
+		? null
+		: !/^\d+$/.test(quotaBytes)
+			? t("clientNew.quotaInvalid")
+			: !decimalWithinSafeInteger(quotaBytes)
+				? t("clientNew.quotaTooLarge")
+				: null;
+
 	const create = useMutation({
 		mutationFn: async () => {
+			if (
+				quotaBytes &&
+				(!/^\d+$/.test(quotaBytes) || !decimalWithinSafeInteger(quotaBytes))
+			) {
+				throw new ApiError(400, t("clientNew.quotaTooLarge"));
+			}
 			const body: Record<string, unknown> = {
 				name,
 				enabled: true,
 			};
 			if (email) body.email = email;
 			if (notes) body.notes = notes;
-			if (quotaBytes) body.quotaBytes = Number(quotaBytes);
+			if (quotaBytes) body.quotaBytes = parseQuotaDecimal(quotaBytes);
 			if (expiresAt)
 				body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
 			if (bindings.length > 0) {
@@ -200,6 +218,7 @@ export function ClientNewPage() {
 							value={quotaBytes}
 							onChange={(e) => setQuotaBytes(e.target.value)}
 						/>
+						{quotaError ? <FormMessage>{quotaError}</FormMessage> : null}
 					</FormItem>
 					<FormItem>
 						<Label htmlFor="nc-exp">{t("clientNew.expiryLabel")}</Label>
@@ -374,7 +393,9 @@ export function ClientNewPage() {
 						<Button
 							type="button"
 							variant="primary"
-							disabled={step === 0 && !name}
+							disabled={
+								(step === 0 && !name) || (step === 1 && quotaError != null)
+							}
 							onClick={() => setStep((s) => s + 1)}
 						>
 							{t("common.next")}

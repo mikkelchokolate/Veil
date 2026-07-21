@@ -48,6 +48,10 @@ export interface ClientView {
   name: string;
   email?: string;
   enabled?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
   quotaBytes?: number;
   quotaResetPolicy?: string;
   expiresAt?: number;

@@ -71,12 +71,17 @@ export const GetApiV1TrafficIdParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const getApiV1TrafficIdResponseQuotaBytesMin = 0;
+export const getApiV1TrafficIdResponseQuotaBytesMax = 9007199254740991;
+
+
+
 export const GetApiV1TrafficIdResponse = zod.object({
   "clientId": zod.string(),
   "uploadBytes": zod.number(),
   "downloadBytes": zod.number(),
   "totalBytes": zod.number(),
-  "quotaBytes": zod.number().optional(),
+  "quotaBytes": zod.number().min(getApiV1TrafficIdResponseQuotaBytesMin).max(getApiV1TrafficIdResponseQuotaBytesMax).optional(),
   "remainingBytes": zod.number().optional(),
   "depleted": zod.boolean()
 })

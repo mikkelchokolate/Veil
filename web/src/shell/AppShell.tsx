@@ -36,7 +36,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 			</aside>
 			<div className="content-wrapper">
 				<header className="top-bar">
-					<h1>Veil Panel</h1>
+					<h1>{t("shell.panelTitle")}</h1>
 					<div style={{ display: "flex", alignItems: "center", gap: 16 }}>
 						<ApplyStatusIndicator />
 						<span className="muted" style={{ fontSize: 13 }}>
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 							<option value="ru">RU</option>
 						</select>
 						<button type="button" className="btn" onClick={() => void logout()}>
-							{t("common.logout") || "Logout"}
+							{t("common.logout")}
 						</button>
 					</div>
 				</header>

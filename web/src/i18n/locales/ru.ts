@@ -1,6 +1,7 @@
 // Russian UI catalog. Must contain exactly the same keys as en.ts.
 export const ru: Record<string, string> = {
 	"nav.overview": "Обзор",
+	"shell.panelTitle": "Veil Panel",
 	"nav.clients": "Клиенты",
 	"nav.inbounds": "Инбаунды",
 	"nav.routing": "Маршрутизация",
@@ -293,6 +294,7 @@ export const ru: Record<string, string> = {
 	"subTokens.copyUrl": "Скопировать URL",
 	"subTokens.copied": "Скопировано",
 	"subTokens.dismiss": "Закрыть",
+	"subTokens.urlLabel": "URL подписки",
 	"subTokens.issuedNote":
 		"URL и QR-код показываются только сейчас. Ротация токена делает старый URL недействительным.",
 	"subTokens.labelPlaceholder": "Метка (например, телефон, ноутбук)",
@@ -416,6 +418,8 @@ export const ru: Record<string, string> = {
 	"clientDetail.validation.nameRequired": "имя обязательно",
 	"clientDetail.validation.invalidEmail": "некорректный email",
 	"clientDetail.validation.wholeBytes": "должно быть целым числом байт",
+	"clientDetail.validation.quotaTooLarge":
+		"квота слишком велика (максимум 9007199254740991 байт)",
 
 	"common.notFound": "Не найдено",
 	"common.notFoundDescription": "Эта страница не существует.",
@@ -480,6 +484,9 @@ export const ru: Record<string, string> = {
 	"clientNew.emailLabel": "Email (необязательно)",
 	"clientNew.notesLabel": "Заметки (необязательно)",
 	"clientNew.quotaLabel": "Квота (bytes, необязательно)",
+	"clientNew.quotaInvalid": "квота должна быть целым числом байт",
+	"clientNew.quotaTooLarge":
+		"квота слишком велика (максимум 9007199254740991 байт)",
 	"clientNew.expiryLabel": "Дата окончания (необязательно)",
 	"clientNew.bindingsLegend": "Привязать к инбаундам",
 	"clientNew.noInbounds": "Нет доступных инбаундов.",

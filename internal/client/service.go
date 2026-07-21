@@ -83,12 +83,24 @@ type BindingCapability struct {
 // ErrValidation marks a 400-class client-side validation failure.
 var ErrValidation = errors.New("client: validation error")
 
+// MaxQuotaBytes caps quotaBytes at Number.MAX_SAFE_INTEGER (2^53-1). The API
+// serializes quotas as JSON numbers and the SPA consumes them as JS numbers;
+// larger int64 values would silently lose precision on the client. Values
+// above the cap are rejected end-to-end (OpenAPI maximum, this validation,
+// and the SPA's form schemas) instead of being represented imprecisely.
+const MaxQuotaBytes int64 = 1<<53 - 1
+
 func validate(c Client) error {
 	if c.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrValidation)
 	}
-	if c.QuotaBytes != nil && *c.QuotaBytes < 0 {
-		return fmt.Errorf("%w: quotaBytes must be >= 0", ErrValidation)
+	if c.QuotaBytes != nil {
+		if *c.QuotaBytes < 0 {
+			return fmt.Errorf("%w: quotaBytes must be >= 0", ErrValidation)
+		}
+		if *c.QuotaBytes > MaxQuotaBytes {
+			return fmt.Errorf("%w: quotaBytes must be <= %d (Number.MAX_SAFE_INTEGER)", ErrValidation, MaxQuotaBytes)
+		}
 	}
 	switch c.QuotaResetPolicy {
 	case "", ResetNever, ResetDaily, ResetWeekly, ResetMonthly, ResetFixedInterval:

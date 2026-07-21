@@ -133,7 +133,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 						/>
 						<div style={{ flex: 1, minWidth: 240 }}>
 							<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-								Subscription URL
+								{t("subTokens.urlLabel")}
 							</div>
 							<code
 								className="mono"
@@ -166,8 +166,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 								</button>
 							</div>
 							<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-								The URL and QR are shown only now. Rotating a token invalidates
-								the old URL.
+								{t("subTokens.issuedNote")}
 							</p>
 						</div>
 					</div>

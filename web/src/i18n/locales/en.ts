@@ -3,6 +3,7 @@
 // Values may contain {placeholders} interpolated by t(key, vars).
 export const en: Record<string, string> = {
 	"nav.overview": "Overview",
+	"shell.panelTitle": "Veil Panel",
 	"nav.clients": "Clients",
 	"nav.inbounds": "Inbounds",
 	"nav.routing": "Routing",
@@ -338,6 +339,7 @@ export const en: Record<string, string> = {
 	"subTokens.copyUrl": "Copy URL",
 	"subTokens.copied": "Copied",
 	"subTokens.dismiss": "Dismiss",
+	"subTokens.urlLabel": "Subscription URL",
 	"subTokens.issuedNote":
 		"The URL and QR are shown only now. Rotating a token invalidates the old URL.",
 	"subTokens.labelPlaceholder": "Label (e.g. phone, laptop)",
@@ -413,6 +415,8 @@ export const en: Record<string, string> = {
 	"clientDetail.validation.nameRequired": "name is required",
 	"clientDetail.validation.invalidEmail": "invalid email",
 	"clientDetail.validation.wholeBytes": "must be a whole number of bytes",
+	"clientDetail.validation.quotaTooLarge":
+		"quota is too large (max 9007199254740991 bytes)",
 
 	"common.notFound": "Not found",
 	"common.notFoundDescription": "This page does not exist.",
@@ -477,6 +481,8 @@ export const en: Record<string, string> = {
 	"clientNew.emailLabel": "Email (optional)",
 	"clientNew.notesLabel": "Notes (optional)",
 	"clientNew.quotaLabel": "Quota (bytes, optional)",
+	"clientNew.quotaInvalid": "quota must be a whole number of bytes",
+	"clientNew.quotaTooLarge": "quota is too large (max 9007199254740991 bytes)",
 	"clientNew.expiryLabel": "Expiry date (optional)",
 	"clientNew.bindingsLegend": "Bind to inbounds",
 	"clientNew.noInbounds": "No inbounds available.",

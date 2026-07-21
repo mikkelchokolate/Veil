@@ -46,6 +46,10 @@ export type PostApiV1ClientsBulkBody = {
   action: PostApiV1ClientsBulkBodyAction;
   clientIds: string[];
   days?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
   quotaBytes?: number;
   inboundId?: string;
 };
