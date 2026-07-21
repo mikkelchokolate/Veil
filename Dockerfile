@@ -37,7 +37,7 @@ FROM node:24-alpine AS webbuilder
 RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 
 WORKDIR /web
-COPY web/package.json web/pnpm-lock.yaml ./
+COPY web/package.json web/pnpm-lock.yaml web/.npmrc web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build

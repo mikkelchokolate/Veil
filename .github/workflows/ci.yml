@@ -54,6 +54,19 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web/dist (embedded into the binary)
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
@@ -71,19 +84,6 @@ jobs:
         run: make verify-openapi
       - name: Verify generated Go SDK
         run: make verify-sdk
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
-        with:
-          version: 11.10.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build web/dist (embedded into the binary)
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
       - run: make build
       - name: Install Caddy runtime for unit tests
         run: |
@@ -128,6 +128,10 @@ jobs:
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.5'
+      - name: Stub web/dist for analysis (go:embed must resolve)
+        run: |
+          mkdir -p web/dist
+          echo '<!doctype html><title>analysis stub</title>' > web/dist/index.html
       - name: staticcheck
         uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
@@ -353,8 +357,17 @@ jobs:
           sudo chmod 600 /etc/veil/backup.passphrase
           sudo -u veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' --role admin \
             --state /var/lib/veil/state.json --key-path /etc/veil/state.key
-          sudo -g veil ./dist/veil helper serve --socket /run/veil/helper.sock >"${RUNNER_TEMP}/veil-helper.log" 2>&1 &
+          # GH runner sudoers covers (ALL) but not (ALL:ALL), so `sudo -g veil`
+          # would prompt for a password. Start the helper as plain root and
+          # group-adjust the socket afterwards instead (the panel dials it as
+          # the veil user and needs group access).
+          sudo ./dist/veil helper serve --socket /run/veil/helper.sock >"${RUNNER_TEMP}/veil-helper.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/veil-helper.pid"
+          for attempt in $(seq 1 30); do
+            [ -S /run/veil/helper.sock ] && break
+            sleep 1
+          done
+          sudo chgrp veil /run/veil/helper.sock
           sudo -u veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
             VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
             VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${RUNNER_TEMP}/veil-browser-backup.log" 2>&1 &
