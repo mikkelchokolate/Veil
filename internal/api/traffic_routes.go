@@ -80,7 +80,7 @@ func (s *managementState) handleV1TrafficHistory(w http.ResponseWriter, r *http.
 	}
 	from := parseInt64Default(r.URL.Query().Get("from"), 0)
 	to := parseInt64Default(r.URL.Query().Get("to"), time.Now().Unix())
-	limit := int(parseInt64Default(r.URL.Query().Get("limit"), 500))
+	limit := parseLimitParam(r.URL.Query().Get("limit"), 500, 5000)
 	rows, err := s.trafficStore.HistoryForClient(clientID, from, to, limit)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
@@ -137,7 +137,7 @@ func (s *managementState) handleV1TrafficTop(w http.ResponseWriter, r *http.Requ
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	limit := int(parseInt64Default(r.URL.Query().Get("limit"), 10))
+	limit := parseLimitParam(r.URL.Query().Get("limit"), 10, 500)
 	clients, _, err := s.clientService.List(client.ListFilter{PageSize: 1000})
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
@@ -228,6 +228,20 @@ func parseInt64Default(v string, def int64) int64 {
 		return def
 	}
 	return n
+}
+
+// parseLimitParam parses an int64 query value and clamps it to [1, max]
+// BEFORE narrowing to int: a huge ?limit= (e.g. 2^60) must not overflow the
+// conversion, and non-positive values are meaningless for LIMIT clauses.
+func parseLimitParam(v string, def, max int) int {
+	n := parseInt64Default(v, int64(def))
+	if n < 1 {
+		return def
+	}
+	if n > int64(max) {
+		return max
+	}
+	return int(n)
 }
 
 // splitNonEmpty splits a path on sep, dropping empty segments.
