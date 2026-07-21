@@ -118,7 +118,10 @@ func setSPAHeaders(w http.ResponseWriter, cache string) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// SPA CSP (B12): no unsafe-inline scripts/styles, no CDN. The bundle is
 	// self-hosted; fonts use the system stack. Tightened vs the legacy panel.
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+	// base-uri 'self' (not 'none'): the SPA ships a static <base href> that the
+	// server rewrites to the active WebBasePath — deep-link reloads depend on
+	// it, and 'self' still blocks injected foreign-origin bases.
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
 	if cache == "no-store" {
