@@ -146,58 +146,148 @@ type IssuedCredential struct {
 // IssuedCredential list. Errors never suppress a partial create — any failure
 // rolls the whole transaction back.
 func (s *Service) CreateWithBindingsIssued(c Client, bindings []BindingInput) (View, []IssuedCredential, error) {
-	if err := validate(c); err != nil {
-		return View{}, nil, err
-	}
-	for _, b := range bindings {
-		if b.InboundID == "" {
-			return View{}, nil, fmt.Errorf("%w: inboundId is required", ErrValidation)
-		}
-	}
 	var createdID string
-	issued := []IssuedCredential{}
+	var issued []IssuedCredential
 	err := s.repo.WithTx(func(tx *Tx) error {
-		created, err := tx.CreateClient(c)
-		if err != nil {
-			return err
-		}
-		createdID = created.ID
-		for _, b := range bindings {
-			bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, Enabled: true})
-			if err != nil {
-				return err
-			}
-			plaintext := b.Credential
-			generated := false
-			if plaintext == "" {
-				plaintext, err = generateCredentialPlaintext()
-				if err != nil {
-					return err
-				}
-				generated = true
-			}
-			if _, err := tx.SetCredential(s.creds, bind.ID, "password", plaintext); err != nil {
-				return err
-			}
-			if generated {
-				issued = append(issued, IssuedCredential{
-					BindingID: bind.ID,
-					InboundID: bind.InboundID,
-					Kind:      "password",
-					Plaintext: plaintext,
-				})
-			}
-		}
-		return nil
+		id, iss, err := s.CreateWithBindingsIssuedTx(tx, c, bindings)
+		createdID, issued = id, iss
+		return err
 	})
 	if err != nil {
 		return View{}, nil, err
 	}
+	// Build the view AFTER commit. Building it inside the transaction would
+	// call the inbound-capability lookup, which acquires the management-state
+	// mutex — a self-deadlock when the API layer wraps the whole mutation in
+	// that same lock.
 	view, err := s.Get(createdID)
 	if err != nil {
 		return View{}, nil, err
 	}
 	return view, issued, nil
+}
+
+// CreateWithBindingsIssuedTx is the transactional core of
+// CreateWithBindingsIssued for the unified mutation orchestration: the API
+// layer folds the create, the desired-revision bump, and the immutable
+// snapshot into ONE SQLite transaction through this entry point. It returns
+// the created client ID; the caller builds the response view after commit.
+func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []BindingInput) (string, []IssuedCredential, error) {
+	if err := validate(c); err != nil {
+		return "", nil, err
+	}
+	for _, b := range bindings {
+		if b.InboundID == "" {
+			return "", nil, fmt.Errorf("%w: inboundId is required", ErrValidation)
+		}
+	}
+	created, err := tx.CreateClient(c)
+	if err != nil {
+		return "", nil, err
+	}
+	issued := []IssuedCredential{}
+	for _, b := range bindings {
+		bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, Enabled: true})
+		if err != nil {
+			return "", nil, err
+		}
+		plaintext := b.Credential
+		generated := false
+		if plaintext == "" {
+			plaintext, err = generateCredentialPlaintext()
+			if err != nil {
+				return "", nil, err
+			}
+			generated = true
+		}
+		if _, err := tx.SetCredential(s.creds, bind.ID, "password", plaintext); err != nil {
+			return "", nil, err
+		}
+		if generated {
+			issued = append(issued, IssuedCredential{
+				BindingID: bind.ID,
+				InboundID: bind.InboundID,
+				Kind:      "password",
+				Plaintext: plaintext,
+			})
+		}
+	}
+	return created.ID, issued, nil
+}
+
+// UpdateTx is the transactional variant of Update for the unified mutation
+// orchestration. It performs the optimistic-concurrency update only; callers
+// build the response view AFTER commit (the view's inbound-capability lookup
+// takes the management-state mutex, which the API layer already holds around
+// the whole mutation).
+func (s *Service) UpdateTx(tx *Tx, c Client, version int) error {
+	if err := validate(c); err != nil {
+		return err
+	}
+	_, err := tx.Update(c, version)
+	return err
+}
+
+// DeleteTx is the transactional variant of Delete for the unified mutation
+// orchestration.
+func (s *Service) DeleteTx(tx *Tx, id string) error { return tx.Delete(id) }
+
+// AddBindingTx is the transactional variant of AddBinding.
+func (s *Service) AddBindingTx(tx *Tx, clientID, inboundID string) (Binding, error) {
+	if inboundID == "" {
+		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
+	}
+	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: true})
+}
+
+// RemoveBindingTx is the transactional variant of RemoveBinding.
+func (s *Service) RemoveBindingTx(tx *Tx, bindingID, clientID string) error {
+	return tx.DeleteBinding(bindingID)
+}
+
+// SetCredentialTx is the transactional variant of SetCredential.
+func (s *Service) SetCredentialTx(tx *Tx, bindingID, kind, plaintext string) (Credential, error) {
+	if plaintext == "" {
+		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
+	}
+	return tx.SetCredential(s.creds, bindingID, kind, plaintext)
+}
+
+// RotateCredentialTx is the transactional variant of RotateCredential.
+func (s *Service) RotateCredentialTx(tx *Tx, bindingID, kind, plaintext string) (Credential, error) {
+	if plaintext == "" {
+		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
+	}
+	return tx.RotateCredential(s.creds, bindingID, kind, plaintext)
+}
+
+// RotateCredentialGeneratedTx is the transactional variant of
+// RotateCredentialGenerated: the server generates the high-entropy plaintext
+// and returns it exactly once.
+func (s *Service) RotateCredentialGeneratedTx(tx *Tx, bindingID, kind string) (GeneratedCredential, error) {
+	plaintext, err := generateCredentialPlaintext()
+	if err != nil {
+		return GeneratedCredential{}, err
+	}
+	c, err := s.RotateCredentialTx(tx, bindingID, kind, plaintext)
+	if err != nil {
+		return GeneratedCredential{}, err
+	}
+	return GeneratedCredential{Credential: c, Plaintext: plaintext}, nil
+}
+
+// SetBindingEnabledTx is the transactional variant of SetBindingEnabled.
+func (s *Service) SetBindingEnabledTx(tx *Tx, bindingID string, enabled bool, version int) (Binding, error) {
+	b, err := tx.GetBinding(bindingID)
+	if err != nil {
+		return Binding{}, err
+	}
+	b.Enabled = enabled
+	updated, err := tx.UpdateBinding(b, version)
+	if err != nil {
+		return Binding{}, err
+	}
+	return updated, nil
 }
 
 // Get returns one client with computed status.
@@ -370,7 +460,15 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 }
 
 func (s *Service) toView(c Client) (View, error) {
-	bindings, err := s.repo.BindingsForClient(c.ID)
+	return s.viewWith(c, s.repo.BindingsForClient, s.creds.ActiveForBinding, s.creds.ListForBinding)
+}
+
+func (s *Service) viewWith(c Client,
+	bindingsFn func(clientID string) ([]Binding, error),
+	activeFn func(bindingID, kind string) (Credential, error),
+	listFn func(bindingID string) ([]Credential, error),
+) (View, error) {
+	bindings, err := bindingsFn(c.ID)
 	if err != nil {
 		return View{}, err
 	}
@@ -383,7 +481,7 @@ func (s *Service) toView(c Client) (View, error) {
 		if s.inboundLookup != nil {
 			bv.Capability = s.inboundLookup(b.InboundID)
 		}
-		if active, err := s.creds.ActiveForBinding(b.ID, "password"); err == nil && active.ID != "" {
+		if active, err := activeFn(b.ID, "password"); err == nil && active.ID != "" {
 			bv.Credential = &CredentialMeta{
 				Configured: true,
 				Kind:       active.Kind,
@@ -393,7 +491,7 @@ func (s *Service) toView(c Client) (View, error) {
 		}
 		bindingViews = append(bindingViews, bv)
 		if !hasCreds {
-			creds, err := s.creds.ListForBinding(b.ID)
+			creds, err := listFn(b.ID)
 			if err == nil && len(creds) > 0 {
 				hasCreds = true
 			}

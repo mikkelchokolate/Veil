@@ -85,12 +85,16 @@ func TestSnapshotDoesNotContainPlaintextCredentials(t *testing.T) {
 	s.inbounds = []Inbound{{Name: "hy2", Protocol: "hysteria2", Password: "SECRET-PASSWORD", Port: 443}}
 
 	db := openApplyTestDB(t)
+	s.db = db
 	s.applySnapshots = apply.NewSnapshotStore(db)
 	s.applyRevisions = apply.NewRevisionStore(db)
 	s.applyJobs = apply.NewJobStore(db)
 	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, s.executeApplyRevision)
 
-	rev := s.bumpDesiredRevisionLocked()
+	rev, err := s.bumpDesiredRevisionLocked()
+	if err != nil {
+		t.Fatalf("bump desired revision: %v", err)
+	}
 	if rev == 0 {
 		t.Fatal("expected a desired revision")
 	}

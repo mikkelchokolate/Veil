@@ -148,6 +148,18 @@ CREATE TABLE revision_snapshots (
 );
 `,
 	},
+	{
+		version: 3,
+		name:    "migration_markers",
+		sql: `
+CREATE TABLE migration_markers (
+  key TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  applied_at INTEGER NOT NULL,
+  details TEXT NOT NULL DEFAULT '{}'
+);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

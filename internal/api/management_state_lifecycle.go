@@ -10,10 +10,8 @@ import (
 	"runtime"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
-	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
-	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
@@ -132,6 +130,15 @@ func newManagementState(info ServerInfo) *managementState {
 	// (repository + encrypted credentials + service) onto the same SQLite store.
 	initClientSubsystem(state)
 
+	// Blocker A3: legacy-profile migration at NORMAL startup/upgrade, not only
+	// on SIGHUP reload. Pre-flight backup + migration marker + verification,
+	// idempotent. Non-fatal by design: log loudly and keep booting — a broken
+	// migration must not take the panel down, and the manual migration API
+	// remains available.
+	if err := lifecycle.StartupMigrateLegacyLocked(); err != nil {
+		log.Printf("startup legacy migration: %v", err)
+	}
+
 	return state
 }
 
@@ -163,35 +170,19 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 	// exactly the configuration committed as revision N, never newer mutable
 	// state. Load all clients, bindings, and active credentials from the repo.
 	if l.state.clientRepo != nil {
-		if clients, err := l.state.clientRepo.AllClients(); err == nil {
-			input.Clients = make([]model.ClientSnapshot, 0, len(clients))
-			for _, c := range clients {
-				input.Clients = append(input.Clients, model.ClientSnapshot{
-					ID: c.ID, Name: c.Name, Email: c.Email, Enabled: c.Enabled,
-					GroupID: c.GroupID, QuotaBytes: c.QuotaBytes, QuotaResetPolicy: c.QuotaResetPolicy,
-					QuotaResetAt: c.QuotaResetAt, ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit,
-					Depleted: c.Depleted, Version: c.Version,
-				})
-			}
+		clients, err := l.state.clientRepo.AllClients()
+		if err != nil {
+			log.Printf("snapshot: read clients: %v", err)
 		}
-		if bindings, err := l.state.clientRepo.AllBindings(); err == nil {
-			input.Bindings = make([]model.BindingSnapshot, 0, len(bindings))
-			for _, b := range bindings {
-				input.Bindings = append(input.Bindings, model.BindingSnapshot{
-					ID: b.ID, ClientID: b.ClientID, InboundID: b.InboundID, Enabled: b.Enabled,
-					ProtocolSettings: b.ProtocolSettings, Version: b.Version,
-				})
-			}
+		bindings, err := l.state.clientRepo.AllBindings()
+		if err != nil {
+			log.Printf("snapshot: read bindings: %v", err)
 		}
-		if creds, err := l.state.clientRepo.AllActiveCredentials(); err == nil {
-			input.Credentials = make([]model.CredentialSnapshot, 0, len(creds))
-			for _, c := range creds {
-				input.Credentials = append(input.Credentials, model.CredentialSnapshot{
-					ID: c.ID, BindingID: c.BindingID, Kind: c.Kind, EncryptedValue: c.EncryptedValue,
-					KeyVersion: c.KeyVersion, CredentialVersion: c.CredentialVersion,
-				})
-			}
+		creds, err := l.state.clientRepo.AllActiveCredentials()
+		if err != nil {
+			log.Printf("snapshot: read credentials: %v", err)
 		}
+		input.Clients, input.Bindings, input.Credentials = clientSnapshotRows(clients, bindings, creds)
 	}
 	return managementstate.BuildSnapshot(input)
 }
@@ -201,9 +192,11 @@ func (l ManagementStateLifecycle) SaveLocked() error {
 		return err
 	}
 	// The configuration mutation is committed; record a new desired revision so
-	// the system reports desired != applied until an apply job succeeds.
-	l.state.bumpDesiredRevisionLocked()
-	return nil
+	// the system reports desired != applied until an apply job succeeds. A
+	// revision/snapshot failure fails the mutation honestly (blocker A1): it
+	// is returned, not just logged.
+	_, err := l.state.bumpDesiredRevisionLocked()
+	return err
 }
 
 func (l ManagementStateLifecycle) Load() error {
@@ -247,33 +240,11 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 }
 
 // AutoMigrateLegacyLocked converts any legacy inbound-embedded profiles into
-// the normalized model. Idempotent: clients already migrated (by stable ID)
-// are skipped. Caller must hold l.state.mu.
+// the normalized model. It now shares the blocker-A3 startup path (pre-flight
+// backup, migration marker/version, in-transaction verification, idempotent
+// fast path) defined in startup_migration.go. Caller must hold l.state.mu.
 func (l ManagementStateLifecycle) AutoMigrateLegacyLocked() error {
-	if l.state.clientMigrator == nil {
-		return nil
-	}
-	migrated := 0
-	for _, in := range l.state.inbounds {
-		if len(in.Profiles) == 0 {
-			continue
-		}
-		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
-		for _, p := range in.Profiles {
-			profiles = append(profiles, client.LegacyProfile{
-				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
-			})
-		}
-		res, err := l.state.clientMigrator.MigrateInboundProfiles(in.Name, in.Protocol, profiles)
-		if err != nil {
-			return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
-		}
-		migrated += res.ClientsCreated
-	}
-	if migrated > 0 {
-		log.Printf("auto-migrated %d legacy profiles to normalized clients", migrated)
-	}
-	return nil
+	return l.StartupMigrateLegacyLocked()
 }
 
 func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot) {

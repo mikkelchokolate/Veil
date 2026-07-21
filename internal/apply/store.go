@@ -14,18 +14,33 @@ type RevisionStore struct{ db *sql.DB }
 
 func NewRevisionStore(db *sql.DB) *RevisionStore { return &RevisionStore{db: db} }
 
-func (s *RevisionStore) ensureRow() error {
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO revisions(id, desired_revision, applied_revision) VALUES(1,0,0)`)
+// DBTX is the database/sql surface shared by *sql.DB and *sql.Tx so revision
+// and snapshot writes can join a caller-managed transaction.
+type DBTX interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func ensureRowQ(q DBTX) error {
+	_, err := q.Exec(`INSERT OR IGNORE INTO revisions(id, desired_revision, applied_revision) VALUES(1,0,0)`)
 	return err
+}
+
+func (s *RevisionStore) ensureRow() error {
+	return ensureRowQ(s.db)
 }
 
 // Get returns the current revision pair.
 func (s *RevisionStore) Get() (Revisions, error) {
-	if err := s.ensureRow(); err != nil {
+	return getRevisionsQ(s.db)
+}
+
+func getRevisionsQ(q DBTX) (Revisions, error) {
+	if err := ensureRowQ(q); err != nil {
 		return Revisions{}, fmt.Errorf("apply: init revisions: %w", err)
 	}
 	var r Revisions
-	err := s.db.QueryRow(`SELECT desired_revision, applied_revision FROM revisions WHERE id=1`).
+	err := q.QueryRow(`SELECT desired_revision, applied_revision FROM revisions WHERE id=1`).
 		Scan(&r.Desired, &r.Applied)
 	if err != nil {
 		return Revisions{}, fmt.Errorf("apply: read revisions: %w", err)
@@ -36,17 +51,23 @@ func (s *RevisionStore) Get() (Revisions, error) {
 // BumpDesired increments desired_revision and returns the new value. Applied is
 // untouched so the system reports pending/applying until a job succeeds.
 func (s *RevisionStore) BumpDesired() (uint64, error) {
-	if err := s.ensureRow(); err != nil {
+	return BumpDesiredTx(s.db)
+}
+
+// BumpDesiredTx is BumpDesired inside a caller-managed transaction so the
+// revision bump commits atomically with the mutation that caused it.
+func BumpDesiredTx(q DBTX) (uint64, error) {
+	if err := ensureRowQ(q); err != nil {
 		return 0, err
 	}
-	res, err := s.db.Exec(`UPDATE revisions SET desired_revision = desired_revision + 1 WHERE id=1`)
+	res, err := q.Exec(`UPDATE revisions SET desired_revision = desired_revision + 1 WHERE id=1`)
 	if err != nil {
 		return 0, fmt.Errorf("apply: bump desired: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return 0, fmt.Errorf("apply: bump desired affected no rows")
 	}
-	r, err := s.Get()
+	r, err := getRevisionsQ(q)
 	if err != nil {
 		return 0, err
 	}

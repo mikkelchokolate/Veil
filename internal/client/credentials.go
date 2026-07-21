@@ -23,14 +23,23 @@ func NewCredentialStore(db *sql.DB, cipher *secrets.Cipher) *CredentialStore {
 // Set encrypts and stores a credential for a binding, creating credential
 // version 1 (or the next version if one already exists for that kind).
 func (s *CredentialStore) Set(bindingID, kind, plaintext string) (Credential, error) {
-	return s.insert(bindingID, kind, plaintext, nextVersionFor(s.db, bindingID, kind))
+	if s.cipher == nil {
+		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
+	}
+	return insertCredentialQ(s.db, s.cipher, bindingID, kind, plaintext, nextVersionForQ(s.db, bindingID, kind))
 }
 
 func (s *CredentialStore) insert(bindingID, kind, plaintext string, version int) (Credential, error) {
 	if s.cipher == nil {
 		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
 	}
-	enc, err := s.cipher.Encrypt(plaintext)
+	return insertCredentialQ(s.db, s.cipher, bindingID, kind, plaintext, version)
+}
+
+// insertCredentialQ is the querier-based insert shared by the autocommit store
+// and the transactional Tx path.
+func insertCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext string, version int) (Credential, error) {
+	enc, err := cipher.Encrypt(plaintext)
 	if err != nil {
 		return Credential{}, fmt.Errorf("client: encrypt credential: %w", err)
 	}
@@ -43,9 +52,9 @@ func (s *CredentialStore) insert(bindingID, kind, plaintext string, version int)
 		CredentialVersion: version,
 		CreatedAt:         nowUnix(),
 	}
-	_, err = s.db.Exec(`INSERT INTO client_credentials
-	  (id, binding_id, kind, encrypted_value, key_version, credential_version, created_at)
-	  VALUES(?,?,?,?,?,?,?)`,
+	_, err = q.Exec(`INSERT INTO client_credentials
+  (id, binding_id, kind, encrypted_value, key_version, credential_version, created_at)
+  VALUES(?,?,?,?,?,?,?)`,
 		c.ID, c.BindingID, c.Kind, c.EncryptedValue, c.KeyVersion, c.CredentialVersion, c.CreatedAt)
 	if err != nil {
 		return Credential{}, fmt.Errorf("client: store credential: %w", err)
@@ -53,8 +62,44 @@ func (s *CredentialStore) insert(bindingID, kind, plaintext string, version int)
 	return c, nil
 }
 
+// SetCredential encrypts and stores a credential within the transaction. The
+// cipher is passed explicitly so the Tx does not need a reference to the
+// CredentialStore's DB handle (which would bypass the transaction).
+func (t *Tx) SetCredential(creds *CredentialStore, bindingID, kind, plaintext string) (Credential, error) {
+	if creds.cipher == nil {
+		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
+	}
+	return insertCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext, nextVersionForQ(t.q, bindingID, kind))
+}
+
+// RotateCredential revokes the active credential of the given kind and stores
+// a new version — revoke, insert, and rotated_at all inside the transaction,
+// so a failure can never leave a binding without an active credential while
+// the old one is already revoked.
+func (t *Tx) RotateCredential(creds *CredentialStore, bindingID, kind, plaintext string) (Credential, error) {
+	if creds.cipher == nil {
+		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
+	}
+	now := nowUnix()
+	if _, err := t.q.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
+		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
+	}
+	newCred, err := insertCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext, nextVersionForQ(t.q, bindingID, kind))
+	if err != nil {
+		return Credential{}, err
+	}
+	newCred.RotatedAt = &now
+	if _, err := t.q.Exec(`UPDATE client_credentials SET rotated_at=? WHERE id=?`, now, newCred.ID); err != nil {
+		return Credential{}, fmt.Errorf("client: mark rotated credential: %w", err)
+	}
+	return newCred, nil
+}
+
 // Rotate revokes the current active credential of the given kind and stores a
-// new version with fresh plaintext, returning the new active credential.
+// new version with fresh plaintext, returning the new active credential. The
+// revoke + insert + rotated_at write run in ONE transaction — the previous
+// implementation committed the revoke first and inserted the replacement in
+// autocommit, which could strand a binding with no active credential.
 func (s *CredentialStore) Rotate(bindingID, kind, plaintext string) (Credential, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -65,16 +110,17 @@ func (s *CredentialStore) Rotate(bindingID, kind, plaintext string) (Credential,
 	if _, err := tx.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
 		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return Credential{}, err
-	}
-	newCred, err := s.insert(bindingID, kind, plaintext, nextVersionFor(s.db, bindingID, kind))
+	newCred, err := insertCredentialQ(tx, s.cipher, bindingID, kind, plaintext, nextVersionForQ(tx, bindingID, kind))
 	if err != nil {
 		return Credential{}, err
 	}
-	rotatedAt := now
-	newCred.RotatedAt = &rotatedAt
-	_, _ = s.db.Exec(`UPDATE client_credentials SET rotated_at=? WHERE id=?`, now, newCred.ID)
+	newCred.RotatedAt = &now
+	if _, err := tx.Exec(`UPDATE client_credentials SET rotated_at=? WHERE id=?`, now, newCred.ID); err != nil {
+		return Credential{}, fmt.Errorf("client: mark rotated credential: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Credential{}, err
+	}
 	return newCred, nil
 }
 
@@ -87,10 +133,18 @@ func (s *CredentialStore) Get(id string) (Credential, error) {
 
 // ActiveForBinding returns the current (unrevoked) credential of a kind.
 func (s *CredentialStore) ActiveForBinding(bindingID, kind string) (Credential, error) {
-	row := s.db.QueryRow(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
-	  created_at, rotated_at, revoked_at FROM client_credentials
-	  WHERE binding_id=? AND kind=? AND revoked_at IS NULL
-	  ORDER BY credential_version DESC LIMIT 1`, bindingID, kind)
+	return activeCredentialQ(s.db, bindingID, kind)
+}
+
+// activeCredentialQ is the querier-based ActiveForBinding shared by the
+// autocommit store and the transactional Tx path.
+func activeCredentialQ(q interface {
+	QueryRow(query string, args ...any) *sql.Row
+}, bindingID, kind string) (Credential, error) {
+	row := q.QueryRow(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
+  created_at, rotated_at, revoked_at FROM client_credentials
+  WHERE binding_id=? AND kind=? AND revoked_at IS NULL
+  ORDER BY credential_version DESC LIMIT 1`, bindingID, kind)
 	return scanCredential(row, true)
 }
 
@@ -110,9 +164,17 @@ func (s *CredentialStore) Reveal(id string) (string, error) {
 // ListForBinding returns credential metadata for a binding WITHOUT the
 // encrypted material, so list endpoints never carry secrets.
 func (s *CredentialStore) ListForBinding(bindingID string) ([]Credential, error) {
-	rows, err := s.db.Query(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
-	  created_at, rotated_at, revoked_at FROM client_credentials
-	  WHERE binding_id=? ORDER BY kind, credential_version DESC`, bindingID)
+	return listCredentialsForBindingQ(s.db, bindingID)
+}
+
+// listCredentialsForBindingQ is the querier-based ListForBinding shared by the
+// autocommit store and the transactional Tx path.
+func listCredentialsForBindingQ(q interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}, bindingID string) ([]Credential, error) {
+	rows, err := q.Query(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
+  created_at, rotated_at, revoked_at FROM client_credentials
+  WHERE binding_id=? ORDER BY kind, credential_version DESC`, bindingID)
 	if err != nil {
 		return nil, fmt.Errorf("client: list credentials: %w", err)
 	}
@@ -143,15 +205,15 @@ func scanCredential(row scanner, withValue bool) (Credential, error) {
 }
 
 func nextVersionFor(db *sql.DB, bindingID, kind string) int {
-	var max int
-	_ = db.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
-	return max + 1
+	return nextVersionForQ(db, bindingID, kind)
 }
 
-// nextVersionForTx is the transactional variant used within a WithTx block so
-// the version computation sees uncommitted rows in the same transaction.
-func nextVersionForTx(tx *sql.Tx, bindingID, kind string) int {
+// nextVersionForQ computes the next credential version on any querier. When
+// called with a *sql.Tx it sees uncommitted rows in the same transaction.
+func nextVersionForQ(q interface {
+	QueryRow(query string, args ...any) *sql.Row
+}, bindingID, kind string) int {
 	var max int
-	_ = tx.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
+	_ = q.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
 	return max + 1
 }

@@ -7,21 +7,23 @@ import (
 
 // Reconciler periodically marks clients as depleted when their cumulative
 // usage crosses their quota, and clears the flag when a reset policy window
-// rolls over. It also emits a callback so callers can trigger an apply /
-// disable the affected bindings.
+// rolls over. The onChange callback OWNS the depleted-flag write: callers
+// route it through the unified mutation orchestration (atomic flag flip +
+// desired-revision bump + immutable snapshot + one apply job). When onChange
+// is nil the reconciler flips the flag directly (standalone/test use).
 type Reconciler struct {
 	repo     *Repository
 	traffic  *TrafficStore
 	interval time.Duration
 	now      func() time.Time
-	onChange func(clientID string, depleted bool)
+	onChange func(clientID string, depleted bool) error
 
 	mu      sync.Mutex
 	running bool
 	stop    chan struct{}
 }
 
-func NewReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool)) *Reconciler {
+func NewReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool) error) *Reconciler {
 	if interval <= 0 {
 		interval = 60 * time.Second
 	}
@@ -39,26 +41,35 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 	for _, c := range clients {
 		depleted, reset := r.evaluate(c, now)
 		if reset {
-			// Reset window rolled over: clear counters and depleted flag.
+			// Reset window rolled over: clear counters. The flag flip (when the
+			// client was depleted) goes through onChange like any other flip.
 			_ = r.traffic.ResetForClient(c.ID)
 			if c.Depleted {
-				_ = r.repo.SetDepleted(c.ID, false)
-				if r.onChange != nil {
-					r.onChange(c.ID, false)
+				if err := r.applyChange(c.ID, false); err != nil {
+					return changed, err
 				}
 				changed++
 			}
 			continue
 		}
 		if depleted != c.Depleted {
-			_ = r.repo.SetDepleted(c.ID, depleted)
-			if r.onChange != nil {
-				r.onChange(c.ID, depleted)
+			if err := r.applyChange(c.ID, depleted); err != nil {
+				return changed, err
 			}
 			changed++
 		}
 	}
 	return changed, nil
+}
+
+// applyChange performs the depleted-flag flip: through the owning callback
+// when one is attached (the callback persists the flag inside its atomic
+// mutation), or directly when running standalone.
+func (r *Reconciler) applyChange(clientID string, depleted bool) error {
+	if r.onChange != nil {
+		return r.onChange(clientID, depleted)
+	}
+	return r.repo.SetDepleted(clientID, depleted)
 }
 
 // evaluate decides whether the client is depleted and whether a reset window

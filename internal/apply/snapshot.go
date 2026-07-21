@@ -18,7 +18,13 @@ func NewSnapshotStore(db *sql.DB) *SnapshotStore { return &SnapshotStore{db: db}
 // never overwrites an existing snapshot: re-saving the same revision is a
 // no-op (the first write wins), preserving immutability.
 func (s *SnapshotStore) Save(revision uint64, payload []byte) error {
-	_, err := s.db.Exec(
+	return SaveSnapshotTx(s.db, revision, payload)
+}
+
+// SaveSnapshotTx is Save inside a caller-managed transaction so the snapshot
+// commits atomically with the revision bump and the mutation that caused it.
+func SaveSnapshotTx(q DBTX, revision uint64, payload []byte) error {
+	_, err := q.Exec(
 		`INSERT OR IGNORE INTO revision_snapshots(revision, payload) VALUES(?, ?)`,
 		revision, string(payload),
 	)

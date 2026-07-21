@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -99,9 +100,11 @@ type v1BulkResult struct {
 	Message string `json:"message,omitempty"`
 }
 
-// handleV1Bulk applies one action to many clients transactionally per client,
-// collecting per-client results. A single failing client does not abort the
-// rest; the summary reports each outcome honestly.
+// handleV1Bulk applies one action to many clients. Per-client failures roll
+// back only that client (SQLite savepoints inside ONE transaction); the whole
+// bulk then commits atomically together with the desired-revision bump and the
+// immutable snapshot, and exactly one apply job runs. When nothing was
+// actually applied (all failed or skipped), no revision is created at all.
 func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	if !s.clientsV1Enabled(w) {
 		return
@@ -121,28 +124,48 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	results := make([]v1BulkResult, 0, len(req.ClientIDs))
 	succeeded := 0
 	skipped := 0
-	for _, id := range req.ClientIDs {
-		res := v1BulkResult{ID: id}
-		ok, sk, err := s.applyBulkAction(id, req)
-		switch {
-		case err != nil:
-			res.OK = false
-			res.Message = err.Error()
-		case sk:
-			res.OK = false
-			res.Message = "skipped"
-			skipped++
-		default:
-			res.OK = ok
-			succeeded++
+	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		anyApplied := false
+		for i, id := range req.ClientIDs {
+			sp := fmt.Sprintf("bulk_%d", i)
+			if err := tx.Savepoint(sp); err != nil {
+				return err
+			}
+			res := v1BulkResult{ID: id}
+			ok, sk, aerr := s.applyBulkActionTx(tx, id, req)
+			switch {
+			case aerr != nil:
+				_ = tx.RollbackToSavepoint(sp)
+				res.OK = false
+				res.Message = aerr.Error()
+			case sk:
+				_ = tx.RollbackToSavepoint(sp)
+				res.OK = false
+				res.Message = "skipped"
+				skipped++
+			default:
+				if err := tx.ReleaseSavepoint(sp); err != nil {
+					return err
+				}
+				res.OK = ok
+				succeeded++
+				anyApplied = true
+			}
+			results = append(results, res)
 		}
-		results = append(results, res)
-	}
+		if !anyApplied {
+			// Nothing changed: roll the (empty) transaction back and skip the
+			// revision bump + apply entirely.
+			return errNoClientChanges
+		}
+		return nil
+	})
 	failed := len(req.ClientIDs) - succeeded - skipped
-	s.logUserAction(r, "bulk_"+req.Action, "clients", succeeded == len(req.ClientIDs), "")
-	// A bulk mutation changes desired state for many clients: run a single
-	// apply and return the honest revision/applyJob envelope.
-	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	s.logUserAction(r, "bulk_"+req.Action, "clients", err == nil && succeeded == len(req.ClientIDs), "")
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
 	resp := map[string]any{
 		"action":    req.Action,
 		"total":     len(req.ClientIDs),
@@ -155,33 +178,35 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// applyBulkAction applies one bulk action to one client. It returns
-// (applied, skipped, err): err for hard failures (not found, validation),
-// skipped for no-op cases the plan calls skipped (already in desired state),
-// applied=true when a change was persisted.
-func (s *managementState) applyBulkAction(id string, req v1BulkRequest) (bool, bool, error) {
-	existing, err := s.clientService.Get(id)
+// errNoClientChanges signals from a mutation closure that no change was
+// actually applied (e.g. a bulk where every client failed or was skipped):
+// the transaction rolls back and NO revision/snapshot/apply is recorded.
+var errNoClientChanges = errors.New("no client changes applied")
+
+// applyBulkActionTx applies one bulk action to one client inside the bulk
+// transaction. Returns (applied, skipped, err) with the same semantics as the
+// former autocommit variant.
+func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1BulkRequest) (bool, bool, error) {
+	existing, err := tx.Get(id)
 	if err != nil {
 		return false, false, err
 	}
-	c := existing.Client
+	c := existing
 	switch req.Action {
 	case "enable":
 		c.Enabled = true
 	case "disable":
 		c.Enabled = false
 	case "delete":
-		return true, false, s.clientService.Delete(id)
+		return true, false, tx.Delete(id)
 	case "reset_quota":
 		// Deprecated alias of reset_traffic kept for backward compatibility.
 		fallthrough
 	case "reset_traffic":
 		// Clear actual recorded usage and the depleted flag. This is the
 		// honest "reset traffic" (not merely un-depleting the client).
-		if s.trafficStore != nil {
-			if err := s.trafficStore.ResetForClient(id); err != nil {
-				return false, false, err
-			}
+		if err := tx.ResetTrafficForClient(id); err != nil {
+			return false, false, err
 		}
 		c.Depleted = false
 		c.QuotaResetAt = nil
@@ -207,7 +232,7 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) (bool, b
 		if req.InboundID == "" {
 			return false, false, client.ErrValidation
 		}
-		if _, err := s.clientService.AddBinding(id, req.InboundID); err != nil {
+		if _, err := s.clientService.AddBindingTx(tx, id, req.InboundID); err != nil {
 			return false, false, err
 		}
 		return true, false, nil
@@ -215,18 +240,20 @@ func (s *managementState) applyBulkAction(id string, req v1BulkRequest) (bool, b
 		if req.InboundID == "" {
 			return false, false, client.ErrValidation
 		}
-		// find binding id for this inbound
-		bv := existing.Bindings
+		bv, err := tx.BindingsForClient(id)
+		if err != nil {
+			return false, false, err
+		}
 		for _, b := range bv {
 			if b.InboundID == req.InboundID {
-				return true, false, s.clientService.RemoveBinding(b.ID, id)
+				return true, false, s.clientService.RemoveBindingTx(tx, b.ID, id)
 			}
 		}
 		return false, true, nil // not attached -> skipped
 	default:
 		return false, false, client.ErrValidation
 	}
-	_, err = s.clientService.Update(c, c.Version)
+	_, err = tx.Update(c, c.Version)
 	return err == nil, false, err
 }
 
@@ -255,35 +282,47 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 		CredentialsCreated int    `json:"credentialsCreated"`
 		Skipped            int    `json:"skipped"`
 	}
+	s.logUserAction(r, "migrate_legacy", "", true, "")
 	results := []inboundResult{}
 	totalCreated := 0
-	for _, in := range inbounds {
-		if len(in.Profiles) == 0 {
-			continue
-		}
-		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
-		for _, p := range in.Profiles {
-			profiles = append(profiles, client.LegacyProfile{
-				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
+	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		anyApplied := false
+		for _, in := range inbounds {
+			if len(in.Profiles) == 0 {
+				continue
+			}
+			profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
+			for _, p := range in.Profiles {
+				profiles = append(profiles, client.LegacyProfile{
+					Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
+				})
+			}
+			res, err := s.clientMigrator.MigrateInboundProfilesTx(tx, in.Name, in.Protocol, profiles)
+			if err != nil {
+				return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
+			}
+			totalCreated += res.ClientsCreated
+			if res.ClientsCreated > 0 {
+				anyApplied = true
+			}
+			results = append(results, inboundResult{
+				Inbound:            in.Name,
+				ClientsCreated:     res.ClientsCreated,
+				BindingsCreated:    res.BindingsCreated,
+				CredentialsCreated: res.CredentialsCreated,
+				Skipped:            res.Skipped,
 			})
 		}
-		res, err := s.clientMigrator.MigrateInboundProfiles(in.Name, in.Protocol, profiles)
-		if err != nil {
-			s.logUserAction(r, "migrate_legacy", in.Name, false, err.Error())
-			writeError(w, "migrate inbound "+in.Name+": "+err.Error(), http.StatusInternalServerError)
-			return
+		if !anyApplied {
+			// Everything already migrated (idempotent re-run): no revision.
+			return errNoClientChanges
 		}
-		totalCreated += res.ClientsCreated
-		results = append(results, inboundResult{
-			Inbound:            in.Name,
-			ClientsCreated:     res.ClientsCreated,
-			BindingsCreated:    res.BindingsCreated,
-			CredentialsCreated: res.CredentialsCreated,
-			Skipped:            res.Skipped,
-		})
+		return nil
+	})
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
 	}
-	s.logUserAction(r, "migrate_legacy", "", true, "")
-	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 	s.writeMutationResponse(w, http.StatusOK, map[string]any{
 		"results":        results,
 		"clientsCreated": totalCreated,
@@ -291,18 +330,6 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 }
 
 func nowUnixAPI() int64 { return time.Now().Unix() }
-
-// applyAfterClientMutation bumps the desired revision and runs the apply job
-// for a committed client mutation, returning the outcome so the handler can
-// surface an honest mutation envelope. The client store is separate from the
-// management state file, so the management mutation hooks are not triggered;
-// we record the revision explicitly. Caller must not hold s.mu.
-func (s *managementState) applyAfterClientMutation(r *http.Request, actor string) autoApplyOutcome {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.bumpDesiredRevisionLocked()
-	return s.autoApplyResultLocked(r, actor)
-}
 
 // actorFromRequest extracts the authenticated username for audit/apply actor.
 func actorFromRequest(r *http.Request) string {
@@ -361,10 +388,11 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		DeviceLimit:      req.DeviceLimit,
 		Notes:            req.Notes,
 	}
-	// A4/A5: single SQL transaction. Client + bindings + credentials commit or
-	// roll back atomically; exactly one apply runs for the fully-configured
-	// client; no compensating deletes. A failure returns an error, never a 201
-	// for a partially-created client.
+	// A4/A5 + blocker A1: single SQL transaction. Client + bindings +
+	// credentials + desired-revision bump + immutable snapshot commit or roll
+	// back atomically; exactly one apply runs for the fully-configured client;
+	// no compensating deletes. A failure returns an error, never a 201 for a
+	// partially-created client.
 	bindings := make([]client.BindingInput, 0, len(req.Bindings))
 	for _, b := range req.Bindings {
 		if b.InboundID == "" {
@@ -372,17 +400,28 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		}
 		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, Credential: b.Credential})
 	}
-	final, issued, err := s.clientService.CreateWithBindingsIssued(c, bindings)
+	var createdID string
+	var issued []client.IssuedCredential
+	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		id, iss, err := s.clientService.CreateWithBindingsIssuedTx(tx, c, bindings)
+		if err != nil {
+			return err
+		}
+		createdID, issued = id, iss
+		return nil
+	})
 	if err != nil {
 		s.logUserAction(r, "create_client", req.Name, false, err.Error())
 		s.writeV1ClientError(w, err)
 		return
 	}
 	s.logUserAction(r, "create_client", req.Name, true, "")
-	// Unified orchestration: exactly one revision bump (immutable snapshot of
-	// the just-committed client+bindings+credentials) and exactly one apply
-	// job. The response carries THIS mutation's revision and job.
-	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
+	// Build the response view after commit (outside the mutation lock).
+	final, err := s.clientService.Get(createdID)
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
 	// S2: response shape { client, issuedCredentials, revision, applyJob,
 	// success }. The generated plaintext appears exactly once here; it is
 	// never persisted (only the encrypted form is stored).
@@ -421,12 +460,14 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 	case http.MethodPut:
 		s.handleV1UpdateClient(w, r, id)
 	case http.MethodDelete:
-		if err := s.clientService.Delete(id); err != nil {
+		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			return s.clientService.DeleteTx(tx, id)
+		})
+		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
 		s.logUserAction(r, "delete_client", id, true, "")
-		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": id}, outcome)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
@@ -460,15 +501,22 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 		DeviceLimit:      req.DeviceLimit,
 		Notes:            req.Notes,
 	}
-	updated, err := s.clientService.Update(c, req.Version)
+	updated, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		return s.clientService.UpdateTx(tx, c, req.Version)
+	})
 	if err != nil {
 		s.logUserAction(r, "update_client", id, false, err.Error())
 		s.writeV1ClientError(w, err)
 		return
 	}
 	s.logUserAction(r, "update_client", id, true, "")
-	outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
-	s.writeMutationResponse(w, http.StatusOK, updated, outcome)
+	// Build the response view after commit (outside the mutation lock).
+	updatedView, err := s.clientService.Get(id)
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
+	s.writeMutationResponse(w, http.StatusOK, updatedView, updated)
 }
 
 func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
@@ -537,16 +585,28 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			if !decodeJSONRequest(w, r, &req) {
 				return
 			}
-			b, err := s.clientService.AddBinding(clientID, req.InboundID)
+			var b client.Binding
+			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+				nb, err := s.clientService.AddBindingTx(tx, clientID, req.InboundID)
+				if err != nil {
+					return err
+				}
+				b = nb
+				if req.Credential != "" {
+					// The credential joins the SAME transaction: a binding is
+					// never committed without its credential (the former code
+					// swallowed this error entirely).
+					if _, err := s.clientService.SetCredentialTx(tx, b.ID, "password", req.Credential); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 			if err != nil {
 				s.writeV1ClientError(w, err)
 				return
 			}
-			if req.Credential != "" {
-				_, _ = s.clientService.SetCredential(b.ID, "password", req.Credential)
-			}
 			s.logUserAction(r, "add_binding", clientID, true, req.InboundID)
-			outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 			s.writeMutationResponse(w, http.StatusCreated, b, outcome)
 			return
 		}
@@ -567,23 +627,32 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			writeError(w, "enabled is required", http.StatusBadRequest)
 			return
 		}
-		b, err := s.clientService.SetBindingEnabled(bindingID, *req.Enabled, req.Version)
+		var b client.Binding
+		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			ub, err := s.clientService.SetBindingEnabledTx(tx, bindingID, *req.Enabled, req.Version)
+			if err != nil {
+				return err
+			}
+			b = ub
+			return nil
+		})
 		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
 		s.logUserAction(r, "update_binding", clientID, true, bindingID)
-		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 		s.writeMutationResponse(w, http.StatusOK, b, outcome)
 		return
 	}
 	if r.Method == http.MethodDelete {
-		if err := s.clientService.RemoveBinding(bindingID, clientID); err != nil {
+		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			return s.clientService.RemoveBindingTx(tx, bindingID, clientID)
+		})
+		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
 		s.logUserAction(r, "remove_binding", clientID, true, bindingID)
-		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": bindingID}, outcome)
 		return
 	}
@@ -608,13 +677,20 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		if req.Kind == "" {
 			req.Kind = "password"
 		}
-		cred, err := s.clientService.SetCredential(bindingID, req.Kind, req.Value)
+		var cred client.Credential
+		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			nc, err := s.clientService.SetCredentialTx(tx, bindingID, req.Kind, req.Value)
+			if err != nil {
+				return err
+			}
+			cred = nc
+			return nil
+		})
 		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
 		s.logUserAction(r, "set_credential", clientID, true, bindingID)
-		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 		s.writeMutationResponse(w, http.StatusCreated, cred, outcome)
 		return
 	}
@@ -633,23 +709,37 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		// is supplied the server generates a high-entropy secret and returns it
 		// exactly once. An explicit value keeps the legacy caller-supplied path.
 		if req.Value == "" {
-			gen, err := s.clientService.RotateCredentialGenerated(bindingID, req.Kind)
+			var gen client.GeneratedCredential
+			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+				g, err := s.clientService.RotateCredentialGeneratedTx(tx, bindingID, req.Kind)
+				if err != nil {
+					return err
+				}
+				gen = g
+				return nil
+			})
 			if err != nil {
 				s.writeV1ClientError(w, err)
 				return
 			}
 			s.logUserAction(r, "rotate_credential", clientID, true, bindingID)
-			outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 			s.writeMutationResponse(w, http.StatusOK, gen, outcome)
 			return
 		}
-		cred, err := s.clientService.RotateCredential(bindingID, req.Kind, req.Value)
+		var cred client.Credential
+		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			nc, err := s.clientService.RotateCredentialTx(tx, bindingID, req.Kind, req.Value)
+			if err != nil {
+				return err
+			}
+			cred = nc
+			return nil
+		})
 		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
 		s.logUserAction(r, "rotate_credential", clientID, true, bindingID)
-		outcome := s.applyAfterClientMutation(r, actorFromRequest(r))
 		s.writeMutationResponse(w, http.StatusOK, cred, outcome)
 		return
 	}

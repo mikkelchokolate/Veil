@@ -82,6 +82,7 @@ func TestAutoMigrateLegacyIdempotent(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
+	s.clientRepo = repo
 	s.clientMigrator = client.NewMigrator(repo, creds)
 
 	lifecycle := NewManagementStateLifecycle(s)
@@ -115,6 +116,7 @@ func TestAutoMigrateLegacySkipsEmptyProfiles(t *testing.T) {
 	db := openApplyTestDB(t)
 	repo := client.NewRepository(db)
 	creds := client.NewCredentialStore(db, s.cipher)
+	s.clientRepo = repo
 	s.clientMigrator = client.NewMigrator(repo, creds)
 
 	lifecycle := NewManagementStateLifecycle(s)

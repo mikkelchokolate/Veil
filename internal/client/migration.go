@@ -55,8 +55,24 @@ func NewMigrator(repo *Repository, creds *CredentialStore, opts ...MigratorOptio
 
 // MigrateInboundProfiles converts one inbound's legacy profiles. Clients that
 // already exist (by stable derived ID) are skipped, making the operation safe
-// to re-run during rolling migration.
+// to re-run during rolling migration. The whole inbound migrates in ONE
+// transaction: a failure rolls back every client/binding/credential created
+// for it instead of leaving a half-migrated inbound.
 func (m *Migrator) MigrateInboundProfiles(inboundID, protocol string, profiles []LegacyProfile) (MigrationResult, error) {
+	var res MigrationResult
+	err := m.repo.WithTx(func(tx *Tx) error {
+		r, err := m.MigrateInboundProfilesTx(tx, inboundID, protocol, profiles)
+		res = r
+		return err
+	})
+	return res, err
+}
+
+// MigrateInboundProfilesTx is the transactional core of MigrateInboundProfiles
+// for callers (startup migration, API endpoint) that must fold the migration
+// into a larger atomic commit (e.g. with the desired-revision bump and the
+// immutable snapshot).
+func (m *Migrator) MigrateInboundProfilesTx(tx *Tx, inboundID, protocol string, profiles []LegacyProfile) (MigrationResult, error) {
 	var res MigrationResult
 	for _, p := range profiles {
 		if !p.Enabled && !m.opts.includeDisabled {
@@ -68,7 +84,7 @@ func (m *Migrator) MigrateInboundProfiles(inboundID, protocol string, profiles [
 			continue
 		}
 		clientID := stableClientID(inboundID, p.Username)
-		if _, err := m.repo.Get(clientID); err == nil {
+		if _, err := tx.Get(clientID); err == nil {
 			// Already migrated.
 			res.Skipped++
 			continue
@@ -77,7 +93,7 @@ func (m *Migrator) MigrateInboundProfiles(inboundID, protocol string, profiles [
 		if name == "" {
 			name = p.Username
 		}
-		cl, err := m.repo.Create(Client{
+		cl, err := tx.CreateClient(Client{
 			ID:               clientID,
 			Name:             name,
 			Enabled:          p.Enabled,
@@ -86,11 +102,11 @@ func (m *Migrator) MigrateInboundProfiles(inboundID, protocol string, profiles [
 		if err != nil {
 			return res, fmt.Errorf("client: migrate create %q: %w", p.Username, err)
 		}
-		b, err := m.repo.CreateBinding(Binding{ClientID: cl.ID, InboundID: inboundID, Enabled: p.Enabled})
+		b, err := tx.CreateBinding(Binding{ClientID: cl.ID, InboundID: inboundID, Enabled: p.Enabled})
 		if err != nil {
 			return res, fmt.Errorf("client: migrate binding %q: %w", p.Username, err)
 		}
-		if _, err := m.creds.Set(b.ID, "password", p.Password); err != nil {
+		if _, err := tx.SetCredential(m.creds, b.ID, "password", p.Password); err != nil {
 			return res, fmt.Errorf("client: migrate credential %q: %w", p.Username, err)
 		}
 		res.ClientsCreated++
@@ -99,6 +115,45 @@ func (m *Migrator) MigrateInboundProfiles(inboundID, protocol string, profiles [
 		res.ClientIDs = append(res.ClientIDs, cl.ID)
 	}
 	return res, nil
+}
+
+// VerifyInboundProfiles checks that every migratable legacy profile of the
+// inbound has a corresponding normalized client (stable derived ID) with a
+// binding to this inbound and an active credential. It returns an error
+// describing the first gap found. Used after startup migration to prove the
+// conversion actually persisted before the marker is recorded.
+func (m *Migrator) VerifyInboundProfiles(tx *Tx, inboundID string, profiles []LegacyProfile) error {
+	for _, p := range profiles {
+		if !p.Enabled && !m.opts.includeDisabled {
+			continue
+		}
+		if p.Password == "" || p.Username == "" {
+			continue
+		}
+		clientID := stableClientID(inboundID, p.Username)
+		if _, err := tx.Get(clientID); err != nil {
+			return fmt.Errorf("client %q (profile %q) missing after migration", clientID, p.Username)
+		}
+		bindings, err := tx.BindingsForClient(clientID)
+		if err != nil {
+			return fmt.Errorf("read bindings for migrated profile %q: %w", p.Username, err)
+		}
+		found := false
+		for _, b := range bindings {
+			if b.InboundID != inboundID {
+				continue
+			}
+			active, aerr := activeCredentialQ(tx.q, b.ID, "password")
+			if aerr == nil && active.ID != "" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("migrated profile %q has no binding with active credential on inbound %q", p.Username, inboundID)
+		}
+	}
+	return nil
 }
 
 // stableClientID derives a deterministic client ID from (inbound, username)

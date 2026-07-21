@@ -89,10 +89,25 @@ func initClientSubsystem(s *managementState) {
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 	s.trafficStore = client.NewTrafficStore(s.db)
 	s.trafficCollector = client.NewCollector(s.trafficStore, 0, nil)
-	s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) {
+	// Blocker A2: quota reconciliation is a REAL configuration mutation — the
+	// depleted flag changes the rendered runtime config. It therefore routes
+	// through the same orchestration as every other client mutation: the flag
+	// flip, the desired-revision bump, and the immutable snapshot commit in
+	// ONE SQLite transaction, and exactly one apply job runs for the new
+	// revision. Before this the reconciler flipped the flag and ran a bare
+	// apply with no revision/snapshot, so the pinned snapshot never contained
+	// the depleted state.
+	s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if _, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
+			return tx.SetDepleted(clientID, depleted)
+		}); err != nil {
+			log.Printf("traffic: reconcile client %s depleted=%v: %v", clientID, depleted, err)
+			return err
+		}
 		s.autoApplyResultLocked(nil, "system")
+		return nil
 	})
 	// A9: register real TrafficProviders for supported protocols. Hysteria2
 	// reads per-user stats from the runtime's stats file. Other protocols can
@@ -180,33 +195,59 @@ func (s *managementState) applyTrackingEnabled() bool {
 	return s.applyRunner != nil && s.applyRevisions != nil && s.applyJobs != nil
 }
 
-// bumpDesiredRevisionLocked records a committed configuration mutation. Caller
-// must hold s.mu. Returns the new desired revision, or 0 when tracking is
-// disabled. Errors are logged but never fail the mutation that triggered them.
-func (s *managementState) bumpDesiredRevisionLocked() uint64 {
+// bumpDesiredRevisionLocked records a committed configuration mutation for the
+// STATE-FILE path (settings/inbounds/routing/warp/users): the desired revision
+// bump and the immutable snapshot commit in ONE SQLite transaction, and any
+// error is returned so the mutation fails honestly instead of leaving a
+// committed state file with no pinned revision. (The normalized client path
+// instead folds client rows + revision + snapshot into a single transaction
+// via commitClientMutationLocked.) Caller must hold s.mu. Returns the new
+// desired revision, or 0 when tracking is disabled.
+func (s *managementState) bumpDesiredRevisionLocked() (uint64, error) {
 	if !s.applyTrackingEnabled() {
-		return 0
+		return 0, nil
 	}
-	rev, err := s.applyRevisions.BumpDesired()
+	// Build + encrypt + marshal the snapshot BEFORE opening the transaction.
+	// The snapshot reads the client tables through the connection pool in
+	// autocommit; doing that INSIDE the tx would deadlock the single-
+	// connection SQLite pool (the tx holds the only connection). s.mu
+	// serializes all state mutations, so the rows read here are exactly the
+	// committed state this revision records.
+	var payload []byte
+	if s.applySnapshots != nil {
+		snap := s.snapshotLocked()
+		if err := s.encryptSnapshot(&snap); err != nil {
+			return 0, fmt.Errorf("apply subsystem: encrypt revision snapshot: %w", err)
+		}
+		var err error
+		payload, err = json.Marshal(snap)
+		if err != nil {
+			return 0, fmt.Errorf("apply subsystem: marshal revision snapshot: %w", err)
+		}
+	}
+	tx, err := s.db.Begin()
 	if err != nil {
-		log.Printf("apply subsystem: bump desired revision: %v", err)
-		return 0
+		return 0, fmt.Errorf("apply subsystem: begin revision tx: %w", err)
+	}
+	rev, err := apply.BumpDesiredTx(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("apply subsystem: bump desired revision: %w", err)
 	}
 	// Record an immutable snapshot of the configuration committed as this
 	// revision. Apply jobs for this revision render from the snapshot, never
 	// from newer mutable state. Save is idempotent (first write wins). Secrets
-	// are encrypted before persistence so the snapshot never stores plaintext.
+	// were encrypted above so the snapshot never stores plaintext.
 	if s.applySnapshots != nil {
-		snap := s.snapshotLocked()
-		if err := s.encryptSnapshot(&snap); err != nil {
-			log.Printf("apply subsystem: encrypt revision %d snapshot: %v", rev, err)
-		} else if payload, serr := json.Marshal(snap); serr == nil {
-			if werr := s.applySnapshots.Save(rev, payload); werr != nil {
-				log.Printf("apply subsystem: save revision %d snapshot: %v", rev, werr)
-			}
+		if err := apply.SaveSnapshotTx(tx, rev, payload); err != nil {
+			_ = tx.Rollback()
+			return 0, err
 		}
 	}
-	return rev
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("apply subsystem: commit revision %d: %w", rev, err)
+	}
+	return rev, nil
 }
 
 // executeApplyRevision applies one immutable desired revision to the runtime.

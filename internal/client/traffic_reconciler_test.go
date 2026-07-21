@@ -17,10 +17,14 @@ func TestReconcilerMarksDepletedAtQuota(t *testing.T) {
 	_ = ts.RecordSample(Sample{BindingID: b.ID, UploadBytes: 600, DownloadBytes: 500, AtUnix: 1})
 
 	var flipped []string
-	rec := NewReconciler(repo, ts, 0, func(id string, depleted bool) {
+	// The callback OWNS the depleted-flag write (blocker A2: it routes through
+	// the unified mutation orchestration in production, which persists the
+	// flag atomically with the revision bump + snapshot).
+	rec := NewReconciler(repo, ts, 0, func(id string, depleted bool) error {
 		if depleted {
 			flipped = append(flipped, id)
 		}
+		return repo.SetDepleted(id, depleted)
 	})
 	changed, err := rec.ReconcileOnce()
 	if err != nil {
