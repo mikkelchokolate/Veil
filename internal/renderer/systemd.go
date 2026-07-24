@@ -169,6 +169,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+SupplementaryGroups=veil
 # Caddy stores its cert/key material and local CA root here. The hardening
 # below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
 # Caddy (root) cannot write there; give it a dedicated state dir it owns
