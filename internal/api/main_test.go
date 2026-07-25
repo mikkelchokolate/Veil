@@ -17,6 +17,12 @@ func TestMain(m *testing.M) {
 	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
 		return ServiceRuntimeStatus{Unit: unit, LoadState: "not-found", ActiveState: "inactive", SubState: "dead"}
 	}
+	// Caddy's Admin API is a process-external mutation boundary just like
+	// systemd and the privileged helper. Docker CI can share the host network,
+	// so the production default (127.0.0.1:2019) must never be reachable from a
+	// unit test that happens to exercise apply. Tests for Admin API behavior
+	// explicitly override this seam and restore it to this hermetic baseline.
+	caddyAdminLoader = func([]byte) error { return nil }
 
 	// Establish a package-wide filesystem boundary before any test runs. Tests
 	// may override individual variables with t.Setenv, which restores them to
