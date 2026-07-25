@@ -66,7 +66,7 @@ test.describe('Veil Panel — React SPA', () => {
     await login(page, adminUsername, adminPassword);
     await page.getByRole('link', { name: /^traffic$/i }).first().click();
     await expect(page).toHaveURL(/\/traffic/);
-    await expect(page.getByRole('heading', { name: /^traffic$/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /^traffic telemetry$/i })).toBeVisible({ timeout: 10_000 });
     expect(pageErrors).toEqual([]);
   });
 

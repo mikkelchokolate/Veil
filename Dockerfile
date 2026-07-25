@@ -36,11 +36,16 @@ ARG ALPINE_IMAGE=alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f79
 
 FROM ${NODE_IMAGE} AS webbuilder
 
+ARG NPM_VERSION=12.0.1
 ARG PNPM_VERSION=11.17.0
 
 # The Go binary embeds web/dist (see web/web.go); build the SPA first so the
 # image ships the real panel UI.
-RUN corepack enable && corepack prepare "pnpm@${PNPM_VERSION}" --activate
+RUN npm_config_update_notifier=false npm install --global --ignore-scripts --no-audit --no-fund \
+      "npm@${NPM_VERSION}" "pnpm@${PNPM_VERSION}" \
+    && npm --version \
+    && pnpm --version \
+    && rm -rf /root/.npm
 
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml web/.npmrc web/pnpm-workspace.yaml ./
@@ -50,16 +55,25 @@ RUN pnpm build
 
 FROM ${GO_IMAGE} AS builder
 
+ARG GO_GODEBUG=http2client=0
+ARG GO_GOPROXY=https://proxy.golang.org|direct
+ENV GODEBUG=${GO_GODEBUG} \
+    GOPROXY=${GO_GOPROXY}
+
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
 COPY . .
 COPY --from=webbuilder /web/dist ./web/dist
 ARG VERSION=dev
-RUN test -n "${VERSION}" \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    test -n "${VERSION}" \
     && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /veil ./cmd/veil
 
 FROM ${ALPINE_IMAGE}
@@ -70,10 +84,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && chown -R veil:veil /etc/veil /var/lib/veil
 
 COPY --from=builder /veil /usr/local/bin/veil
-
-ENV VEIL_STATE_PATH=/var/lib/veil/state.json \
-    VEIL_APPLY_ROOT=/etc/veil \
-    VEIL_KEY_PATH=/etc/veil/state.key
+COPY --chmod=0755 packaging/docker/entrypoint.sh /usr/local/bin/veil-entrypoint
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD veil status --listen http://127.0.0.1:2096 --json || exit 1
@@ -81,5 +92,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 USER veil
 EXPOSE 2096
 
-ENTRYPOINT ["veil"]
+ENTRYPOINT ["/usr/local/bin/veil-entrypoint"]
 CMD ["serve"]

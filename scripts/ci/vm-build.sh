@@ -65,8 +65,11 @@ build_target() {
     --build-arg "UBUNTU_BASE=ubuntu:24.04@${UBUNTU_24_04_DIGEST}" \
     --build-arg "CI_GO_VERSION=${CI_GO_VERSION}" \
     --build-arg "CI_GO_TARBALL_SHA256=${CI_GO_TARBALL_SHA256}" \
+    --build-arg "CI_GO_GODEBUG=${CI_GO_GODEBUG}" \
+    --build-arg "CI_GO_GOPROXY=${CI_GO_GOPROXY}" \
     --build-arg "CI_NODE_VERSION=${CI_NODE_VERSION}" \
     --build-arg "CI_NODE_TARBALL_SHA256=${CI_NODE_TARBALL_SHA256}" \
+    --build-arg "CI_NPM_VERSION=${CI_NPM_VERSION}" \
     --build-arg "CI_PNPM_VERSION=${CI_PNPM_VERSION}" \
     --build-arg "CI_STATICCHECK_VERSION=${CI_STATICCHECK_VERSION}" \
     --build-arg "CI_GOVULNCHECK_VERSION=${CI_GOVULNCHECK_VERSION}" \
@@ -74,6 +77,8 @@ build_target() {
     --build-arg "CI_REDOCLY_VERSION=${CI_REDOCLY_VERSION}" \
     --build-arg "CI_DOCKER_CLI_VERSION=${CI_DOCKER_CLI_VERSION}" \
     --build-arg "CI_DOCKER_CLI_SHA256=${CI_DOCKER_CLI_SHA256}" \
+    --build-arg "CI_DOCKER_BUILDX_VERSION=${CI_DOCKER_BUILDX_VERSION}" \
+    --build-arg "CI_DOCKER_BUILDX_SHA256=${CI_DOCKER_BUILDX_SHA256}" \
     --build-arg "CI_PLAYWRIGHT_VERSION=${CI_PLAYWRIGHT_VERSION}" \
     --build-arg "CI_CADDY_VERSION=${CI_CADDY_VERSION}" \
     --build-arg "CI_FORWARDPROXY_VERSION=${CI_FORWARDPROXY_VERSION}" \

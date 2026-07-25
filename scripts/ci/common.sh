@@ -23,7 +23,8 @@ CI_SCRIPTS_DIR="${CI_ROOT}/scripts/ci"
 # Keep Go module transport deterministic across local Docker/smolvm and GitHub.
 # This is a repository pin, not a host-specific caller override.
 GODEBUG="${CI_GO_GODEBUG}"
-export GODEBUG
+GOPROXY="${CI_GO_GOPROXY}"
+export GODEBUG GOPROXY
 
 # Artifacts --------------------------------------------------------------------
 : "${CI_ARTIFACT_DIR:=${CI_ROOT}/.artifacts/ci}"

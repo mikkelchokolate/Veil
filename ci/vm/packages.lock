@@ -11,7 +11,7 @@ gcc 4:13.2.0-7ubuntu1
 git 1:2.43.0-1ubuntu7.3
 jq 1.7.1-3ubuntu0.24.04.2
 libc6-dev 2.39-0ubuntu8.7
-python3-minimal 3.12.3-0ubuntu2.1
+python3 3.12.3-0ubuntu2.1
 make 4.3-4.1build2
 shellcheck 0.9.0-1
 sudo 1.9.15p5-3ubuntu5.24.04.2

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/ci/browser-e2e.sh — browser E2E CI job (Playwright against a real panel).
 # Mirrors the former `browser-e2e` workflow job: three panel instances
-# (standard, WebBasePath, helper-backed production layout) + npm test.
+# (standard, WebBasePath, helper-backed production layout) + pinned Playwright.
 set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,7 +112,7 @@ ci_step "playwright"
   export VEIL_BROWSER_USERNAME=browser-admin
   export VEIL_BROWSER_PASSWORD='Browser-E2E-Password-123!'
   export VEIL_BROWSER_API_TOKEN=browser-e2e-token
-  npm test
+  node_modules/.bin/playwright test
 )
 
 # Preserve diagnostics.

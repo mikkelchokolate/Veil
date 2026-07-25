@@ -22,7 +22,12 @@ fi
 # --network host: build-time transport only (identical image content). The
 # default bridge NAT is silently broken on some hosts (module downloads stall
 # in LAST_ACK/Send-Q); host networking matches the daemon's own egress path.
-ci_run image-build docker build --pull --network host --build-arg "VERSION=${version}" --tag veil:ci .
+ci_run image-check docker build --check .
+ci_run image-build docker build --pull --network host \
+  --build-arg "VERSION=${version}" \
+  --build-arg "GO_GODEBUG=${CI_GO_GODEBUG}" \
+  --build-arg "GO_GOPROXY=${CI_GO_GOPROXY}" \
+  --tag veil:ci .
 docker run --rm veil:ci version | tee "${CI_ARTIFACT_DIR}/image-version.txt" | grep -F "${version}"
 
 ci_log "image-build job passed"

@@ -19,8 +19,11 @@ SHELL ["/bin/bash", "-c"]
 
 ARG CI_GO_VERSION
 ARG CI_GO_TARBALL_SHA256
+ARG CI_GO_GODEBUG
+ARG CI_GO_GOPROXY
 ARG CI_NODE_VERSION
 ARG CI_NODE_TARBALL_SHA256
+ARG CI_NPM_VERSION
 ARG CI_PNPM_VERSION
 ARG CI_STATICCHECK_VERSION
 ARG CI_GOVULNCHECK_VERSION
@@ -33,11 +36,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
+    GODEBUG=${CI_GO_GODEBUG} \
+    GOPROXY=${CI_GO_GOPROXY} \
     PATH=/usr/local/go/bin:/usr/local/node/bin:/root/go/bin:/home/ci/go/bin:$PATH
 
 # --- System packages (list locked in packages.lock [target:base]) ------------
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
+    printf 'path-include=/usr/share/man/man1/*\npath-include=/usr/share/man/*/man1/*\n' >/etc/dpkg/dpkg.cfg.d/zz-veil-man1; \
     apt-get update; \
     awk '/^\[target:base\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
       | xargs apt-get install -y --no-install-recommends; \
@@ -57,12 +63,17 @@ RUN set -euo pipefail; \
     mkdir -p /usr/local/node; \
     tar -C /usr/local/node --strip-components=1 -xJf /tmp/node.tar.xz; \
     rm -f /tmp/node.tar.xz; \
-    npm install -g "pnpm@${CI_PNPM_VERSION}" "@redocly/cli@${CI_REDOCLY_VERSION}"; \
-    npm cache clean --force
+    npm_config_update_notifier=false npm install --global --ignore-scripts --no-audit --no-fund \
+      "npm@${CI_NPM_VERSION}" "pnpm@${CI_PNPM_VERSION}" "@redocly/cli@${CI_REDOCLY_VERSION}"; \
+    npm --version; \
+    pnpm --version; \
+    rm -rf /root/.npm
 
 # --- Go CI tools (version-pinned; module proxy fetch with retry for
 # transient network failures) ---------------------------------------------------
-RUN set -euo pipefail; \
+RUN --mount=type=cache,target=/root/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -euo pipefail; \
     for attempt in 1 2 3; do \
       GOBIN=/usr/local/bin go install "honnef.co/go/tools/cmd/staticcheck@${CI_STATICCHECK_VERSION}" && \
       GOBIN=/usr/local/bin go install "golang.org/x/vuln/cmd/govulncheck@${CI_GOVULNCHECK_VERSION}" && \
@@ -71,8 +82,7 @@ RUN set -euo pipefail; \
     done; \
     staticcheck -version >/dev/null; \
     govulncheck -version >/dev/null 2>&1 || govulncheck -h >/dev/null 2>&1; \
-    nfpm -v >/dev/null; \
-    rm -rf /root/go/pkg /root/.cache/go-build
+    nfpm -v >/dev/null
 
 # --- CI user + in-guest helpers --------------------------------------------------
 # ubuntu:24.04 ships a default `ubuntu` user at UID/GID 1000 — replace it with
@@ -141,7 +151,9 @@ RUN set -euo pipefail; \
 # Caddy with the naive forward_proxy module — source-built with the exact same
 # pins as the product installer (internal/runtimeinstall/runtimeinstall.go).
 # vm-build.sh supplies both versions from scripts/ci/versions.sh.
-RUN set -euo pipefail; \
+RUN --mount=type=cache,target=/root/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -euo pipefail; \
     mkdir -p /tmp/caddy-build && cd /tmp/caddy-build; \
     printf 'package main\n\nimport (\n\tcaddycmd "github.com/caddyserver/caddy/v2/cmd"\n\t_ "github.com/caddyserver/caddy/v2/modules/standard"\n\t_ "github.com/caddyserver/forwardproxy"\n)\n\nfunc main() {\n\tcaddycmd.Main()\n}\n' > main.go; \
     go mod init caddy >/dev/null; \
@@ -150,7 +162,7 @@ RUN set -euo pipefail; \
     go mod tidy; \
     CGO_ENABLED=0 go build -o /opt/veil-runtime/caddy -ldflags='-s -w' -trimpath .; \
     /opt/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy; \
-    rm -rf /tmp/caddy-build /root/go/pkg /root/.cache/go-build
+    rm -rf /tmp/caddy-build
 
 # ==============================================================================
 # base — canonical CI target for frontend/test/lint jobs.
@@ -177,18 +189,24 @@ RUN set -euo pipefail; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
 # Chromium for Playwright, system-wide browser path so both root and ci use it.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000
 RUN set -euo pipefail; \
-    mkdir -p /opt/ms-playwright; \
-    npx -y "playwright@${CI_PLAYWRIGHT_VERSION}" install chromium; \
+    mkdir -p /opt/ms-playwright /tmp/playwright-installer; \
+    cd /tmp/playwright-installer; \
+    npm init --yes >/dev/null; \
+    npm install --ignore-scripts --no-audit --no-fund "playwright@${CI_PLAYWRIGHT_VERSION}"; \
+    ./node_modules/.bin/playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
-    npm cache clean --force
+    rm -rf /root/.npm /tmp/playwright-installer
 
 # ==============================================================================
 FROM base AS system
 
 ARG CI_DOCKER_CLI_VERSION
 ARG CI_DOCKER_CLI_SHA256
+ARG CI_DOCKER_BUILDX_VERSION
+ARG CI_DOCKER_BUILDX_SHA256
 
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
@@ -197,13 +215,20 @@ RUN set -euo pipefail; \
       | xargs apt-get install -y --no-install-recommends; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# docker CLI only (talks to the host daemon via mounted socket for
+# Docker CLI + Buildx plugin (talks to the host daemon via mounted socket for
 # package-smoke / image-build); no daemon inside the image.
 RUN set -euo pipefail; \
     curl --fail --location "https://download.docker.com/linux/static/stable/x86_64/docker-${CI_DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
     echo "${CI_DOCKER_CLI_SHA256}  /tmp/docker.tgz" | sha256sum --check -; \
     tar -C /usr/local/bin --strip-components=1 -xzf /tmp/docker.tgz docker/docker; \
-    rm -f /tmp/docker.tgz
+    rm -f /tmp/docker.tgz; \
+    install -d -m 0755 /usr/local/lib/docker/cli-plugins; \
+    curl --fail --location \
+      "https://github.com/docker/buildx/releases/download/v${CI_DOCKER_BUILDX_VERSION}/buildx-v${CI_DOCKER_BUILDX_VERSION}.linux-amd64" \
+      -o /usr/local/lib/docker/cli-plugins/docker-buildx; \
+    echo "${CI_DOCKER_BUILDX_SHA256}  /usr/local/lib/docker/cli-plugins/docker-buildx" | sha256sum --check -; \
+    chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx; \
+    docker buildx version | grep -F "v${CI_DOCKER_BUILDX_VERSION}"
 
 # Full pinned runtime set for protocol E2E / privilege-boundary / package-smoke.
 # caddy itself comes from the base layer; this adds the rest alongside it.

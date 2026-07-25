@@ -19,12 +19,15 @@ CI_GO_VERSION="1.26.5"
 CI_GO_TARBALL_SHA256="5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053" # go1.26.5.linux-amd64.tar.gz
 # The live-host network path intermittently stalls Go's HTTP/2 proxy connections
 # with bytes stuck in Send-Q. Pin HTTP/1.1 transport for deterministic clean-cache
-# downloads in both local CI and GitHub Actions.
+# downloads in both local CI and GitHub Actions. Fall back to checksum-verified
+# direct module fetches on any official proxy transport failure.
 CI_GO_GODEBUG="http2client=0"
+CI_GO_GOPROXY="https://proxy.golang.org|direct"
 
 CI_NODE_VERSION="26.5.0"
 CI_NODE_TARBALL_SHA256="9f619528f1db5ddc41dccf54211066fb42228d69a156733c69cb9d6cc92e358c" # node-v26.5.0-linux-x64.tar.xz
 
+CI_NPM_VERSION="12.0.1"
 CI_PNPM_VERSION="11.17.0"
 
 # --- Go CI tools ------------------------------------------------------------
@@ -33,9 +36,11 @@ CI_GOVULNCHECK_VERSION="v1.6.0"   # golang.org/x/vuln/cmd/govulncheck
 CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
 CI_REDOCLY_VERSION="2.40.0"       # @redocly/cli (OpenAPI lint)
 
-# Docker CLI used by the system image to talk to the mounted host daemon.
+# Docker CLI and Buildx used by the system image to talk to the mounted host daemon.
 CI_DOCKER_CLI_VERSION="29.6.2"
 CI_DOCKER_CLI_SHA256="d6204aea92238e2453d5445c885b9d2e5eb8f82915568ec50edf9dbe12a3ac74"
+CI_DOCKER_BUILDX_VERSION="0.35.0"
+CI_DOCKER_BUILDX_SHA256="d41ece72044243b4f58b343441ae37446d9c29a7d6b5e11c61847bbcf8f7dfda"
 
 # --- Browser ----------------------------------------------------------------
 # Must match test/browser/package.json @playwright/test and web/package.json

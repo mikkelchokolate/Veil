@@ -72,6 +72,17 @@ expect(
     browser_package["devDependencies"]["@playwright/test"].lstrip("^~"),
     versions["CI_PLAYWRIGHT_VERSION"],
 )
+browser_lock = json.loads((ROOT / "test/browser/package-lock.json").read_text())
+foreign_browser_urls = sorted(
+    {
+        package["resolved"]
+        for package in browser_lock.get("packages", {}).values()
+        if package.get("resolved")
+        and not package["resolved"].startswith("https://registry.npmjs.org/")
+    }
+)
+if foreign_browser_urls:
+    fail("browser lock uses foreign registry URLs: " + ", ".join(foreign_browser_urls))
 
 dockerfile = (ROOT / "Dockerfile").read_text()
 expect(
@@ -83,6 +94,21 @@ expect(
     "Dockerfile Go image",
     match(r"^ARG GO_IMAGE=golang:([0-9.]+)-alpine@", dockerfile, "Dockerfile Go image"),
     versions["CI_GO_VERSION"],
+)
+expect(
+    "Dockerfile GODEBUG",
+    match(r"^ARG GO_GODEBUG=([^\s]+)$", dockerfile, "Dockerfile GODEBUG"),
+    versions["CI_GO_GODEBUG"],
+)
+expect(
+    "Dockerfile GOPROXY",
+    match(r"^ARG GO_GOPROXY=([^\s]+)$", dockerfile, "Dockerfile GOPROXY"),
+    versions["CI_GO_GOPROXY"],
+)
+expect(
+    "Dockerfile npm",
+    match(r"^ARG NPM_VERSION=([0-9.]+)$", dockerfile, "Dockerfile npm"),
+    versions["CI_NPM_VERSION"],
 )
 expect(
     "Dockerfile pnpm",
@@ -119,5 +145,14 @@ for label, value in (
 ):
     if value not in runtime_install:
         fail(f"runtime installer does not contain the {label} pin {value}")
+
+docker_entrypoint = (ROOT / "packaging/docker/entrypoint.sh").read_text()
+for label, value in (
+    ("state", "/var/lib/veil/state.json"),
+    ("apply", "/etc/veil"),
+    ("key", "/etc/veil/state.key"),
+):
+    if value not in docker_entrypoint:
+        fail(f"Docker entrypoint does not contain the {label} path {value}")
 
 print("version pins are consistent")

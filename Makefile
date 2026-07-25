@@ -13,7 +13,13 @@ e2e:
 	go test -tags e2e ./test/e2e/... -count=1
 
 verify-openapi:
-	npx --yes @redocly/cli@1.25.15 lint docs/openapi.yaml
+	@set -eu; \
+	. ./scripts/ci/versions.sh; \
+	if command -v redocly >/dev/null 2>&1 && [ "$$(redocly --version)" = "$$CI_REDOCLY_VERSION" ]; then \
+		redocly lint docs/openapi.yaml --config .redocly.yaml; \
+	else \
+		npm_config_update_notifier=false npx --yes --package="@redocly/cli@$$CI_REDOCLY_VERSION" -- redocly lint docs/openapi.yaml --config .redocly.yaml; \
+	fi
 
 generate-sdk:
 	go generate ./sdk/go

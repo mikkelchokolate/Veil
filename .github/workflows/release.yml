@@ -46,7 +46,9 @@ jobs:
         run: |
           . scripts/ci/versions.sh
           go install "golang.org/x/vuln/cmd/govulncheck@${CI_GOVULNCHECK_VERSION}"
-          "$(go env GOPATH)/bin/govulncheck" ./...
+          go_path="$(go env GOPATH)"
+          export PATH="${go_path}/bin:${PATH}"
+          govulncheck ./...
       - name: shellcheck
         run: |
           sudo apt-get update
