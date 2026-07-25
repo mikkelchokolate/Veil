@@ -59,6 +59,17 @@ test.describe('Veil Panel — React SPA', () => {
     await expect(page.getByRole('button', { name: /new inbound/i })).toBeVisible({ timeout: 10_000 });
   });
 
+  test('traffic lazy chunks load without runtime errors', async ({ page }) => {
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await login(page, adminUsername, adminPassword);
+    await page.getByRole('link', { name: /^traffic$/i }).first().click();
+    await expect(page).toHaveURL(/\/traffic/);
+    await expect(page.getByRole('heading', { name: /^traffic$/i })).toBeVisible({ timeout: 10_000 });
+    expect(pageErrors).toEqual([]);
+  });
+
   test('admin can create a client through the wizard', async ({ page }) => {
     await login(page, adminUsername, adminPassword);
     await page.getByRole('link', { name: /clients/i }).first().click();

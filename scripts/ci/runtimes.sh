@@ -5,8 +5,8 @@
 #
 # Required CI must NEVER resolve /releases/latest: versions and checksums come
 # from versions.sh. The caddy-with-forward_proxy server runtime is source-built
-# with the same pins as the product installer (caddy v2.11.4 + the
-# klzgrad/forwardproxy fork replace).
+# with the same pins as the product installer; both values are declared below
+# by versions.sh rather than restated in this script.
 set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,8 +47,7 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
     install -m 0755 "$(find singbox -type f -name sing-box | head -n1)" "${dest}/sing-box"
   )
 
-  # caddy with naive forward_proxy: source-built with product-pinned modules
-  # (internal/runtimeinstall pins caddy v2.11.4 + the klzgrad fork replace).
+  # caddy with naive forward_proxy: source-built with product-pinned modules.
   if [ -n "${veil_bin}" ] && [ -x "${veil_bin}" ]; then
     "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
   else
@@ -70,8 +69,8 @@ func main() {
 }
 EOF
       go mod init caddy >/dev/null
-      go mod edit -require github.com/caddyserver/caddy/v2@v2.11.4
-      go mod edit -replace github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317
+      go mod edit -require "github.com/caddyserver/caddy/v2@${CI_CADDY_VERSION}"
+      go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CI_FORWARDPROXY_VERSION}"
       go mod tidy
       CGO_ENABLED=0 go build -o "${dest}/caddy" -ldflags='-s -w' -trimpath .
     )

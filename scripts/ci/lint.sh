@@ -9,6 +9,8 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
+ci_run version-consistency python3 scripts/ci/verify_versions.py
+
 ci_step "stub web/dist for analysis (go:embed must resolve)"
 if [ ! -f web/dist/index.html ]; then
   mkdir -p web/dist

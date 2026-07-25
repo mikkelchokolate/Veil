@@ -340,7 +340,7 @@ func installCaddyNaive(ctx context.Context, opts Options, runtime Runtime) (stri
 
 // runCaddyNaiveBuild builds a Caddy binary with the klzgrad/forwardproxy
 // (naive) fork. It creates a self-contained Go module in cacheDir/build-caddy,
-// pins Caddy v2.10.0 and the naive forwardproxy fork via a replace directive,
+// pins Caddy v2.11.4 and the naive forwardproxy fork via a replace directive,
 // and compiles a static binary to outPath.
 func runCaddyNaiveBuild(ctx context.Context, goBin, cacheDir, outPath string) error {
 	if resolved, err := exec.LookPath(goBin); err == nil {

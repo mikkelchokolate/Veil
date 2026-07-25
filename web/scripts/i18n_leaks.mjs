@@ -149,7 +149,7 @@ function checkFile(path, problems) {
 			);
 			if (!container) return;
 			const holder = ancestors[ancestors.indexOf(container) - 1];
-			if (!holder || holder.type !== "JSXElement") return;
+			if (holder?.type !== "JSXElement") return;
 			report(node, "jsx-expr string", node.value);
 		}
 	});

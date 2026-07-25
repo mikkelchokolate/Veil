@@ -63,15 +63,33 @@ export default defineConfig({
 	build: {
 		outDir: "dist",
 		sourcemap: false,
-		rollupOptions: {
+		rolldownOptions: {
 			output: {
-				manualChunks(id: string) {
-					if (id.includes("node_modules")) {
-						if (id.includes("react-dom") || id.includes("/react/"))
-							return "react";
-						if (id.includes("@tanstack")) return "tanstack";
-						return "vendor";
-					}
+				codeSplitting: {
+					groups: [
+						{
+							name: "zrender",
+							test: /node_modules[\\/](?:\.pnpm[\\/]zrender@[^\\/]+[\\/]node_modules[\\/])?zrender[\\/]/,
+							priority: 40,
+						},
+						{
+							name: "echarts",
+							test: /node_modules[\\/](?:\.pnpm[\\/]echarts@[^\\/]+[\\/]node_modules[\\/])?echarts[\\/]/,
+							priority: 30,
+						},
+						{
+							name: "react",
+							test: (id: string) =>
+								id.includes("node_modules") &&
+								(id.includes("react-dom") || id.includes("/react/")),
+							priority: 20,
+						},
+						{
+							name: "tanstack",
+							test: /node_modules[\\/].*@tanstack/,
+							priority: 20,
+						},
+					],
 				},
 			},
 		},

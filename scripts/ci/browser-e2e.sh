@@ -25,7 +25,7 @@ mkdir -p dist
 go build -trimpath -ldflags "-s -w -X main.version=browser-e2e" -o dist/veil ./cmd/veil
 
 ci_step "pinned Playwright (${CI_PLAYWRIGHT_VERSION})"
-(cd test/browser && npm install --ignore-scripts)
+(cd test/browser && npm ci --ignore-scripts)
 # Browsers are baked into the CI image (PLAYWRIGHT_BROWSERS_PATH); never
 # provision at run time — fail loudly if the image is missing them.
 if ! (cd test/browser && npx playwright install --dry-run chromium >/dev/null 2>&1); then

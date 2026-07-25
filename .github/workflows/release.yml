@@ -16,17 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version-file: go.mod
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - name: gofmt
         run: |
-          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          unformatted="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
           if [ -n "${unformatted}" ]; then
             echo "These files are not gofmt-clean:" >&2
             echo "${unformatted}" >&2
@@ -38,14 +38,15 @@ jobs:
       - name: Verify generated Go SDK
         run: make verify-sdk
       - name: staticcheck
-        uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
-        with:
-          version: '2026.1'
-          install-go: false
+        run: |
+          . scripts/ci/versions.sh
+          go install "honnef.co/go/tools/cmd/staticcheck@${CI_STATICCHECK_VERSION}"
+          "$(go env GOPATH)/bin/staticcheck" ./...
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          govulncheck ./...
+          . scripts/ci/versions.sh
+          go install "golang.org/x/vuln/cmd/govulncheck@${CI_GOVULNCHECK_VERSION}"
+          "$(go env GOPATH)/bin/govulncheck" ./...
       - name: shellcheck
         run: |
           sudo apt-get update
@@ -60,52 +61,14 @@ jobs:
             sudo ln -sf /usr/local/bin/veil "/usr/local/bin/${bin}"
           done
           systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
-      - name: Install real protocol runtime binaries for e2e tests
+      - name: Install checksum-verified protocol runtimes for tests
         run: |
           set -euo pipefail
-          # Replace the veil stubs with actual upstream binaries so data-path tests
-          # exercise real protocol clients/servers instead of failing silently.
-          sudo veil runtime install --only hysteria2
-          sudo veil runtime install --only naiveproxy
-          sudo veil runtime install --only mieru
-          command -v hysteria
-          command -v mita
-      - name: Install real Mieru client
-        run: |
-          set -euo pipefail
-          arch=amd64
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/enfein/mieru/releases/latest)"
-          asset_url="$(jq -er --arg arch "$arch" '.assets[] | select(.name | test("^mieru_.*_linux_" + $arch + "\\.tar\\.gz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/mieru-client.tar.gz
-          rm -rf /tmp/mieru-client && mkdir -p /tmp/mieru-client
-          tar -xzf /tmp/mieru-client.tar.gz -C /tmp/mieru-client
-          client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
-          test -n "$client_bin"
-          sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
-          mieru version
-      - name: Install real NaiveProxy client
-        run: |
-          set -euo pipefail
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/klzgrad/naiveproxy/releases/latest)"
-          asset_url="$(jq -er '.assets[] | select(.name | test("^naiveproxy-v.*-linux-x64\\.tar\\.xz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/naiveproxy.tar.xz
-          rm -rf /tmp/naiveproxy && mkdir -p /tmp/naiveproxy
-          tar -xJf /tmp/naiveproxy.tar.xz -C /tmp/naiveproxy
-          naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
-          test -n "$naive_bin"
-          sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
-          naive --version
-      - name: Install real Caddy runtime for unit tests
-        run: |
-          # The systemd-unit validation step above symlinks /usr/local/bin/caddy to
-          # the veil stub so `caddy list-modules` fails. Unit tests probe Caddy
-          # capabilities, so install a real Caddy earlier in PATH (mirrors ci.yml).
-          # Use sudo + a fresh dir: prior sudo steps may leave root-owned files
-          # under /tmp/veil-runtime that break the caddy build-dir cleanup.
-          sudo rm -rf /tmp/veil-runtime
-          sudo ./bin/veil runtime install --only naiveproxy --bin-dir /tmp/veil-runtime
-          echo "/tmp/veil-runtime" >> "$GITHUB_PATH"
-          /tmp/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy
+          . scripts/ci/runtimes.sh
+          runtime_dir="${RUNNER_TEMP}/veil-runtime"
+          install_pinned_runtimes "${runtime_dir}" ./dist/veil
+          echo "${runtime_dir}" >> "$GITHUB_PATH"
+          "${runtime_dir}/caddy" list-modules | grep -Fx http.handlers.forward_proxy
       - run: go test ./... -race -count=1
       # e2e data-path tests need root (mita creates /var/run/mita, protocols bind
       # privileged paths). ci.yml only runs the Required-* data-path tests, not the
@@ -125,10 +88,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version-file: go.mod
       - name: Build Veil browser-test binary
         run: |
           mkdir -p dist
@@ -136,7 +99,7 @@ jobs:
       - name: Install pinned Playwright
         working-directory: test/browser
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           npx playwright install --with-deps chromium
       - name: Start authenticated Panel
         run: |
@@ -155,7 +118,7 @@ jobs:
             --key-path "${VEIL_KEY_PATH}"
           VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2096 >"${RUNNER_TEMP}/veil-browser.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/veil-browser.pid"
-          for attempt in $(seq 1 60); do
+          for _ in {1..60}; do
             if curl --fail --silent http://127.0.0.1:2096/healthz >/dev/null; then
               exit 0
             fi
@@ -191,16 +154,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version-file: go.mod
       - name: Build package payload
         run: |
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/veil ./cmd/veil
       - name: Install pinned nfpm
-        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.40.0
+        run: |
+          . scripts/ci/versions.sh
+          go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
       - name: Install and upgrade native packages in clean distributions
         run: bash scripts/package-smoke.sh
 
@@ -217,10 +182,10 @@ jobs:
             goarch: arm64
             label: linux/arm64
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version-file: go.mod
       - name: Build archive
         env:
           GOOS: ${{ matrix.goos }}
@@ -235,7 +200,8 @@ jobs:
       - name: Build native packages (deb/rpm/apk)
         run: |
           set -euo pipefail
-          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.40.0
+          . scripts/ci/versions.sh
+          go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
           version="${GITHUB_REF_NAME#v}"
           target_goarch="${{ matrix.goarch }}"
           case "${target_goarch}" in
@@ -270,23 +236,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: [quality, browser-e2e, package-smoke]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify Docker image version before publishing
         run: |
           docker build --pull --build-arg "VERSION=${GITHUB_REF_NAME}" --tag veil:release-check .
           docker run --rm veil:release-check version | tee /tmp/veil-version.txt
           grep -F "${GITHUB_REF_NAME}" /tmp/veil-version.txt
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
           flavor: |
@@ -296,7 +262,7 @@ jobs:
             type=raw,value=latest
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
@@ -311,21 +277,18 @@ jobs:
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          images=""
-          for tag in ${TAGS}; do
-            images="${images} ${tag}"
-          done
-          cosign sign --yes ${images}
+          mapfile -t images <<< "${TAGS}"
+          cosign sign --yes "${images[@]}"
 
   publish:
     runs-on: ubuntu-latest
     # Legacy ordering sentinel retained for self-audit compatibility: needs: [quality, release, docker-publish]
     needs: [quality, browser-e2e, package-smoke, release, docker-publish]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version-file: go.mod
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
@@ -335,11 +298,11 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum veil_linux_amd64.tar.gz veil_linux_arm64.tar.gz \
-            *.deb *.rpm *.apk install.sh > checksums.txt
+          sha256sum ./veil_linux_amd64.tar.gz ./veil_linux_arm64.tar.gz \
+            ./*.deb ./*.rpm ./*.apk ./install.sh > checksums.txt
           cat checksums.txt
       - name: Generate SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           path: .
           format: spdx-json
@@ -355,7 +318,7 @@ jobs:
               "${f}"
           done
       - name: Attest release artifacts (SLSA provenance)
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: |
             dist/checksums.txt

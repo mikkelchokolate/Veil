@@ -12,7 +12,7 @@
 
 # --- Base image -------------------------------------------------------------
 # ubuntu:24.04 manifest digest (linux/amd64). Also mirrored in ci/vm/image.lock.
-CI_UBUNTU_BASE="ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90"
+CI_UBUNTU_BASE="ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf"
 
 # --- Core toolchain ---------------------------------------------------------
 CI_GO_VERSION="1.26.5"
@@ -25,18 +25,22 @@ CI_GO_GODEBUG="http2client=0"
 CI_NODE_VERSION="26.5.0"
 CI_NODE_TARBALL_SHA256="9f619528f1db5ddc41dccf54211066fb42228d69a156733c69cb9d6cc92e358c" # node-v26.5.0-linux-x64.tar.xz
 
-CI_PNPM_VERSION="11.10.0"
+CI_PNPM_VERSION="11.17.0"
 
 # --- Go CI tools ------------------------------------------------------------
 CI_STATICCHECK_VERSION="2026.1"   # honnef.co/go/tools/cmd/staticcheck@2026.1
-CI_GOVULNCHECK_VERSION="v1.1.4"   # golang.org/x/vuln/cmd/govulncheck
-CI_NFPM_VERSION="v2.40.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
-CI_REDOCLY_VERSION="1.25.15"      # @redocly/cli (OpenAPI lint)
+CI_GOVULNCHECK_VERSION="v1.6.0"   # golang.org/x/vuln/cmd/govulncheck
+CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
+CI_REDOCLY_VERSION="2.40.0"       # @redocly/cli (OpenAPI lint)
+
+# Docker CLI used by the system image to talk to the mounted host daemon.
+CI_DOCKER_CLI_VERSION="29.6.2"
+CI_DOCKER_CLI_SHA256="d6204aea92238e2453d5445c885b9d2e5eb8f82915568ec50edf9dbe12a3ac74"
 
 # --- Browser ----------------------------------------------------------------
 # Must match test/browser/package.json @playwright/test and web/package.json
 # playwright. vm-build.sh asserts this at image build time.
-CI_PLAYWRIGHT_VERSION="1.61.1"
+CI_PLAYWRIGHT_VERSION="1.62.0"
 
 # --- Protocol runtimes (server + clients) ------------------------------------
 # Server runtimes are what `veil runtime install` would fetch; for required CI
@@ -65,7 +69,9 @@ CI_SINGBOX_SHA256="f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d
 # Caddy-with-forwardproxy (naiveproxy server) is source-built by the product
 # installer (internal/runtimeinstall), which pins caddy v2.11.4 and the
 # klzgrad/forwardproxy fork via a go.mod replace. Built once at image build
-# time; resolved module versions are recorded in the image metadata.
+# time and shared by base/browser/system targets.
+CI_CADDY_VERSION="v2.11.4"
+CI_FORWARDPROXY_VERSION="d62c80d3dd2c706b6b87579844d2397bddd18317"
 
 # --- Local VM runtime ---------------------------------------------------------
 # Minimum smolvm version required for the authoritative local backend.

@@ -30,11 +30,17 @@
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
-FROM node:24-alpine AS webbuilder
+ARG NODE_IMAGE=node:26.5.0-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66
+ARG GO_IMAGE=golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2
+ARG ALPINE_IMAGE=alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+
+FROM ${NODE_IMAGE} AS webbuilder
+
+ARG PNPM_VERSION=11.17.0
 
 # The Go binary embeds web/dist (see web/web.go); build the SPA first so the
 # image ships the real panel UI.
-RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
+RUN corepack enable && corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml web/.npmrc web/pnpm-workspace.yaml ./
@@ -42,7 +48,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
 
-FROM golang:1.26.5-alpine AS builder
+FROM ${GO_IMAGE} AS builder
 
 RUN apk add --no-cache git ca-certificates
 
@@ -56,7 +62,7 @@ ARG VERSION=dev
 RUN test -n "${VERSION}" \
     && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /veil ./cmd/veil
 
-FROM alpine:3.23
+FROM ${ALPINE_IMAGE}
 
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -h /var/lib/veil veil \

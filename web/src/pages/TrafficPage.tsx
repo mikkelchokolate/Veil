@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import * as echarts from "echarts";
+import { BarChart } from "echarts/charts";
+import {
+	GridComponent,
+	LegendComponent,
+	TooltipComponent,
+} from "echarts/components";
+import * as echarts from "echarts/core";
+import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 import { apiFetch } from "../api/fetcher";
 import type { TrafficTopEntry } from "../api/generated/models";
@@ -25,6 +32,14 @@ interface TrafficSummary {
 }
 
 type TopEntry = TrafficTopEntry;
+
+echarts.use([
+	BarChart,
+	GridComponent,
+	LegendComponent,
+	TooltipComponent,
+	CanvasRenderer,
+]);
 
 /** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
@@ -56,7 +71,7 @@ export function TrafficPage() {
 		const downloadLabel = t("traffic.download");
 		const totalLabel = t("traffic.total");
 		const items = top.data?.items ?? [];
-		const option: echarts.EChartsOption = {
+		const option: echarts.EChartsCoreOption = {
 			tooltip: {
 				trigger: "axis",
 				axisPointer: { type: "shadow" },

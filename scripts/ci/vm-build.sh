@@ -39,6 +39,10 @@ declare -A TAGS=(
 
 # shellcheck disable=SC1091  # image.lock is a KEY=VALUE lockfile, not an input script
 . "${VM_DIR}/image.lock"
+if [ "${CI_UBUNTU_BASE}" != "ubuntu:24.04@${UBUNTU_24_04_DIGEST}" ]; then
+  printf '[ci] ERROR: Ubuntu base drift between versions.sh and image.lock\n' >&2
+  exit 1
+fi
 
 build_target() {
   local target="$1"
@@ -68,7 +72,11 @@ build_target() {
     --build-arg "CI_GOVULNCHECK_VERSION=${CI_GOVULNCHECK_VERSION}" \
     --build-arg "CI_NFPM_VERSION=${CI_NFPM_VERSION}" \
     --build-arg "CI_REDOCLY_VERSION=${CI_REDOCLY_VERSION}" \
+    --build-arg "CI_DOCKER_CLI_VERSION=${CI_DOCKER_CLI_VERSION}" \
+    --build-arg "CI_DOCKER_CLI_SHA256=${CI_DOCKER_CLI_SHA256}" \
     --build-arg "CI_PLAYWRIGHT_VERSION=${CI_PLAYWRIGHT_VERSION}" \
+    --build-arg "CI_CADDY_VERSION=${CI_CADDY_VERSION}" \
+    --build-arg "CI_FORWARDPROXY_VERSION=${CI_FORWARDPROXY_VERSION}" \
     --build-arg "CI_HYSTERIA_TAG=${CI_HYSTERIA_TAG}" \
     --build-arg "CI_HYSTERIA_ASSET=${CI_HYSTERIA_ASSET}" \
     --build-arg "CI_HYSTERIA_SHA256=${CI_HYSTERIA_SHA256}" \

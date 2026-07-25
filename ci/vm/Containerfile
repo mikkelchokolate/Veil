@@ -24,6 +24,8 @@ ARG CI_STATICCHECK_VERSION
 ARG CI_GOVULNCHECK_VERSION
 ARG CI_NFPM_VERSION
 ARG CI_REDOCLY_VERSION
+ARG CI_CADDY_VERSION
+ARG CI_FORWARDPROXY_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
@@ -135,14 +137,14 @@ RUN set -euo pipefail; \
     rm -rf /tmp/*
 
 # Caddy with the naive forward_proxy module — source-built with the exact same
-# pins as the product installer (internal/runtimeinstall/runtimeinstall.go):
-# caddy v2.11.4 + klzgrad/forwardproxy@d62c80d3dd2c. Keep in sync with product.
+# pins as the product installer (internal/runtimeinstall/runtimeinstall.go).
+# vm-build.sh supplies both versions from scripts/ci/versions.sh.
 RUN set -euo pipefail; \
     mkdir -p /tmp/caddy-build && cd /tmp/caddy-build; \
     printf 'package main\n\nimport (\n\tcaddycmd "github.com/caddyserver/caddy/v2/cmd"\n\t_ "github.com/caddyserver/caddy/v2/modules/standard"\n\t_ "github.com/caddyserver/forwardproxy"\n)\n\nfunc main() {\n\tcaddycmd.Main()\n}\n' > main.go; \
     go mod init caddy >/dev/null; \
-    go mod edit -require github.com/caddyserver/caddy/v2@v2.11.4; \
-    go mod edit -replace github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317; \
+    go mod edit -require "github.com/caddyserver/caddy/v2@${CI_CADDY_VERSION}"; \
+    go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CI_FORWARDPROXY_VERSION}"; \
     go mod tidy; \
     CGO_ENABLED=0 go build -o /opt/veil-runtime/caddy -ldflags='-s -w' -trimpath .; \
     /opt/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy; \
@@ -183,6 +185,9 @@ RUN set -euo pipefail; \
 # ==============================================================================
 FROM base AS system
 
+ARG CI_DOCKER_CLI_VERSION
+ARG CI_DOCKER_CLI_SHA256
+
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
     apt-get update; \
@@ -193,8 +198,8 @@ RUN set -euo pipefail; \
 # docker CLI only (talks to the host daemon via mounted socket for
 # package-smoke / image-build); no daemon inside the image.
 RUN set -euo pipefail; \
-    curl --fail --location "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz" -o /tmp/docker.tgz; \
-    echo "4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640  /tmp/docker.tgz" | sha256sum --check -; \
+    curl --fail --location "https://download.docker.com/linux/static/stable/x86_64/docker-${CI_DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
+    echo "${CI_DOCKER_CLI_SHA256}  /tmp/docker.tgz" | sha256sum --check -; \
     tar -C /usr/local/bin --strip-components=1 -xzf /tmp/docker.tgz docker/docker; \
     rm -f /tmp/docker.tgz
 
