@@ -8,7 +8,9 @@
 
 # syntax=docker/dockerfile:1
 
-ARG UBUNTU_BASE
+# Parser-safe default is mirrored from scripts/ci/versions.sh and checked by
+# verify_versions.py; vm-build.sh still passes the same value explicitly.
+ARG UBUNTU_BASE=ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf
 # hadolint ignore=DL3006
 FROM ${UBUNTU_BASE} AS toolchain
 

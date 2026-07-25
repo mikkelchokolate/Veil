@@ -101,6 +101,16 @@ expect(
     f"ubuntu:24.04@{locked_digest}",
     versions["CI_UBUNTU_BASE"],
 )
+ci_containerfile = (ROOT / "ci/vm/Containerfile").read_text()
+expect(
+    "CI Containerfile Ubuntu default",
+    match(
+        r"^ARG UBUNTU_BASE=(ubuntu:24\.04@sha256:[0-9a-f]{64})$",
+        ci_containerfile,
+        "CI Containerfile Ubuntu default",
+    ),
+    versions["CI_UBUNTU_BASE"],
+)
 
 runtime_install = (ROOT / "internal/runtimeinstall/runtimeinstall.go").read_text()
 for label, value in (
