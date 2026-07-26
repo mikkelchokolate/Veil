@@ -12,10 +12,22 @@ import (
 func WaitForHealthy(addr string, token string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	candidates := statusflow.CandidateAddrs(addr)
-	for time.Now().Before(deadline) {
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
 		for _, candidate := range candidates {
+			remaining = time.Until(deadline)
+			if remaining <= 0 {
+				break
+			}
+			requestTimeout := 2 * time.Second
+			if remaining < requestTimeout {
+				requestTimeout = remaining
+			}
 			url := candidate + "/healthz"
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
 				cancel()
@@ -34,7 +46,16 @@ func WaitForHealthy(addr string, token string, timeout time.Duration) error {
 				resp.Body.Close()
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		remaining = time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		retryDelay := 100 * time.Millisecond
+		if remaining < retryDelay {
+			retryDelay = remaining
+		}
+		timer := time.NewTimer(retryDelay)
+		<-timer.C
 	}
 	return fmt.Errorf("health check timed out after %v", timeout)
 }
