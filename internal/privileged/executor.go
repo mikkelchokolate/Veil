@@ -2,6 +2,8 @@ package privileged
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -658,7 +660,10 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		name := request.ArchiveName
 		if name == "" {
-			name = "veil_backup_" + createdAt.Format("20060102_150405") + ".tar.gz.enc"
+			name, err = generatedBackupArchiveName(createdAt)
+			if err != nil {
+				return BackupResult{}, err
+			}
 		}
 		if err := os.MkdirAll(request.BackupRoot, 0o700); err != nil {
 			return BackupResult{}, err
@@ -685,7 +690,13 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			return BackupResult{}, err
 		}
 		archivePath := filepath.Join(request.BackupRoot, name)
-		if err := os.Rename(pendingPath, archivePath); err != nil {
+		// pendingPath and archivePath are in the same directory. Linking publishes
+		// the verified inode atomically and fails with EEXIST instead of replacing
+		// an archive created concurrently by the API, timer, or another helper.
+		if err := os.Link(pendingPath, archivePath); err != nil {
+			return BackupResult{}, err
+		}
+		if err := os.Remove(pendingPath); err != nil {
 			return BackupResult{}, err
 		}
 		if err := syncBackupDirectory(request.BackupRoot); err != nil {
@@ -725,6 +736,18 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 	default:
 		return BackupResult{}, errors.New("unsupported backup operation")
 	}
+}
+
+func generatedBackupArchiveName(createdAt time.Time) (string, error) {
+	var suffix [16]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", fmt.Errorf("generate backup archive identifier: %w", err)
+	}
+	return fmt.Sprintf(
+		"veil_backup_%s_%s.tar.gz.enc",
+		createdAt.UTC().Format("20060102_150405_000000000"),
+		hex.EncodeToString(suffix[:]),
+	), nil
 }
 
 func configuredBackupMaxBytes(config ProductionConfig) (int64, error) {

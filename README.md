@@ -191,7 +191,7 @@ sudo veil backup schedule enable --passphrase-file /root/veil-backup-passphrase
 sudo veil backup list --dir /var/lib/veil/backups
 sudo veil backup prune --dir /var/lib/veil/backups \
   --daily 7 --weekly 4 --monthly 12 --dry-run
-sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS.tar.gz.enc \
+sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS_NNNNNNNNN_RANDOMHEX.tar.gz.enc \
   --passphrase-file /root/veil-backup-passphrase
 sudo veil backup restore /path/to/archive.tar.gz.enc \
   --passphrase-file /root/veil-backup-passphrase --check-only

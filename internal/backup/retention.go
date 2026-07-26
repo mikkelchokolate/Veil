@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
-var archiveNamePattern = regexp.MustCompile(`^veil_backup_(\d{8})_(\d{6})\.tar\.gz(?:\.enc)?$`)
+var archiveNamePattern = regexp.MustCompile(`^veil_backup_(\d{8})_(\d{6})(?:_(\d{9})_[0-9a-fA-F]{32})?\.tar\.gz(?:\.enc)?$`)
 
 // retentionRemove is overridable in tests to inject removal failures.
 var retentionRemove = os.Remove
@@ -142,12 +143,19 @@ func selectRetentionBuckets(
 
 func parseArchiveTimestamp(name string) (time.Time, bool) {
 	match := archiveNamePattern.FindStringSubmatch(name)
-	if len(match) != 3 {
+	if len(match) != 4 {
 		return time.Time{}, false
 	}
 	parsed, err := time.ParseInLocation("20060102_150405", match[1]+"_"+match[2], time.UTC)
 	if err != nil {
 		return time.Time{}, false
+	}
+	if match[3] != "" {
+		nanoseconds, err := strconv.Atoi(match[3])
+		if err != nil {
+			return time.Time{}, false
+		}
+		parsed = parsed.Add(time.Duration(nanoseconds))
 	}
 	return parsed, true
 }

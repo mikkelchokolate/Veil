@@ -15,6 +15,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -892,6 +893,111 @@ func TestRunProductionBackupAllActions(t *testing.T) {
 	}
 	if len(pruned.Kept) != 1 || len(pruned.Pruned) != 0 {
 		t.Fatalf("unexpected prune result: kept=%v pruned=%v", pruned.Kept, pruned.Pruned)
+	}
+}
+
+func TestRunProductionBackupConcurrentCreatesDoNotReplace(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	passphrasePath := filepath.Join(root, "backup.passphrase")
+	backupRoot := filepath.Join(root, "backups")
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, key[:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := managementstate.NewStore(statePath, cipher).Save(model.ManagementSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	createBackupTestDatabase(t, root)
+	fixedNow := time.Date(2026, 6, 5, 12, 0, 0, 123456789, time.UTC)
+	config := ProductionConfig{
+		StatePath: statePath, KeyPath: keyPath, BackupPassphrasePath: passphrasePath,
+		BackupRoot: backupRoot, VeilVersion: "v0.0.1", Now: func() time.Time { return fixedNow },
+	}
+	request := ResolvedBackup{
+		Action: BackupActionCreate, BackupRoot: backupRoot, StateRoot: root,
+		StatePath: statePath, KeyPath: keyPath, BackupPassphrasePath: passphrasePath,
+	}
+
+	start := make(chan struct{})
+	results := make([]BackupResult, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			results[index], errs[index] = runProductionBackup(context.Background(), config, request)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent create %d: %v", i, err)
+		}
+	}
+	if results[0].ArchiveName == results[1].ArchiveName {
+		t.Fatalf("concurrent creates returned the same archive name %q", results[0].ArchiveName)
+	}
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("backup directory contains %d archives, want 2", len(entries))
+	}
+	listed, err := runProductionBackup(context.Background(), config, ResolvedBackup{Action: BackupActionList, BackupRoot: backupRoot})
+	if err != nil {
+		t.Fatalf("list concurrent archives: %v", err)
+	}
+	if len(listed.Archives) != 2 {
+		t.Fatalf("retention/list parser sees %d archives, want 2", len(listed.Archives))
+	}
+	for _, result := range results {
+		if _, err := runProductionBackup(context.Background(), config, ResolvedBackup{
+			Action: BackupActionVerify, ArchiveName: result.ArchiveName,
+			ArchivePath:          filepath.Join(backupRoot, result.ArchiveName),
+			BackupPassphrasePath: passphrasePath,
+		}); err != nil {
+			t.Fatalf("verify surviving archive %q: %v", result.ArchiveName, err)
+		}
+	}
+
+	explicit := request
+	explicit.ArchiveName = "veil_backup_20260605_120000.tar.gz.enc"
+	if _, err := runProductionBackup(context.Background(), config, explicit); err != nil {
+		t.Fatalf("create explicit-name archive: %v", err)
+	}
+	explicitPath := filepath.Join(backupRoot, explicit.ArchiveName)
+	beforeReplaceAttempt, err := os.ReadFile(explicitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runProductionBackup(context.Background(), config, explicit); err == nil {
+		t.Fatal("second create with the same explicit archive name replaced the first")
+	}
+	afterReplaceAttempt, err := os.ReadFile(explicitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeReplaceAttempt, afterReplaceAttempt) {
+		t.Fatal("existing archive changed after no-replace publication failure")
 	}
 }
 
