@@ -275,8 +275,19 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
 
     // …until revoked.
-    await page.getByRole('button', { name: /^revoke$/i }).first().click();
-    await expect(page.locator('.badge-danger').first()).toBeVisible({ timeout: 10_000 });
+    const tokenRow = page.getByRole('row').filter({ hasText: `e2e-label-${stamp}` });
+    await expect(tokenRow.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
+    const revoked = page.waitForResponse((response) => {
+      const path = new URL(response.url()).pathname;
+      return (
+        response.request().method() === 'DELETE' &&
+        path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
+      );
+    });
+    await tokenRow.getByRole('button', { name: /^revoke$/i }).click();
+    const revokedResponse = await revoked;
+    expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
+    await expect(tokenRow.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
     const dead = await request.get(subURL);
     expect(dead.status(), 'revoked token must 404 (oracle-safe)').toBe(404);
   });
@@ -292,10 +303,9 @@ test.describe('Veil Panel — extended critical flows', () => {
     const request = await playwright.request.newContext({ baseURL: backupBase });
 
     const stamp = Date.now();
-    // Restore rolls back state.json-resident state. Panel users live in
-    // state.json (unlike normalized clients, which live in veil.db and are
-    // NOT covered by the archive today — a known gap tracked for the
-    // client/traffic arc), so users are the honest rollback probe.
+    // Panel users provide a compact UI-level rollback probe. Archive v2 also
+    // restores the normalized veil.db domain; real table coverage lives in
+    // internal/backup to keep this browser flow focused.
     const beforeName = `e2e-backup-before-${stamp}`;
     const afterName = `e2e-backup-after-${stamp}`;
     const userShape = (username) => ({

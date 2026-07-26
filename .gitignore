@@ -27,6 +27,10 @@ web/src/routeTree.gen.ts
 # TypeScript incremental build cache.
 web/tsconfig.tsbuildinfo
 
+# Playwright runtime output is never source.
+test/browser/test-results/
+test/browser/playwright-report/
+
 # Runtime artifacts written by api package tests (apply history/state fixtures)
 internal/api/generated/
 .artifacts/

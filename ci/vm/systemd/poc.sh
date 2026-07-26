@@ -31,7 +31,10 @@ echo "[poc] test service ok"
 # is the trigger).
 systemctl start veil-ci-echo.socket
 systemctl is-active veil-ci-echo.socket | grep -qx active
-! systemctl is-active veil-ci-echo.service >/dev/null 2>&1
+if systemctl is-active veil-ci-echo.service >/dev/null 2>&1; then
+  echo "[poc] FAIL: echo service active before socket trigger" >&2
+  exit 1
+fi
 # Trigger activation: the connect itself starts the service (curl exits with a
 # protocol error since nothing answers — that is expected and fine).
 curl --silent --max-time 5 --unix-socket /run/veil-ci-echo.sock http://localhost/ >/dev/null 2>&1 || true

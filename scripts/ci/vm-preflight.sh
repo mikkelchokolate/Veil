@@ -23,6 +23,13 @@ No fallback was performed.
 
 See:
 docs/development/ci.md#virtualization-setup"
+    installed_version="$(smolvm --version | awk '{print $NF}')"
+    if [ "$(printf '%s\n%s\n' "${CI_SMOLVM_MIN_VERSION}" "${installed_version}" | sort -V | head -n1)" != "${CI_SMOLVM_MIN_VERSION}" ]; then
+      ci_die "smolvm ${installed_version} is too old; require >= ${CI_SMOLVM_MIN_VERSION}"
+    fi
+    [ "$(uname -m)" = "x86_64" ] || ci_die "local CI images currently support amd64/x86_64 only (got $(uname -m))"
+    command -v docker >/dev/null 2>&1 || ci_die "Docker is required on the host to build/export content-keyed VM images"
+    docker info >/dev/null 2>&1 || ci_die "Docker daemon is required on the host to build/export content-keyed VM images"
     if [ ! -e /dev/kvm ] && [ "$(uname -s)" = "Linux" ]; then
       smolvm_out="$(smolvm machine run --image alpine -- true 2>&1 || true)"
       ci_die "\

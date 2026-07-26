@@ -237,8 +237,11 @@ COPY --from=runtimebuild /opt/veil-runtime/ /opt/veil-runtime/
 # systemd test units used by the Gate-5 PoC and privilege-boundary job.
 COPY systemd/ /opt/ci/systemd/
 
-# systemd as PID 1 when the image is booted as a system VM (vm-run.sh passes
-# --entrypoint /sbin/init). Mask units that are pointless/harmful in a guest.
+# systemd as PID 1 when the system-image workload is executed by vm-run.sh.
+# Mask pointless guest units and enable the one-shot CI lifecycle runner.
 RUN set -euo pipefail; \
+    chmod 0755 /opt/ci/systemd/run-job.sh; \
+    install -m 0644 /opt/ci/systemd/veil-ci-runner.service /usr/lib/systemd/system/veil-ci-runner.service; \
+    systemctl enable veil-ci-runner.service >/dev/null; \
     systemctl mask systemd-firstboot.service systemd-machine-id-commit.service \
       systemd-networkd-wait-online.service >/dev/null 2>&1 || true

@@ -18,6 +18,7 @@ ARTIFACTS_GUEST="/workspace/artifacts"
 
 mkdir -p "${ARTIFACTS_GUEST}"
 
+# shellcheck disable=SC2317 # invoked by the EXIT trap below.
 finish() {
   rc=$?
   # Artifacts out on every exit path.
@@ -37,7 +38,7 @@ mkdir -p /home/ci/.cache /home/ci/go/pkg /home/ci/.local/share/pnpm
 chown ci:ci /home/ci /home/ci/.cache /home/ci/go /home/ci/go/pkg \
   /home/ci/.local /home/ci/.local/share /home/ci/.local/share/pnpm 2>/dev/null || true
 
-cd "${WORKSPACE}"
+cd "${WORKSPACE}" || exit 1
 
 # Jobs that must run as root (system integration) vs as the unprivileged ci
 # user. Root only where the production layout requires it.
@@ -48,7 +49,8 @@ case "${ROOT_JOBS}" in
 esac
 # Composite drivers: run as root only when they include system jobs. `standard`
 # is always unprivileged (its OCI-build validation is dispatched separately by
-# run-job.sh as JOB=image-build in the system guest, which IS root). Running
+# run-job.sh as JOB=image-build in an explicit host-Docker system container,
+# which IS root). Running
 # the base phase as root makes git refuse the ci-owned workspace repo
 # ("detected dubious ownership" → "Not a git repository") and defeats the
 # unit-test privilege boundary.
@@ -56,16 +58,20 @@ if [ "${JOB}" = "standard" ]; then
   JOB_USER="ci"
 fi
 if [ "${JOB}" = "full" ]; then
-  case "${CI_FULL_PHASE:-all}" in
-    system) JOB_USER="root" ;;
-    all)    JOB_USER="root" ;;  # single-VM fallback: mixed; system steps sudo internally
-    *)      JOB_USER="ci" ;;
+  case "${CI_FULL_PHASE:-}" in
+    system|docker) JOB_USER="root" ;;
+    base|browser)  JOB_USER="ci" ;;
+    *) echo "[guest] CI_FULL_PHASE is required for full" >&2; exit 2 ;;
   esac
 fi
 
 export CI_ARTIFACT_DIR="${ARTIFACTS_GUEST}"
 export CI_REPO_ROOT="${WORKSPACE}"
 export CI_EXCHANGE_DIR="${EXCHANGE}"
+export CI_IN_GUEST=1
+export TZ="${TZ:-UTC}" LANG="${LANG:-C.UTF-8}" LC_ALL="${LC_ALL:-C.UTF-8}"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}"
+export PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT="${PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT:-120000}"
 
 run_as() {
   local user="$1"; shift
@@ -79,7 +85,11 @@ run_as() {
       CI_EXCHANGE_DIR="${CI_EXCHANGE_DIR}" \
       CI_FULL_PHASE="${CI_FULL_PHASE:-}" \
       CI_SOURCE_SHA="${CI_SOURCE_SHA:-}" \
+      CI_IN_GUEST=1 \
       VEIL_CI_RUNTIME_DIR="${VEIL_CI_RUNTIME_DIR:-/opt/veil-runtime}" \
+      PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" \
+      PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT="${PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT}" \
+      TZ="${TZ}" LANG="${LANG}" LC_ALL="${LC_ALL}" \
       PATH="/usr/local/go/bin:/usr/local/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
       HOME=/home/ci \
       "$@")"

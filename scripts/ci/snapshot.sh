@@ -15,15 +15,10 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
-# A dirty worktree is fine for local runs — the parity contract targets
-# committed state. When CI_TREEISH is set explicitly (e.g. the ci-pr merge
-# commit), the snapshot content is already fully determined by that commit, so
-# the check is unnecessary. Otherwise refuse dirty trees so "what CI checks"
-# always equals "what is committed".
-if [ "${CI_ALLOW_DIRTY:-0}" != "1" ] && [ -z "${CI_TREEISH:-}" ]; then
-  if [ -n "$(git status --porcelain)" ]; then
-    ci_die "working tree is dirty — commit first (or set CI_ALLOW_DIRTY=1 for a diagnostic run)"
-  fi
+# Refuse dirty trees so the archived tree and the tested tree are identical.
+# CI_TREEISH is set for the detached ci-pr merge and is already deterministic.
+if [ -z "${CI_TREEISH:-}" ] && [ -n "$(git status --porcelain)" ]; then
+  ci_die "working tree is dirty — commit first"
 fi
 
 git archive --format=tar "${TREEISH}" > "${OUT}"

@@ -60,9 +60,19 @@ CI_SOURCE_SHA="$(git -C "${CI_ROOT}" rev-parse "${CI_TREEISH:-HEAD}^{commit}" 2>
 export CI_SOURCE_SHA
 ci_timer_stop "snapshot-create"
 
+ACTIVE_SMOLVM_MACHINE=""
+ROOTFS_EXPORT_CONTAINER=""
+ROOTFS_EXPORT_TMP=""
+
 # shellcheck disable=SC2317  # invoked indirectly via trap
 cleanup() {
   rc=$?
+  if [ -n "${ACTIVE_SMOLVM_MACHINE}" ]; then
+    smolvm machine stop --name "${ACTIVE_SMOLVM_MACHINE}" >/dev/null 2>&1 || true
+    smolvm machine delete --name "${ACTIVE_SMOLVM_MACHINE}" --force >/dev/null 2>&1 || true
+  fi
+  [ -z "${ROOTFS_EXPORT_CONTAINER}" ] || docker rm -f "${ROOTFS_EXPORT_CONTAINER}" >/dev/null 2>&1 || true
+  [ -z "${ROOTFS_EXPORT_TMP}" ] || rm -rf "${ROOTFS_EXPORT_TMP}"
   # Merge guest artifacts into the run's artifact dir (success and failure).
   if [ -d "${EXCHANGE}/artifacts" ]; then
     cp -rf "${EXCHANGE}/artifacts/." "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
@@ -90,23 +100,70 @@ if [ "$(id -u)" -eq 0 ]; then
   chown -R 1000:1000 "${CACHE_ROOT}" 2>/dev/null || true
 fi
 
+smolvm_stop_active() {
+  [ -n "${ACTIVE_SMOLVM_MACHINE}" ] || return 0
+  smolvm machine stop --name "${ACTIVE_SMOLVM_MACHINE}" >/dev/null 2>&1 || true
+  smolvm machine delete --name "${ACTIVE_SMOLVM_MACHINE}" --force >/dev/null 2>&1 || true
+  ACTIVE_SMOLVM_MACHINE=""
+}
+
 run_job_smolvm() {
-  local image_tar="${CACHE_ROOT}/veil-ci-${IMAGE_TARGET}-${KEY}.tar"
-  if [ ! -f "${image_tar}" ]; then
-    ci_step "export ${IMAGE_TAG} for smolvm"
-    docker save "${IMAGE_TAG}" -o "${image_tar}"
+  # smolvm can consume a pre-expanded rootfs directly. This avoids its
+  # guest-side crane extraction path for docker-save archives, which is not
+  # supported by every KVM host filesystem. Keep the expansion content-keyed
+  # and atomic on the same HDD-backed cache as dependency stores.
+  local image_rootfs="${CACHE_ROOT}/rootfs/veil-ci-${IMAGE_TARGET}-${KEY}"
+  if [ ! -f "${image_rootfs}/.veil-ci-rootfs-complete" ]; then
+    ci_step "expand ${IMAGE_TAG} for smolvm"
+    ROOTFS_EXPORT_TMP="${image_rootfs}.tmp.$$"
+    rm -rf "${ROOTFS_EXPORT_TMP}"
+    mkdir -p "${ROOTFS_EXPORT_TMP}" "$(dirname "${image_rootfs}")"
+    if ! ROOTFS_EXPORT_CONTAINER="$(docker create "${IMAGE_TAG}")"; then return 1; fi
+    if ! docker export "${ROOTFS_EXPORT_CONTAINER}" | tar -xpf - -C "${ROOTFS_EXPORT_TMP}"; then return 1; fi
+    if ! docker rm "${ROOTFS_EXPORT_CONTAINER}" >/dev/null; then return 1; fi
+    ROOTFS_EXPORT_CONTAINER=""
+    if ! { printf '%s\n' "${KEY}" > "${ROOTFS_EXPORT_TMP}/.veil-ci-rootfs-complete" && \
+      rm -rf "${image_rootfs}" && mv "${ROOTFS_EXPORT_TMP}" "${image_rootfs}"; }; then return 1; fi
+    ROOTFS_EXPORT_TMP=""
   fi
   ci_step "smolvm run ${IMAGE_TARGET} job=${JOB}"
-  timeout "${CI_VM_TIMEOUT}" smolvm machine run \
-    --image "${image_tar}" \
-    --name "veil-ci-${IMAGE_TARGET}-$$" \
-    --cpus "${CI_CPUS}" --mem "$(( CI_MEMORY * 1024 ))" \
-    --net \
+  if [ "${IMAGE_TARGET}" != "system" ]; then
+    timeout "${CI_VM_TIMEOUT}" smolvm machine run \
+      --image "${image_rootfs}" \
+      --name "veil-ci-${IMAGE_TARGET}-$$" \
+      --cpus "${CI_CPUS}" --mem "$(( CI_MEMORY * 1024 ))" \
+      --net \
+      --volume "${EXCHANGE}:/exchange" \
+      --volume "${CACHE_ROOT}/gomod:/home/ci/go/pkg/mod" \
+      --volume "${CACHE_ROOT}/gobuild:/home/ci/.cache/go-build" \
+      --volume "${CACHE_ROOT}/pnpm:/home/ci/.local/share/pnpm/store" \
+      -- /opt/ci/guest-run.sh "${JOB}" "${JOB_ARGS[@]:-}"
+    return
+  fi
+
+  local machine="veil-ci-system-$$"
+  local rc=0
+  printf '%s\n' "${JOB}" > "${EXCHANGE}/job"
+  printf '%s\n' "${CI_FULL_PHASE:-system}" > "${EXCHANGE}/full-phase"
+  printf '%s\n' "${CI_SOURCE_SHA}" > "${EXCHANGE}/source-sha"
+  : > "${EXCHANGE}/systemd-run-request"
+  ACTIVE_SMOLVM_MACHINE="${machine}"
+  smolvm machine create --name "${machine}" --image "${image_rootfs}" \
+    --cpus "${CI_CPUS}" --mem "$(( CI_MEMORY * 1024 ))" --net \
     --volume "${EXCHANGE}:/exchange" \
     --volume "${CACHE_ROOT}/gomod:/home/ci/go/pkg/mod" \
     --volume "${CACHE_ROOT}/gobuild:/home/ci/.cache/go-build" \
     --volume "${CACHE_ROOT}/pnpm:/home/ci/.local/share/pnpm/store" \
-    -- "${JOB}" "${JOB_ARGS[@]:-}"
+    -- /bin/sleep infinity || return 1
+  smolvm machine start --name "${machine}" || return 1
+  timeout "${CI_VM_TIMEOUT}" smolvm machine exec --name "${machine}" --stream -- /sbin/init || true
+  if [ ! -f "${EXCHANGE}/result" ]; then rc=1
+  else
+    rc="$(tr -d '\r\n' < "${EXCHANGE}/result")"
+    case "${rc}" in (''|*[!0-9]*) rc=1 ;; esac
+  fi
+  smolvm_stop_active
+  return "${rc}"
 }
 
 run_job_docker_simple() { # base/browser: one ephemeral container per job

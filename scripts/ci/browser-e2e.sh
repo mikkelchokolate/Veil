@@ -10,7 +10,20 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
+if [ "${CI_IN_GUEST:-}" != "1" ] && {
+  [ -e /etc/veil/state.key ] || [ -e /var/lib/veil/state.json ] || [ -S /run/veil/helper.sock ];
+}; then
+  ci_die "refusing browser E2E on a host with production Veil sentinels; run it through make ci/ci-full"
+fi
+
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
+run_as_veil() {
+  if [ "$(id -u)" -eq 0 ]; then
+    runuser -u veil -- "$@"
+  else
+    sudo -u veil -- "$@"
+  fi
+}
 WORK="${CI_ARTIFACT_DIR}/browser-e2e"
 mkdir -p "${WORK}"
 
@@ -84,13 +97,13 @@ ${SUDO} chown -R veil:veil /var/lib/veil /etc/veil
 openssl rand -hex 32 | ${SUDO} tee /etc/veil/backup.passphrase >/dev/null
 ${SUDO} chown veil:veil /etc/veil/backup.passphrase
 ${SUDO} chmod 600 /etc/veil/backup.passphrase
-${SUDO} -u veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
   --role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
 ${SUDO} ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
 ${SUDO} chgrp veil /run/veil/helper.sock
-${SUDO} -u veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
+run_as_veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
   VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
   VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${WORK}/backup-panel.log" 2>&1 &
 PIDS+=($!)

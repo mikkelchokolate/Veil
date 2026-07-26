@@ -120,7 +120,8 @@ ci_timer_stop "ci-image-build"
   echo "image key: ${KEY}"
   for t in "${targets[@]}"; do
     size="$(docker image inspect "${TAGS[$t]}" --format '{{.Size}}')"
-    printf 'veil-ci-%s\t%s\t%d bytes (%.0f MiB)\n' "${t}" "${TAGS[$t]}" "${size}" "$(echo "${size}/1048576" | bc -l)"
+    mib=$(( size / 1048576 ))
+    printf 'veil-ci-%s\t%s\t%d bytes (%d MiB)\n' "${t}" "${TAGS[$t]}" "${size}" "${mib}"
   done
 } | tee "${CI_ARTIFACT_DIR}/image-metadata.txt"
 

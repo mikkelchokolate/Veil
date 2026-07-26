@@ -136,12 +136,19 @@ ubuntu:24.04@sha256:<pinned>
 
 - `base` runs: frontend, test, lint, stress.
 - `browser` runs: browser-e2e.
-- `system` runs: privilege-boundary, e2e, package-smoke, image-build — booted
-  with systemd as PID 1.
+- `system` runs in a booted systemd smolvm guest: privilege-boundary and e2e.
+- `package-smoke` and `image-build` require an OCI daemon. They run through an
+  explicit host Docker backend even when `CI_BACKEND=smolvm`; their logs identify
+  that boundary and never claim those jobs ran inside smolvm.
 
 Not a monolith: the browser job does not carry systemd, the system jobs do not
 carry Chromium, and base jobs carry neither. GCC and libc headers stay in
-`base` because `go test -race` requires CGO.
+`base` because `go test -race` requires CGO. For smolvm, each OCI image is
+flattened once with `docker export` into a content-keyed rootfs directory in the
+HDD-backed cache. This avoids guest-side docker-archive extraction while
+preserving the exact built filesystem; Docker-backed jobs continue to use the
+OCI image directly. Local smolvm runs mount the snapshot and Go/pnpm caches from
+the HDD-backed cache into the guest; no test state is persisted.
 
 All downloads (Go, Node, runtimes, docker CLI) are SHA256-verified before
 unpacking — see `scripts/ci/versions.sh` and `ci/vm/Containerfile`.
@@ -150,8 +157,8 @@ unpacking — see `scripts/ci/versions.sh` and `ci/vm/Containerfile`.
 
 ```bash
 make ci-fast    # pre-commit: quick host checks (seconds). NOT a full CI.
-make ci         # pre-push: frontend + test + lint + image-build, in a VM
-make ci-full    # everything: adds browser-e2e, privilege, protocol e2e, packages
+make ci         # pre-push: VM-capable jobs in smolvm; image-build via host Docker
+make ci-full    # adds browser/systemd VM jobs and host-Docker package smoke
 make ci-pr      # ci-full on the temporary merge with origin/main
 make ci-stress  # race/shuffle stress for historically flaky tests
 
@@ -181,6 +188,12 @@ automatically. They exist for debugging the scripts themselves.
 
 ## Virtualization setup
 
+The local VM path currently supports **amd64/x86_64 only** because its pinned
+runtime and browser assets are amd64. It requires smolvm >= 1.6.13. Docker CLI
+and a reachable host Docker daemon are also required to build/export the
+content-keyed OCI rootfs images and to run the explicitly host-backed
+`image-build` and `package-smoke` phases.
+
 ### Linux (KVM)
 
 `smolvm` requires `/dev/kvm`:
@@ -201,6 +214,15 @@ CI_BACKEND=docker make ci
 which runs the same images/scripts under the docker daemon (no hardware
 isolation, host kernel — clearly warned, never automatic).
 
+### What GitHub-hosted green CI proves
+
+Normal GitHub jobs validate the shared `scripts/ci/*` job logic and the
+Docker-backed OCI/package phases. They intentionally do **not** repeat the
+entire suite through smolvm: that would duplicate every PR job. A green GitHub
+workflow is therefore not proof of create/start/systemd/exec/stop orchestration.
+The merge gate additionally requires one successful default-backend
+`make ci-full` on an amd64 KVM-capable machine for the exact HEAD.
+
 ### Windows (WHP / WSL2)
 
 smolvm on Windows uses the Windows Hypervisor Platform (enable the WHP
@@ -211,9 +233,9 @@ WSL2 backend.
 
 ### macOS
 
-smolvm uses Hypervisor.framework natively; no extra setup beyond the
-installer. Note the guest is Linux — architecture must match (arm64 guests on
-Apple Silicon).
+The current repository-owned images/assets are amd64-only, so Apple Silicon is
+not supported by the authoritative local backend yet. An x86_64 macOS host may
+use Hypervisor.framework if smolvm and Docker satisfy the requirements above.
 
 ## Caching
 
@@ -298,10 +320,9 @@ image, not resolved at test time.
 
 ### Image build job
 
-`image-build` talks to an OCI daemon. GitHub runners provide one; the docker
-backend mounts the host daemon socket into the system guest. Under smolvm the
-same socket can be forwarded as a volume — verify daemon behaviour (cgroups,
-overlayfs, networking) before relying on it.
+`image-build` talks to an OCI daemon. GitHub runners provide one. Local runs,
+including default smolvm runs, dispatch this job explicitly to the host Docker
+backend; it is not executed in or attributed to the daemonless smolvm guest.
 
 ## Known remaining differences vs GitHub runners
 
@@ -312,8 +333,8 @@ overlayfs, networking) before relying on it.
   therefore carries the pinned forward_proxy caddy in /opt/veil-runtime, and
   `test.sh` puts it on PATH — a difference you only notice in a clean image.
 - Kernel differs (libkrunfw guest kernel vs Azure kernel).
-- `package-smoke` uses the docker daemon for clean-distribution containers in
-  both environments; inside smolvm this requires the forwarded socket above.
+- `package-smoke` uses the Docker daemon for clean-distribution containers in
+  both environments; local default-backend runs dispatch it to host Docker.
 - GitHub's `sudo` configuration differs from the image's (`ci` has passwordless
   sudo in CI images; scripts use sudo only for the steps that need it).
 
