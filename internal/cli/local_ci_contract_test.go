@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,10 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 		if !strings.Contains(runJob, want) {
 			t.Errorf("run-job.sh missing host-Docker boundary %q", want)
 		}
+	}
+	imageBuild := read("../../scripts/ci/image-build.sh")
+	if strings.Contains(imageBuild, "rootless OCI builder") {
+		t.Fatal("image-build.sh falsely claims the Docker-only job runs inside smolvm")
 	}
 	full := read("../../scripts/ci/full.sh")
 	systemStart := strings.Index(full, "  system)")
@@ -49,10 +54,13 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 	if strings.Contains(vmRun, "docker save") {
 		t.Fatal("smolvm path retains unsupported guest-side docker-save archive extraction")
 	}
-	for _, want := range []string{"smolvm machine create", "smolvm machine start", "-- /sbin/init", "systemd-run-request", "smolvm machine exec", "smolvm machine stop", "smolvm machine delete"} {
+	for _, want := range []string{"smolvm machine create", "smolvm machine start", "-- /sbin/init", "systemd-run-request", "smolvm machine stop", "smolvm machine delete"} {
 		if !strings.Contains(vmRun, want) {
 			t.Errorf("vm-run.sh missing systemd lifecycle %q", want)
 		}
+	}
+	if strings.Contains(vmRun, "smolvm machine exec") {
+		t.Fatal("systemd is exec'd after machine start instead of booting as the persistent PID-1 workload")
 	}
 	runner := read("../../ci/vm/systemd/run-job.sh")
 	unit := read("../../ci/vm/systemd/veil-ci-runner.service")
@@ -92,13 +100,35 @@ func TestLocalCIPrerequisiteContract(t *testing.T) {
 	}
 
 	workflow := read("../../.github/workflows/ci.yml")
-	if strings.Contains(workflow, "smolvm-default-backend") {
-		t.Fatal("normal GitHub CI duplicates the complete local smolvm suite")
+	for _, want := range []string{"runs-on: ubuntu-24.04", "bash scripts/ci/frontend.sh", "bash scripts/ci/test.sh", "bash scripts/ci/e2e.sh", "bash scripts/ci/package-smoke.sh", "bash scripts/ci/image-build.sh"} {
+		if !strings.Contains(workflow, want) {
+			t.Errorf("normal GitHub CI does not invoke shared hosted-runner contract %q", want)
+		}
+	}
+	workflowPaths, err := filepath.Glob("../../.github/workflows/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range workflowPaths {
+		if ext := filepath.Ext(path); ext != ".yml" && ext != ".yaml" {
+			continue
+		}
+		body := read(path)
+		for _, forbidden := range []string{"smolvm", "/dev/kvm", "runs-on: self-hosted", "runs-on: [self-hosted"} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("GitHub workflow %s contains local-only VM requirement %q", filepath.Base(path), forbidden)
+			}
+		}
 	}
 	ciDocs := read("../../docs/development/ci.md")
-	for _, want := range []string{"not proof of create/start/systemd/exec/stop", "make ci-full", "exact HEAD"} {
+	for _, want := range []string{"optional local developer tool", "duplicates the hosted GitHub", "CI checks locally", "GitHub Actions does not install", "execute smolvm", "make ci-full", "make ci-pr", "does not block a PR, push, or merge-readiness"} {
 		if !strings.Contains(ciDocs, want) {
-			t.Errorf("CI docs missing smolvm disclosure %q", want)
+			t.Errorf("CI docs missing optional-smolvm disclosure %q", want)
+		}
+	}
+	for _, forbidden := range []string{"exact local HEAD must also", "leaves this separate local evidence pending"} {
+		if strings.Contains(ciDocs, forbidden) {
+			t.Errorf("CI docs still make optional smolvm evidence mandatory: %q", forbidden)
 		}
 	}
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # scripts/ci/image-build.sh — OCI/Docker image build CI job.
 # Builds the Veil image with an injected version and verifies `veil version`
-# reports it. Uses the docker daemon on GitHub runners; inside smolvm the
-# system image provides a rootless OCI builder instead (see ci/vm/README.md).
+# reports it. Uses the Docker daemon on GitHub-hosted runners and in the
+# explicit local host-Docker phase; it never runs inside the daemonless smolvm
+# guest.
 set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

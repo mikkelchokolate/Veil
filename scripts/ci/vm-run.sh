@@ -154,10 +154,15 @@ run_job_smolvm() {
     --volume "${CACHE_ROOT}/gomod:/home/ci/go/pkg/mod" \
     --volume "${CACHE_ROOT}/gobuild:/home/ci/.cache/go-build" \
     --volume "${CACHE_ROOT}/pnpm:/home/ci/.local/share/pnpm/store" \
-    -- /bin/sleep infinity || return 1
+    -- /sbin/init || return 1
   smolvm machine start --name "${machine}" || return 1
-  timeout "${CI_VM_TIMEOUT}" smolvm machine exec --name "${machine}" --stream -- /sbin/init || true
-  if [ ! -f "${EXCHANGE}/result" ]; then rc=1
+  local deadline=$(( SECONDS + CI_VM_TIMEOUT ))
+  while [ ! -f "${EXCHANGE}/result" ] && [ "${SECONDS}" -lt "${deadline}" ]; do
+    sleep 1
+  done
+  if [ ! -f "${EXCHANGE}/result" ]; then
+    ci_warn "systemd workload did not publish a result within ${CI_VM_TIMEOUT}s"
+    rc=1
   else
     rc="$(tr -d '\r\n' < "${EXCHANGE}/result")"
     case "${rc}" in (''|*[!0-9]*) rc=1 ;; esac

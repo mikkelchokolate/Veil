@@ -156,10 +156,10 @@ unpacking — see `scripts/ci/versions.sh` and `ci/vm/Containerfile`.
 ## Commands
 
 ```bash
-make ci-fast    # pre-commit: quick host checks (seconds). NOT a full CI.
-make ci         # pre-push: VM-capable jobs in smolvm; image-build via host Docker
-make ci-full    # adds browser/systemd VM jobs and host-Docker package smoke
-make ci-pr      # ci-full on the temporary merge with origin/main
+make ci-fast    # quick host checks (seconds). NOT a full CI.
+make ci         # optional smolvm jobs plus host-Docker image build
+make ci-full    # optional browser/systemd VM jobs plus host-Docker package smoke
+make ci-pr      # optional ci-full on the temporary merge with origin/main
 make ci-stress  # race/shuffle stress for historically flaky tests
 
 make ci-job JOB=test            # one job in a VM
@@ -216,12 +216,20 @@ isolation, host kernel — clearly warned, never automatic).
 
 ### What GitHub-hosted green CI proves
 
-Normal GitHub jobs validate the shared `scripts/ci/*` job logic and the
-Docker-backed OCI/package phases. They intentionally do **not** repeat the
-entire suite through smolvm: that would duplicate every PR job. A green GitHub
-workflow is therefore not proof of create/start/systemd/exec/stop orchestration.
-The merge gate additionally requires one successful default-backend
-`make ci-full` on an amd64 KVM-capable machine for the exact HEAD.
+VM CI is an **optional local developer tool**. It duplicates the hosted GitHub
+CI checks locally by invoking the same shared job scripts, with smolvm providing
+the developer-side wrapper and isolation. GitHub Actions does not install or
+execute smolvm and does not require KVM. Normal jobs run the shared
+`scripts/ci/*.sh` directly on GitHub-hosted Ubuntu 24.04 runners, validating the
+product, shared job logic, and Docker-backed OCI/package phases. Hosted green is
+therefore not proof of hardware isolation, a separate kernel, systemd as PID 1,
+or create/start/stop/delete orchestration.
+
+Developers may run default-backend `make ci-full` for the exact local HEAD and
+`make ci-pr` for a temporary merge with current `origin/main` when an amd64
+KVM-capable machine is available. These are supplemental convenience checks,
+not required CI gates. Missing KVM does not block a PR, push, or merge-readiness;
+the required remote CI evidence comes from the normal GitHub-hosted workflows.
 
 ### Windows (WHP / WSL2)
 
@@ -244,7 +252,7 @@ Persisted between runs (safe):
 - OCI image layers (content-keyed — rebuilt only when inputs change);
 - Go module cache, Go build cache, pnpm store, Playwright browsers
   (`~/.cache/veil-ci/`);
-- exported image archives for smolvm.
+- expanded content-keyed rootfs directories for smolvm.
 
 Never persisted (would poison results): `/etc/veil`, `/var/lib/veil`,
 databases, keys, apply state, systemd state, sockets, temp dirs, panel state.
@@ -300,7 +308,11 @@ docker exec <ctr> /opt/ci/systemd/poc.sh     # full PoC: service, socket, journa
 ```
 
 `systemd-analyze verify` is a static check only — the gate is the real
-lifecycle PoC plus the socket-activation integration tests.
+lifecycle PoC plus the socket-activation integration tests. In the smolvm path,
+`/sbin/init` is the image machine's persistent workload supplied to
+`smolvm machine create`; `smolvm machine start` boots it, and the host waits for
+the enabled service to publish `/exchange/result`. Never launch systemd afterward
+with `smolvm machine exec`: that would not make it PID 1.
 
 ### Browser jobs
 
