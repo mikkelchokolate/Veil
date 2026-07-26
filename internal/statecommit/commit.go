@@ -52,63 +52,80 @@ func Save(snapshot model.ManagementSnapshot, options Options) (uint64, error) {
 			return err
 		}
 		defer db.Close()
-		revisions, err := apply.NewRevisionStore(db).Get()
-		if err != nil {
-			return fmt.Errorf("state commit: read revisions: %w", err)
-		}
-		encoded, err := store.Marshal(snapshot)
-		if err != nil {
-			return fmt.Errorf("state commit: encode state: %w", err)
-		}
-		payload, err := immutableSnapshotPayload(db, snapshot, options.Cipher)
-		if err != nil {
-			return err
-		}
-		commit, err := store.PrepareStateCommit(encoded, revisions.Desired, revisions.Desired+1)
-		if err != nil {
-			return err
-		}
-		rollbackState := func(commitErr error) error {
-			if rollbackErr := commit.Rollback(); rollbackErr != nil {
-				return errors.Join(commitErr, fmt.Errorf("state commit: restore previous state: %w", rollbackErr))
-			}
-			return commitErr
-		}
-
-		tx, err := db.Begin()
-		if err != nil {
-			return rollbackState(fmt.Errorf("state commit: begin SQLite transaction: %w", err))
-		}
-		revision, err := apply.BumpDesiredTx(tx)
-		if err != nil {
-			_ = tx.Rollback()
-			return rollbackState(err)
-		}
-		if revision != revisions.Desired+1 {
-			_ = tx.Rollback()
-			return rollbackState(fmt.Errorf("state commit: revision advanced to %d, want %d", revision, revisions.Desired+1))
-		}
-		stateDigest := commit.Journal().IntendedStateSHA256
-		if err := apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest); err != nil {
-			_ = tx.Rollback()
-			return rollbackState(err)
-		}
-		if err := tx.Commit(); err != nil {
-			return rollbackState(fmt.Errorf("state commit: commit revision %d: %w", revision, err))
-		}
-		committedRevision = revision
-		// Both durable stores committed. Startup can clean a marker that could not
-		// be removed, so a cleanup error must not produce a false mutation failure.
-		if err := commit.Finalize(); err != nil {
-			log.Printf("state commit: revision %d left recovery marker: %v", revision, err)
-		}
-		return nil
+		committedRevision, err = saveWithDBLocked(db, snapshot, options)
+		return err
 	})
 	return committedRevision, err
 }
 
+// saveWithDBLocked preserves Save's accepted state/SQLite protocol while
+// allowing callers that already own the snapshot barrier to include their
+// authoritative read and mutation in the same critical section.
+func saveWithDBLocked(db *sql.DB, snapshot model.ManagementSnapshot, options Options) (uint64, error) {
+	store := managementstate.NewStore(options.StatePath, options.Cipher)
+	revisions, err := apply.NewRevisionStore(db).Get()
+	if err != nil {
+		return 0, fmt.Errorf("state commit: read revisions: %w", err)
+	}
+	encoded, err := store.Marshal(snapshot)
+	if err != nil {
+		return 0, fmt.Errorf("state commit: encode state: %w", err)
+	}
+	payload, err := immutableSnapshotPayload(db, snapshot, options.Cipher)
+	if err != nil {
+		return 0, err
+	}
+	commit, err := store.PrepareStateCommit(encoded, revisions.Desired, revisions.Desired+1)
+	if err != nil {
+		return 0, err
+	}
+	rollbackState := func(commitErr error) error {
+		if rollbackErr := commit.Rollback(); rollbackErr != nil {
+			return errors.Join(commitErr, fmt.Errorf("state commit: restore previous state: %w", rollbackErr))
+		}
+		return commitErr
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, rollbackState(fmt.Errorf("state commit: begin SQLite transaction: %w", err))
+	}
+	revision, err := apply.BumpDesiredTx(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, rollbackState(err)
+	}
+	if revision != revisions.Desired+1 {
+		_ = tx.Rollback()
+		return 0, rollbackState(fmt.Errorf("state commit: revision advanced to %d, want %d", revision, revisions.Desired+1))
+	}
+	stateDigest := commit.Journal().IntendedStateSHA256
+	if err := apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest); err != nil {
+		_ = tx.Rollback()
+		return 0, rollbackState(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, rollbackState(fmt.Errorf("state commit: commit revision %d: %w", revision, err))
+	}
+	// Both durable stores committed. Startup can clean a marker that could not
+	// be removed, so a cleanup error must not produce a false mutation failure.
+	if err := commit.Finalize(); err != nil {
+		log.Printf("state commit: revision %d left recovery marker: %v", revision, err)
+	}
+	return revision, nil
+}
+
+type snapshotClientSource interface {
+	AllClients() ([]client.Client, error)
+	AllBindings() ([]client.Binding, error)
+	AllActiveCredentials() ([]client.Credential, error)
+}
+
 func immutableSnapshotPayload(db *sql.DB, snapshot model.ManagementSnapshot, cipher *secrets.Cipher) ([]byte, error) {
-	repository := client.NewRepository(db)
+	return immutableSnapshotPayloadFromSource(client.NewRepository(db), snapshot, cipher)
+}
+
+func immutableSnapshotPayloadFromSource(repository snapshotClientSource, snapshot model.ManagementSnapshot, cipher *secrets.Cipher) ([]byte, error) {
 	clients, err := repository.AllClients()
 	if err != nil {
 		return nil, fmt.Errorf("state commit: snapshot clients: %w", err)

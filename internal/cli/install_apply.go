@@ -136,8 +136,15 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		// Direct mode needs a domain for client links. If the existing state
 		// was created before auto-fill was implemented, backfill it now.
 		if resolvedIP != nil && snapshot.Settings.Domain == "" {
-			snapshot.Settings.Domain = resolvedIP.String()
-			if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
+			if _, err := statecommit.Update(statecommit.UpdateOptions{
+				StatePath: resolvedStatePath, KeyPath: resolvedKeyPath,
+			}, func(current *model.ManagementSnapshot) error {
+				if current.Settings.Domain == "" {
+					current.Settings.Domain = resolvedIP.String()
+				}
+				snapshot = *current
+				return nil
+			}); err != nil {
 				return fmt.Errorf("update existing panel state domain: %w", err)
 			}
 		}

@@ -26,20 +26,37 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.privileged.RotateKey(r.Context(), privileged.RotateKeyRequest{}); err != nil {
+		reloadErr := NewManagementStateLifecycle(s).ReloadLocked()
+		if reloadErr != nil {
+			s.startupStateLoadFailed = true
+			s.allowDevAnonymous = false
+			s.recordRequestAudit(r, audit.Record{
+				Action: "security.key.rotate", Target: "state", Success: false,
+				Error: err.Error() + "; recovery failed: " + reloadErr.Error(),
+			})
+			writeError(w, "state key rotation failed and recovery could not establish a coherent key/state pair", http.StatusInternalServerError)
+			return
+		}
 		s.recordRequestAudit(r, audit.Record{
 			Action: "security.key.rotate", Target: "state", Success: false, Error: err.Error(),
 		})
 		writePrivilegedError(w, err)
 		return
 	}
-	if err := s.Reload(); err != nil {
+	if err := NewManagementStateLifecycle(s).ReloadLocked(); err != nil {
+		s.startupStateLoadFailed = true
+		s.allowDevAnonymous = false
 		s.recordRequestAudit(r, audit.Record{
 			Action: "security.key.rotate", Target: "state", Success: false, Error: err.Error(),
 		})
 		writeError(w, "state key rotated but Panel reload failed", http.StatusInternalServerError)
 		return
 	}
+	s.startupStateLoadFailed = false
 	revoked, err := s.sessionRegistry().DeleteAllExceptPersisted(currentSessionToken(r))
 	if err != nil {
 		writeError(w, "state key rotated but sessions could not be revoked", http.StatusInternalServerError)

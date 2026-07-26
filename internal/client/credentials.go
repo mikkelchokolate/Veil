@@ -88,6 +88,52 @@ func (t *Tx) RotateCredential(creds *CredentialStore, bindingID, kind, plaintext
 	return newCred, nil
 }
 
+// ReencryptCredentials moves every normalized credential to a replacement
+// master cipher within the caller's transaction. Active and revoked rows are
+// both covered so no live database ciphertext is stranded under the old key.
+func (t *Tx) ReencryptCredentials(oldCipher, newCipher *secrets.Cipher) error {
+	if oldCipher == nil || newCipher == nil {
+		return fmt.Errorf("client: credential rotation ciphers unavailable")
+	}
+	rows, err := t.q.Query(`SELECT id, encrypted_value FROM client_credentials ORDER BY id`)
+	if err != nil {
+		return fmt.Errorf("client: list credentials for master-key rotation: %w", err)
+	}
+	type encryptedCredential struct {
+		id    string
+		value []byte
+	}
+	var credentials []encryptedCredential
+	for rows.Next() {
+		var credential encryptedCredential
+		if err := rows.Scan(&credential.id, &credential.value); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("client: scan credential for master-key rotation: %w", err)
+		}
+		credentials = append(credentials, credential)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("client: close credential rotation rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("client: list credentials for master-key rotation: %w", err)
+	}
+	for _, credential := range credentials {
+		plaintext, err := oldCipher.Decrypt(string(credential.value))
+		if err != nil {
+			return fmt.Errorf("client: decrypt credential %s for master-key rotation: %w", credential.id, err)
+		}
+		encrypted, err := newCipher.Encrypt(plaintext)
+		if err != nil {
+			return fmt.Errorf("client: encrypt credential %s for master-key rotation: %w", credential.id, err)
+		}
+		if _, err := t.q.Exec(`UPDATE client_credentials SET encrypted_value=?, key_version=key_version+1 WHERE id=?`, []byte(encrypted), credential.id); err != nil {
+			return fmt.Errorf("client: persist credential %s master-key rotation: %w", credential.id, err)
+		}
+	}
+	return nil
+}
+
 // Rotate revokes the current active credential of the given kind and stores a
 // new version with fresh plaintext, returning the new active credential. The
 // revoke + insert + rotated_at write run in ONE transaction — the previous

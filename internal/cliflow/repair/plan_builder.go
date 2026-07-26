@@ -125,13 +125,19 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps Pl
 	if !ok {
 		return plan, nil
 	}
-	// Direct mode needs a domain for client links. Backfill it in the encrypted
-	// state when it is empty and we were able to resolve the public IP.
+	// Direct mode needs a domain for client links. Re-check the field after
+	// acquiring the cross-process barrier so repair cannot overwrite a newer
+	// Panel mutation observed after the read-only plan snapshot above.
 	if resolvedIP != "" && snapshot.Settings.Domain == "" && !opts.DryRun {
-		snapshot.Settings.Domain = resolvedIP
-		if _, err := statecommit.Save(snapshot, statecommit.Options{
-			StatePath: statePath,
-			Cipher:    repairStateCipher(filepath.Join(opts.EtcDir, "state.key")),
+		keyPath := filepath.Join(opts.EtcDir, "state.key")
+		if _, err := statecommit.Update(statecommit.UpdateOptions{
+			StatePath: statePath, KeyPath: keyPath,
+		}, func(current *model.ManagementSnapshot) error {
+			if current.Settings.Domain == "" {
+				current.Settings.Domain = resolvedIP
+			}
+			snapshot = *current
+			return nil
 		}); err != nil {
 			return installer.RepairPlan{}, fmt.Errorf("update panel state domain: %w", err)
 		}
