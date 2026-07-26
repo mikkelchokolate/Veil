@@ -93,11 +93,13 @@ export const postApiBackupsResponseArchiveSizeMin = 0;
 export const postApiBackupsResponseVerificationFormatVersionMin = 0;
 
 
+export const postApiBackupsResponseVerificationDesiredRevisionMin = 0;
+
 export const postApiBackupsResponseVerificationFilesItemSizeMin = 0;
 
 export const postApiBackupsResponseVerificationFilesItemSha256RegExp = new RegExp('^[0-9a-f]{64}$');
 export const postApiBackupsResponseVerificationFilesMin = 2;
-export const postApiBackupsResponseVerificationFilesMax = 2;
+export const postApiBackupsResponseVerificationFilesMax = 3;
 
 
 
@@ -111,12 +113,13 @@ export const PostApiBackupsResponse = zod.object({
 }),
   "verification": zod.object({
   "formatVersion": zod.number().min(postApiBackupsResponseVerificationFormatVersionMin).describe('Zero for legacy archives without a manifest.'),
-  "encryptionVersion": zod.union([zod.literal(0),zod.literal(1),zod.literal(2)]).describe('Zero for unencrypted archives.'),
+  "encryptionVersion": zod.union([zod.literal(0),zod.literal(1),zod.literal(2),zod.literal(3)]).describe('Zero for unencrypted archives.'),
   "encrypted": zod.boolean(),
   "legacy": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}).optional(),
   "veilVersion": zod.string().optional(),
   "stateSchemaVersion": zod.number().min(1),
+  "desiredRevision": zod.number().min(postApiBackupsResponseVerificationDesiredRevisionMin).describe('Desired configuration revision captured with the state and SQLite snapshot.'),
   "files": zod.array(zod.object({
   "name": zod.enum(['state.json', 'state.key', 'veil.db']),
   "size": zod.number().min(postApiBackupsResponseVerificationFilesItemSizeMin),
@@ -190,22 +193,25 @@ export const PostApiBackupsNameVerifyBody = zod.object({
 export const postApiBackupsNameVerifyResponseFormatVersionMin = 0;
 
 
+export const postApiBackupsNameVerifyResponseDesiredRevisionMin = 0;
+
 export const postApiBackupsNameVerifyResponseFilesItemSizeMin = 0;
 
 export const postApiBackupsNameVerifyResponseFilesItemSha256RegExp = new RegExp('^[0-9a-f]{64}$');
 export const postApiBackupsNameVerifyResponseFilesMin = 2;
-export const postApiBackupsNameVerifyResponseFilesMax = 2;
+export const postApiBackupsNameVerifyResponseFilesMax = 3;
 
 
 
 export const PostApiBackupsNameVerifyResponse = zod.object({
   "formatVersion": zod.number().min(postApiBackupsNameVerifyResponseFormatVersionMin).describe('Zero for legacy archives without a manifest.'),
-  "encryptionVersion": zod.union([zod.literal(0),zod.literal(1),zod.literal(2)]).describe('Zero for unencrypted archives.'),
+  "encryptionVersion": zod.union([zod.literal(0),zod.literal(1),zod.literal(2),zod.literal(3)]).describe('Zero for unencrypted archives.'),
   "encrypted": zod.boolean(),
   "legacy": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}).optional(),
   "veilVersion": zod.string().optional(),
   "stateSchemaVersion": zod.number().min(1),
+  "desiredRevision": zod.number().min(postApiBackupsNameVerifyResponseDesiredRevisionMin).describe('Desired configuration revision captured with the state and SQLite snapshot.'),
   "files": zod.array(zod.object({
   "name": zod.enum(['state.json', 'state.key', 'veil.db']),
   "size": zod.number().min(postApiBackupsNameVerifyResponseFilesItemSizeMin),

@@ -98,9 +98,10 @@ func TestReadArchiveTarballValidation(t *testing.T) {
 	manifest := []byte(`{"formatVersion":1}`)
 
 	tests := []struct {
-		name    string
-		entries []tarEntry
-		wantErr string
+		name     string
+		entries  []tarEntry
+		wantErr  string
+		maxBytes int64
 	}{
 		{
 			name:    "unexpected entry",
@@ -121,15 +122,20 @@ func TestReadArchiveTarballValidation(t *testing.T) {
 			wantErr: "not a regular file",
 		},
 		{
-			name:    "size limit exceeded",
-			entries: []tarEntry{{name: "state.json", body: bytes.Repeat([]byte{0x42}, maxBackupArchiveFileBytes+1)}},
-			wantErr: "exceeds size limit",
+			name:     "size limit exceeded",
+			entries:  []tarEntry{{name: "state.json", body: bytes.Repeat([]byte{0x42}, 1025)}},
+			wantErr:  "exceeds size limit",
+			maxBytes: 1024,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data := buildTarball(t, tt.entries)
-			_, err := readArchiveTarball(data)
+			maxBytes := tt.maxBytes
+			if maxBytes == 0 {
+				maxBytes = DefaultMaxBackupBytes
+			}
+			_, err := readArchiveTarballWithMax(data, maxBytes)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
 			}

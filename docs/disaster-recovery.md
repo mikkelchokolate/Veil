@@ -16,9 +16,20 @@ A complete recovery set contains:
   legacy-migration provenance.
 
 Archive format v2 contains all three files plus a manifest with the creation
-time, Veil version, Management schema version, file sizes, and SHA-256
-checksums. The manifest is inside the same encrypted envelope when archive
-encryption is enabled.
+time, Veil version, Management schema version, captured desired revision, file
+sizes, and SHA-256 checksums. Creation holds the Management snapshot barrier
+across `state.json` capture and SQLite `VACUUM INTO`. Verification checks that
+the archived database contains the immutable snapshot for the manifest's
+non-zero desired revision. The manifest is inside the same encrypted envelope
+when archive encryption is enabled.
+
+New encrypted backups stream tar/gzip data through independently authenticated
+1 MiB encryption frames. Creation, verification, download, and restore do not
+load `veil.db` or the complete archive into RAM. Legacy encryption versions
+remain readable. `VEIL_BACKUP_MAX_BYTES` is an explicit positive byte-count
+policy applied to both encrypted archive size and expanded member total; its
+production default is 17179869184 bytes (16 GiB). Native services read it from
+`/etc/veil/veil.env`; standalone CLI invocations may export it directly.
 
 Losing `state.key` makes `state.json` unrecoverable. Store encrypted archives
 off-host and keep the archive passphrase outside the backup destination.
@@ -93,7 +104,8 @@ sudo veil backup restore \
 ```
 
 The check decrypts the archive, validates checksums, validates the state/key
-pair, and rejects a state schema newer than the running Veil release. You can
+pair and SQLite integrity/revision snapshot, and rejects a state schema newer
+than the running Veil release. You can
 also structurally validate any Management state file (for example a restored
 `state.json` before starting the Panel) without touching the live server:
 

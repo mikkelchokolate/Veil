@@ -20,6 +20,7 @@ type BackupVerificationReport struct {
 	CreatedAt          string                   `json:"createdAt,omitempty"`
 	VeilVersion        string                   `json:"veilVersion,omitempty"`
 	StateSchemaVersion int                      `json:"stateSchemaVersion"`
+	DesiredRevision    uint64                   `json:"desiredRevision"`
 	Files              []BackupVerificationFile `json:"files"`
 }
 

@@ -69,6 +69,9 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		defer s.backupMutationMu.Unlock()
+		// The helper acquires the cross-process Management snapshot barrier only
+		// while it copies state/key and runs SQLite VACUUM INTO; compression and
+		// verification do not block unrelated configuration mutations.
 		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionCreate})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.create", Target: "state", Success: false, Error: err.Error()})
@@ -159,16 +162,31 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
-			Action: privileged.BackupActionRead, ArchiveName: name,
-		})
-		if err != nil {
-			writePrivilegedError(w, err)
-			return
-		}
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(result.Data)
+		var offset int64
+		for {
+			result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+				Action: privileged.BackupActionRead, ArchiveName: name,
+				Offset: offset, Limit: 1024 * 1024,
+			})
+			if err != nil {
+				if offset == 0 {
+					writePrivilegedError(w, err)
+				}
+				return
+			}
+			if len(result.Data) == 0 && result.More {
+				return
+			}
+			if _, err := w.Write(result.Data); err != nil {
+				return
+			}
+			offset += int64(len(result.Data))
+			if !result.More {
+				break
+			}
+		}
 	case "verify":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)

@@ -57,23 +57,27 @@ func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) 
 		// as legacy mode by the response envelope.
 		return 0, s.clientRepo.WithTx(mutate)
 	}
-	tx, err := s.clientRepo.BeginTx()
-	if err != nil {
-		return 0, err
-	}
-	if err := mutate(tx); err != nil {
-		_ = tx.Rollback()
-		return 0, err
-	}
-	rev, err := s.recordRevisionInTxLocked(tx)
-	if err != nil {
-		_ = tx.Rollback()
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return rev, nil
+	var revision uint64
+	err := managementstate.WithSnapshotBarrier(s.statePath, func() error {
+		tx, err := s.clientRepo.BeginTx()
+		if err != nil {
+			return err
+		}
+		if err := mutate(tx); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		revision, err = s.recordRevisionInTxLocked(tx)
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return nil
+	})
+	return revision, err
 }
 
 // recordRevisionInTxLocked bumps the desired revision and writes the immutable

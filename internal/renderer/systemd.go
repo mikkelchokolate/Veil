@@ -302,6 +302,7 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
 ExecStart=` + cfg.VeilBinary + ` backup create --state /var/lib/veil/state.json --key-path ` + path.Join(cfg.EtcDir, "state.key") + ` --passphrase-file ` + path.Join(cfg.EtcDir, "backup.passphrase") + ` --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
@@ -321,7 +322,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/var/lib/veil/backups
+ReadWritePaths=/var/lib/veil
 `,
 		UnitBackupTimer: `[Unit]
 Description=Daily Veil encrypted state backup

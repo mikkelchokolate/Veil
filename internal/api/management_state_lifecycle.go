@@ -214,15 +214,17 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 }
 
 func (l ManagementStateLifecycle) SaveLocked() error {
-	if err := managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked()); err != nil {
+	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
+		if err := managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked()); err != nil {
+			return err
+		}
+		// The configuration mutation is committed; record a new desired revision so
+		// the system reports desired != applied until an apply job succeeds. A
+		// revision/snapshot failure fails the mutation honestly (blocker A1): it
+		// is returned, not just logged.
+		_, err := l.state.bumpDesiredRevisionLocked()
 		return err
-	}
-	// The configuration mutation is committed; record a new desired revision so
-	// the system reports desired != applied until an apply job succeeds. A
-	// revision/snapshot failure fails the mutation honestly (blocker A1): it
-	// is returned, not just logged.
-	_, err := l.state.bumpDesiredRevisionLocked()
-	return err
+	})
 }
 
 func (l ManagementStateLifecycle) Load() error {

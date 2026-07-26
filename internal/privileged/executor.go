@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	maxBackupReadBytes    int64 = 64 * 1024 * 1024
-	maxUpdateArchiveBytes int64 = 64 * 1024 * 1024
-	maxChecksumsBytes     int64 = 1024 * 1024
+	maxBackupPassphraseBytes int64 = 64 * 1024
+	maxUpdateArchiveBytes    int64 = 64 * 1024 * 1024
+	maxChecksumsBytes        int64 = 1024 * 1024
 )
 
 // Test hooks for functions that touch global runtime state or external
@@ -86,6 +86,7 @@ type ProductionConfig struct {
 	KeyPath              string
 	BackupPassphrasePath string
 	BackupRoot           string
+	BackupMaxBytes       int64
 	VeilVersion          string
 	BinaryPath           string
 	FirewallCommands     map[string][]string
@@ -580,19 +581,51 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return result, nil
 	case BackupActionRead:
-		file, err := os.Open(request.ArchivePath)
+		maxBytes, err := configuredBackupMaxBytes(config)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		file, err := openRegularNoFollow(request.ArchivePath)
 		if err != nil {
 			return BackupResult{}, err
 		}
 		defer file.Close()
-		data, err := io.ReadAll(io.LimitReader(file, maxBackupReadBytes+1))
+		info, err := file.Stat()
 		if err != nil {
 			return BackupResult{}, err
 		}
-		if int64(len(data)) > maxBackupReadBytes {
-			return BackupResult{}, errors.New("backup archive exceeds helper size limit")
+		if !info.Mode().IsRegular() {
+			return BackupResult{}, errors.New("backup archive is not a regular file")
 		}
-		return BackupResult{ArchiveName: request.ArchiveName, Data: data}, nil
+		if info.Size() > maxBytes {
+			return BackupResult{}, fmt.Errorf("configured backup size policy exceeded: %d bytes > %d bytes", info.Size(), maxBytes)
+		}
+		if request.Offset > info.Size() {
+			return BackupResult{}, errors.New("backup read offset exceeds archive size")
+		}
+		limit := request.Limit
+		if limit == 0 {
+			limit = maxBackupReadChunkBytes
+		}
+		remaining := info.Size() - request.Offset
+		if limit > remaining {
+			limit = remaining
+		}
+		data := make([]byte, int(limit))
+		if limit > 0 {
+			n, err := file.ReadAt(data, request.Offset)
+			if err != nil && err != io.EOF {
+				return BackupResult{}, err
+			}
+			if int64(n) != limit {
+				return BackupResult{}, io.ErrUnexpectedEOF
+			}
+		}
+		return BackupResult{
+			ArchiveName: request.ArchiveName,
+			Data:        data,
+			More:        request.Offset+int64(len(data)) < info.Size(),
+		}, nil
 	case BackupActionPrune:
 		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
 		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {
@@ -604,7 +637,7 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
 	}
-	passphraseBody, err := os.ReadFile(request.BackupPassphrasePath)
+	passphraseBody, err := readBoundedRegularFile(request.BackupPassphrasePath, maxBackupPassphraseBytes)
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("read backup passphrase: %w", err)
 	}
@@ -612,55 +645,70 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 	if len(passphrase) < 16 {
 		return BackupResult{}, errors.New("configured backup passphrase is too short")
 	}
+	maxBytes, err := configuredBackupMaxBytes(config)
+	if err != nil {
+		return BackupResult{}, err
+	}
 	switch request.Action {
 	case BackupActionCreate:
+		createdAt := config.Now().UTC()
 		databasePath := request.DatabasePath
 		if databasePath == "" {
 			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
-		}
-		data, err := backup.CreateBackupWithOptions(request.StatePath, request.KeyPath, passphrase, backup.ArchiveOptions{
-			VeilVersion:  config.VeilVersion,
-			CreatedAt:    config.Now().UTC(),
-			DatabasePath: databasePath,
-		})
-		if err != nil {
-			return BackupResult{}, err
-		}
-		if _, err := backup.VerifyBackup(data, passphrase); err != nil {
-			return BackupResult{}, err
 		}
 		name := request.ArchiveName
 		if name == "" {
-			name = "veil_backup_" + config.Now().UTC().Format("20060102_150405") + ".tar.gz.enc"
+			name = "veil_backup_" + createdAt.Format("20060102_150405") + ".tar.gz.enc"
 		}
-		if err := atomicfile.Write(filepath.Join(request.BackupRoot, name), data, 0o600, 0o700); err != nil {
+		if err := os.MkdirAll(request.BackupRoot, 0o700); err != nil {
 			return BackupResult{}, err
 		}
-		return BackupResult{ArchiveName: name, Verified: true}, nil
+		pending, err := os.CreateTemp(request.BackupRoot, ".veil-backup-pending-*")
+		if err != nil {
+			return BackupResult{}, err
+		}
+		pendingPath := pending.Name()
+		if err := pending.Close(); err != nil {
+			_ = os.Remove(pendingPath)
+			return BackupResult{}, err
+		}
+		_ = os.Remove(pendingPath)
+		defer os.Remove(pendingPath)
+		if err := backup.CreateBackupFileWithOptions(pendingPath, request.StatePath, request.KeyPath, passphrase, backup.ArchiveOptions{
+			VeilVersion: config.VeilVersion, CreatedAt: createdAt,
+			DatabasePath: databasePath, MaxBytes: maxBytes,
+		}); err != nil {
+			return BackupResult{}, err
+		}
+		report, err := backup.VerifyBackupFile(pendingPath, passphrase, maxBytes)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		archivePath := filepath.Join(request.BackupRoot, name)
+		if err := os.Rename(pendingPath, archivePath); err != nil {
+			return BackupResult{}, err
+		}
+		if err := syncBackupDirectory(request.BackupRoot); err != nil {
+			return BackupResult{}, err
+		}
+		return BackupResult{ArchiveName: name, Verified: true, Verification: privilegedBackupVerification(report)}, nil
 	case BackupActionVerify:
-		data, err := os.ReadFile(request.ArchivePath)
+		report, err := backup.VerifyBackupFile(request.ArchivePath, passphrase, maxBytes)
 		if err != nil {
 			return BackupResult{}, err
 		}
-		if _, err := backup.VerifyBackup(data, passphrase); err != nil {
-			return BackupResult{}, err
-		}
-		return BackupResult{ArchiveName: request.ArchiveName, Verified: true}, nil
+		return BackupResult{ArchiveName: request.ArchiveName, Verified: true, Verification: privilegedBackupVerification(report)}, nil
 	case BackupActionRestore:
-		data, err := os.ReadFile(request.ArchivePath)
-		if err != nil {
-			return BackupResult{}, err
-		}
 		databasePath := request.DatabasePath
 		if databasePath == "" {
 			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
 		}
-		restored, err := backup.RestoreBackupWithOptions(
-			data,
+		restored, err := backup.RestoreBackupFileWithOptions(
+			request.ArchivePath,
 			request.StatePath,
 			request.KeyPath,
 			passphrase,
-			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath},
+			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath, MaxBytes: maxBytes},
 		)
 		if err != nil {
 			return BackupResult{}, err
@@ -669,6 +717,7 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			ArchiveName:        request.ArchiveName,
 			Verified:           true,
 			Restored:           !request.CheckOnly,
+			Verification:       privilegedBackupVerification(restored.Verification),
 			SafetyStatePath:    restored.SafetyStatePath,
 			SafetyKeyPath:      restored.SafetyKeyPath,
 			SafetyDatabasePath: restored.SafetyDatabasePath,
@@ -676,6 +725,42 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 	default:
 		return BackupResult{}, errors.New("unsupported backup operation")
 	}
+}
+
+func configuredBackupMaxBytes(config ProductionConfig) (int64, error) {
+	if config.BackupMaxBytes != 0 {
+		if config.BackupMaxBytes < 0 {
+			return 0, errors.New("configured backup size policy must be positive")
+		}
+		return config.BackupMaxBytes, nil
+	}
+	return backup.ConfiguredMaxBackupBytes()
+}
+
+func privilegedBackupVerification(report backup.VerificationReport) *BackupVerificationReport {
+	files := make([]BackupVerificationFile, 0, len(report.Files))
+	for _, file := range report.Files {
+		files = append(files, BackupVerificationFile{Name: file.Name, Size: file.Size, SHA256: file.SHA256})
+	}
+	createdAt := ""
+	if !report.CreatedAt.IsZero() {
+		createdAt = report.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	return &BackupVerificationReport{
+		FormatVersion: report.FormatVersion, EncryptionVersion: report.EncryptionVersion,
+		Encrypted: report.Encrypted, Legacy: report.Legacy, CreatedAt: createdAt,
+		VeilVersion: report.VeilVersion, StateSchemaVersion: report.StateSchemaVersion,
+		DesiredRevision: report.DesiredRevision, Files: files,
+	}
+}
+
+func syncBackupDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 // runSyncCaddyCert copies a Caddy-managed ACME certificate for domain into

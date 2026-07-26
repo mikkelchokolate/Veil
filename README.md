@@ -177,9 +177,9 @@ actions in a structured, redacted, rotated JSONL log. With the default state
 path it is stored at `/var/lib/veil/audit/panel.jsonl`; administrators can read
 the bounded history through `GET /api/audit`.
 
-Encrypted disaster-recovery archives include both Management state and its
-encryption key, plus a checksum manifest. Native packages ship a daily systemd
-timer with daily/weekly/monthly retention. The Panel can create, verify,
+Encrypted disaster-recovery archives include Management state, its encryption
+key, a consistent `veil.db` snapshot, and a checksum manifest. Native packages
+ship a daily systemd timer with daily/weekly/monthly retention. The Panel can create, verify,
 download, prune, and restore managed archives without sending the backup
 passphrase to the browser. The configured backup and audit directories must be
 writable by the process performing each operation.

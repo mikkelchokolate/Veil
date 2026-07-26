@@ -54,6 +54,7 @@ func backupVerificationFromPrivileged(result privileged.BackupResult) backup.Ver
 		CreatedAt:          createdAt,
 		VeilVersion:        result.Verification.VeilVersion,
 		StateSchemaVersion: result.Verification.StateSchemaVersion,
+		DesiredRevision:    result.Verification.DesiredRevision,
 		Files:              files,
 	}
 }

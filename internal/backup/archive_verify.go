@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -26,13 +27,19 @@ import (
 const (
 	CurrentArchiveFormatVersion = 2
 	LegacyArchiveFormatVersion  = 1
-	maxBackupArchiveFileBytes   = 32 * 1024 * 1024
 )
 
 type ArchiveOptions struct {
 	VeilVersion  string
 	CreatedAt    time.Time
 	DatabasePath string
+	// MaxBytes is the explicit policy limit for both the published encrypted
+	// archive and the total expanded members. Zero selects the production
+	// default.
+	MaxBytes int64
+	// afterStateCapture is a deterministic package-test hook. Production callers
+	// leave it nil.
+	afterStateCapture func()
 }
 
 type ArchiveFile struct {
@@ -42,11 +49,15 @@ type ArchiveFile struct {
 }
 
 type ArchiveManifest struct {
-	FormatVersion      int           `json:"formatVersion"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	VeilVersion        string        `json:"veilVersion"`
-	StateSchemaVersion int           `json:"stateSchemaVersion"`
-	Files              []ArchiveFile `json:"files"`
+	FormatVersion      int       `json:"formatVersion"`
+	CreatedAt          time.Time `json:"createdAt"`
+	VeilVersion        string    `json:"veilVersion"`
+	StateSchemaVersion int       `json:"stateSchemaVersion"`
+	// Pointer preserves verification compatibility with archive-v2 manifests
+	// created before desiredRevision was recorded. New v2 archives always set
+	// it, including revision zero.
+	DesiredRevision *uint64       `json:"desiredRevision,omitempty"`
+	Files           []ArchiveFile `json:"files"`
 }
 
 type VerificationReport struct {
@@ -57,6 +68,7 @@ type VerificationReport struct {
 	CreatedAt          time.Time     `json:"createdAt,omitempty"`
 	VeilVersion        string        `json:"veilVersion,omitempty"`
 	StateSchemaVersion int           `json:"stateSchemaVersion"`
+	DesiredRevision    uint64        `json:"desiredRevision"`
 	Files              []ArchiveFile `json:"files"`
 }
 
@@ -64,6 +76,7 @@ type RestoreOptions struct {
 	CheckOnly    bool
 	Now          func() time.Time
 	DatabasePath string
+	MaxBytes     int64
 }
 
 type RestoreResult struct {
@@ -112,7 +125,7 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	if _, err := os.Stat(options.DatabasePath); err != nil {
 		return nil, fmt.Errorf("archive database: %w", err)
 	}
-	database, err := consistentSQLiteSnapshot(options.DatabasePath)
+	database, desiredRevision, err := consistentSQLiteSnapshot(options.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("archive database: %w", err)
 	}
@@ -131,6 +144,7 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 		CreatedAt:          createdAt,
 		VeilVersion:        veilVersion,
 		StateSchemaVersion: rawStateSchemaVersion(state),
+		DesiredRevision:    &desiredRevision,
 		Files: []ArchiveFile{
 			{Name: "state.json", Size: int64(len(state)), SHA256: backupChecksum(state)},
 			{Name: "state.key", Size: int64(len(key)), SHA256: backupChecksum(key)},
@@ -144,35 +158,39 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	return writeArchiveTarball(archiveContents{state: state, key: key, database: database, manifest: manifestBody})
 }
 
-func consistentSQLiteSnapshot(databasePath string) ([]byte, error) {
+func consistentSQLiteSnapshot(databasePath string) ([]byte, uint64, error) {
 	db, err := storage.OpenExisting(databasePath)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer db.Close()
 	tmp, err := os.CreateTemp(filepath.Dir(databasePath), ".veil-backup-db-*.sqlite")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	tmpPath := tmp.Name()
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
-		return nil, err
+		return nil, 0, err
 	}
 	_ = os.Remove(tmpPath) // VACUUM INTO requires a non-existent target.
 	defer os.Remove(tmpPath)
 	quoted := "'" + strings.ReplaceAll(tmpPath, "'", "''") + "'"
 	if _, err := db.Exec(`VACUUM INTO ` + quoted); err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	desiredRevision, err := validateSQLiteDesiredSnapshotPath(tmpPath, nil)
+	if err != nil {
+		return nil, 0, err
 	}
 	body, err := os.ReadFile(tmpPath)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(body) == 0 {
-		return nil, errors.New("SQLite snapshot is empty")
+		return nil, 0, errors.New("SQLite snapshot is empty")
 	}
-	return body, nil
+	return body, desiredRevision, nil
 }
 
 func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
@@ -320,7 +338,7 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 				return verifiedBackup{}, errors.New("invalid backup: missing veil.db")
 			}
 			report.Files = append(report.Files, ArchiveFile{Name: "veil.db", Size: int64(len(contents.database)), SHA256: backupChecksum(contents.database)})
-			if err := validateSQLiteSnapshot(contents.database); err != nil {
+			if err := validateSQLiteSnapshot(contents.database, manifest.DesiredRevision); err != nil {
 				return verifiedBackup{}, fmt.Errorf("validate backup database: %w", err)
 			}
 		}
@@ -337,6 +355,9 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 		report.FormatVersion = manifest.FormatVersion
 		report.CreatedAt = manifest.CreatedAt.UTC()
 		report.VeilVersion = manifest.VeilVersion
+		if manifest.DesiredRevision != nil {
+			report.DesiredRevision = *manifest.DesiredRevision
+		}
 		report.Files = manifest.Files
 	}
 	return verifiedBackup{report: report, state: contents.state, key: contents.key, database: contents.database}, nil
@@ -368,7 +389,7 @@ func checkpointSQLiteRestoreBoundary(path string) error {
 	return nil
 }
 
-func validateSQLiteSnapshot(body []byte) error {
+func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64) error {
 	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
 	if err != nil {
 		return err
@@ -394,7 +415,49 @@ func validateSQLiteSnapshot(body []byte) error {
 	if result != "ok" {
 		return fmt.Errorf("SQLite quick_check: %s", result)
 	}
-	return nil
+	if expectedDesiredRevision == nil {
+		return nil
+	}
+	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision)
+	return err
+}
+
+func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64) (uint64, error) {
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision)
+}
+
+func validateSQLiteDesiredSnapshotDB(db interface {
+	QueryRow(query string, args ...any) *sql.Row
+}, expectedDesiredRevision *uint64) (uint64, error) {
+	var desiredRevision uint64
+	if err := db.QueryRow(`SELECT desired_revision FROM revisions WHERE id=1`).Scan(&desiredRevision); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if expectedDesiredRevision != nil && *expectedDesiredRevision != 0 {
+				return 0, fmt.Errorf("captured desired revision mismatch: manifest=%d database=0", *expectedDesiredRevision)
+			}
+			return 0, nil
+		}
+		return 0, fmt.Errorf("read captured desired revision: %w", err)
+	}
+	if expectedDesiredRevision != nil && desiredRevision != *expectedDesiredRevision {
+		return 0, fmt.Errorf("captured desired revision mismatch: manifest=%d database=%d", *expectedDesiredRevision, desiredRevision)
+	}
+	if desiredRevision == 0 {
+		return desiredRevision, nil
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM revision_snapshots WHERE revision=?`, desiredRevision).Scan(&count); err != nil {
+		return 0, fmt.Errorf("verify immutable snapshot for desired revision %d: %w", desiredRevision, err)
+	}
+	if count != 1 {
+		return 0, fmt.Errorf("immutable snapshot for desired revision %d is missing", desiredRevision)
+	}
+	return desiredRevision, nil
 }
 
 func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
@@ -487,6 +550,13 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 }
 
 func readArchiveTarball(tarball []byte) (archiveContents, error) {
+	return readArchiveTarballWithMax(tarball, DefaultMaxBackupBytes)
+}
+
+func readArchiveTarballWithMax(tarball []byte, maxBytes int64) (archiveContents, error) {
+	if maxBytes <= 0 {
+		return archiveContents{}, errors.New("backup size policy must be positive")
+	}
 	gzipReader, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
 		return archiveContents{}, fmt.Errorf("initialize gzip reader: %w", err)
@@ -513,10 +583,10 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 		if header.Typeflag != tar.TypeReg && header.Typeflag != 0 {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q is not a regular file", name)
 		}
-		if header.Size < 0 || header.Size > maxBackupArchiveFileBytes {
+		if header.Size < 0 || header.Size > maxBytes {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q exceeds size limit", name)
 		}
-		body, err := io.ReadAll(io.LimitReader(reader, maxBackupArchiveFileBytes+1))
+		body, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
 		if err != nil {
 			return archiveContents{}, fmt.Errorf("read archive entry %q: %w", name, err)
 		}

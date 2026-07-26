@@ -58,8 +58,13 @@ export interface BackupVerificationReport {
   /** @minimum 1 */
   stateSchemaVersion: number;
   /**
+     * Desired configuration revision captured with the state and SQLite snapshot.
+     * @minimum 0
+     */
+  desiredRevision: number;
+  /**
      * @minItems 2
-     * @maxItems 2
+     * @maxItems 3
      */
   files: BackupArchiveFile[];
 }

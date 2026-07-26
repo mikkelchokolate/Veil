@@ -90,6 +90,8 @@ type ResolvedBackup struct {
 	Monthly              int
 	CheckOnly            bool
 	AllowVersionMismatch bool
+	Offset               int64
+	Limit                int64
 }
 
 type ResolvedFirewall struct {
@@ -312,6 +314,8 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		Monthly:              request.Monthly,
 		CheckOnly:            request.CheckOnly,
 		AllowVersionMismatch: request.AllowVersionMismatch,
+		Offset:               request.Offset,
+		Limit:                request.Limit,
 	}
 	if resolved.StatePath == "" {
 		resolved.StatePath = filepath.Join(p.StateRoot, "state.json")

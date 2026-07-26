@@ -2781,6 +2781,7 @@ components:
         - encrypted
         - legacy
         - stateSchemaVersion
+        - desiredRevision
         - files
       properties:
         formatVersion:
@@ -2789,7 +2790,7 @@ components:
           description: Zero for legacy archives without a manifest.
         encryptionVersion:
           type: integer
-          enum: [0, 1, 2]
+          enum: [0, 1, 2, 3]
           description: Zero for unencrypted archives.
         encrypted:
           type: boolean
@@ -2803,10 +2804,15 @@ components:
         stateSchemaVersion:
           type: integer
           minimum: 1
+        desiredRevision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Desired configuration revision captured with the state and SQLite snapshot.
         files:
           type: array
           minItems: 2
-          maxItems: 2
+          maxItems: 3
           items:
             $ref: "#/components/schemas/BackupArchiveFile"
     BackupPruneResult:

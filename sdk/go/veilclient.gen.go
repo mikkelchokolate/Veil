@@ -164,6 +164,7 @@ const (
 	N0 BackupVerificationReportEncryptionVersion = 0
 	N1 BackupVerificationReportEncryptionVersion = 1
 	N2 BackupVerificationReportEncryptionVersion = 2
+	N3 BackupVerificationReportEncryptionVersion = 3
 )
 
 // Valid indicates whether the value is a known member of the BackupVerificationReportEncryptionVersion enum.
@@ -174,6 +175,8 @@ func (e BackupVerificationReportEncryptionVersion) Valid() bool {
 	case N1:
 		return true
 	case N2:
+		return true
+	case N3:
 		return true
 	default:
 		return false
@@ -858,7 +861,10 @@ type BackupRestoreRequestConfirm bool
 // BackupVerificationReport defines model for BackupVerificationReport.
 type BackupVerificationReport struct {
 	CreatedAt *time.Time `json:"createdAt,omitempty"`
-	Encrypted bool       `json:"encrypted"`
+
+	// DesiredRevision Desired configuration revision captured with the state and SQLite snapshot.
+	DesiredRevision int64 `json:"desiredRevision"`
+	Encrypted       bool  `json:"encrypted"`
 
 	// EncryptionVersion Zero for unencrypted archives.
 	EncryptionVersion BackupVerificationReportEncryptionVersion `json:"encryptionVersion"`

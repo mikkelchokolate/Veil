@@ -126,6 +126,8 @@ type BackupRequest struct {
 	Monthly              int          `json:"monthly,omitempty"`
 	CheckOnly            bool         `json:"checkOnly,omitempty"`
 	AllowVersionMismatch bool         `json:"allowVersionMismatch,omitempty"`
+	Offset               int64        `json:"offset,omitempty"`
+	Limit                int64        `json:"limit,omitempty"`
 }
 
 type BackupArchive struct {
@@ -147,6 +149,7 @@ type BackupResult struct {
 	SafetyKeyPath      string                    `json:"safetyKeyPath,omitempty"`
 	SafetyDatabasePath string                    `json:"safetyDatabasePath,omitempty"`
 	Data               []byte                    `json:"data,omitempty"`
+	More               bool                      `json:"more,omitempty"`
 	Warning            string                    `json:"warning,omitempty"`
 }
 

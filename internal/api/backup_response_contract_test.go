@@ -124,6 +124,43 @@ func TestBackupCreateReturnsCreatedWhenOptionalPruneFails(t *testing.T) {
 	}
 }
 
+func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
+	state := newPanelBackupState(t)
+	body := []byte(strings.Repeat("chunked-download-payload-", 100000))
+	readCalls := 0
+	state.privileged = backupStubClient{backup: func(_ context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {
+		if request.Action != privileged.BackupActionRead {
+			t.Fatalf("unexpected backup action %q", request.Action)
+		}
+		readCalls++
+		if request.Limit <= 0 || request.Limit > 1024*1024 {
+			t.Fatalf("invalid bounded read limit %d", request.Limit)
+		}
+		start := request.Offset
+		end := start + request.Limit
+		if end > int64(len(body)) {
+			end = int64(len(body))
+		}
+		return privileged.BackupResult{
+			Data: body[start:end],
+			More: end < int64(len(body)),
+		}, nil
+	}}
+
+	request := adminJSONRequest(http.MethodGet, "/api/backups/large.enc/download", "")
+	response := httptest.NewRecorder()
+	state.handleBackupByName(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response.Body.String() != string(body) {
+		t.Fatalf("download bytes=%d want=%d", response.Body.Len(), len(body))
+	}
+	if readCalls < 2 {
+		t.Fatalf("helper read calls=%d, want multiple bounded chunks", readCalls)
+	}
+}
+
 func assertCompleteBackupVerification(t *testing.T, report backup.VerificationReport) {
 	t.Helper()
 	if report.FormatVersion <= 0 || report.EncryptionVersion <= 0 || !report.Encrypted || report.Legacy {
