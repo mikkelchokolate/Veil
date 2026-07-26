@@ -102,7 +102,7 @@ func initClientSubsystem(s *managementState) {
 	// once per committed mutation (revision bump + snapshot + one job) and
 	// returns that exact revision/job in the response.
 	s.clientService = client.NewService(clientRepo, clientCreds).WithInboundLookup(s.bindingCapabilityForInbound)
-	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds)
+	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds, client.WithIncludeDisabled())
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 	s.trafficStore = client.NewTrafficStore(s.db)

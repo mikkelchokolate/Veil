@@ -427,3 +427,64 @@ func TestStartupLegacyProvenanceRepairsInterruptedPartialMigration(t *testing.T)
 		t.Fatalf("profile provenance missing after repair: %v", err)
 	}
 }
+
+func TestStartupLegacyDisabledProfileMigratesAndCanBeEnabledAfterRestart(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	info := ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(dir, "state.key"), ApplyRoot: filepath.Join(dir, "apply")}
+	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[{"username":"sleeping","password":"secret","enabled":false}]}]}`), 0o600, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// First boot must preserve the legacy disabled semantics in normalized
+	// storage instead of marking an unrepresented profile as permanently done.
+	st := newManagementState(info)
+	id := client.StableClientID("hy2", "sleeping")
+	normalized, err := st.clientRepo.Get(id)
+	if err != nil {
+		t.Fatalf("disabled legacy profile was not migrated: %v", err)
+	}
+	if normalized.Enabled {
+		t.Fatal("disabled legacy profile migrated as enabled client")
+	}
+	bindings, err := st.clientRepo.BindingsForClient(id)
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("disabled profile bindings: %v %#v", err, bindings)
+	}
+	if bindings[0].Enabled {
+		t.Fatal("disabled legacy profile migrated as enabled binding")
+	}
+	marker, err := st.clientRepo.GetMigrationMarker(legacyProfileMarkerKey("hy2", "sleeping"))
+	if err != nil || marker == nil {
+		t.Fatalf("verified disabled profile provenance missing: %v", err)
+	}
+
+	// Once migrated, normalized state is authoritative. Enable both the client
+	// and its binding while the untouched legacy source remains disabled.
+	normalized.Enabled = true
+	if _, err := st.clientRepo.Update(normalized, normalized.Version); err != nil {
+		t.Fatalf("enable normalized client: %v", err)
+	}
+	binding := bindings[0]
+	binding.Enabled = true
+	if _, err := st.clientRepo.UpdateBinding(binding, binding.Version); err != nil {
+		t.Fatalf("enable normalized binding: %v", err)
+	}
+	closeClientSubsystem(st)
+
+	// A later boot must neither lose the profile nor force legacy disabled=false
+	// back over the operator's normalized enablement.
+	st = newManagementState(info)
+	defer closeClientSubsystem(st)
+	normalized, err = st.clientRepo.Get(id)
+	if err != nil {
+		t.Fatalf("enabled normalized client lost after restart: %v", err)
+	}
+	if !normalized.Enabled {
+		t.Fatal("normalized client enablement was not preserved across restart")
+	}
+	bindings, err = st.clientRepo.BindingsForClient(id)
+	if err != nil || len(bindings) != 1 || !bindings[0].Enabled {
+		t.Fatalf("normalized binding enablement was not preserved: %v %#v", err, bindings)
+	}
+}
