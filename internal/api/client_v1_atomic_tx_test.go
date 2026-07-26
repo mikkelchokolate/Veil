@@ -11,6 +11,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
 // Blocker-A1 tests: client state, desired revision, and the immutable snapshot
@@ -331,8 +332,19 @@ func TestStartupMigrateLegacyRestoredStateMigratesNewProfiles(t *testing.T) {
 	}
 
 	// Restore an older state file that also contains carol — a profile the
-	// marker never represented. The marker row from boot 1 is still in the DB.
+	// marker never represented. Keep the desired snapshot binding coherent with
+	// the restored file; only the migration marker is intentionally stale.
 	writeState(`{"username":"alice","password":"alice-pass","enabled":true},{"username":"bob","password":"bob-pass","enabled":true},{"username":"carol","password":"carol-pass","enabled":true}`)
+	restoredState, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st1.db.Exec(
+		`UPDATE revision_snapshots SET payload=?, state_sha256=? WHERE revision=?`,
+		string(restoredState), managementstate.EncodedStateSHA256(restoredState), rev1.Desired,
+	); err != nil {
+		t.Fatalf("bind restored state to desired snapshot: %v", err)
+	}
 	st2 := newManagementState(info)
 	_, total, err = st2.clientRepo.List(client.ListFilter{})
 	if err != nil {

@@ -125,7 +125,7 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	if _, err := os.Stat(options.DatabasePath); err != nil {
 		return nil, fmt.Errorf("archive database: %w", err)
 	}
-	database, desiredRevision, err := consistentSQLiteSnapshot(options.DatabasePath)
+	database, desiredRevision, err := consistentSQLiteSnapshot(options.DatabasePath, backupChecksum(state))
 	if err != nil {
 		return nil, fmt.Errorf("archive database: %w", err)
 	}
@@ -158,7 +158,7 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	return writeArchiveTarball(archiveContents{state: state, key: key, database: database, manifest: manifestBody})
 }
 
-func consistentSQLiteSnapshot(databasePath string) ([]byte, uint64, error) {
+func consistentSQLiteSnapshot(databasePath, stateDigest string) ([]byte, uint64, error) {
 	db, err := storage.OpenExisting(databasePath)
 	if err != nil {
 		return nil, 0, err
@@ -179,7 +179,7 @@ func consistentSQLiteSnapshot(databasePath string) ([]byte, uint64, error) {
 	if _, err := db.Exec(`VACUUM INTO ` + quoted); err != nil {
 		return nil, 0, err
 	}
-	desiredRevision, err := validateSQLiteDesiredSnapshotPath(tmpPath, nil)
+	desiredRevision, err := validateSQLiteDesiredSnapshotPath(tmpPath, nil, stateDigest)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -338,7 +338,7 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 				return verifiedBackup{}, errors.New("invalid backup: missing veil.db")
 			}
 			report.Files = append(report.Files, ArchiveFile{Name: "veil.db", Size: int64(len(contents.database)), SHA256: backupChecksum(contents.database)})
-			if err := validateSQLiteSnapshot(contents.database, manifest.DesiredRevision); err != nil {
+			if err := validateSQLiteSnapshot(contents.database, manifest.DesiredRevision, backupChecksum(contents.state)); err != nil {
 				return verifiedBackup{}, fmt.Errorf("validate backup database: %w", err)
 			}
 		}
@@ -389,7 +389,7 @@ func checkpointSQLiteRestoreBoundary(path string) error {
 	return nil
 }
 
-func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64) error {
+func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64, expectedStateDigest string) error {
 	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
 	if err != nil {
 		return err
@@ -415,25 +415,22 @@ func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64) error 
 	if result != "ok" {
 		return fmt.Errorf("SQLite quick_check: %s", result)
 	}
-	if expectedDesiredRevision == nil {
-		return nil
-	}
-	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision)
+	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
 	return err
 }
 
-func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64) (uint64, error) {
+func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
 	db, err := storage.OpenExisting(path)
 	if err != nil {
 		return 0, err
 	}
 	defer db.Close()
-	return validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision)
+	return validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
 }
 
 func validateSQLiteDesiredSnapshotDB(db interface {
 	QueryRow(query string, args ...any) *sql.Row
-}, expectedDesiredRevision *uint64) (uint64, error) {
+}, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
 	var desiredRevision uint64
 	if err := db.QueryRow(`SELECT desired_revision FROM revisions WHERE id=1`).Scan(&desiredRevision); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -450,12 +447,30 @@ func validateSQLiteDesiredSnapshotDB(db interface {
 	if desiredRevision == 0 {
 		return desiredRevision, nil
 	}
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(1) FROM revision_snapshots WHERE revision=?`, desiredRevision).Scan(&count); err != nil {
+	var digestColumnCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(1) FROM pragma_table_info('revision_snapshots') WHERE name='state_sha256'`,
+	).Scan(&digestColumnCount); err != nil {
+		return 0, fmt.Errorf("inspect immutable snapshot state digest schema: %w", err)
+	}
+	if digestColumnCount == 0 {
+		return 0, errors.New("immutable snapshots do not support state digest binding")
+	}
+	var stateDigest string
+	if err := db.QueryRow(`SELECT state_sha256 FROM revision_snapshots WHERE revision=?`, desiredRevision).Scan(&stateDigest); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("immutable snapshot for desired revision %d is missing", desiredRevision)
+		}
 		return 0, fmt.Errorf("verify immutable snapshot for desired revision %d: %w", desiredRevision, err)
 	}
-	if count != 1 {
-		return 0, fmt.Errorf("immutable snapshot for desired revision %d is missing", desiredRevision)
+	if len(stateDigest) != sha256.Size*2 {
+		return 0, fmt.Errorf("immutable snapshot state digest for desired revision %d is missing or invalid", desiredRevision)
+	}
+	if _, err := hex.DecodeString(stateDigest); err != nil {
+		return 0, fmt.Errorf("immutable snapshot state digest for desired revision %d is invalid", desiredRevision)
+	}
+	if expectedStateDigest != "" && !strings.EqualFold(stateDigest, expectedStateDigest) {
+		return 0, fmt.Errorf("state digest mismatch for desired revision %d: snapshot=%s archive=%s", desiredRevision, stateDigest, expectedStateDigest)
 	}
 	return desiredRevision, nil
 }

@@ -160,6 +160,14 @@ CREATE TABLE migration_markers (
 );
 `,
 	},
+	{
+		version: 4,
+		name:    "revision_snapshot_state_digest",
+		sql: `
+ALTER TABLE revision_snapshots
+  ADD COLUMN state_sha256 TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

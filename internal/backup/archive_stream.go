@@ -96,11 +96,17 @@ func createBackupFileWithOptionsUnlocked(destination, statePath, keyPath, passph
 	// captured. Tar/gzip/encryption stream from these private files after unlock.
 	var stateSnapshot, keySnapshot, databaseSnapshot string
 	var desiredRevision uint64
+	var stateDigest string
 	err = managementstate.WithSnapshotBarrier(statePath, func() error {
 		stateSnapshot, err = copySnapshotFile(statePath, filepath.Join(workDir, "state.json"), maxBytes)
 		if err != nil {
 			return fmt.Errorf("capture state snapshot: %w", err)
 		}
+		stateMetadata, err := archiveFileMetadata("state.json", stateSnapshot)
+		if err != nil {
+			return fmt.Errorf("digest captured state snapshot: %w", err)
+		}
+		stateDigest = stateMetadata.SHA256
 		if options.afterStateCapture != nil {
 			options.afterStateCapture()
 		}
@@ -108,7 +114,7 @@ func createBackupFileWithOptionsUnlocked(destination, statePath, keyPath, passph
 		if err != nil {
 			return fmt.Errorf("archive key: %w", err)
 		}
-		databaseSnapshot, desiredRevision, err = consistentSQLiteSnapshotFile(options.DatabasePath, workDir)
+		databaseSnapshot, desiredRevision, err = consistentSQLiteSnapshotFile(options.DatabasePath, workDir, stateDigest)
 		if err != nil {
 			return fmt.Errorf("archive database: %w", err)
 		}
@@ -467,7 +473,7 @@ func extractAndVerifyTarball(tarballPath string, maxBytes int64, result *extract
 		}
 		result.databasePath = paths["veil.db"]
 		result.report.Files = append(result.report.Files, metadata["veil.db"])
-		if err := validateSQLiteSnapshotFile(result.databasePath, manifest.DesiredRevision); err != nil {
+		if err := validateSQLiteSnapshotFile(result.databasePath, manifest.DesiredRevision, metadata["state.json"].SHA256); err != nil {
 			return fmt.Errorf("validate backup database: %w", err)
 		}
 	}
@@ -547,7 +553,7 @@ func prepareTarballFile(path, passphrase string, maxBytes int64, workDir string)
 	return outputPath, true, version, nil
 }
 
-func consistentSQLiteSnapshotFile(databasePath, workDir string) (string, uint64, error) {
+func consistentSQLiteSnapshotFile(databasePath, workDir, stateDigest string) (string, uint64, error) {
 	info, err := os.Lstat(databasePath)
 	if err != nil {
 		return "", 0, err
@@ -581,14 +587,14 @@ func consistentSQLiteSnapshotFile(databasePath, workDir string) (string, uint64,
 	if snapshotInfo.Size() == 0 {
 		return "", 0, errors.New("SQLite snapshot is empty")
 	}
-	desiredRevision, err := validateSQLiteDesiredSnapshotPath(path, nil)
+	desiredRevision, err := validateSQLiteDesiredSnapshotPath(path, nil, stateDigest)
 	if err != nil {
 		return "", 0, err
 	}
 	return path, desiredRevision, nil
 }
 
-func validateSQLiteSnapshotFile(path string, expectedDesiredRevision *uint64) error {
+func validateSQLiteSnapshotFile(path string, expectedDesiredRevision *uint64, expectedStateDigest string) error {
 	db, err := storage.OpenExisting(path)
 	if err != nil {
 		return err
@@ -601,9 +607,7 @@ func validateSQLiteSnapshotFile(path string, expectedDesiredRevision *uint64) er
 	if result != "ok" {
 		return fmt.Errorf("SQLite quick_check: %s", result)
 	}
-	if expectedDesiredRevision != nil {
-		_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision)
-	}
+	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
 	return err
 }
 

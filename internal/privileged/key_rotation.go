@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 func rotateStateKey(statePath, keyPath string, now func() time.Time) error {
@@ -64,6 +65,16 @@ func rotateStateKey(statePath, keyPath string, now func() time.Time) error {
 		_ = os.Rename(keySafety, keyPath)
 		_ = os.Rename(stateSafety, statePath)
 		return fmt.Errorf("write re-encrypted state: %w", err)
+	}
+	if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: statePath, Cipher: newCipher}); err != nil {
+		_ = os.Remove(statePath)
+		_ = os.Remove(keyPath)
+		stateRollbackErr := os.Rename(stateSafety, statePath)
+		keyRollbackErr := os.Rename(keySafety, keyPath)
+		if stateRollbackErr != nil || keyRollbackErr != nil {
+			return fmt.Errorf("record rotated state revision: %v; restore state: %v; restore key: %v", err, stateRollbackErr, keyRollbackErr)
+		}
+		return fmt.Errorf("record rotated state revision: %w", err)
 	}
 	return nil
 }

@@ -53,6 +53,7 @@ type managementState struct {
 	authToken                      string
 	allowDevAnonymous              bool
 	startupStateLoadFailed         bool
+	requireApplyTracking           bool
 	setupAllowed                   bool
 	setup                          SetupState
 	settings                       Settings

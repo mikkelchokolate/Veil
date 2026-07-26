@@ -59,6 +59,14 @@ func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) 
 	}
 	var revision uint64
 	err := managementstate.WithSnapshotBarrier(s.statePath, func() error {
+		stateDigest := ""
+		if s.statePath != "" {
+			var err error
+			stateDigest, err = stateFileDigest(s.statePath)
+			if err != nil {
+				return fmt.Errorf("digest management state: %w", err)
+			}
+		}
 		tx, err := s.clientRepo.BeginTx()
 		if err != nil {
 			return err
@@ -67,7 +75,7 @@ func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) 
 			_ = tx.Rollback()
 			return err
 		}
-		revision, err = s.recordRevisionInTxLocked(tx)
+		revision, err = s.recordRevisionInTxLocked(tx, stateDigest)
 		if err != nil {
 			_ = tx.Rollback()
 			return err
@@ -85,7 +93,7 @@ func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) 
 // tables through the SAME transaction, so it captures exactly the state being
 // committed — never a pre-mutation snapshot or a mix of old and new rows.
 // A revision or snapshot failure aborts the caller's mutation.
-func (s *managementState) recordRevisionInTxLocked(tx *client.Tx) (uint64, error) {
+func (s *managementState) recordRevisionInTxLocked(tx *client.Tx, stateDigest string) (uint64, error) {
 	clients, err := tx.AllClients()
 	if err != nil {
 		return 0, fmt.Errorf("snapshot: read clients: %w", err)
@@ -110,7 +118,7 @@ func (s *managementState) recordRevisionInTxLocked(tx *client.Tx) (uint64, error
 	if err != nil {
 		return 0, err
 	}
-	if err := apply.SaveSnapshotTx(tx, rev, payload); err != nil {
+	if err := apply.SaveSnapshotTxBound(tx, rev, payload, stateDigest); err != nil {
 		return 0, err
 	}
 	return rev, nil

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/protocols/hysteria2"
 	"github.com/mikkelchokolate/Veil/internal/storage"
@@ -210,9 +212,22 @@ func (s *managementState) applyTrackingEnabled() bool {
 // instead folds client rows + revision + snapshot into a single transaction
 // via commitClientMutationLocked.) Caller must hold s.mu. Returns the new
 // desired revision, or 0 when tracking is disabled.
-func (s *managementState) bumpDesiredRevisionLocked() (uint64, error) {
+func (s *managementState) bumpDesiredRevisionLocked(stateDigests ...string) (uint64, error) {
 	if !s.applyTrackingEnabled() {
 		return 0, nil
+	}
+	if len(stateDigests) > 1 {
+		return 0, fmt.Errorf("apply subsystem: multiple state digests supplied")
+	}
+	stateDigest := ""
+	if len(stateDigests) == 1 {
+		stateDigest = stateDigests[0]
+	} else if s.statePath != "" {
+		var err error
+		stateDigest, err = stateFileDigest(s.statePath)
+		if err != nil {
+			return 0, fmt.Errorf("apply subsystem: digest state file: %w", err)
+		}
 	}
 	// Build + encrypt + marshal the snapshot BEFORE opening the transaction.
 	// The snapshot reads the client tables through the connection pool in
@@ -246,15 +261,29 @@ func (s *managementState) bumpDesiredRevisionLocked() (uint64, error) {
 	// from newer mutable state. Save is idempotent (first write wins). Secrets
 	// were encrypted above so the snapshot never stores plaintext.
 	if s.applySnapshots != nil {
-		if err := apply.SaveSnapshotTx(tx, rev, payload); err != nil {
+		var snapshotErr error
+		if s.statePath == "" {
+			snapshotErr = apply.SaveSnapshotTx(tx, rev, payload)
+		} else {
+			snapshotErr = apply.SaveSnapshotTxBound(tx, rev, payload, stateDigest)
+		}
+		if snapshotErr != nil {
 			_ = tx.Rollback()
-			return 0, err
+			return 0, snapshotErr
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("apply subsystem: commit revision %d: %w", rev, err)
 	}
 	return rev, nil
+}
+
+func stateFileDigest(path string) (string, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return managementstate.EncodedStateSHA256(body), nil
 }
 
 // executeApplyRevision applies one immutable desired revision to the runtime.

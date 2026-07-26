@@ -18,6 +18,10 @@ const largeBackupFixtureBytes = 36 * 1024 * 1024
 
 func TestStreamingArchiveLargerThan32MiBCreateVerifyAndRestore(t *testing.T) {
 	statePath, keyPath := writeValidBackupSource(t)
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	databasePath := filepath.Join(filepath.Dir(statePath), "veil.db")
 	db, err := storage.OpenExisting(databasePath)
 	if err != nil {
@@ -27,7 +31,7 @@ func TestStreamingArchiveLargerThan32MiBCreateVerifyAndRestore(t *testing.T) {
 		`CREATE TABLE large_backup_fixture(payload BLOB NOT NULL)`,
 		`INSERT INTO large_backup_fixture(payload) VALUES(randomblob(` + "37748736" + `))`,
 		`INSERT OR REPLACE INTO revisions(id, desired_revision, applied_revision) VALUES(1, 3, 2)`,
-		`INSERT INTO revision_snapshots(revision, payload, created_at) VALUES(3, '{"settings":{"domain":"large.example"}}', 1)`,
+		`INSERT INTO revision_snapshots(revision, payload, created_at, state_sha256) VALUES(3, '{"settings":{"domain":"large.example"}}', 1, '` + backupChecksum(stateBody) + `')`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -237,7 +241,7 @@ func TestStreamingArchiveSnapshotBarrierPreventsMixedStateAndRevision(t *testing
 	if _, err := db.Exec(`INSERT OR REPLACE INTO revisions(id, desired_revision, applied_revision) VALUES(1, 1, 0)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT OR REPLACE INTO revision_snapshots(revision, payload, created_at) VALUES(1, ?, 1)`, preState); err != nil {
+	if _, err := db.Exec(`INSERT OR REPLACE INTO revision_snapshots(revision, payload, created_at, state_sha256) VALUES(1, ?, 1, ?)`, preState, backupChecksum(preState)); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -280,7 +284,7 @@ func TestStreamingArchiveSnapshotBarrierPreventsMixedStateAndRevision(t *testing
 			if _, err := mutationDB.Exec(`INSERT OR REPLACE INTO revisions(id, desired_revision, applied_revision) VALUES(1, 2, 0)`); err != nil {
 				return err
 			}
-			_, err = mutationDB.Exec(`INSERT OR REPLACE INTO revision_snapshots(revision, payload, created_at) VALUES(2, ?, 2)`, postState)
+			_, err = mutationDB.Exec(`INSERT OR REPLACE INTO revision_snapshots(revision, payload, created_at, state_sha256) VALUES(2, ?, 2, ?)`, postState, backupChecksum(postState))
 			return err
 		})
 	}()

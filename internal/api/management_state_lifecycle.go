@@ -3,10 +3,13 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
@@ -86,6 +89,7 @@ func newManagementState(info ServerInfo) *managementState {
 	}
 	state := &managementState{
 		statePath:                      info.StatePath,
+		requireApplyTracking:           info.StatePath != "",
 		applyRoot:                      defaultApplyRoot(applyRoot),
 		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,
@@ -147,6 +151,14 @@ func newManagementState(info ServerInfo) *managementState {
 			state.startupStateLoadFailed = true
 			state.allowDevAnonymous = false
 		}
+	} else if err := lifecycle.RecoverPendingCommit(); err != nil {
+		log.Printf("error recovering interrupted management-state mutation for %s: %v", info.StatePath, err)
+		state.startupStateLoadFailed = true
+		state.allowDevAnonymous = false
+	} else if err := lifecycle.VerifyCurrentStateRevision(); err != nil {
+		log.Printf("error verifying management-state revision for %s: %v", info.StatePath, err)
+		state.startupStateLoadFailed = true
+		state.allowDevAnonymous = false
 	} else if err := lifecycle.Load(); err != nil {
 		log.Printf("error loading management state from %s: %v", info.StatePath, err)
 		state.startupStateLoadFailed = true
@@ -157,12 +169,12 @@ func newManagementState(info ServerInfo) *managementState {
 	initClientSubsystem(state)
 
 	// Blocker A3: legacy-profile migration at NORMAL startup/upgrade, not only
-	// on SIGHUP reload. Pre-flight backup + migration marker + verification,
-	// idempotent. Non-fatal by design: log loudly and keep booting — a broken
-	// migration must not take the panel down, and the manual migration API
-	// remains available.
-	if err := lifecycle.StartupMigrateLegacyLocked(); err != nil {
-		log.Printf("startup legacy migration: %v", err)
+	// on SIGHUP reload. Never mutate SQLite after state/revision recovery failed;
+	// the mismatch must remain fail-closed and diagnosable.
+	if !state.startupStateLoadFailed {
+		if err := lifecycle.StartupMigrateLegacyLocked(); err != nil {
+			log.Printf("startup legacy migration: %v", err)
+		}
 	}
 
 	return state
@@ -215,15 +227,171 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 
 func (l ManagementStateLifecycle) SaveLocked() error {
 	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
-		if err := managementstate.NewStore(l.state.statePath, l.state.cipher).Save(l.SnapshotLocked()); err != nil {
+		store := managementstate.NewStore(l.state.statePath, l.state.cipher)
+		if l.state.statePath == "" {
+			if err := store.Save(l.SnapshotLocked()); err != nil {
+				return err
+			}
+			_, err := l.state.bumpDesiredRevisionLocked()
 			return err
 		}
-		// The configuration mutation is committed; record a new desired revision so
-		// the system reports desired != applied until an apply job succeeds. A
-		// revision/snapshot failure fails the mutation honestly (blocker A1): it
-		// is returned, not just logged.
-		_, err := l.state.bumpDesiredRevisionLocked()
-		return err
+		if !l.state.applyTrackingEnabled() {
+			if l.state.requireApplyTracking {
+				return errors.New("apply subsystem unavailable for persistent management-state mutation")
+			}
+			return store.Save(l.SnapshotLocked())
+		}
+		revisions, err := l.state.applyRevisions.Get()
+		if err != nil {
+			return fmt.Errorf("read desired revision before state mutation: %w", err)
+		}
+		encoded, err := store.Marshal(l.SnapshotLocked())
+		if err != nil {
+			return err
+		}
+		commit, err := store.PrepareStateCommit(encoded, revisions.Desired, revisions.Desired+1)
+		if err != nil {
+			return err
+		}
+		if _, err := l.state.bumpDesiredRevisionLocked(commit.Journal().IntendedStateSHA256); err != nil {
+			if rollbackErr := commit.Rollback(); rollbackErr != nil {
+				return errors.Join(err, fmt.Errorf("restore previous management state: %w", rollbackErr))
+			}
+			return err
+		}
+		// SQLite is committed. Marker cleanup is recoverable at startup, so do not
+		// report a failed API mutation after both durable stores have committed.
+		if err := commit.Finalize(); err != nil {
+			log.Printf("management state: committed mutation left recovery marker: %v", err)
+		}
+		return nil
+	})
+}
+
+// RecoverPendingCommit deterministically reconciles an interrupted
+// state-file/SQLite commit before state.json is loaded into memory.
+func (l ManagementStateLifecycle) RecoverPendingCommit() error {
+	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
+		store := managementstate.NewStore(l.state.statePath, l.state.cipher)
+		commit, ok, err := store.LoadPendingStateCommit()
+		if err != nil || !ok {
+			return err
+		}
+		if !l.state.applyTrackingEnabled() {
+			return errors.New("pending management-state mutation exists but apply subsystem is unavailable")
+		}
+		journal := commit.Journal()
+		revisions, err := l.state.applyRevisions.Get()
+		if err != nil {
+			return fmt.Errorf("read desired revision for pending mutation: %w", err)
+		}
+		currentDigest, currentExists, err := commit.CurrentStateDigest()
+		if err != nil {
+			return fmt.Errorf("read state for pending mutation: %w", err)
+		}
+		matchesPrevious := currentExists == journal.PreviousStateExists && currentDigest == journal.PreviousStateSHA256
+		matchesIntended := currentExists && currentDigest == journal.IntendedStateSHA256
+		switch revisions.Desired {
+		case journal.PreviousRevision:
+			if l.state.applySnapshots.Has(journal.IntendedRevision) {
+				return fmt.Errorf("pending mutation revision %d has a snapshot but is not desired", journal.IntendedRevision)
+			}
+			if !matchesPrevious && !matchesIntended {
+				return errors.New("state file matches neither side of the pending mutation")
+			}
+			return commit.Rollback()
+		case journal.IntendedRevision:
+			if !l.state.applySnapshots.Has(journal.IntendedRevision) {
+				return fmt.Errorf("pending committed revision %d has no immutable snapshot", journal.IntendedRevision)
+			}
+			snapshotDigest, err := l.state.applySnapshots.StateDigest(journal.IntendedRevision)
+			if err != nil {
+				return err
+			}
+			if snapshotDigest != journal.IntendedStateSHA256 {
+				return fmt.Errorf("pending committed revision %d snapshot state digest mismatch", journal.IntendedRevision)
+			}
+			if !matchesIntended {
+				return fmt.Errorf("state file does not match committed pending revision %d", journal.IntendedRevision)
+			}
+			return commit.Finalize()
+		default:
+			return fmt.Errorf("pending mutation expects desired revision %d or %d, database has %d", journal.PreviousRevision, journal.IntendedRevision, revisions.Desired)
+		}
+	})
+}
+
+// VerifyCurrentStateRevision prevents startup from loading a state file that is
+// not cryptographically associated with the recorded desired revision.
+func (l ManagementStateLifecycle) VerifyCurrentStateRevision() error {
+	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
+		if l.state.statePath == "" {
+			return nil
+		}
+		if !l.state.applyTrackingEnabled() {
+			return errors.New("apply subsystem unavailable for management-state revision verification")
+		}
+		revisions, err := l.state.applyRevisions.Get()
+		if err != nil {
+			return fmt.Errorf("read desired revision: %w", err)
+		}
+		if revisions.Desired == 0 {
+			return nil
+		}
+		currentDigest, err := stateFileDigest(l.state.statePath)
+		if err != nil {
+			return fmt.Errorf("digest management state: %w", err)
+		}
+		storedDigest, err := l.state.applySnapshots.StateDigest(revisions.Desired)
+		if err != nil {
+			return err
+		}
+		if storedDigest != "" {
+			if storedDigest != currentDigest {
+				return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
+			}
+			return nil
+		}
+
+		// Migration v4 adds the digest column to legacy snapshot rows. Bind it
+		// only after proving the decrypted state-file projection is identical to
+		// the desired immutable snapshot; otherwise fail closed.
+		store := managementstate.NewStore(l.state.statePath, l.state.cipher)
+		fileSnapshot, ok, err := store.Load()
+		if err != nil {
+			return fmt.Errorf("load management state for legacy digest binding: %w", err)
+		}
+		if !ok {
+			return errors.New("management state is missing for nonzero desired revision")
+		}
+		payload, err := l.state.applySnapshots.Load(revisions.Desired)
+		if err != nil {
+			return err
+		}
+		var revisionSnapshot managementSnapshot
+		if err := json.Unmarshal(payload, &revisionSnapshot); err != nil {
+			return fmt.Errorf("decode desired revision snapshot %d: %w", revisions.Desired, err)
+		}
+		if err := l.state.decryptSnapshot(&revisionSnapshot); err != nil {
+			return fmt.Errorf("decrypt desired revision snapshot %d: %w", revisions.Desired, err)
+		}
+		if !reflect.DeepEqual(stateFileProjection(fileSnapshot), stateFileProjection(revisionSnapshot)) {
+			return fmt.Errorf("legacy management state does not match desired revision %d", revisions.Desired)
+		}
+		return l.state.applySnapshots.BindStateDigest(revisions.Desired, currentDigest)
+	})
+}
+
+func stateFileProjection(snapshot managementSnapshot) managementSnapshot {
+	return managementstate.BuildSnapshot(managementstate.SnapshotInput{
+		Setup:         snapshot.Setup,
+		Settings:      snapshot.Settings,
+		Inbounds:      snapshot.Inbounds,
+		Rules:         snapshot.Rules,
+		RoutingPreset: snapshot.RoutingPreset,
+		RoutingSource: snapshot.RoutingSource,
+		Warp:          snapshot.Warp,
+		Users:         snapshot.Users,
 	})
 }
 
@@ -251,19 +419,27 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 		}
 		l.state.cipher = cipher
 	}
-	if l.state.statePath != "" {
-		if err := l.Load(); err != nil {
-			return fmt.Errorf("reload state: %w", err)
-		}
-	}
 	// A backup restore closes the SQLite-backed domain before the privileged
-	// helper atomically replaces veil.db. Reopen it only after state+key loaded,
-	// so every repository observes the restored database and restored cipher.
+	// helper atomically replaces veil.db. Reopen it before loading state so the
+	// restored state/revision association can be verified fail-closed.
 	if l.state.statePath != "" && l.state.db == nil {
 		initApplySubsystem(l.state)
 		if l.state.db == nil {
 			return fmt.Errorf("reload database: open restored veil.db failed")
 		}
+	}
+	if l.state.statePath != "" {
+		if err := l.RecoverPendingCommit(); err != nil {
+			return fmt.Errorf("recover interrupted state mutation: %w", err)
+		}
+		if err := l.VerifyCurrentStateRevision(); err != nil {
+			return fmt.Errorf("verify state revision: %w", err)
+		}
+		if err := l.Load(); err != nil {
+			return fmt.Errorf("reload state: %w", err)
+		}
+	}
+	if l.state.statePath != "" && l.state.clientService == nil {
 		initClientSubsystem(l.state)
 	}
 	// A6: auto-migrate legacy inbound-embedded profiles to normalized

@@ -19,6 +19,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -136,7 +137,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		// was created before auto-fill was implemented, backfill it now.
 		if resolvedIP != nil && snapshot.Settings.Domain == "" {
 			snapshot.Settings.Domain = resolvedIP.String()
-			if err := store.Save(snapshot); err != nil {
+			if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
 				return fmt.Errorf("update existing panel state domain: %w", err)
 			}
 		}
@@ -165,8 +166,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			},
 		}
 
-		store := managementstate.NewStore(resolvedStatePath, cipher)
-		if err := store.Save(initialSnapshot); err != nil {
+		if _, err := statecommit.Save(initialSnapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
 			return fmt.Errorf("write initial state.json: %w", err)
 		}
 	}

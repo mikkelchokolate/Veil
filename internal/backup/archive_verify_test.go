@@ -216,6 +216,10 @@ func TestArchiveV2RestoreRequiresIdleSQLiteBoundary(t *testing.T) {
 
 func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
 	statePath, keyPath := writeValidBackupSource(t)
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	dbPath := filepath.Join(filepath.Dir(statePath), "veil.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
@@ -228,7 +232,7 @@ func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
 		`INSERT INTO client_credentials(id,binding_id,kind,encrypted_value,created_at) VALUES('credential-1','binding-1','password',X'0102',1)`,
 		`INSERT INTO subscription_tokens(id,client_id,token_hash,token_prefix,created_at) VALUES('token-1','client-1',X'0304','tok',1)`,
 		`INSERT INTO traffic_counters(client_id,binding_id,upload_bytes,download_bytes,updated_at) VALUES('client-1','binding-1',11,22,1)`,
-		`INSERT INTO revision_snapshots(revision,payload,created_at) VALUES(7,'{"clients":["client-1"]}',1)`,
+		`INSERT INTO revision_snapshots(revision,payload,created_at,state_sha256) VALUES(7,'{"clients":["client-1"]}',1,'` + backupChecksum(stateBody) + `')`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {

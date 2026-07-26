@@ -23,6 +23,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/runtime"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 type PlanDependencies struct {
@@ -128,7 +129,10 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps Pl
 	// state when it is empty and we were able to resolve the public IP.
 	if resolvedIP != "" && snapshot.Settings.Domain == "" && !opts.DryRun {
 		snapshot.Settings.Domain = resolvedIP
-		if err := store.Save(snapshot); err != nil {
+		if _, err := statecommit.Save(snapshot, statecommit.Options{
+			StatePath: statePath,
+			Cipher:    repairStateCipher(filepath.Join(opts.EtcDir, "state.key")),
+		}); err != nil {
 			return installer.RepairPlan{}, fmt.Errorf("update panel state domain: %w", err)
 		}
 	}

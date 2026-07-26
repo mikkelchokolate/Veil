@@ -11,6 +11,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -75,7 +76,7 @@ func newAdminCommand() *cobra.Command {
 				},
 			}
 
-			if err := store.Save(snapshot); err != nil {
+			if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: resolvedState, Cipher: cipher}); err != nil {
 				return fmt.Errorf("save state: %w", err)
 			}
 
@@ -166,7 +167,7 @@ func newAdminCommand() *cobra.Command {
 				snapshot.Users = append(snapshot.Users, updatedUser)
 			}
 
-			if err := store.Save(snapshot); err != nil {
+			if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: resolvedState, Cipher: cipher}); err != nil {
 				return fmt.Errorf("save state: %w", err)
 			}
 
@@ -254,6 +255,10 @@ func newAdminCommand() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no state found at %s to rotate", resolvedState)
 			}
+			oldStateBody, err := os.ReadFile(resolvedState)
+			if err != nil {
+				return fmt.Errorf("read old state file: %w", err)
+			}
 
 			// Generate new key bytes
 			var newKey [secrets.KeySize]byte
@@ -325,14 +330,25 @@ func newAdminCommand() *cobra.Command {
 				return fmt.Errorf("rename state file (rolled back key): %w", err)
 			}
 
-			// Delete backup files on success
-			if hasBackup {
-				_ = os.Remove(backupKeyPath)
-			}
-
 			// Restore ownership/permissions on the rotated files.
 			statePerm.apply(resolvedState)
 			keyPerm.apply(targetKeyPath)
+			if _, err := statecommit.Save(snapshot, statecommit.Options{StatePath: resolvedState, Cipher: newCipher}); err != nil {
+				stateRollbackErr := managementstate.NewStore(resolvedState, oldCipher).SaveEncoded(oldStateBody)
+				_ = os.Remove(targetKeyPath)
+				var keyRollbackErr error
+				if hasBackup {
+					keyRollbackErr = os.Rename(backupKeyPath, targetKeyPath)
+				}
+				if stateRollbackErr != nil || keyRollbackErr != nil {
+					return fmt.Errorf("record rotated state revision: %v; restore state: %v; restore key: %v", err, stateRollbackErr, keyRollbackErr)
+				}
+				return fmt.Errorf("record rotated state revision: %w", err)
+			}
+			// Delete backup files only after state + revision commit succeeds.
+			if hasBackup {
+				_ = os.Remove(backupKeyPath)
+			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "New key written to: %s\n", targetKeyPath)
