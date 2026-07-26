@@ -90,9 +90,9 @@ docker:
 # Local CI (see docs/development/ci.md)
 #
 #   make ci-fast    quick pre-commit checks on the host (NOT a full CI)
-#   make ci         authoritative pre-push gate, runs in a VM (smolvm)
-#   make ci-full    every job incl. protocol E2E, packages, systemd
-#   make ci-pr      ci-full on the temporary merge with origin/main
+#   make ci         optional local duplicate: base checks in smolvm + image build
+#   make ci-full    optional local duplicate incl. browser, protocol E2E, packages, systemd
+#   make ci-pr      optional ci-full on the temporary merge with origin/main
 #   make ci-host    diagnostic: run the standard job set directly on the host
 #   make ci-job JOB=<job>        one job in a VM
 #   make ci-job-host JOB=<job>   one job directly on the host (diagnostic)
@@ -100,9 +100,10 @@ docker:
 #   make ci-image   build/refresh the CI OCI images (content-keyed)
 #   make ci-clean   remove artifacts, temp VMs/worktrees (images: --images)
 #
-# Backend: CI_BACKEND=smolvm (default, authoritative; requires KVM).
-# CI_BACKEND=docker is an explicit diagnostic fallback for hosts without
-# virtualization — it is never selected automatically.
+# Backend: CI_BACKEND=smolvm (default for the optional local duplicate; requires
+# KVM). Hosted GitHub CI remains the required gate. CI_BACKEND=docker is an
+# explicit diagnostic fallback for hosts without virtualization and is never
+# selected automatically.
 # Resources: CI_CPUS (4), CI_MEMORY (8GiB), CI_VM_TIMEOUT (5400s).
 # Clean run:  CI_CLEAN=1 (dependency caches off; images rebuild only via
 #             `make ci-image CI_CLEAN=1`).

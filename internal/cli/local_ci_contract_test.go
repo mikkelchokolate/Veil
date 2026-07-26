@@ -131,6 +131,17 @@ func TestLocalCIPrerequisiteContract(t *testing.T) {
 			t.Errorf("CI docs still make optional smolvm evidence mandatory: %q", forbidden)
 		}
 	}
+	makefile := read("../../Makefile")
+	for _, want := range []string{"optional local duplicate", "Hosted GitHub CI remains the required gate"} {
+		if !strings.Contains(makefile, want) {
+			t.Errorf("Makefile missing optional-smolvm contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{"authoritative pre-push gate", "default, authoritative"} {
+		if strings.Contains(makefile, forbidden) {
+			t.Errorf("Makefile still makes optional smolvm evidence mandatory: %q", forbidden)
+		}
+	}
 
 	dirtyEscape := "CI_" + "ALLOW_DIRTY"
 	if strings.Contains(read("../../scripts/ci/snapshot.sh"), dirtyEscape) {
