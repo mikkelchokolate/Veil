@@ -371,3 +371,59 @@ func TestStartupMigrateLegacyRestoredStateMigratesNewProfiles(t *testing.T) {
 		t.Fatalf("boot 3: revision churn with nothing to migrate: %d -> %d", rev2.Desired, rev3.Desired)
 	}
 }
+
+func TestStartupLegacyProvenanceSurvivesNormalizedDeletionAndDetach(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	info := ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(dir, "state.key"), ApplyRoot: filepath.Join(dir, "apply")}
+	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[{"username":"alice","password":"secret","enabled":true}]}]}`), 0o600, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := newManagementState(info)
+	id := client.StableClientID("hy2", "alice")
+	bindings, err := st.clientRepo.AllBindings()
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("bindings: %v %#v", err, bindings)
+	}
+	if err := st.clientRepo.DeleteBinding(bindings[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	st = newManagementState(info)
+	bindings, err = st.clientRepo.AllBindings()
+	if err != nil || len(bindings) != 0 {
+		t.Fatalf("detached binding recreated: %v %#v", err, bindings)
+	}
+	if err := st.clientRepo.Delete(id); err != nil {
+		t.Fatal(err)
+	}
+	st = newManagementState(info)
+	if _, err := st.clientRepo.Get(id); err == nil {
+		t.Fatal("deleted migrated client was recreated")
+	}
+}
+
+func TestStartupLegacyProvenanceRepairsInterruptedPartialMigration(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	info := ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(dir, "state.key"), ApplyRoot: filepath.Join(dir, "apply")}
+	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[{"username":"alice","password":"secret","enabled":true}]}]}`), 0o600, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := newManagementState(info)
+	id := client.StableClientID("hy2", "alice")
+	if _, err := st.db.Exec(`DELETE FROM migration_markers WHERE key=?`, legacyProfileMarkerKey("hy2", "alice")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`DELETE FROM client_bindings WHERE client_id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	st = newManagementState(info)
+	bindings, err := st.clientRepo.AllBindings()
+	if err != nil || len(bindings) != 1 || bindings[0].ClientID != id {
+		t.Fatalf("partial migration not repaired: %v %#v", err, bindings)
+	}
+	marker, err := st.clientRepo.GetMigrationMarker(legacyProfileMarkerKey("hy2", "alice"))
+	if err != nil || marker == nil {
+		t.Fatalf("profile provenance missing after repair: %v", err)
+	}
+}

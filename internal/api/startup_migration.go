@@ -41,8 +41,9 @@ import (
 //   - IDEMPOTENT: stable derived client IDs make re-runs no-ops.
 
 const (
-	legacyProfilesMarkerKey     = "legacy_profiles"
-	legacyProfilesMarkerVersion = 1
+	legacyProfilesMarkerKey      = "legacy_profiles"
+	legacyProfileMarkerKeyPrefix = "legacy_profile/"
+	legacyProfilesMarkerVersion  = 2
 )
 
 // StartupMigrateLegacyLocked migrates legacy inbound-embedded profiles to
@@ -67,8 +68,11 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		return fmt.Errorf("client store unavailable for legacy migration")
 	}
 
-	// Fingerprint the CURRENT legacy set: find profiles with no normalized
-	// representation yet. Read-only pass; runs on every startup.
+	// Provenance is independent of the current normalized representation. A
+	// per-profile marker means the legacy profile was seen and deliberately
+	// handed over to the normalized domain; deleting that client or detaching
+	// its binding later must not resurrect it. Profiles restored from an older
+	// state have no marker and are therefore migrated.
 	type inboundMissing struct {
 		Name     string
 		Protocol string
@@ -78,18 +82,27 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 	missingCount := 0
 	if err := s.clientRepo.WithTx(func(tx *client.Tx) error {
 		for _, in := range pending {
-			m, err := s.clientMigrator.MissingInboundProfiles(tx, in.Name, in.Profiles)
-			if err != nil {
-				return err
+			unseen := make([]client.LegacyProfile, 0, len(in.Profiles))
+			for _, profile := range in.Profiles {
+				if profile.Username == "" || profile.Password == "" {
+					continue
+				}
+				marker, err := tx.GetMigrationMarker(legacyProfileMarkerKey(in.Name, profile.Username))
+				if err != nil {
+					return err
+				}
+				if marker == nil {
+					unseen = append(unseen, profile)
+				}
 			}
-			if len(m) > 0 {
-				missing = append(missing, inboundMissing{Name: in.Name, Protocol: in.Protocol, Profiles: m})
-				missingCount += len(m)
+			if len(unseen) > 0 {
+				missing = append(missing, inboundMissing{Name: in.Name, Protocol: in.Protocol, Profiles: unseen})
+				missingCount += len(unseen)
 			}
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("verify legacy profile representation: %w", err)
+		return fmt.Errorf("read legacy migration provenance: %w", err)
 	}
 	if missingCount == 0 {
 		// Every current legacy profile is already represented (regardless of
@@ -119,6 +132,18 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 			if err := s.clientMigrator.VerifyInboundProfiles(tx, in.Name, in.Profiles); err != nil {
 				return err
 			}
+			for _, profile := range in.Profiles {
+				details, _ := json.Marshal(map[string]any{
+					"fingerprint": legacyProfileFingerprint(in.Name, in.Protocol, profile),
+					"clientId":    client.StableClientID(in.Name, profile.Username),
+				})
+				if err := tx.PutMigrationMarker(client.MigrationMarker{
+					Key: legacyProfileMarkerKey(in.Name, profile.Username), Version: legacyProfilesMarkerVersion,
+					AppliedAt: time.Now().Unix(), Details: string(details),
+				}); err != nil {
+					return err
+				}
+			}
 		}
 		details, _ := json.Marshal(map[string]any{
 			"clientsCreated": created,
@@ -143,6 +168,16 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 		log.Printf("startup: migrated %d legacy profiles to normalized clients (backup: %s)", created, backupPath)
 	}
 	return nil
+}
+
+func legacyProfileMarkerKey(inboundName, username string) string {
+	return legacyProfileMarkerKeyPrefix + client.StableClientID(inboundName, username)
+}
+
+func legacyProfileFingerprint(inboundName, protocol string, profile client.LegacyProfile) string {
+	body, _ := json.Marshal([]any{inboundName, protocol, profile.Name, profile.Username, profile.Enabled})
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:16])
 }
 
 // legacyProfileFingerprint hashes the sorted stable client IDs of the current

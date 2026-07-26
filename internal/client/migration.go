@@ -85,7 +85,35 @@ func (m *Migrator) MigrateInboundProfilesTx(tx *Tx, inboundID, protocol string, 
 		}
 		clientID := stableClientID(inboundID, p.Username)
 		if _, err := tx.Get(clientID); err == nil {
-			// Already migrated.
+			// Repair an interrupted migration: the client row may have committed
+			// before its binding/credential and provenance marker. A completed
+			// migration is filtered by the startup provenance gate before here.
+			bindings, err := tx.BindingsForClient(clientID)
+			if err != nil {
+				return res, err
+			}
+			var binding *Binding
+			for i := range bindings {
+				if bindings[i].InboundID == inboundID {
+					binding = &bindings[i]
+					break
+				}
+			}
+			if binding == nil {
+				created, err := tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: p.Enabled})
+				if err != nil {
+					return res, fmt.Errorf("client: repair binding %q: %w", p.Username, err)
+				}
+				binding = &created
+				res.BindingsCreated++
+			}
+			active, activeErr := activeCredentialQ(tx.q, binding.ID, "password")
+			if activeErr != nil || active.ID == "" {
+				if _, err := tx.SetCredential(m.creds, binding.ID, "password", p.Password); err != nil {
+					return res, fmt.Errorf("client: repair credential %q: %w", p.Username, err)
+				}
+				res.CredentialsCreated++
+			}
 			res.Skipped++
 			continue
 		}
