@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"strconv"
+
+	"golang.org/x/sys/unix"
 )
 
 const systemdListenFD = 3
@@ -25,6 +27,17 @@ func (s *Server) ServeSystemd(ctx context.Context, allowedUID uint32, allowRoot 
 	return s.serveUnixListener(ctx, listener, allowedUID, allowRoot)
 }
 
+func validateSystemdListenFD(fd int) error {
+	address, err := unix.Getsockname(fd)
+	if err != nil {
+		return fmt.Errorf("systemd helper socket fd is unavailable: %w", err)
+	}
+	if _, ok := address.(*unix.SockaddrUnix); !ok {
+		return fmt.Errorf("systemd helper listener is not a Unix socket")
+	}
+	return nil
+}
+
 func systemdUnixListener() (*net.UnixListener, error) {
 	pid, err := strconv.Atoi(os.Getenv("LISTEN_PID"))
 	if err != nil || pid != os.Getpid() {
@@ -33,6 +46,9 @@ func systemdUnixListener() (*net.UnixListener, error) {
 	fds, err := strconv.Atoi(os.Getenv("LISTEN_FDS"))
 	if err != nil || fds != 1 {
 		return nil, fmt.Errorf("systemd helper requires exactly one listening socket")
+	}
+	if err := validateSystemdListenFD(systemdListenFD); err != nil {
+		return nil, err
 	}
 	file := os.NewFile(systemdListenFD, "veil-helper.socket")
 	if file == nil {

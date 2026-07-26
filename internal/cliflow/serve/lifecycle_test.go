@@ -172,9 +172,13 @@ func TestRunLifecycleShutdownTimeout(t *testing.T) {
 	}
 	defer listener.Close()
 
+	entered := make(chan struct{})
 	server := &http.Server{
-		Addr:    listener.Addr().String(),
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }),
+		Addr: listener.Addr().String(),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			close(entered)
+			<-r.Context().Done()
+		}),
 	}
 
 	lifecycleListenAndServe = func(srv *http.Server) error {
@@ -203,8 +207,13 @@ func TestRunLifecycleShutdownTimeout(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 	defer conn.Close()
-	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n")); err != nil {
+	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")); err != nil {
 		t.Fatalf("write: %v", err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocking handler did not start")
 	}
 
 	cancel()

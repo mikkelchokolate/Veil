@@ -45,3 +45,17 @@ func TestSystemdUnixListenerRejectsInvalidEnvironment(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateSystemdListenFDDoesNotCloseNonSocket(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "not-a-socket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := validateSystemdListenFD(int(file.Fd())); err == nil {
+		t.Fatal("ordinary file accepted as systemd socket")
+	}
+	if _, err := file.WriteString("still-open"); err != nil {
+		t.Fatalf("validation closed unrelated descriptor: %v", err)
+	}
+}
