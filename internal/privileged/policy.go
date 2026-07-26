@@ -83,6 +83,7 @@ type ResolvedBackup struct {
 	StateRoot            string
 	StatePath            string
 	KeyPath              string
+	DatabasePath         string
 	BackupPassphrasePath string
 	Daily                int
 	Weekly               int
@@ -318,6 +319,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	if resolved.KeyPath == "" {
 		resolved.KeyPath = filepath.Join(p.StateRoot, "state.key")
 	}
+	resolved.DatabasePath = filepath.Join(p.StateRoot, "veil.db")
 	if resolved.BackupPassphrasePath == "" {
 		resolved.BackupPassphrasePath = filepath.Join(p.StateRoot, "backup.passphrase")
 	}

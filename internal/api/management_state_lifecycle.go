@@ -254,6 +254,16 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 			return fmt.Errorf("reload state: %w", err)
 		}
 	}
+	// A backup restore closes the SQLite-backed domain before the privileged
+	// helper atomically replaces veil.db. Reopen it only after state+key loaded,
+	// so every repository observes the restored database and restored cipher.
+	if l.state.statePath != "" && l.state.db == nil {
+		initApplySubsystem(l.state)
+		if l.state.db == nil {
+			return fmt.Errorf("reload database: open restored veil.db failed")
+		}
+		initClientSubsystem(l.state)
+	}
 	// A6: auto-migrate legacy inbound-embedded profiles to normalized
 	// Client+Binding+Credential on startup/upgrade. Idempotent (stable derived
 	// client IDs) so safe to run every boot. Runs AFTER state load so legacy

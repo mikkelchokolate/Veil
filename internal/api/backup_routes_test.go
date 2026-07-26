@@ -180,8 +180,11 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	completed, _ := state.backupRestoreJob(accepted.ID)
-	if completed.SafetyStatePath == "" || completed.SafetyKeyPath == "" {
+	if completed.SafetyStatePath == "" || completed.SafetyKeyPath == "" || completed.SafetyDatabasePath == "" {
 		t.Fatalf("restore job missing safety paths: %+v", completed)
+	}
+	if state.db == nil || state.db.Ping() != nil || state.clientRepo == nil {
+		t.Fatal("restore job did not reopen SQLite-backed subsystems")
 	}
 	if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
 		t.Fatal("restore revoked owner session before final status poll")

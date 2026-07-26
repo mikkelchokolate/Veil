@@ -1,7 +1,8 @@
 # Disaster Recovery And Key Lifecycle
 
-Veil disaster recovery protects the Management state and the key required to
-decrypt it. Treat every archive as a root credential for the host.
+Veil disaster recovery protects the Management state, normalized SQLite
+domain, and the key required to decrypt credentials. Treat every archive as a
+root credential for the host.
 
 ## Protected Material
 
@@ -10,9 +11,14 @@ A complete recovery set contains:
 - `/var/lib/veil/state.json`: Management state, users, Inbounds, routing, and
   encrypted secrets.
 - `/etc/veil/state.key`: the 32-byte AES-256-GCM state encryption key.
+- `/var/lib/veil/veil.db`: normalized clients/bindings, encrypted credentials,
+  subscription tokens, traffic, revisions/apply jobs, snapshots, and durable
+  legacy-migration provenance.
 
-New archives also contain an encrypted manifest with the creation time, Veil
-version, Management schema version, file sizes, and SHA-256 checksums.
+Archive format v2 contains all three files plus a manifest with the creation
+time, Veil version, Management schema version, file sizes, and SHA-256
+checksums. The manifest is inside the same encrypted envelope when archive
+encryption is enabled.
 
 Losing `state.key` makes `state.json` unrecoverable. Store encrypted archives
 off-host and keep the archive passphrase outside the backup destination.
@@ -112,11 +118,14 @@ sudo systemctl start veil.service
 veil status
 ```
 
-Before replacement, Veil preserves existing files as timestamped
-`.pre-restore-*` safety copies. Keep them until the restored Panel and all
-managed protocols have been validated.
+Before replacement, Veil stages and verifies all archive members, then preserves
+existing state, key, and database files as timestamped `.pre-restore-*` safety
+copies. Any commit failure rolls all three back. Keep the copies until the
+restored Panel and all managed protocols have been validated.
 
-Panel restores are queued, admin-only jobs. A successful restore revokes all
+Panel restores are queued, admin-only jobs. The Panel stops SQLite collectors,
+closes the database before replacement, then reloads state/key and reopens every
+SQLite-backed store before reporting success. A successful restore revokes all
 browser sessions, including the initiating session after it receives the final
 job result.
 
@@ -163,7 +172,9 @@ Veil restores:
 
 - legacy encrypted envelope v1;
 - authenticated encrypted envelope v2;
-- current manifest format v1;
+- legacy two-file archive/manifest format v1 (leaves the existing `veil.db`
+  untouched);
+- current three-file archive/manifest format v2;
 - older supported Management state schemas.
 
 Committed v1 and v0.5.0-v2 archive fixtures are restored by the test suite on

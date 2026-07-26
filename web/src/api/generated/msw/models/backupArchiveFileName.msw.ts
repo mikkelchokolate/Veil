@@ -47,4 +47,5 @@ export type BackupArchiveFileName = typeof BackupArchiveFileName[keyof typeof Ba
 export const BackupArchiveFileName = {
   statejson: 'state.json',
   statekey: 'state.key',
+  veildb: 'veil.db',
 } as const;

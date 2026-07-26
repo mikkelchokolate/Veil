@@ -21,16 +21,17 @@ type BackupCreateResponse struct {
 }
 
 type BackupRestoreJob struct {
-	ID                string    `json:"id"`
-	Archive           string    `json:"archive"`
-	Status            string    `json:"status"`
-	CreatedAt         time.Time `json:"createdAt"`
-	StartedAt         time.Time `json:"startedAt,omitempty"`
-	FinishedAt        time.Time `json:"finishedAt,omitempty"`
-	Error             string    `json:"error,omitempty"`
-	SafetyStatePath   string    `json:"safetyStatePath,omitempty"`
-	SafetyKeyPath     string    `json:"safetyKeyPath,omitempty"`
-	ownerSessionToken string
+	ID                 string    `json:"id"`
+	Archive            string    `json:"archive"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"createdAt"`
+	StartedAt          time.Time `json:"startedAt,omitempty"`
+	FinishedAt         time.Time `json:"finishedAt,omitempty"`
+	Error              string    `json:"error,omitempty"`
+	SafetyStatePath    string    `json:"safetyStatePath,omitempty"`
+	SafetyKeyPath      string    `json:"safetyKeyPath,omitempty"`
+	SafetyDatabasePath string    `json:"safetyDatabasePath,omitempty"`
+	ownerSessionToken  string
 }
 
 type backupCreateRequest struct {
@@ -255,11 +256,25 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		job.Status = "running"
 		job.StartedAt = time.Now().UTC()
 	})
-	result, err := s.backupOperation(context.Background(), privileged.BackupRequest{
-		Action: privileged.BackupActionRestore, ArchiveName: name,
-	})
+	s.mu.Lock()
+	closeErr := closeClientSubsystem(s)
+	var result privileged.BackupResult
+	var err error
+	if closeErr != nil {
+		err = fmt.Errorf("close database for restore: %w", closeErr)
+	} else {
+		result, err = s.backupOperation(context.Background(), privileged.BackupRequest{
+			Action: privileged.BackupActionRestore, ArchiveName: name,
+		})
+	}
+	// Reopen on both success and failure. The helper rolls all staged files back
+	// on failure, so this reconnects either the restored DB or the original DB.
+	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
+	s.mu.Unlock()
 	if err == nil {
-		err = s.Reload()
+		err = reopenErr
+	} else if reopenErr != nil {
+		err = fmt.Errorf("%v; reopen database: %w", err, reopenErr)
 	}
 	if err == nil {
 		_, err = s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
@@ -279,6 +294,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		job.FinishedAt = finished
 		job.SafetyStatePath = result.SafetyStatePath
 		job.SafetyKeyPath = result.SafetyKeyPath
+		job.SafetyDatabasePath = result.SafetyDatabasePath
 		if err != nil {
 			job.Status = "failed"
 			job.Error = err.Error()

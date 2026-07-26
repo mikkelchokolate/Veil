@@ -103,6 +103,7 @@ func (e ApplyOperationType) Valid() bool {
 const (
 	StateJson BackupArchiveFileName = "state.json"
 	StateKey  BackupArchiveFileName = "state.key"
+	VeilDb    BackupArchiveFileName = "veil.db"
 )
 
 // Valid indicates whether the value is a known member of the BackupArchiveFileName enum.
@@ -111,6 +112,8 @@ func (e BackupArchiveFileName) Valid() bool {
 	case StateJson:
 		return true
 	case StateKey:
+		return true
+	case VeilDb:
 		return true
 	default:
 		return false
@@ -829,15 +832,16 @@ type BackupPruneResult struct {
 
 // BackupRestoreJob defines model for BackupRestoreJob.
 type BackupRestoreJob struct {
-	Archive         string                 `json:"archive"`
-	CreatedAt       time.Time              `json:"createdAt"`
-	Error           *string                `json:"error,omitempty"`
-	FinishedAt      *time.Time             `json:"finishedAt,omitempty"`
-	Id              string                 `json:"id"`
-	SafetyKeyPath   *string                `json:"safetyKeyPath,omitempty"`
-	SafetyStatePath *string                `json:"safetyStatePath,omitempty"`
-	StartedAt       *time.Time             `json:"startedAt,omitempty"`
-	Status          BackupRestoreJobStatus `json:"status"`
+	Archive            string                 `json:"archive"`
+	CreatedAt          time.Time              `json:"createdAt"`
+	Error              *string                `json:"error,omitempty"`
+	FinishedAt         *time.Time             `json:"finishedAt,omitempty"`
+	Id                 string                 `json:"id"`
+	SafetyDatabasePath *string                `json:"safetyDatabasePath,omitempty"`
+	SafetyKeyPath      *string                `json:"safetyKeyPath,omitempty"`
+	SafetyStatePath    *string                `json:"safetyStatePath,omitempty"`
+	StartedAt          *time.Time             `json:"startedAt,omitempty"`
+	Status             BackupRestoreJobStatus `json:"status"`
 }
 
 // BackupRestoreJobStatus defines model for BackupRestoreJob.Status.

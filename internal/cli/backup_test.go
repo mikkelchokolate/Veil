@@ -27,6 +27,7 @@ func TestBackupRestoreCLIUnencrypted(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createCLIBackupDatabase(t, statePath)
 	// 1. Create backup
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
@@ -118,6 +119,7 @@ func TestBackupRestoreCLIEncrypted(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createCLIBackupDatabase(t, statePath)
 	// 1. Create backup with passphrase
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
@@ -200,6 +202,7 @@ func TestBackupRestoreCLIPassphraseFile(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createCLIBackupDatabase(t, statePath)
 	// 1. Create backup with passphrase file
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer

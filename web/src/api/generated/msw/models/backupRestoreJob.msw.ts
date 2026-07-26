@@ -53,4 +53,5 @@ export interface BackupRestoreJob {
   error?: string;
   safetyStatePath?: string;
   safetyKeyPath?: string;
+  safetyDatabasePath?: string;
 }

@@ -2765,7 +2765,7 @@ components:
       properties:
         name:
           type: string
-          enum: [state.json, state.key]
+          enum: [state.json, state.key, veil.db]
         size:
           type: integer
           format: int64
@@ -2867,6 +2867,8 @@ components:
         safetyStatePath:
           type: string
         safetyKeyPath:
+          type: string
+        safetyDatabasePath:
           type: string
     UserResponse:
       type: object

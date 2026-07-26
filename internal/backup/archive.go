@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -93,10 +94,13 @@ func createTarball(statePath, keyPath string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// CreateBackup packages state.json and state.key into a tar.gz archive.
-// If a non-empty passphrase is provided, the archive is encrypted using PBKDF2 + AES-GCM.
+// CreateBackup creates the current archive format, inferring veil.db next to
+// state.json. Restore remains backward compatible with legacy two-file v1
+// archives.
 func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
-	return CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{})
+	return CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{
+		DatabasePath: filepath.Join(filepath.Dir(statePath), "veil.db"),
+	})
 }
 
 func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {

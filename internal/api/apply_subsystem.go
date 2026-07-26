@@ -14,6 +14,24 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
+func closeClientSubsystem(s *managementState) error {
+	if s.trafficCollector != nil {
+		s.trafficCollector.Stop()
+	}
+	if s.trafficReconciler != nil {
+		s.trafficReconciler.Stop()
+	}
+	// Keep repository/service handles non-nil during the short swap boundary.
+	// Concurrent handlers then receive closed-database errors rather than
+	// panicking on a nil service; successful reopen replaces every handle.
+	if s.db == nil {
+		return nil
+	}
+	db := s.db
+	s.db = nil
+	return db.Close()
+}
+
 // initApplySubsystem opens the normalized SQLite store next to the state file
 // and wires durable revisions and apply jobs. It is a no-op when no StatePath
 // is configured (in-memory/test servers) — revision/apply tracking then

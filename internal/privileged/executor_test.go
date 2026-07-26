@@ -22,7 +22,19 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
+
+func createBackupTestDatabase(t *testing.T, root string) {
+	t.Helper()
+	db, err := storage.Open(filepath.Join(root, "veil.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T) {
 	root := t.TempDir()
@@ -815,6 +827,7 @@ func TestRunProductionBackupAllActions(t *testing.T) {
 	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	createBackupTestDatabase(t, root)
 
 	config := ProductionConfig{
 		StatePath:            statePath,
@@ -1024,6 +1037,7 @@ func TestRunProductionBackupCreateUsesDefaultArchiveName(t *testing.T) {
 	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	createBackupTestDatabase(t, root)
 
 	config := ProductionConfig{
 		StatePath:            statePath,

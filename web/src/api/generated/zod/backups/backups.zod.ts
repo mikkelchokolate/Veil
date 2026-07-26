@@ -118,7 +118,7 @@ export const PostApiBackupsResponse = zod.object({
   "veilVersion": zod.string().optional(),
   "stateSchemaVersion": zod.number().min(1),
   "files": zod.array(zod.object({
-  "name": zod.enum(['state.json', 'state.key']),
+  "name": zod.enum(['state.json', 'state.key', 'veil.db']),
   "size": zod.number().min(postApiBackupsResponseVerificationFilesItemSizeMin),
   "sha256": zod.string().regex(postApiBackupsResponseVerificationFilesItemSha256RegExp)
 })).min(postApiBackupsResponseVerificationFilesMin).max(postApiBackupsResponseVerificationFilesMax)
@@ -207,7 +207,7 @@ export const PostApiBackupsNameVerifyResponse = zod.object({
   "veilVersion": zod.string().optional(),
   "stateSchemaVersion": zod.number().min(1),
   "files": zod.array(zod.object({
-  "name": zod.enum(['state.json', 'state.key']),
+  "name": zod.enum(['state.json', 'state.key', 'veil.db']),
   "size": zod.number().min(postApiBackupsNameVerifyResponseFilesItemSizeMin),
   "sha256": zod.string().regex(postApiBackupsNameVerifyResponseFilesItemSha256RegExp)
 })).min(postApiBackupsNameVerifyResponseFilesMin).max(postApiBackupsNameVerifyResponseFilesMax)
@@ -242,7 +242,8 @@ export const PostApiBackupsNameRestoreResponse = zod.object({
   "finishedAt": zod.iso.datetime({"offset":true}).optional(),
   "error": zod.string().optional(),
   "safetyStatePath": zod.string().optional(),
-  "safetyKeyPath": zod.string().optional()
+  "safetyKeyPath": zod.string().optional(),
+  "safetyDatabasePath": zod.string().optional()
 })
 
 /**
@@ -268,6 +269,7 @@ export const GetApiBackupRestoreJobsIdResponse = zod.object({
   "finishedAt": zod.iso.datetime({"offset":true}).optional(),
   "error": zod.string().optional(),
   "safetyStatePath": zod.string().optional(),
-  "safetyKeyPath": zod.string().optional()
+  "safetyKeyPath": zod.string().optional(),
+  "safetyDatabasePath": zod.string().optional()
 })
 

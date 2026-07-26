@@ -9,8 +9,20 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/storage"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+func createArchiveTestDatabase(t *testing.T, dir string) {
+	t.Helper()
+	db, err := storage.Open(filepath.Join(dir, "veil.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 	dir := t.TempDir()
@@ -28,6 +40,7 @@ func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createArchiveTestDatabase(t, dir)
 	// Create backup
 	backupData, err := CreateBackup(statePath, keyPath, "")
 	if err != nil {
@@ -78,6 +91,7 @@ func TestCreateAndRestoreBackupEncrypted(t *testing.T) {
 	}
 
 	passphrase := "my-secure-passphrase"
+	createArchiveTestDatabase(t, dir)
 
 	// Create encrypted backup
 	backupData, err := CreateBackup(statePath, keyPath, passphrase)
@@ -140,6 +154,7 @@ func TestRestoreUnencryptedBackupWithPassphraseErrors(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createArchiveTestDatabase(t, dir)
 	// Unencrypted backup
 	backupData, err := CreateBackup(statePath, keyPath, "")
 	if err != nil {

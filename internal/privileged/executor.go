@@ -614,9 +614,14 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 	}
 	switch request.Action {
 	case BackupActionCreate:
+		databasePath := request.DatabasePath
+		if databasePath == "" {
+			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
+		}
 		data, err := backup.CreateBackupWithOptions(request.StatePath, request.KeyPath, passphrase, backup.ArchiveOptions{
-			VeilVersion: config.VeilVersion,
-			CreatedAt:   config.Now().UTC(),
+			VeilVersion:  config.VeilVersion,
+			CreatedAt:    config.Now().UTC(),
+			DatabasePath: databasePath,
 		})
 		if err != nil {
 			return BackupResult{}, err
@@ -646,22 +651,27 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		if err != nil {
 			return BackupResult{}, err
 		}
+		databasePath := request.DatabasePath
+		if databasePath == "" {
+			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
+		}
 		restored, err := backup.RestoreBackupWithOptions(
 			data,
 			request.StatePath,
 			request.KeyPath,
 			passphrase,
-			backup.RestoreOptions{CheckOnly: request.CheckOnly},
+			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath},
 		)
 		if err != nil {
 			return BackupResult{}, err
 		}
 		return BackupResult{
-			ArchiveName:     request.ArchiveName,
-			Verified:        true,
-			Restored:        !request.CheckOnly,
-			SafetyStatePath: restored.SafetyStatePath,
-			SafetyKeyPath:   restored.SafetyKeyPath,
+			ArchiveName:        request.ArchiveName,
+			Verified:           true,
+			Restored:           !request.CheckOnly,
+			SafetyStatePath:    restored.SafetyStatePath,
+			SafetyKeyPath:      restored.SafetyKeyPath,
+			SafetyDatabasePath: restored.SafetyDatabasePath,
 		}, nil
 	default:
 		return BackupResult{}, errors.New("unsupported backup operation")

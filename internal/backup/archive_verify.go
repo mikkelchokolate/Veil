@@ -20,16 +20,19 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 const (
-	CurrentArchiveFormatVersion = 1
+	CurrentArchiveFormatVersion = 2
+	LegacyArchiveFormatVersion  = 1
 	maxBackupArchiveFileBytes   = 32 * 1024 * 1024
 )
 
 type ArchiveOptions struct {
-	VeilVersion string
-	CreatedAt   time.Time
+	VeilVersion  string
+	CreatedAt    time.Time
+	DatabasePath string
 }
 
 type ArchiveFile struct {
@@ -58,28 +61,32 @@ type VerificationReport struct {
 }
 
 type RestoreOptions struct {
-	CheckOnly bool
-	Now       func() time.Time
+	CheckOnly    bool
+	Now          func() time.Time
+	DatabasePath string
 }
 
 type RestoreResult struct {
-	Verified        bool               `json:"verified"`
-	CheckOnly       bool               `json:"checkOnly"`
-	Verification    VerificationReport `json:"verification"`
-	SafetyStatePath string             `json:"safetyStatePath,omitempty"`
-	SafetyKeyPath   string             `json:"safetyKeyPath,omitempty"`
+	Verified           bool               `json:"verified"`
+	CheckOnly          bool               `json:"checkOnly"`
+	Verification       VerificationReport `json:"verification"`
+	SafetyStatePath    string             `json:"safetyStatePath,omitempty"`
+	SafetyKeyPath      string             `json:"safetyKeyPath,omitempty"`
+	SafetyDatabasePath string             `json:"safetyDatabasePath,omitempty"`
 }
 
 type archiveContents struct {
 	state    []byte
 	key      []byte
+	database []byte
 	manifest []byte
 }
 
 type verifiedBackup struct {
-	report VerificationReport
-	state  []byte
-	key    []byte
+	report   VerificationReport
+	state    []byte
+	key      []byte
+	database []byte
 }
 
 func CreateBackupWithOptions(statePath, keyPath, passphrase string, options ArchiveOptions) ([]byte, error) {
@@ -99,6 +106,16 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	if err != nil {
 		return nil, fmt.Errorf("archive key: %w", err)
 	}
+	if options.DatabasePath == "" {
+		options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+	}
+	if _, err := os.Stat(options.DatabasePath); err != nil {
+		return nil, fmt.Errorf("archive database: %w", err)
+	}
+	database, err := consistentSQLiteSnapshot(options.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("archive database: %w", err)
+	}
 	createdAt := options.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -117,13 +134,45 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 		Files: []ArchiveFile{
 			{Name: "state.json", Size: int64(len(state)), SHA256: backupChecksum(state)},
 			{Name: "state.key", Size: int64(len(key)), SHA256: backupChecksum(key)},
+			{Name: "veil.db", Size: int64(len(database)), SHA256: backupChecksum(database)},
 		},
 	}
 	manifestBody, err := archiveManifestMarshal(manifest)
 	if err != nil {
 		return nil, fmt.Errorf("marshal backup manifest: %w", err)
 	}
-	return writeArchiveTarball(archiveContents{state: state, key: key, manifest: manifestBody})
+	return writeArchiveTarball(archiveContents{state: state, key: key, database: database, manifest: manifestBody})
+}
+
+func consistentSQLiteSnapshot(databasePath string) ([]byte, error) {
+	db, err := storage.OpenExisting(databasePath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(databasePath), ".veil-backup-db-*.sqlite")
+	if err != nil {
+		return nil, err
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return nil, err
+	}
+	_ = os.Remove(tmpPath) // VACUUM INTO requires a non-existent target.
+	defer os.Remove(tmpPath)
+	quoted := "'" + strings.ReplaceAll(tmpPath, "'", "''") + "'"
+	if _, err := db.Exec(`VACUUM INTO ` + quoted); err != nil {
+		return nil, err
+	}
+	body, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 {
+		return nil, errors.New("SQLite snapshot is empty")
+	}
+	return body, nil
 }
 
 func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
@@ -147,6 +196,14 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 	if options.CheckOnly {
 		return result, nil
 	}
+	if len(verified.database) != 0 {
+		if options.DatabasePath == "" {
+			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+		}
+		if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
+			return RestoreResult{}, fmt.Errorf("prepare database restore boundary: %w", err)
+		}
+	}
 	now := options.Now
 	if now == nil {
 		now = time.Now
@@ -160,23 +217,55 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 	}
 	keyBackup, err := stageRestoreFile(keyPath, verified.key, keySafety)
 	if err != nil {
-		_ = stateBackup.rollback()
+		_ = stateBackup.cleanupStaged()
 		return RestoreResult{}, fmt.Errorf("stage key restore: %w", err)
 	}
-	if err := stateBackup.commit(); err != nil {
-		_ = keyBackup.cleanupStaged()
-		return RestoreResult{}, fmt.Errorf("replace state: %w", err)
+	staged := []*stagedRestoreFile{stateBackup, keyBackup}
+	var databaseBackup *stagedRestoreFile
+	databaseSafety := ""
+	if len(verified.database) != 0 {
+		if options.DatabasePath == "" {
+			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+		}
+		databaseSafety = options.DatabasePath + ".pre-restore-" + suffix
+		databaseBackup, err = stageRestoreFile(options.DatabasePath, verified.database, databaseSafety)
+		if err != nil {
+			_ = stateBackup.cleanupStaged()
+			_ = keyBackup.cleanupStaged()
+			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
+		}
+		staged = append(staged, databaseBackup)
 	}
-	if err := keyBackup.commit(); err != nil {
-		_ = stateBackup.rollback()
-		_ = keyBackup.rollback()
-		return RestoreResult{}, fmt.Errorf("replace key: %w", err)
+	for i, file := range staged {
+		if err := file.commit(); err != nil {
+			for j := len(staged) - 1; j >= 0; j-- {
+				if j < i {
+					_ = staged[j].rollback()
+				} else {
+					_ = staged[j].cleanupStaged()
+				}
+			}
+			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", i, err)
+		}
+	}
+	if databaseBackup != nil {
+		for _, suffix := range []string{"-wal", "-shm"} {
+			if err := restoreRemove(options.DatabasePath + suffix); err != nil && !os.IsNotExist(err) {
+				for j := len(staged) - 1; j >= 0; j-- {
+					_ = staged[j].rollback()
+				}
+				return RestoreResult{}, fmt.Errorf("remove stale database sidecar %s: %w", suffix, err)
+			}
+		}
 	}
 	if stateBackup.hadOriginal {
 		result.SafetyStatePath = stateSafety
 	}
 	if keyBackup.hadOriginal {
 		result.SafetyKeyPath = keySafety
+	}
+	if databaseBackup != nil && databaseBackup.hadOriginal {
+		result.SafetyDatabasePath = databaseSafety
 	}
 	return result, nil
 }
@@ -223,8 +312,17 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 		if err := json.Unmarshal(contents.manifest, &manifest); err != nil {
 			return verifiedBackup{}, fmt.Errorf("decode backup manifest: %w", err)
 		}
-		if manifest.FormatVersion != CurrentArchiveFormatVersion {
+		if manifest.FormatVersion != LegacyArchiveFormatVersion && manifest.FormatVersion != CurrentArchiveFormatVersion {
 			return verifiedBackup{}, fmt.Errorf("unsupported archive manifest version: %d", manifest.FormatVersion)
+		}
+		if manifest.FormatVersion == CurrentArchiveFormatVersion {
+			if len(contents.database) == 0 {
+				return verifiedBackup{}, errors.New("invalid backup: missing veil.db")
+			}
+			report.Files = append(report.Files, ArchiveFile{Name: "veil.db", Size: int64(len(contents.database)), SHA256: backupChecksum(contents.database)})
+			if err := validateSQLiteSnapshot(contents.database); err != nil {
+				return verifiedBackup{}, fmt.Errorf("validate backup database: %w", err)
+			}
 		}
 		if manifest.StateSchemaVersion != sourceSchema {
 			return verifiedBackup{}, fmt.Errorf(
@@ -241,7 +339,62 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 		report.VeilVersion = manifest.VeilVersion
 		report.Files = manifest.Files
 	}
-	return verifiedBackup{report: report, state: contents.state, key: contents.key}, nil
+	return verifiedBackup{report: report, state: contents.state, key: contents.key, database: contents.database}, nil
+}
+
+func checkpointSQLiteRestoreBoundary(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	var busy, logFrames, checkpointed int
+	err = db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed)
+	closeErr := db.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if busy != 0 {
+		return fmt.Errorf("veil.db is still in use (WAL frames=%d checkpointed=%d); stop writers before restore", logFrames, checkpointed)
+	}
+	return nil
+}
+
+func validateSQLiteSnapshot(body []byte) error {
+	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
+	if err != nil {
+		return err
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var result string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
+		return err
+	}
+	if result != "ok" {
+		return fmt.Errorf("SQLite quick_check: %s", result)
+	}
+	return nil
 }
 
 func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
@@ -296,6 +449,13 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 		{name: "state.json", body: contents.state, mode: 0o600},
 		{name: "state.key", body: contents.key, mode: 0o600},
 	}
+	if len(contents.database) > 0 {
+		files = append(files, struct {
+			name string
+			body []byte
+			mode int64
+		}{name: "veil.db", body: contents.database, mode: 0o600})
+	}
 	if len(contents.manifest) > 0 {
 		files = append(files, struct {
 			name string
@@ -344,7 +504,7 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 			return archiveContents{}, fmt.Errorf("read tar archive: %w", err)
 		}
 		name := strings.TrimPrefix(filepath.ToSlash(header.Name), "./")
-		if name != "state.json" && name != "state.key" && name != "manifest.json" {
+		if name != "state.json" && name != "state.key" && name != "veil.db" && name != "manifest.json" {
 			return archiveContents{}, fmt.Errorf("invalid backup: unexpected archive entry %q", header.Name)
 		}
 		if seen[name] {
@@ -369,6 +529,8 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 			contents.state = body
 		case "state.key":
 			contents.key = body
+		case "veil.db":
+			contents.database = body
 		case "manifest.json":
 			contents.manifest = body
 		}
