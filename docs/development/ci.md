@@ -179,7 +179,7 @@ automatically. They exist for debugging the scripts themselves.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `CI_BACKEND` | `smolvm` | `smolvm` (authoritative) or `docker` (explicit diagnostic) |
+| `CI_BACKEND` | `smolvm` | `smolvm` (local VM backend) or `docker` (explicit diagnostic) |
 | `CI_CPUS` | `4` | vCPUs per VM |
 | `CI_MEMORY` | `8` | GiB RAM per VM |
 | `CI_VM_TIMEOUT` | `5400` | seconds per guest run |
@@ -242,7 +242,7 @@ WSL2 backend.
 ### macOS
 
 The current repository-owned images/assets are amd64-only, so Apple Silicon is
-not supported by the authoritative local backend yet. An x86_64 macOS host may
+not supported by the local smolvm backend yet. An x86_64 macOS host may
 use Hypervisor.framework if smolvm and Docker satisfy the requirements above.
 
 ## Caching
@@ -375,5 +375,5 @@ Before the guard existed, a root test run on the live host overwrote
 live `/etc/veil/state.key` + `/var/lib/veil/state.json`, taking the panel,
 helper, and protocol units down. The recovery path (pre-restore backups under
 `/etc/veil/*.pre-restore-*`) worked, but the correct fix is the isolation
-above. All authoritative runs happen as the unprivileged `ci` user inside the
+above. All local-backend jobs run as the unprivileged `ci` user inside the
 VM/container exactly to make this class of accident impossible.

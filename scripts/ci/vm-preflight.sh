@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/ci/vm-preflight.sh — validates the selected CI backend before any work.
-# CI_BACKEND=smolvm (default, authoritative) requires smolvm + hardware
+# CI_BACKEND=smolvm (default local VM backend) requires smolvm + hardware
 # virtualization. CI_BACKEND=docker is an explicit, opt-in diagnostic backend
 # (never selected automatically, always prints a warning).
 set -euo pipefail
@@ -49,7 +49,7 @@ docs/development/ci.md#virtualization-setup"
     ci_warn "\
 CI_BACKEND=docker is an explicit diagnostic backend.
 
-It is NOT an authoritative CI reproduction: no hardware isolation, host kernel,
+It is NOT an isolated-VM reproduction: no hardware isolation, host kernel,
 no smolvm. Use the default CI_BACKEND=smolvm on a virtualization-capable host."
     command -v docker >/dev/null 2>&1 || ci_die "CI_BACKEND=docker but docker is not installed"
     docker info >/dev/null 2>&1 || ci_die "CI_BACKEND=docker but the docker daemon is unreachable"

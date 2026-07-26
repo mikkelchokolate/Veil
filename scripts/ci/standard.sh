@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/ci/standard.sh — job set for `make ci` (pre-push authoritative gate).
+# scripts/ci/standard.sh — job set for the optional local `make ci` duplicate.
 # Runs INSIDE a VM via run-job.sh; this script executes inside the guest.
 set -euo pipefail
 

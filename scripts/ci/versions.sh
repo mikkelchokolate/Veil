@@ -79,7 +79,7 @@ CI_CADDY_VERSION="v2.11.4"
 CI_FORWARDPROXY_VERSION="d62c80d3dd2c706b6b87579844d2397bddd18317"
 
 # --- Local VM runtime ---------------------------------------------------------
-# Minimum smolvm version required for the authoritative local backend.
+# Minimum smolvm version required for the local VM backend.
 CI_SMOLVM_MIN_VERSION="1.6.13"
 
 # --- Test parameters -----------------------------------------------------------

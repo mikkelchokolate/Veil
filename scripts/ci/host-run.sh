@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/ci/host-run.sh — DIAGNOSTIC execution of a CI job directly on the host.
-# Never selected automatically. Prints the non-authoritative warning.
+# Never selected automatically. Prints the diagnostic-boundary warning.
 set -euo pipefail
 
 JOB="${1:?usage: host-run.sh <job> [args...]}"
@@ -11,7 +11,7 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${_script_dir}/common.sh"
 
 cat >&2 <<'EOF'
-WARNING: ci-host is not an authoritative CI reproduction.
+WARNING: ci-host is not a hosted-CI or isolated-VM reproduction.
 
 It does not fully validate:
 - clean VM state;
