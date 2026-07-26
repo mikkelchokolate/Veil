@@ -242,7 +242,32 @@ func (s *managementState) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return NewManagementStateLifecycle(s).ReloadLocked()
+	err := NewManagementStateLifecycle(s).ReloadLocked()
+	if err != nil {
+		s.startupStateLoadFailed = true
+		s.startupStateLoadErr = err
+		s.allowDevAnonymous = false
+		return err
+	}
+	s.startupStateLoadFailed = false
+	s.startupStateLoadErr = nil
+	return nil
+}
+
+// Close stops and joins every normalized-domain background worker before
+// closing the SQLite store. RunLifecycle calls it after HTTP draining, while
+// backup restore uses the same detach/stop/close primitives around its DB swap.
+func (s *managementState) Close() error {
+	s.mu.Lock()
+	s.clientSubsystemStopping = true
+	workers := detachClientBackgroundWorkers(s)
+	s.mu.Unlock()
+
+	stopClientBackgroundWorkers(workers)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return closeClientDatabase(s)
 }
 
 func (s *managementState) saveLocked() error {

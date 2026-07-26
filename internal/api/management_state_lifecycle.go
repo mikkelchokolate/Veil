@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,8 +16,8 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
-	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
@@ -150,6 +151,7 @@ func newManagementState(info ServerInfo) *managementState {
 		log.Printf("error loading coherent management state for %s: %v", info.StatePath, err)
 		if info.StatePath != "" {
 			state.startupStateLoadFailed = true
+			state.startupStateLoadErr = err
 			state.allowDevAnonymous = false
 		}
 	}
@@ -182,19 +184,31 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 	return nil
 }
 
-// RecoverPendingKeyRotation runs before any key-dependent load. SQLite and the
-// dedicated journal decide both-file rollback/finalization; unknown states fail
-// closed rather than guessing which key/state half is authoritative.
+// RecoverPendingKeyRotation runs the journal protocol through the privileged
+// helper before any key-dependent load. The helper owns the root-only journal,
+// safety artifacts, and /etc/veil key writes; the Panel never opens them.
 func (l ManagementStateLifecycle) RecoverPendingKeyRotation() error {
-	return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{
-		StatePath: l.state.statePath,
-	})
+	return l.RecoverPendingKeyRotationContext(context.Background())
+}
+
+func (l ManagementStateLifecycle) RecoverPendingKeyRotationContext(ctx context.Context) error {
+	if l.state.statePath == "" {
+		return nil
+	}
+	if l.state.privileged == nil {
+		return errors.New("recover interrupted key rotation: privileged helper is unavailable")
+	}
+	if err := l.state.privileged.RecoverKeyRotation(ctx, privileged.RecoverKeyRotationRequest{}); err != nil {
+		return fmt.Errorf("recover interrupted key rotation through privileged helper: %w", err)
+	}
+	return nil
 }
 
 func (l ManagementStateLifecycle) loadCoherentStateLocked() error {
-	return statecommit.WithKeyRotationRecovery(statecommit.RecoverKeyRotationOptions{
-		StatePath: l.state.statePath,
-	}, func() error {
+	if err := l.RecoverPendingKeyRotation(); err != nil {
+		return err
+	}
+	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
 		if l.state.keyPath != "" {
 			if err := l.loadOrCreateCipher(); err != nil {
 				return fmt.Errorf("load encryption key: %w", err)

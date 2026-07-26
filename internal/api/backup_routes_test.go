@@ -118,6 +118,8 @@ func TestBackupRoutesRejectTraversalAndPruneManagedArchives(t *testing.T) {
 
 func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	state := newPanelBackupState(t)
+	collectorBeforeRestore := state.trafficCollector
+	reconcilerBeforeRestore := state.trafficReconciler
 	auditStarted := make(chan audit.Record, 1)
 	releaseAudit := make(chan struct{})
 	state.backupRestoreAudit = func(record audit.Record) error {
@@ -186,6 +188,14 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if state.db == nil || state.db.Ping() != nil || state.clientRepo == nil {
 		t.Fatal("restore job did not reopen SQLite-backed subsystems")
 	}
+	if collectorBeforeRestore.Running() || reconcilerBeforeRestore.Running() {
+		t.Fatal("restore returned before old traffic workers stopped")
+	}
+	if state.trafficCollector == nil || state.trafficReconciler == nil ||
+		state.trafficCollector == collectorBeforeRestore || state.trafficReconciler == reconcilerBeforeRestore ||
+		!state.trafficCollector.Running() || !state.trafficReconciler.Running() {
+		t.Fatal("restore did not create exactly one live worker pair for the reopened database")
+	}
 	if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
 		t.Fatal("restore revoked owner session before final status poll")
 	}
@@ -215,6 +225,11 @@ func newPanelBackupState(t *testing.T) *managementState {
 		ApplyRoot: filepath.Join(dir, "etc"),
 	}
 	state := newManagementState(info)
+	t.Cleanup(func() {
+		if err := state.Close(); err != nil {
+			t.Errorf("close backup test state: %v", err)
+		}
+	})
 	state.mu.Lock()
 	if err := state.saveLocked(); err != nil {
 		state.mu.Unlock()

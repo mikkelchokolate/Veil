@@ -17,11 +17,37 @@ import (
 type fakeReloader struct {
 	reloadCalled int32
 	reloadErr    error
+	closeCalled  int32
+	closeErr     error
 }
 
 func (f *fakeReloader) Reload() error {
 	atomic.AddInt32(&f.reloadCalled, 1)
 	return f.reloadErr
+}
+
+func (f *fakeReloader) Close() error {
+	atomic.AddInt32(&f.closeCalled, 1)
+	return f.closeErr
+}
+
+func TestRunServeLifecycleClosesStateWorkersOnShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	reloader := &fakeReloader{}
+	err := RunLifecycle(LifecycleOptions{
+		Context:       ctx,
+		Out:           &bytes.Buffer{},
+		Err:           &bytes.Buffer{},
+		Server:        &http.Server{Addr: "127.0.0.1:0", Handler: http.NewServeMux()},
+		StateReloader: reloader,
+	})
+	if err != nil {
+		t.Fatalf("RunLifecycle: %v", err)
+	}
+	if got := atomic.LoadInt32(&reloader.closeCalled); got != 1 {
+		t.Fatalf("state lifecycle close calls=%d, want 1", got)
+	}
 }
 
 func TestRunServeLifecycleShutsDownOnContextCancel(t *testing.T) {

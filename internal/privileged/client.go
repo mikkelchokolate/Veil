@@ -9,6 +9,7 @@ type Client interface {
 	Journal(context.Context, JournalRequest) (JournalResult, error)
 	Backup(context.Context, BackupRequest) (BackupResult, error)
 	RotateKey(context.Context, RotateKeyRequest) error
+	RecoverKeyRotation(context.Context, RecoverKeyRotationRequest) error
 	FirewallApply(context.Context, FirewallRequest) (FirewallResult, error)
 	StageUpdate(context.Context, UpdateRequest) (UpdateResult, error)
 	RestartPanel(context.Context) error

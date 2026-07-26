@@ -359,6 +359,8 @@ func TestManagementStateReloadPicksUpStateChanges(t *testing.T) {
 
 	// Write initial state: domain=old.example.com
 	state := &managementState{statePath: statePath, keyPath: keyPath, applyRoot: stateDir, cipher: cipher}
+	state.privileged = newLocalPrivilegedClient(state)
+	state.privilegedLocal = true
 	state.settings = Settings{PanelListen: "127.0.0.1:2096", Domain: "old.example.com"}
 	if err := state.saveLocked(); err != nil {
 		t.Fatalf("save initial state: %v", err)

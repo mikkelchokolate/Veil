@@ -36,6 +36,9 @@ func TestSocketClientCallsAllOperations(t *testing.T) {
 	if err := client.RotateKey(ctx, RotateKeyRequest{}); err != nil {
 		t.Fatalf("rotate key: %v", err)
 	}
+	if err := client.RecoverKeyRotation(ctx, RecoverKeyRotationRequest{}); err != nil {
+		t.Fatalf("recover key rotation: %v", err)
+	}
 	if _, err := client.FirewallApply(ctx, FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}}); err != nil {
 		t.Fatalf("firewall apply: %v", err)
 	}

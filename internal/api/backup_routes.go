@@ -275,7 +275,16 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		job.StartedAt = time.Now().UTC()
 	})
 	s.mu.Lock()
-	closeErr := closeClientSubsystem(s)
+	s.clientSubsystemStopping = true
+	workers := detachClientBackgroundWorkers(s)
+	s.mu.Unlock()
+	// Wait without s.mu: a reconciler already inside ReconcileOnce may need the
+	// mutex to finish its final mutation. The stopping flag prevents any reload
+	// in this interval from starting replacement workers.
+	stopClientBackgroundWorkers(workers)
+
+	s.mu.Lock()
+	closeErr := closeClientDatabase(s)
 	var result privileged.BackupResult
 	var err error
 	if closeErr != nil {
@@ -287,6 +296,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	}
 	// Reopen on both success and failure. The helper rolls all staged files back
 	// on failure, so this reconnects either the restored DB or the original DB.
+	s.clientSubsystemStopping = false
 	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
 	s.mu.Unlock()
 	if err == nil {

@@ -1,17 +1,49 @@
 package serve
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
+
+func startRecoveryTestHelper(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "helper.sock")
+	server := privileged.NewServer(privileged.NewLocalAdapter(privileged.DefaultPolicy(), privileged.Executor{
+		RecoverKeyRotation: func(context.Context) error { return nil },
+	}))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- server.ServeUnix(ctx, path, uint32(os.Getuid()), true) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("test helper socket did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("stop test helper: %v", err)
+		}
+	})
+	return path
+}
 
 func TestServeHTTPServerBuildsTLSConfiguredServer(t *testing.T) {
 	server, reloader := NewHTTPServer(HTTPServerOptions{
@@ -87,14 +119,16 @@ func TestServeHTTPServerInjectsLiveHostValidator(t *testing.T) {
 	defer listener.Close()
 	port := listener.Addr().(*net.TCPAddr).Port
 	root := t.TempDir()
+	helperSocket := startRecoveryTestHelper(t)
 	server, _ := NewHTTPServer(HTTPServerOptions{
-		Listen:      "127.0.0.1:2096",
-		Version:     "test",
-		AuthToken:   "token",
-		StatePath:   filepath.Join(root, "state.json"),
-		ApplyRoot:   filepath.Join(root, "apply"),
-		KeyPath:     filepath.Join(root, "state.key"),
-		WebBasePath: "/",
+		Listen:       "127.0.0.1:2096",
+		Version:      "test",
+		AuthToken:    "token",
+		StatePath:    filepath.Join(root, "state.json"),
+		ApplyRoot:    filepath.Join(root, "apply"),
+		KeyPath:      filepath.Join(root, "state.key"),
+		HelperSocket: helperSocket,
+		WebBasePath:  "/",
 	}).Build()
 
 	body := `{"settings":{"panelListen":"127.0.0.1:2096","mode":"server"},"inbounds":[{"name":"edge","protocol":"mieru","transport":"tcp","port":` + strconv.Itoa(port) + `,"enabled":true,"password":"secret"}],"warp":{}}`

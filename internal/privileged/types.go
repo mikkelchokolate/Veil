@@ -12,21 +12,22 @@ const ProtocolVersion = 1
 type Operation string
 
 const (
-	OperationPromote       Operation = "promote"
-	OperationServiceAction Operation = "service_action"
-	OperationServiceStatus Operation = "service_status"
-	OperationJournal       Operation = "journal"
-	OperationBackupCreate  Operation = "backup_create"
-	OperationBackupList    Operation = "backup_list"
-	OperationBackupVerify  Operation = "backup_verify"
-	OperationBackupRead    Operation = "backup_read"
-	OperationBackupPrune   Operation = "backup_prune"
-	OperationBackupRestore Operation = "backup_restore"
-	OperationRotateKey     Operation = "rotate_key"
-	OperationFirewallApply Operation = "firewall_apply"
-	OperationStageUpdate   Operation = "stage_update"
-	OperationRestartPanel  Operation = "restart_panel"
-	OperationSyncCaddyCert Operation = "sync_caddy_cert"
+	OperationPromote            Operation = "promote"
+	OperationServiceAction      Operation = "service_action"
+	OperationServiceStatus      Operation = "service_status"
+	OperationJournal            Operation = "journal"
+	OperationBackupCreate       Operation = "backup_create"
+	OperationBackupList         Operation = "backup_list"
+	OperationBackupVerify       Operation = "backup_verify"
+	OperationBackupRead         Operation = "backup_read"
+	OperationBackupPrune        Operation = "backup_prune"
+	OperationBackupRestore      Operation = "backup_restore"
+	OperationRotateKey          Operation = "rotate_key"
+	OperationRecoverKeyRotation Operation = "recover_key_rotation"
+	OperationFirewallApply      Operation = "firewall_apply"
+	OperationStageUpdate        Operation = "stage_update"
+	OperationRestartPanel       Operation = "restart_panel"
+	OperationSyncCaddyCert      Operation = "sync_caddy_cert"
 )
 
 func (o Operation) Valid() bool {
@@ -42,6 +43,7 @@ func (o Operation) Valid() bool {
 		OperationBackupPrune,
 		OperationBackupRestore,
 		OperationRotateKey,
+		OperationRecoverKeyRotation,
 		OperationFirewallApply,
 		OperationStageUpdate,
 		OperationRestartPanel,
@@ -155,6 +157,8 @@ type BackupResult struct {
 
 type RotateKeyRequest struct{}
 
+type RecoverKeyRotationRequest struct{}
+
 // FirewallRule is a single firewall allow rule executed by the privileged helper.
 type FirewallRule struct {
 	Command string   `json:"command"`
@@ -196,19 +200,20 @@ type SyncCaddyCertResult struct {
 }
 
 type RequestEnvelope struct {
-	Version       int                   `json:"version"`
-	RequestID     string                `json:"requestId"`
-	Operation     Operation             `json:"operation"`
-	Promote       *PromoteRequest       `json:"promote,omitempty"`
-	ServiceAction *ServiceActionRequest `json:"serviceAction,omitempty"`
-	ServiceStatus *ServiceStatusRequest `json:"serviceStatus,omitempty"`
-	Journal       *JournalRequest       `json:"journal,omitempty"`
-	Backup        *BackupRequest        `json:"backup,omitempty"`
-	RotateKey     *RotateKeyRequest     `json:"rotateKey,omitempty"`
-	Firewall      *FirewallRequest      `json:"firewall,omitempty"`
-	Update        *UpdateRequest        `json:"update,omitempty"`
-	RestartPanel  *RestartPanelRequest  `json:"restartPanel,omitempty"`
-	SyncCaddyCert *SyncCaddyCertRequest `json:"syncCaddyCert,omitempty"`
+	Version            int                        `json:"version"`
+	RequestID          string                     `json:"requestId"`
+	Operation          Operation                  `json:"operation"`
+	Promote            *PromoteRequest            `json:"promote,omitempty"`
+	ServiceAction      *ServiceActionRequest      `json:"serviceAction,omitempty"`
+	ServiceStatus      *ServiceStatusRequest      `json:"serviceStatus,omitempty"`
+	Journal            *JournalRequest            `json:"journal,omitempty"`
+	Backup             *BackupRequest             `json:"backup,omitempty"`
+	RotateKey          *RotateKeyRequest          `json:"rotateKey,omitempty"`
+	RecoverKeyRotation *RecoverKeyRotationRequest `json:"recoverKeyRotation,omitempty"`
+	Firewall           *FirewallRequest           `json:"firewall,omitempty"`
+	Update             *UpdateRequest             `json:"update,omitempty"`
+	RestartPanel       *RestartPanelRequest       `json:"restartPanel,omitempty"`
+	SyncCaddyCert      *SyncCaddyCertRequest      `json:"syncCaddyCert,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -236,6 +241,7 @@ func (r RequestEnvelope) Validate() error {
 		r.Journal != nil,
 		r.Backup != nil,
 		r.RotateKey != nil,
+		r.RecoverKeyRotation != nil,
 		r.Firewall != nil,
 		r.Update != nil,
 		r.RestartPanel != nil,
@@ -270,6 +276,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.Backup != nil
 	case OperationRotateKey:
 		return r.RotateKey != nil
+	case OperationRecoverKeyRotation:
+		return r.RecoverKeyRotation != nil
 	case OperationFirewallApply:
 		return r.Firewall != nil
 	case OperationStageUpdate:

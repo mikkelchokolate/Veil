@@ -28,6 +28,7 @@ type recordingPrivilegedClient struct {
 	updates               []privileged.UpdateRequest
 	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
 	rotateCalls           int
+	recoverRotationCalls  int
 	restartCalls          atomic.Int32
 	err                   error
 }
@@ -180,6 +181,11 @@ func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged
 
 func (c *recordingPrivilegedClient) RotateKey(context.Context, privileged.RotateKeyRequest) error {
 	c.rotateCalls++
+	return c.err
+}
+
+func (c *recordingPrivilegedClient) RecoverKeyRotation(context.Context, privileged.RecoverKeyRotationRequest) error {
+	c.recoverRotationCalls++
 	return c.err
 }
 

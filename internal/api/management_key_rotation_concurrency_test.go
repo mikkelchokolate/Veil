@@ -54,6 +54,8 @@ func TestAPIKeyRotationBlocksSettingsUntilCipherReload(t *testing.T) {
 		ApplyRoot: root, Privileged: privilegedClient,
 	})
 	defer closeClientSubsystem(state)
+	collectorBeforeRotation := state.trafficCollector
+	reconcilerBeforeRotation := state.trafficReconciler
 
 	initial := httptest.NewRecorder()
 	state.handleSettings(initial, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{
@@ -133,6 +135,12 @@ func TestAPIKeyRotationBlocksSettingsUntilCipherReload(t *testing.T) {
 	}
 	if settingsResponse.Code != http.StatusOK {
 		t.Fatalf("settings status=%d body=%s", settingsResponse.Code, settingsResponse.Body.String())
+	}
+	if state.trafficCollector != collectorBeforeRotation {
+		t.Fatal("key rotation leaked the old collector and created a replacement")
+	}
+	if state.trafficReconciler != reconcilerBeforeRotation {
+		t.Fatal("key rotation leaked the old reconciler and created a replacement")
 	}
 
 	newKey, err := os.ReadFile(keyPath)

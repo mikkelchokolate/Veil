@@ -21,6 +21,7 @@ type Reconciler struct {
 	mu      sync.Mutex
 	running bool
 	stop    chan struct{}
+	done    chan struct{}
 }
 
 func NewReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool) error) *Reconciler {
@@ -99,14 +100,18 @@ func (r *Reconciler) Start() {
 		return
 	}
 	r.running = true
-	r.stop = make(chan struct{})
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	r.stop = stop
+	r.done = done
 	r.mu.Unlock()
 	go func() {
+		defer close(done)
 		t := time.NewTicker(r.interval)
 		defer t.Stop()
 		for {
 			select {
-			case <-r.stop:
+			case <-stop:
 				return
 			case <-t.C:
 				_, _ = r.ReconcileOnce()
@@ -118,10 +123,31 @@ func (r *Reconciler) Start() {
 // Stop halts periodic reconciliation.
 func (r *Reconciler) Stop() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if !r.running {
+		done := r.done
+		r.mu.Unlock()
+		if done != nil {
+			<-done
+		}
 		return
 	}
 	r.running = false
-	close(r.stop)
+	stop := r.stop
+	done := r.done
+	close(stop)
+	r.mu.Unlock()
+	<-done
+	r.mu.Lock()
+	if r.stop == stop {
+		r.stop = nil
+		r.done = nil
+	}
+	r.mu.Unlock()
+}
+
+// Running reports whether the periodic reconciliation loop is active.
+func (r *Reconciler) Running() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.running
 }

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -30,9 +32,19 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 	defer s.mu.Unlock()
 
 	if err := s.privileged.RotateKey(r.Context(), privileged.RotateKeyRequest{}); err != nil {
-		reloadErr := NewManagementStateLifecycle(s).ReloadLocked()
+		lifecycle := NewManagementStateLifecycle(s)
+		recoveryCtx, cancelRecovery := context.WithTimeout(context.Background(), 30*time.Second)
+		recoveryErr := lifecycle.RecoverPendingKeyRotationContext(recoveryCtx)
+		cancelRecovery()
+		var reloadErr error
+		if recoveryErr != nil {
+			reloadErr = recoveryErr
+		} else {
+			reloadErr = lifecycle.ReloadLocked()
+		}
 		if reloadErr != nil {
 			s.startupStateLoadFailed = true
+			s.startupStateLoadErr = reloadErr
 			s.allowDevAnonymous = false
 			s.recordRequestAudit(r, audit.Record{
 				Action: "security.key.rotate", Target: "state", Success: false,
@@ -49,6 +61,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 	}
 	if err := NewManagementStateLifecycle(s).ReloadLocked(); err != nil {
 		s.startupStateLoadFailed = true
+		s.startupStateLoadErr = err
 		s.allowDevAnonymous = false
 		s.recordRequestAudit(r, audit.Record{
 			Action: "security.key.rotate", Target: "state", Success: false, Error: err.Error(),
@@ -57,6 +70,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.startupStateLoadFailed = false
+	s.startupStateLoadErr = nil
 	revoked, err := s.sessionRegistry().DeleteAllExceptPersisted(currentSessionToken(r))
 	if err != nil {
 		writeError(w, "state key rotated but sessions could not be revoked", http.StatusInternalServerError)

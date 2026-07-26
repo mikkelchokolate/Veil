@@ -59,6 +59,10 @@ func (c *SocketClient) RotateKey(ctx context.Context, request RotateKeyRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationRotateKey, RotateKey: &request}, nil)
 }
 
+func (c *SocketClient) RecoverKeyRotation(ctx context.Context, request RecoverKeyRotationRequest) error {
+	return c.call(ctx, RequestEnvelope{Operation: OperationRecoverKeyRotation, RecoverKeyRotation: &request}, nil)
+}
+
 func (c *SocketClient) FirewallApply(ctx context.Context, request FirewallRequest) (FirewallResult, error) {
 	var result FirewallResult
 	err := c.call(ctx, RequestEnvelope{Operation: OperationFirewallApply, Firewall: &request}, &result)

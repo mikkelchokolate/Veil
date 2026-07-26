@@ -21,6 +21,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 const (
@@ -68,35 +69,37 @@ func chmodNoFollow(path string, mode os.FileMode) error {
 }
 
 type Executor struct {
-	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
-	ServiceAction func(context.Context, ServiceActionRequest) error
-	ServiceStatus func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
-	Journal       func(context.Context, ResolvedJournal) (JournalResult, error)
-	Backup        func(context.Context, ResolvedBackup) (BackupResult, error)
-	RotateKey     func(context.Context, RotateKeyRequest) error
-	Firewall      func(context.Context, ResolvedFirewall) (FirewallResult, error)
-	Update        func(context.Context, ResolvedUpdate) (UpdateResult, error)
-	RestartPanel  func(context.Context) error
-	SyncCaddyCert func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
+	Promote            func(context.Context, ResolvedPromotion) (PromoteResult, error)
+	ServiceAction      func(context.Context, ServiceActionRequest) error
+	ServiceStatus      func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
+	Journal            func(context.Context, ResolvedJournal) (JournalResult, error)
+	Backup             func(context.Context, ResolvedBackup) (BackupResult, error)
+	RotateKey          func(context.Context, RotateKeyRequest) error
+	RecoverKeyRotation func(context.Context) error
+	Firewall           func(context.Context, ResolvedFirewall) (FirewallResult, error)
+	Update             func(context.Context, ResolvedUpdate) (UpdateResult, error)
+	RestartPanel       func(context.Context) error
+	SyncCaddyCert      func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
 
 type ProductionConfig struct {
-	PromotionBackupRoot  string
-	StatePath            string
-	KeyPath              string
-	BackupPassphrasePath string
-	BackupRoot           string
-	BackupMaxBytes       int64
-	VeilVersion          string
-	BinaryPath           string
-	FirewallCommands     map[string][]string
-	RunCommand           CommandRunner
-	BackupWorkflow       func(context.Context, ResolvedBackup) (BackupResult, error)
-	UpdateWorkflow       func(context.Context, ResolvedUpdate) (UpdateResult, error)
-	RotateKeyWorkflow    func(context.Context) error
-	Now                  func() time.Time
+	PromotionBackupRoot        string
+	StatePath                  string
+	KeyPath                    string
+	BackupPassphrasePath       string
+	BackupRoot                 string
+	BackupMaxBytes             int64
+	VeilVersion                string
+	BinaryPath                 string
+	FirewallCommands           map[string][]string
+	RunCommand                 CommandRunner
+	BackupWorkflow             func(context.Context, ResolvedBackup) (BackupResult, error)
+	UpdateWorkflow             func(context.Context, ResolvedUpdate) (UpdateResult, error)
+	RotateKeyWorkflow          func(context.Context) error
+	RecoverKeyRotationWorkflow func(context.Context) error
+	Now                        func() time.Time
 }
 
 func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
@@ -130,6 +133,11 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	if config.RotateKeyWorkflow == nil {
 		config.RotateKeyWorkflow = func(context.Context) error {
 			return rotateStateKey(config.StatePath, config.KeyPath, config.Now)
+		}
+	}
+	if config.RecoverKeyRotationWorkflow == nil {
+		config.RecoverKeyRotationWorkflow = func(context.Context) error {
+			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
 		}
 	}
 	return Executor{
@@ -205,6 +213,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		RotateKey: func(ctx context.Context, _ RotateKeyRequest) error {
 			return config.RotateKeyWorkflow(ctx)
 		},
+		RecoverKeyRotation: config.RecoverKeyRotationWorkflow,
 		Firewall: func(ctx context.Context, request ResolvedFirewall) (FirewallResult, error) {
 			result := FirewallResult{}
 			for _, id := range request.RuleIDs {

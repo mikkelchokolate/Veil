@@ -53,6 +53,7 @@ type managementState struct {
 	authToken                      string
 	allowDevAnonymous              bool
 	startupStateLoadFailed         bool
+	startupStateLoadErr            error
 	requireApplyTracking           bool
 	setupAllowed                   bool
 	setup                          SetupState
@@ -85,20 +86,21 @@ type managementState struct {
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are
 	// then disabled and handlers fall back to legacy behavior.
-	db                *sql.DB
-	applyRevisions    *apply.RevisionStore
-	applyJobs         *apply.JobStore
-	applySnapshots    *apply.SnapshotStore
-	applyRunner       *apply.Runner
-	clientService     *client.Service
-	clientRepo        *client.Repository
-	clientCreds       *client.CredentialStore
-	clientMigrator    *client.Migrator
-	tokenStore        *client.TokenStore
-	subRenderer       *client.SubscriptionRenderer
-	trafficStore      *client.TrafficStore
-	trafficCollector  *client.Collector
-	trafficReconciler *client.Reconciler
+	db                      *sql.DB
+	applyRevisions          *apply.RevisionStore
+	applyJobs               *apply.JobStore
+	applySnapshots          *apply.SnapshotStore
+	applyRunner             *apply.Runner
+	clientService           *client.Service
+	clientRepo              *client.Repository
+	clientCreds             *client.CredentialStore
+	clientMigrator          *client.Migrator
+	tokenStore              *client.TokenStore
+	subRenderer             *client.SubscriptionRenderer
+	trafficStore            *client.TrafficStore
+	trafficCollector        *client.Collector
+	trafficReconciler       *client.Reconciler
+	clientSubsystemStopping bool
 	// A3: normalized client state pinned from the immutable revision snapshot
 	// for the duration of an apply render. When non-nil these override live
 	// SQLite state so a retry of revision N renders exactly revision N.

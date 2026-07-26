@@ -3,6 +3,7 @@ package client
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 )
 
 // Sample is a single traffic observation. Deltas (non-monotonic) are summed;
@@ -20,7 +21,10 @@ type Sample struct {
 
 // TrafficStore persists byte counters and bucketed samples. Counters are
 // absolute (client totals); samples are per-bucket deltas for history.
-type TrafficStore struct{ db *sql.DB }
+type TrafficStore struct {
+	db       *sql.DB
+	recordMu sync.Mutex
+}
 
 func NewTrafficStore(db *sql.DB) *TrafficStore { return &TrafficStore{db: db} }
 
@@ -28,11 +32,19 @@ func NewTrafficStore(db *sql.DB) *TrafficStore { return &TrafficStore{db: db} }
 // absolute counter and writing a bucketed delta. For monotonic samples the
 // delta is computed against the provider's last raw reading.
 func (s *TrafficStore) RecordSample(sm Sample) error {
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("client: begin traffic sample transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	clientID := sm.ClientID
 	if clientID == "" {
 		var cid string
-		err := s.db.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&cid)
-		if err != nil {
+		if err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&cid); err != nil {
 			return fmt.Errorf("client: traffic resolve binding: %w", err)
 		}
 		clientID = cid
@@ -41,11 +53,13 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	if sm.Monotonic {
 		var lastUp, lastDown int64
 		var lastObserved int64
-		row := s.db.QueryRow(`SELECT last_upload_raw, last_download_raw, last_observed_at FROM traffic_runtime_state WHERE provider_key=?`, sm.ProviderKey)
+		row := tx.QueryRow(`SELECT last_upload_raw, last_download_raw, last_observed_at FROM traffic_runtime_state WHERE provider_key=?`, sm.ProviderKey)
 		scanErr := row.Scan(&lastUp, &lastDown, &lastObserved)
 		if scanErr == sql.ErrNoRows {
 			// First observation of this provider: establish baseline, no delta.
 			upDelta, downDelta = 0, 0
+		} else if scanErr != nil {
+			return fmt.Errorf("client: traffic runtime state: %w", scanErr)
 		} else {
 			upDelta = sm.UploadBytes - lastUp
 			downDelta = sm.DownloadBytes - lastDown
@@ -58,33 +72,36 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 				}
 			}
 		}
-		_, _ = s.db.Exec(`INSERT INTO traffic_runtime_state (provider_key, last_upload_raw, last_download_raw, last_observed_at)
+		if _, err := tx.Exec(`INSERT INTO traffic_runtime_state (provider_key, last_upload_raw, last_download_raw, last_observed_at)
 		  VALUES(?,?,?,?)
 		  ON CONFLICT(provider_key) DO UPDATE SET last_upload_raw=excluded.last_upload_raw,
 		    last_download_raw=excluded.last_download_raw, last_observed_at=excluded.last_observed_at`,
-			sm.ProviderKey, sm.UploadBytes, sm.DownloadBytes, sm.AtUnix)
+			sm.ProviderKey, sm.UploadBytes, sm.DownloadBytes, sm.AtUnix); err != nil {
+			return fmt.Errorf("client: traffic runtime state update: %w", err)
+		}
 	}
 	// Absolute counter.
-	_, err := s.db.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, updated_at)
+	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, updated_at)
 	  VALUES(?,?,?,?,?)
 	  ON CONFLICT(client_id, binding_id) DO UPDATE SET
 	    upload_bytes=upload_bytes+excluded.upload_bytes,
 	    download_bytes=download_bytes+excluded.download_bytes,
 	    updated_at=excluded.updated_at`,
-		clientID, sm.BindingID, upDelta, downDelta, sm.AtUnix)
-	if err != nil {
+		clientID, sm.BindingID, upDelta, downDelta, sm.AtUnix); err != nil {
 		return fmt.Errorf("client: traffic counter: %w", err)
 	}
 	// Bucketed sample (bucket = truncated to minute).
 	bucket := sm.AtUnix - (sm.AtUnix % 60)
-	_, err = s.db.Exec(`INSERT INTO traffic_samples (bucket_start, client_id, binding_id, upload_delta, download_delta)
+	if _, err := tx.Exec(`INSERT INTO traffic_samples (bucket_start, client_id, binding_id, upload_delta, download_delta)
 	  VALUES(?,?,?,?,?)
 	  ON CONFLICT(bucket_start, client_id, binding_id) DO UPDATE SET
 	    upload_delta=upload_delta+excluded.upload_delta,
 	    download_delta=download_delta+excluded.download_delta`,
-		bucket, clientID, sm.BindingID, upDelta, downDelta)
-	if err != nil {
+		bucket, clientID, sm.BindingID, upDelta, downDelta); err != nil {
 		return fmt.Errorf("client: traffic sample: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("client: commit traffic sample transaction: %w", err)
 	}
 	return nil
 }

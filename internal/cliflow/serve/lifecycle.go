@@ -2,6 +2,7 @@ package serve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,7 +35,7 @@ var (
 	}
 )
 
-func RunLifecycle(opts LifecycleOptions) error {
+func RunLifecycle(opts LifecycleOptions) (result error) {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
@@ -46,6 +47,18 @@ func RunLifecycle(opts LifecycleOptions) error {
 	}
 	if opts.DrainTimeout == 0 {
 		opts.DrainTimeout = 5 * time.Second
+	}
+	if closer, ok := opts.StateReloader.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				closeErr := fmt.Errorf("close state lifecycle: %w", err)
+				if result == nil {
+					result = closeErr
+				} else {
+					result = errors.Join(result, closeErr)
+				}
+			}
+		}()
 	}
 	var sighupCh chan os.Signal
 	if opts.StateReloader != nil {

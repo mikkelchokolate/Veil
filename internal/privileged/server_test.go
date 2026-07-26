@@ -250,6 +250,10 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 			setup: func(e *Executor) { e.RotateKey = func(context.Context, RotateKeyRequest) error { return nil } }, wantOK: true,
 		},
 		{
+			name: "recover_key_rotation", operation: OperationRecoverKeyRotation, payload: &RecoverKeyRotationRequest{},
+			setup: func(e *Executor) { e.RecoverKeyRotation = func(context.Context) error { return nil } }, wantOK: true,
+		},
+		{
 			name: "firewall_apply", operation: OperationFirewallApply, payload: &FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}},
 			setup: func(e *Executor) {
 				e.Firewall = func(context.Context, ResolvedFirewall) (FirewallResult, error) { return FirewallResult{}, nil }
@@ -303,6 +307,8 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 				request.Backup = tc.payload.(*BackupRequest)
 			case OperationRotateKey:
 				request.RotateKey = tc.payload.(*RotateKeyRequest)
+			case OperationRecoverKeyRotation:
+				request.RecoverKeyRotation = tc.payload.(*RecoverKeyRotationRequest)
 			case OperationFirewallApply:
 				request.Firewall = tc.payload.(*FirewallRequest)
 			case OperationStageUpdate:

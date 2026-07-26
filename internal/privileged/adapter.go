@@ -81,6 +81,13 @@ func (a *LocalAdapter) RotateKey(ctx context.Context, request RotateKeyRequest) 
 	return wrapOperationError(a.executor.RotateKey(ctx, request))
 }
 
+func (a *LocalAdapter) RecoverKeyRotation(ctx context.Context, _ RecoverKeyRotationRequest) error {
+	if a.executor.RecoverKeyRotation == nil {
+		return newError(ErrorOperationFailed, "key rotation recovery executor is unavailable")
+	}
+	return wrapOperationError(a.executor.RecoverKeyRotation(ctx))
+}
+
 func (a *LocalAdapter) FirewallApply(ctx context.Context, request FirewallRequest) (FirewallResult, error) {
 	resolved, err := a.policy.ResolveFirewall(request)
 	if err != nil {

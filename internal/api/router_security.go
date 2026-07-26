@@ -51,8 +51,13 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		path := r.URL.Path
 		state.mu.Lock()
 		startupStateLoadFailed := state.startupStateLoadFailed
+		startupStateLoadErr := state.startupStateLoadErr
 		state.mu.Unlock()
 		if startupStateLoadFailed && strings.HasPrefix(path, "/api/") {
+			if privilegedHelperSocketUnavailable(startupStateLoadErr) {
+				writePrivilegedError(w, startupStateLoadErr)
+				return
+			}
 			writeError(w, "management state unavailable", http.StatusServiceUnavailable)
 			return
 		}

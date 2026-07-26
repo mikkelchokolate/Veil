@@ -17,6 +17,13 @@ ci_step "systemd socket activation (linuxintegration)"
 go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
 
 ci_step "helper socket and filesystem access matrix (root)"
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
+if ! getent group veil >/dev/null; then
+  ${SUDO} groupadd --system veil
+fi
+if ! getent passwd veil >/dev/null; then
+  ${SUDO} useradd --system --gid veil --home-dir /nonexistent --shell /usr/sbin/nologin veil
+fi
 if [ "$(id -u)" -eq 0 ]; then
   go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
 else
@@ -25,7 +32,6 @@ fi
 
 ci_step "hardened systemd units"
 go build -o /tmp/veil-unit-verify ./cmd/veil
-if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 ${SUDO} install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil
 for bin in caddy hysteria mita olcrtc sing-box; do
   ${SUDO} ln -sf /usr/local/bin/veil "/usr/local/bin/${bin}"

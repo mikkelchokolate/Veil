@@ -134,6 +134,11 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 			return nil, err
 		}
 		return struct{}{}, nil
+	case OperationRecoverKeyRotation:
+		if err := s.client.RecoverKeyRotation(ctx, *request.RecoverKeyRotation); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
 	case OperationFirewallApply:
 		return s.client.FirewallApply(ctx, *request.Firewall)
 	case OperationStageUpdate:

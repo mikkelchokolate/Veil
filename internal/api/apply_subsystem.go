@@ -16,22 +16,51 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
-func closeClientSubsystem(s *managementState) error {
-	if s.trafficCollector != nil {
-		s.trafficCollector.Stop()
+type clientBackgroundWorkers struct {
+	collector  *client.Collector
+	reconciler *client.Reconciler
+}
+
+func detachClientBackgroundWorkers(s *managementState) clientBackgroundWorkers {
+	workers := clientBackgroundWorkers{collector: s.trafficCollector, reconciler: s.trafficReconciler}
+	s.trafficCollector = nil
+	s.trafficReconciler = nil
+	return workers
+}
+
+func stopClientBackgroundWorkers(workers clientBackgroundWorkers) {
+	if workers.collector != nil {
+		workers.collector.Stop()
 	}
-	if s.trafficReconciler != nil {
-		s.trafficReconciler.Stop()
+	if workers.reconciler != nil {
+		workers.reconciler.Stop()
 	}
-	// Keep repository/service handles non-nil during the short swap boundary.
-	// Concurrent handlers then receive closed-database errors rather than
-	// panicking on a nil service; successful reopen replaces every handle.
+}
+
+func closeClientDatabase(s *managementState) error {
 	if s.db == nil {
 		return nil
 	}
 	db := s.db
 	s.db = nil
+	s.applyRevisions = nil
+	s.applyJobs = nil
+	s.applySnapshots = nil
+	s.applyRunner = nil
+	s.clientService = nil
+	s.clientRepo = nil
+	s.clientCreds = nil
+	s.clientMigrator = nil
+	s.tokenStore = nil
+	s.subRenderer = nil
+	s.trafficStore = nil
 	return db.Close()
+}
+
+// closeClientSubsystem is retained for package tests and routes every teardown
+// through the same synchronized lifecycle used by production shutdown.
+func closeClientSubsystem(s *managementState) error {
+	return s.Close()
 }
 
 // initApplySubsystem opens the normalized SQLite store next to the state file
@@ -92,7 +121,7 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 // same SQLite store. It must run AFTER the secrets cipher is loaded because
 // the credential store encrypts at rest with it. No-op when no store/cipher.
 func initClientSubsystem(s *managementState) {
-	if s.db == nil || s.cipher == nil {
+	if s.db == nil || s.cipher == nil || s.clientSubsystemStopping {
 		return
 	}
 	clientRepo := client.NewRepository(s.db)
@@ -107,8 +136,14 @@ func initClientSubsystem(s *managementState) {
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds, client.WithIncludeDisabled())
 	s.tokenStore = client.NewTokenStore(s.db)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
-	s.trafficStore = client.NewTrafficStore(s.db)
-	s.trafficCollector = client.NewCollector(s.trafficStore, 0, nil)
+	if s.trafficStore == nil {
+		s.trafficStore = client.NewTrafficStore(s.db)
+	}
+	startCollector := false
+	if s.trafficCollector == nil {
+		s.trafficCollector = client.NewCollector(s.trafficStore, 0, nil)
+		startCollector = true
+	}
 	// Blocker A2: quota reconciliation is a REAL configuration mutation — the
 	// depleted flag changes the rendered runtime config. It therefore routes
 	// through the same orchestration as every other client mutation: the flag
@@ -117,18 +152,22 @@ func initClientSubsystem(s *managementState) {
 	// revision. Before this the reconciler flipped the flag and ran a bare
 	// apply with no revision/snapshot, so the pinned snapshot never contained
 	// the depleted state.
-	s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if _, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
-			return tx.SetDepleted(clientID, depleted)
-		}); err != nil {
-			log.Printf("traffic: reconcile client %s depleted=%v: %v", clientID, depleted, err)
-			return err
-		}
-		s.autoApplyResultLocked(nil, "system")
-		return nil
-	})
+	startReconciler := false
+	if s.trafficReconciler == nil {
+		s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if _, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
+				return tx.SetDepleted(clientID, depleted)
+			}); err != nil {
+				log.Printf("traffic: reconcile client %s depleted=%v: %v", clientID, depleted, err)
+				return err
+			}
+			s.autoApplyResultLocked(nil, "system")
+			return nil
+		})
+		startReconciler = true
+	}
 	// A9: register real TrafficProviders for supported protocols. Hysteria2
 	// reads per-user stats from the runtime's stats file. Other protocols can
 	// register their own providers here.
@@ -136,8 +175,12 @@ func initClientSubsystem(s *managementState) {
 	// Start the collector and reconciler so quota depletion is reconciled and
 	// counters are collected. With zero providers CollectOnce is a no-op and
 	// the summary endpoint honestly reports state="unsupported" (no fake zeros).
-	s.trafficCollector.Start()
-	s.trafficReconciler.Start()
+	if startCollector {
+		s.trafficCollector.Start()
+	}
+	if startReconciler {
+		s.trafficReconciler.Start()
+	}
 }
 
 // registerTrafficProvidersLocked creates and registers TrafficProviders for
