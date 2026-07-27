@@ -51,7 +51,7 @@ func TestReloadPromotedServicesUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	state.privilegedLocal = false
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.reloadPromotedServicesLocked([]string{filepath.Join(state.liveRoot, "hysteria2", "edge.yaml")})
+	results := ctx.reloadPromotedServices([]string{filepath.Join(state.liveRoot, "hysteria2", "edge.yaml")})
 	if len(results) == 0 {
 		t.Fatalf("expected service actions, got none")
 	}
@@ -75,7 +75,7 @@ func TestCheckServiceHealthUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceHealthChecker = oldChecker })
 
-	results := ctx.checkServiceHealthLocked([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Command: []string{"systemctl", "restart", "veil-hysteria2@edge.service"}, Success: true}})
+	results := ctx.checkServiceHealth([]ServiceActionResult{{Name: "veil-hysteria2@edge.service", Command: []string{"systemctl", "restart", "veil-hysteria2@edge.service"}, Success: true}})
 	if len(results) != 1 || results[0].Name != "veil-hysteria2@edge.service" || !results[0].Healthy {
 		t.Fatalf("unexpected health results: %+v", results)
 	}
@@ -92,7 +92,7 @@ func TestSyncFirewallLockedOpensPanelPortByDefault(t *testing.T) {
 	t.Cleanup(func() { firewallApplierInstance = old })
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.syncFirewallLocked()
+	results := ctx.syncFirewall()
 
 	if len(results) != 1 || !results[0].Success {
 		t.Fatalf("expected one successful firewall sync, got %+v", results)
@@ -131,7 +131,7 @@ func TestSyncFirewallLockedDisabledBySetting(t *testing.T) {
 	t.Cleanup(func() { firewallApplierInstance = old })
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.syncFirewallLocked()
+	results := ctx.syncFirewall()
 
 	if len(results) != 0 {
 		t.Fatalf("expected no firewall results when disabled, got %+v", results)
@@ -152,7 +152,7 @@ func TestSyncFirewallLockedReportsNonFatalErrors(t *testing.T) {
 	t.Cleanup(func() { firewallApplierInstance = old })
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.syncFirewallLocked()
+	results := ctx.syncFirewall()
 
 	if len(results) != 1 || results[0].Success || results[0].Error != "ufw not found" {
 		t.Fatalf("expected non-fatal enable error, got %+v", results)
@@ -179,7 +179,7 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 	ctx := NewManagementApplyContext(state)
 
-	liveFiles, _, records, err := ctx.promoteStagedConfigsLocked([]string{staged})
+	liveFiles, _, records, err := ctx.promoteStagedConfigs([]string{staged})
 	if err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 		BackupID:         "20260608T120000.000000000Z",
 		WrittenArtifacts: []string{},
 	}
-	rollbackFiles, rollbackActions := ctx.rollbackPromotedConfigsLocked(records, liveFiles)
+	rollbackFiles, rollbackActions := ctx.rollbackPromotedConfigs(records, liveFiles)
 	if len(rollbackFiles) != 0 {
 		t.Fatalf("expected no rollback files for newly added inbound, got %+v", rollbackFiles)
 	}
@@ -228,7 +228,7 @@ func TestRollbackStopsUnitWhoseConfigWasNewlyAdded(t *testing.T) {
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 	ctx := NewManagementApplyContext(state)
 
-	// Records mirror what promoteStagedConfigsLocked produced: the artifact was
+	// Records mirror what promoteStagedConfigs produced: the artifact was
 	// written live (so it is in liveFiles), and it had no previous version, so
 	// the restore below will NOT return it in WrittenArtifacts.
 	records := []livePromotionRecord{{
@@ -245,7 +245,7 @@ func TestRollbackStopsUnitWhoseConfigWasNewlyAdded(t *testing.T) {
 		WrittenArtifacts: []string{},
 	}
 
-	_, _ = ctx.rollbackPromotedConfigsLocked(records, liveFiles)
+	_, _ = ctx.rollbackPromotedConfigs(records, liveFiles)
 
 	var got []string
 	for _, a := range client.serviceActions {
@@ -296,7 +296,7 @@ func TestRollbackStopsSingletonBeforeRestoringLegacyCaddy(t *testing.T) {
 	}}
 	newConfig := filepath.Join(liveRoot, "caddy", "config.json")
 
-	_, _ = ctx.rollbackPromotedConfigsLocked(records, []string{newConfig})
+	_, _ = ctx.rollbackPromotedConfigs(records, []string{newConfig})
 
 	var got []string
 	for _, action := range client.serviceActions {
@@ -318,7 +318,7 @@ func TestPromoteStagedConfigsLockedNoOpWhenNothingToDo(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
 	ctx := NewManagementApplyContext(state)
 
-	liveFiles, backupFiles, records, err := ctx.promoteStagedConfigsLocked(nil)
+	liveFiles, backupFiles, records, err := ctx.promoteStagedConfigs(nil)
 	if err != nil {
 		t.Fatalf("expected no error when nothing to promote, got %v", err)
 	}
@@ -352,7 +352,7 @@ func TestReloadPromotedServicesStopsLegacyCaddyBeforeStartingSingleton(t *testin
 	defer func() { caddyAdminLoader = oldLoader }()
 
 	ctx := NewManagementApplyContext(state)
-	ctx.reloadPromotedServicesLocked([]string{caddyPath})
+	ctx.reloadPromotedServices([]string{caddyPath})
 
 	var got []string
 	for _, action := range client.serviceActions {
@@ -381,7 +381,7 @@ func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	state.orphanedUnits = []string{"veil-hysteria2@old.service"}
 	liveFiles := []string{filepath.Join(state.liveRoot, "hysteria2", "new.yaml")}
 
-	ctx.reloadPromotedServicesLocked(liveFiles)
+	ctx.reloadPromotedServices(liveFiles)
 
 	var got []string
 	for _, a := range client.serviceActions {

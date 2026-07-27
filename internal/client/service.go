@@ -53,11 +53,12 @@ type View struct {
 // protocol capabilities of the bound inbound, so the UI/API consumer knows
 // what a client on this inbound supports (per-client credentials, transports).
 type BindingView struct {
-	ID         string             `json:"id"`
-	InboundID  string             `json:"inboundId"`
-	Enabled    bool               `json:"enabled"`
-	Version    int                `json:"version"`
-	Capability *BindingCapability `json:"capability,omitempty"`
+	ID              string             `json:"id"`
+	InboundID       string             `json:"inboundId"`
+	RuntimeIdentity string             `json:"runtimeIdentity"`
+	Enabled         bool               `json:"enabled"`
+	Version         int                `json:"version"`
+	Capability      *BindingCapability `json:"capability,omitempty"`
 	// Credential is metadata-only (configured/kind/version/rotatedAt); never
 	// any encrypted or plaintext material.
 	Credential *CredentialMeta `json:"credential,omitempty"`
@@ -126,8 +127,9 @@ func (s *Service) Create(c Client) (View, error) {
 // BindingInput pairs an inbound ID with an optional plaintext credential for
 // transactional client creation.
 type BindingInput struct {
-	InboundID  string
-	Credential string
+	InboundID       string
+	RuntimeIdentity string
+	Credential      string
 }
 
 // CreateWithBindings atomically creates a client plus its bindings and
@@ -199,7 +201,7 @@ func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []Bindin
 	}
 	issued := []IssuedCredential{}
 	for _, b := range bindings {
-		bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, Enabled: true})
+		bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Enabled: true})
 		if err != nil {
 			return "", nil, err
 		}
@@ -246,10 +248,14 @@ func (s *Service) DeleteTx(tx *Tx, id string) error { return tx.Delete(id) }
 
 // AddBindingTx is the transactional variant of AddBinding.
 func (s *Service) AddBindingTx(tx *Tx, clientID, inboundID string) (Binding, error) {
+	return s.AddBindingWithIdentityTx(tx, clientID, inboundID, "")
+}
+
+func (s *Service) AddBindingWithIdentityTx(tx *Tx, clientID, inboundID, runtimeIdentity string) (Binding, error) {
 	if inboundID == "" {
 		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
 	}
-	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: true})
+	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, RuntimeIdentity: runtimeIdentity, Enabled: true})
 }
 
 // RemoveBindingTx is the transactional variant of RemoveBinding.
@@ -441,7 +447,7 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 	}
 	out := []BindingCredential{}
 	for _, c := range clients {
-		if !c.Enabled {
+		if !c.Enabled || c.Depleted {
 			continue
 		}
 		bindings, err := s.repo.BindingsForClient(c.ID)
@@ -456,15 +462,20 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 			if err != nil {
 				return nil, err
 			}
+			foundActive := false
 			for _, cr := range creds {
 				if cr.RevokedAt != nil {
 					continue
 				}
+				foundActive = true
 				plaintext, rerr := s.creds.Reveal(cr.ID)
 				if rerr != nil {
 					return nil, rerr
 				}
-				out = append(out, BindingCredential{Name: c.Name, Username: c.Name, Password: plaintext})
+				out = append(out, BindingCredential{Name: c.Name, Username: b.RuntimeIdentity, Password: plaintext})
+			}
+			if !foundActive {
+				return nil, fmt.Errorf("%w: enabled binding %s has no active credential", ErrValidation, b.ID)
 			}
 		}
 	}
@@ -489,7 +500,7 @@ func (s *Service) viewWith(c Client,
 	hasCreds := false
 	for _, b := range bindings {
 		inbounds = append(inbounds, b.InboundID)
-		bv := BindingView{ID: b.ID, InboundID: b.InboundID, Enabled: b.Enabled, Version: b.Version}
+		bv := BindingView{ID: b.ID, InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Enabled: b.Enabled, Version: b.Version}
 		if s.inboundLookup != nil {
 			bv.Capability = s.inboundLookup(b.InboundID)
 		}

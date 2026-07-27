@@ -60,7 +60,7 @@ func TestEffectiveAuthStatusReportsCSRFPersistenceFailure(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "failed to refresh session") {
+	if !strings.Contains(rec.Body.String(), "session storage unavailable") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 	tokenHash := hashSessionSecret(session.Token)

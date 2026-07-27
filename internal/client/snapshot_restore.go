@@ -72,9 +72,12 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 		if item.Version <= 0 {
 			item.Version = 1
 		}
+		if item.RuntimeIdentity == "" {
+			item.RuntimeIdentity = GenerateRuntimeIdentity(item.ID)
+		}
 		if _, err := tx.Exec(`INSERT INTO client_bindings
-  (id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version)
-  VALUES(?,?,?,?,?,?,?,?)`, item.ID, item.ClientID, item.InboundID,
+  (id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version)
+  VALUES(?,?,?,?,?,?,?,?,?)`, item.ID, item.ClientID, item.InboundID, item.RuntimeIdentity,
 			boolToInt(item.Enabled), item.ProtocolSettings, item.CreatedAt, item.UpdatedAt,
 			item.Version); err != nil {
 			return fmt.Errorf("client: restore snapshot binding %s: %w", item.ID, err)

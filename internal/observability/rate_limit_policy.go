@@ -11,10 +11,17 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 		DefaultRatePerMinute: 100,
 		DefaultBurst:         20,
 		limits: map[string]EndpointLimit{
-			"/api/tools/speedtest":  {RatePerMinute: 2, Burst: 1},  // 1 req/30s
-			"/api/tools/dns-lookup": {RatePerMinute: 10, Burst: 3}, // 10 req/min for DNS lookups
-			"/api/tools/ping":       {RatePerMinute: 5, Burst: 2},  // 5 req/min for ping
-			"/api/logs":             {RatePerMinute: 10, Burst: 3}, // 10 req/min for log reads
+			"/api/auth/login":        {RatePerMinute: 10, Burst: 3},
+			"/api/tools":             {RatePerMinute: 10, Burst: 2},
+			"/api/diagnostics":       {RatePerMinute: 6, Burst: 2},
+			"/api/tools/speedtest":   {RatePerMinute: 2, Burst: 1},
+			"/api/tools/dns-lookup":  {RatePerMinute: 10, Burst: 3},
+			"/api/tools/ping":        {RatePerMinute: 5, Burst: 2},
+			"/api/v1/events":         {RatePerMinute: 12, Burst: 4},
+			"/api/v1/traffic/stream": {RatePerMinute: 12, Burst: 4},
+			"/s/":                    {RatePerMinute: 30, Burst: 6},
+			"/api/logs":              {RatePerMinute: 10, Burst: 3},
+			"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
 		},
 	}
 }

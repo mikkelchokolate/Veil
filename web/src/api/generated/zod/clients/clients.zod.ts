@@ -74,6 +74,7 @@ export const GetApiV1ClientsResponse = zod.object({
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
   "enabled": zod.boolean(),
   "version": zod.number(),
   "capability": zod.object({
@@ -101,6 +102,7 @@ export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
 export const postApiV1ClientsBodyDeviceLimitMin = 0;
 
+export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[A-Za-z0-9_-]{1,48}$');
 
 
 export const PostApiV1ClientsBody = zod.object({
@@ -116,6 +118,7 @@ export const PostApiV1ClientsBody = zod.object({
   "notes": zod.string().optional(),
   "bindings": zod.array(zod.object({
   "inboundId": zod.string(),
+  "runtimeIdentity": zod.string().regex(postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp).optional(),
   "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
   "enabled": zod.boolean().optional()
 })).optional().describe('Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
@@ -149,6 +152,7 @@ export const PostApiV1ClientsResponse = zod.object({
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
   "enabled": zod.boolean(),
   "version": zod.number(),
   "capability": zod.object({
@@ -349,6 +353,7 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
   "enabled": zod.boolean(),
   "version": zod.number(),
   "capability": zod.object({
@@ -425,6 +430,7 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
   "enabled": zod.boolean(),
   "version": zod.number(),
   "capability": zod.object({

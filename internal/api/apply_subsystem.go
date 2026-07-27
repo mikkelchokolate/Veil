@@ -38,6 +38,8 @@ func stopClientBackgroundWorkers(workers clientBackgroundWorkers) {
 }
 
 func closeClientDatabase(s *managementState) error {
+	s.clientLifecycleMu.Lock()
+	defer s.clientLifecycleMu.Unlock()
 	if s.db == nil {
 		return nil
 	}
@@ -68,6 +70,8 @@ func closeClientSubsystem(s *managementState) error {
 // is configured (in-memory/test servers) — revision/apply tracking then
 // degrades gracefully and apply falls back to the legacy synchronous path.
 func initApplySubsystem(s *managementState) {
+	s.clientLifecycleMu.Lock()
+	defer s.clientLifecycleMu.Unlock()
 	if s.statePath == "" {
 		return
 	}
@@ -121,6 +125,8 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 // same SQLite store. It must run AFTER the secrets cipher is loaded because
 // the credential store encrypts at rest with it. No-op when no store/cipher.
 func initClientSubsystem(s *managementState) {
+	s.clientLifecycleMu.Lock()
+	defer s.clientLifecycleMu.Unlock()
 	if s.db == nil || s.cipher == nil || s.clientSubsystemStopping {
 		return
 	}

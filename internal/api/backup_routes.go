@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -290,7 +291,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	if closeErr != nil {
 		err = fmt.Errorf("close database for restore: %w", closeErr)
 	} else {
-		result, err = s.backupOperation(context.Background(), privileged.BackupRequest{
+		result, err = s.backupOperation(s.lifecycleContext(), privileged.BackupRequest{
 			Action: privileged.BackupActionRestore, ArchiveName: name,
 		})
 	}
@@ -347,18 +348,24 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	if !requestHasAdminRole(s, r) {
-		writeError(w, "forbidden: admin role required", http.StatusForbidden)
-		return
-	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/backup-restore-jobs/")
-	if id == "" || strings.ContainsAny(id, `/\`) {
+	if id == "" || strings.ContainsAny(id, `/\\`) {
 		writeError(w, "invalid restore job id", http.StatusBadRequest)
 		return
 	}
 	job, ok := s.backupRestoreJob(id)
 	if !ok {
 		writeNotFound(w)
+		return
+	}
+	authorized := requestHasAdminRole(s, r)
+	if !authorized && job.ownerSessionToken != "" {
+		if cookie, err := r.Cookie("veil_session"); err == nil {
+			authorized = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(job.ownerSessionToken)) == 1
+		}
+	}
+	if !authorized {
+		writeError(w, "forbidden: restore owner or admin role required", http.StatusForbidden)
 		return
 	}
 	writeJSON(w, job)

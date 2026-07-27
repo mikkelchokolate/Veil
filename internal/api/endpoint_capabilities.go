@@ -46,7 +46,8 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/routing/presets", capabilityViewer},
 	{http.MethodGet, "/api/warp", capabilityViewer},
 	{http.MethodGet, "/api/firewall", capabilityViewer},
-	{http.MethodPost, "/api/validation", capabilityViewer},
+	{http.MethodPost, "/api/validation", capabilityAdminMetadata},
+	{http.MethodPost, "/api/services/{name}/{action}", capabilityAdminMutation},
 	{http.MethodPost, "/api/apply/plan", capabilityViewer},
 	{http.MethodGet, "/api/apply/history", capabilityViewer},
 	{http.MethodGet, "/api/apply/state", capabilityViewer},
@@ -79,7 +80,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/users/{username}", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups/{name}/verify", capabilityAdminMetadata},
-	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilityAdminMetadata},
+	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilitySelfService},
 	{http.MethodGet, "/api/v1/clients/{id}/tokens", capabilityAdminMetadata},
 	{http.MethodGet, "/api/v1/clients/{id}/audit", capabilityAdminMetadata},
 

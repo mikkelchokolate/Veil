@@ -30,6 +30,7 @@ func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycl
 }
 
 func newManagementState(info ServerInfo) *managementState {
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	keyPath := info.KeyPath
 	if keyPath == "" && info.StatePath != "" {
 		keyPath = filepath.Join(filepath.Dir(info.StatePath), "state.key")
@@ -90,6 +91,8 @@ func newManagementState(info ServerInfo) *managementState {
 		configurationValidator = livevalidation.Validator{}
 	}
 	state := &managementState{
+		lifecycleCtx:                   lifecycleCtx,
+		lifecycleCancel:                lifecycleCancel,
 		statePath:                      info.StatePath,
 		requireApplyTracking:           info.StatePath != "",
 		applyRoot:                      defaultApplyRoot(applyRoot),
@@ -128,6 +131,24 @@ func newManagementState(info ServerInfo) *managementState {
 	if err != nil {
 		log.Printf("error loading Panel sessions from %s: %v", sessionPath, err)
 		sessionRegistry = newSessionRegistryWithoutLoad(sessionPath)
+		if info, statErr := os.Stat(sessionPath); statErr == nil && info.Mode().IsRegular() {
+			suffix, randomErr := generateRandomHex(8)
+			if randomErr == nil {
+				quarantinePath := sessionPath + ".corrupt-" + suffix
+				if renameErr := os.Rename(sessionPath, quarantinePath); renameErr == nil {
+					_ = syncSessionDirectory(sessionPath)
+					sessionRegistry.mu.Lock()
+					recoverErr := sessionRegistry.saveLocked()
+					sessionRegistry.mu.Unlock()
+					if recoverErr == nil {
+						err = nil
+						log.Printf("quarantined corrupt Panel session snapshot as %s", quarantinePath)
+					} else {
+						_ = os.Rename(quarantinePath, sessionPath)
+					}
+				}
+			}
+		}
 	}
 	state.sessions = sessionRegistry
 	if info.StatePath != "" {

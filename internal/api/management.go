@@ -1,12 +1,15 @@
 package api
 
 import (
-	"log"
+	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyhistory"
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -115,19 +118,27 @@ func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
 
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
 	context := NewManagementApplyContext(s)
-	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
+	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServices).LivePathForStagedConfig(stagedPath)
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
-	return s.managementConfigRendererLocked().Render()
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		return nil, err
+	}
+	return NewManagementConfigRenderer(ManagementConfigInput{
+		ApplyRoot: s.applyRoot, LiveRoot: s.liveRoot, Settings: s.settings,
+		Inbounds: inbounds, Rules: s.rules, Warp: s.warp,
+	}).Render()
 }
 
 func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
+	inbounds, _ := s.inboundsWithRuntimeCredentialsLocked()
 	return NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: s.applyRoot,
 		LiveRoot:  s.liveRoot,
 		Settings:  s.settings,
-		Inbounds:  s.inboundsWithRuntimeCredentialsLocked(),
+		Inbounds:  inbounds,
 		Rules:     s.rules,
 		Warp:      s.warp,
 	})
@@ -138,37 +149,36 @@ func (s *managementState) managementConfigRendererLocked() ManagementConfigRende
 // store attached as runtime-only data, so the rendered live config includes
 // normalized clients (not just legacy inbound-embedded profiles). Failures to
 // resolve credentials are non-fatal: the inbound renders without them.
-func (s *managementState) inboundsWithRuntimeCredentialsLocked() []Inbound {
-	// A3: when pinned to an immutable revision snapshot, resolve runtime
-	// credentials from the snapshot's frozen Clients/Bindings/Credentials, not
-	// from current mutable SQLite state. This is the core immutability
-	// guarantee: a retry of revision N renders exactly revision N.
+func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, error) {
 	if s.renderClients != nil || s.renderBindings != nil || s.renderCredentials != nil {
 		return s.inboundsWithPinnedCredentialsLocked()
 	}
 	if s.clientService == nil {
-		return s.inbounds
+		return s.inbounds, nil
 	}
 	out := make([]Inbound, len(s.inbounds))
 	copy(out, s.inbounds)
 	for i := range out {
 		creds, err := s.clientService.CredentialsForInbound(out[i].Name)
-		if err != nil || len(creds) == 0 {
+		if err != nil {
+			return nil, fmt.Errorf("resolve runtime credentials for inbound %s: %w", out[i].Name, err)
+		}
+		if len(creds) == 0 {
 			continue
 		}
 		rc := make([]RuntimeCredential, 0, len(creds))
-		for _, c := range creds {
-			rc = append(rc, RuntimeCredential{Name: c.Name, Username: c.Username, Password: c.Password})
+		for _, current := range creds {
+			rc = append(rc, RuntimeCredential{Name: current.Name, Username: current.Username, Password: current.Password})
 		}
 		out[i].RuntimeCredentials = rc
 	}
-	return out
+	return out, nil
 }
 
 // inboundsWithPinnedCredentialsLocked resolves runtime credentials from the
 // pinned immutable snapshot (renderClients/renderBindings/renderCredentials)
 // instead of live SQLite state. Used only during a pinned apply render.
-func (s *managementState) inboundsWithPinnedCredentialsLocked() []Inbound {
+func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, error) {
 	out := make([]Inbound, len(s.inbounds))
 	copy(out, s.inbounds)
 	// Build lookup: bindingID -> client, bindingID -> credential.
@@ -201,21 +211,28 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() []Inbound {
 			}
 			cred, ok := credByBinding[b.ID]
 			if !ok {
-				continue
+				return nil, fmt.Errorf("enabled binding %s has no active credential", b.ID)
 			}
 			// Decrypt the pinned credential for rendering.
-			plaintext, err := s.cipher.Decrypt(string(cred.EncryptedValue))
-			if err != nil {
-				log.Printf("apply: decrypt pinned credential %s: %v", cred.ID, err)
-				continue
+			ciphertext := string(cred.EncryptedValue)
+			if !strings.HasPrefix(ciphertext, "ve1:") {
+				return nil, fmt.Errorf("pinned credential %s ciphertext is invalid", cred.ID)
 			}
-			rc = append(rc, RuntimeCredential{Name: c.Name, Username: c.Name, Password: plaintext})
+			plaintext, err := s.cipher.Decrypt(ciphertext)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt pinned credential %s: %w", cred.ID, err)
+			}
+			runtimeIdentity := b.RuntimeIdentity
+			if runtimeIdentity == "" {
+				runtimeIdentity = client.GenerateRuntimeIdentity(b.ID)
+			}
+			rc = append(rc, RuntimeCredential{Name: c.Name, Username: runtimeIdentity, Password: plaintext})
 		}
 		if len(rc) > 0 {
 			out[i].RuntimeCredentials = rc
 		}
 	}
-	return out
+	return out, nil
 }
 
 func (s *managementState) snapshotLocked() managementSnapshot {
@@ -258,16 +275,31 @@ func (s *managementState) Reload() error {
 // closing the SQLite store. RunLifecycle calls it after HTTP draining, while
 // backup restore uses the same detach/stop/close primitives around its DB swap.
 func (s *managementState) Close() error {
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)
+	hub := s.sse
+	s.sse = nil
 	s.mu.Unlock()
 
+	if hub != nil {
+		hub.Close()
+	}
 	stopClientBackgroundWorkers(workers)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return closeClientDatabase(s)
+}
+
+func (s *managementState) lifecycleContext() context.Context {
+	if s.lifecycleCtx != nil {
+		return s.lifecycleCtx
+	}
+	return context.TODO()
 }
 
 func (s *managementState) saveLocked() error {

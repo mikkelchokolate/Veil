@@ -43,7 +43,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	if basePath != "/" {
 		handler = stripBasePathMiddleware(basePath, mux)
 	}
-	rateLimited := rateLimitMiddleware(metrics, handler)
+	rateLimited := rateLimitMiddleware(metrics, info.TrustedProxyCIDRs, handler)
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,
 		ProtectHealthz:    info.PublicListen,

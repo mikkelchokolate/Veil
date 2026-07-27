@@ -3,11 +3,15 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -32,6 +36,16 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if !decodeJSONRequest(w, r, &req) {
+		return
+	}
+	usernameKey := strings.ToLower(strings.TrimSpace(req.Username))
+	if allowed, retryAfter := s.allowLoginUsername(usernameKey); !allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+		s.recordRequestAudit(r, audit.Record{
+			Actor: req.Username, Action: "auth.login.rate_limited", Target: "panel",
+			Success: false, Error: "username rate limit",
+		})
+		writeError(w, "too many login attempts", http.StatusTooManyRequests)
 		return
 	}
 
@@ -123,6 +137,16 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *managementState) allowLoginUsername(normalizedUsername string) (bool, time.Duration) {
+	s.mu.Lock()
+	if s.loginUsernameLimiter == nil {
+		s.loginUsernameLimiter = observability.NewRateLimiterEngine()
+	}
+	limiter := s.loginUsernameLimiter
+	s.mu.Unlock()
+	return limiter.Allow("login-username:"+normalizedUsername, 5.0/60.0, 3)
+}
+
 func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -135,7 +159,11 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 		if session, ok := s.sessionRegistry().Get(cookie.Value); ok {
 			actor, role = session.Username, session.Role
 		}
-		s.sessionRegistry().Delete(cookie.Value)
+		if err := s.sessionRegistry().Delete(cookie.Value); err != nil {
+			s.recordRequestAudit(r, audit.Record{Actor: actor, Role: role, Action: "auth.logout", Target: "panel", Success: false, Error: "session revocation persistence failed"})
+			writeError(w, "failed to revoke session", http.StatusInternalServerError)
+			return
+		}
 		s.recordRequestAudit(r, audit.Record{
 			Actor:   actor,
 			Role:    role,
@@ -604,8 +632,12 @@ func currentSessionToken(r *http.Request) string {
 }
 
 func clientIP(r *http.Request) string {
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
-		return forwarded
+	if address, ok := clientaddr.FromContext(r); ok {
+		return address
 	}
-	return r.RemoteAddr
+	address, err := (clientaddr.Resolver{}).Resolve(r)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return address
 }

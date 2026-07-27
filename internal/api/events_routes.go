@@ -25,46 +25,7 @@ func (s *managementState) handleV1Events(w http.ResponseWriter, r *http.Request)
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	typesFilter := r.URL.Query().Get("types")
-	wantTraffic := typesFilter == "" || containsEventType(typesFilter, "traffic")
-	wantApply := typesFilter == "" || containsEventType(typesFilter, "apply")
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	rc := http.NewResponseController(w)
-	if err := rc.Flush(); err != nil {
-		writeError(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	// Emit initial state immediately.
-	if wantTraffic {
-		if !s.emitTrafficEvent(w, rc) {
-			return
-		}
-	}
-	if wantApply {
-		if !s.emitApplyEvent(w, rc) {
-			return
-		}
-	}
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-ticker.C:
-			if wantTraffic && !s.emitTrafficEvent(w, rc) {
-				return
-			}
-			if wantApply && !s.emitApplyEvent(w, rc) {
-				return
-			}
-		}
-	}
+	s.serveSharedSSE(w, r, parseSSETypes(r.URL.Query().Get("types")))
 }
 
 func (s *managementState) emitTrafficEvent(w http.ResponseWriter, rc *http.ResponseController) bool {
@@ -101,17 +62,4 @@ func (s *managementState) emitApplyEvent(w http.ResponseWriter, rc *http.Respons
 	fmt.Fprintf(w, "event: apply\ndata: %s\n\n", data)
 	rc.Flush()
 	return true
-}
-
-func containsEventType(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsEventTypeHelper(s, sub))
-}
-
-func containsEventTypeHelper(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

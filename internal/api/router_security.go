@@ -95,6 +95,10 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
+				if healthErr := state.sessionRegistry().Healthy(); healthErr != nil {
+					writeError(w, "session storage unavailable", http.StatusServiceUnavailable)
+					return
+				}
 				sessionToken = cookie.Value
 				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
 					username = sess.Username

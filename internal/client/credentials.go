@@ -2,7 +2,9 @@ package client
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -197,7 +199,11 @@ func (s *CredentialStore) Reveal(id string) (string, error) {
 	if s.cipher == nil {
 		return "", fmt.Errorf("client: credential cipher unavailable")
 	}
-	return s.cipher.Decrypt(string(cred.EncryptedValue))
+	value := string(cred.EncryptedValue)
+	if !strings.HasPrefix(value, "ve1:") {
+		return "", errors.New("client: normalized credential ciphertext is invalid")
+	}
+	return s.cipher.Decrypt(value)
 }
 
 // ListForBinding returns credential metadata for a binding WITHOUT the

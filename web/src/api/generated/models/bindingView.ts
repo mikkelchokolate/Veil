@@ -46,6 +46,7 @@ import type { CredentialMeta } from './credentialMeta.ts';
 export interface BindingView {
   id: string;
   inboundId: string;
+  runtimeIdentity: string;
   enabled: boolean;
   version: number;
   capability?: BindingCapability;

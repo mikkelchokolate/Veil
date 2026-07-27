@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -41,6 +42,7 @@ type ServerInfo struct {
 	Privileged              privileged.Client
 	RequirePrivilegedHelper bool
 	UpdateStager            func(context.Context) (string, error)
+	TrustedProxyCIDRs       []string
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {
@@ -78,8 +80,15 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(metrics *observability.MetricsCollector, next http.Handler) http.Handler {
+func rateLimitMiddleware(metrics *observability.MetricsCollector, trustedProxyCIDRs []string, next http.Handler) http.Handler {
+	resolver, err := clientaddr.New(trustedProxyCIDRs)
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeError(w, "invalid trusted proxy configuration", http.StatusInternalServerError)
+		})
+	}
 	limiter := observability.DefaultRateLimitPolicy().NewLimiter()
+	limiter.SetClientAddressResolver(resolver)
 	limiter.SetOnRateLimited(func() { metrics.TrackRateLimitHit() })
 	return limiter.Middleware(next)
 }

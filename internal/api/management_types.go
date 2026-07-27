@@ -11,6 +11,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
@@ -45,6 +46,9 @@ type managementSnapshot = model.ManagementSnapshot
 
 type managementState struct {
 	mu                             sync.Mutex
+	clientLifecycleMu              sync.RWMutex
+	lifecycleCtx                   context.Context
+	lifecycleCancel                context.CancelFunc
 	statePath                      string
 	applyRoot                      string
 	liveRoot                       string
@@ -66,6 +70,7 @@ type managementState struct {
 	users                          []User
 	orphanedUnits                  []string
 	sessions                       *SessionRegistry
+	loginUsernameLimiter           *observability.RateLimiterEngine
 	audit                          *audit.Recorder
 	version                        string
 	backupDir                      string
@@ -100,6 +105,7 @@ type managementState struct {
 	trafficStore            *client.TrafficStore
 	trafficCollector        *client.Collector
 	trafficReconciler       *client.Reconciler
+	sse                     *sseBroadcaster
 	clientSubsystemStopping bool
 	// A3: normalized client state pinned from the immutable revision snapshot
 	// for the duration of an apply render. When non-nil these override live

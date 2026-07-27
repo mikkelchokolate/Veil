@@ -176,7 +176,7 @@ func snapshotClientRows(
 	bindingRows := make([]model.BindingSnapshot, 0, len(bindings))
 	for _, item := range bindings {
 		bindingRows = append(bindingRows, model.BindingSnapshot{
-			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID, Enabled: item.Enabled,
+			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID, RuntimeIdentity: item.RuntimeIdentity, Enabled: item.Enabled,
 			ProtocolSettings: item.ProtocolSettings,
 			CreatedAt:        item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})

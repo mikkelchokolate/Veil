@@ -103,14 +103,14 @@ func (s *JobStore) Create(j Job) error {
 	if j.Operations == nil {
 		ops = []byte("[]")
 	}
-	_, err = s.db.Exec(`INSERT INTO apply_jobs
-	  (id, desired_revision, base_revision, status, trigger, actor_id, created_at, operations)
-	  VALUES(?,?,?,?,?,?,?,?)`,
+	result, err := s.db.Exec(`INSERT INTO apply_jobs
+  (id, desired_revision, base_revision, status, trigger, actor_id, created_at, operations)
+  VALUES(?,?,?,?,?,?,?,?)`,
 		j.ID, j.DesiredRevision, j.BaseRevision, j.Status, j.Trigger, j.ActorID, j.CreatedAt, string(ops))
 	if err != nil {
 		return fmt.Errorf("apply: create job: %w", err)
 	}
-	return nil
+	return requireOneJobRow(result, "create", j.ID)
 }
 
 func (s *JobStore) Get(id string) (Job, error) {
@@ -145,26 +145,26 @@ func (s *JobStore) List(limit int) ([]Job, error) {
 // MarkStatus transitions a job to a non-terminal status, setting started_at on
 // first transition out of pending.
 func (s *JobStore) MarkStatus(id, status, code, message string) error {
-	_, err := s.db.Exec(`UPDATE apply_jobs SET status=?,
-	  started_at = COALESCE(started_at, ?),
-	  error_code = ?, error_message = ? WHERE id=?`,
+	result, err := s.db.Exec(`UPDATE apply_jobs SET status=?,
+  started_at = COALESCE(started_at, ?),
+  error_code = ?, error_message = ? WHERE id=?`,
 		status, nowUnix(), code, message, id)
 	if err != nil {
 		return fmt.Errorf("apply: mark job status: %w", err)
 	}
-	return nil
+	return requireOneJobRow(result, "mark status", id)
 }
 
 // Finish marks a job terminal and records finished_at.
 func (s *JobStore) Finish(id, status, code, message string) error {
-	_, err := s.db.Exec(`UPDATE apply_jobs SET status=?,
-	  started_at = COALESCE(started_at, ?), finished_at = ?,
-	  error_code = ?, error_message = ? WHERE id=?`,
+	result, err := s.db.Exec(`UPDATE apply_jobs SET status=?,
+  started_at = COALESCE(started_at, ?), finished_at = ?,
+  error_code = ?, error_message = ? WHERE id=?`,
 		status, nowUnix(), nowUnix(), code, message, id)
 	if err != nil {
 		return fmt.Errorf("apply: finish job: %w", err)
 	}
-	return nil
+	return requireOneJobRow(result, "finish", id)
 }
 
 // SetOperations replaces the operation results recorded for a job.
@@ -176,9 +176,31 @@ func (s *JobStore) SetOperations(id string, ops []OperationResult) error {
 	if ops == nil {
 		body = []byte("[]")
 	}
-	_, err = s.db.Exec(`UPDATE apply_jobs SET operations=? WHERE id=?`, string(body), id)
+	result, err := s.db.Exec(`UPDATE apply_jobs SET operations=? WHERE id=?`, string(body), id)
 	if err != nil {
 		return fmt.Errorf("apply: set job operations: %w", err)
+	}
+	return requireOneJobRow(result, "set operations", id)
+}
+
+func (s *JobStore) MarkApplyingInterrupted(message string) error {
+	now := nowUnix()
+	_, err := s.db.Exec(`UPDATE apply_jobs SET status=?, finished_at=?,
+  error_code='INTERRUPTED', error_message=? WHERE status=?`,
+		StatusFailed, now, message, StatusApplying)
+	if err != nil {
+		return fmt.Errorf("apply: mark stale jobs interrupted: %w", err)
+	}
+	return nil
+}
+
+func requireOneJobRow(result sql.Result, operation, id string) error {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("apply: %s job %s affected %d rows", operation, id, rows)
 	}
 	return nil
 }

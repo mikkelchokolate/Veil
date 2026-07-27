@@ -118,7 +118,7 @@ func TestRunnerSerializesConcurrentJobs(t *testing.T) {
 	}
 }
 
-func TestRunnerAppliesExactRevisionNotLatest(t *testing.T) {
+func TestRunnerRejectsPinnedRevisionWhenItIsNoLongerCurrentDesired(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 	rs := NewRevisionStore(db)
@@ -127,12 +127,11 @@ func TestRunnerAppliesExactRevisionNotLatest(t *testing.T) {
 	r := NewRunner(rs, js, exec.apply)
 
 	d1, _ := rs.BumpDesired()
-	// A second mutation bumps desired to 2, but we still run a job pinned to d1.
 	_, _ = rs.BumpDesired()
-	if _, err := r.Run(d1, "retry", "admin"); err != nil {
-		t.Fatalf("run pinned revision: %v", err)
+	if _, err := r.Run(d1, "retry", "admin"); !errors.Is(err, ErrStaleRevision) {
+		t.Fatalf("historical retry error=%v want ErrStaleRevision", err)
 	}
-	if len(exec.applied) != 1 || exec.applied[0] != d1 {
-		t.Fatalf("job must apply its pinned revision %d, got %v", d1, exec.applied)
+	if len(exec.applied) != 0 {
+		t.Fatalf("historical retry touched runtime: %v", exec.applied)
 	}
 }

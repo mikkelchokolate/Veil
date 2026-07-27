@@ -36,7 +36,7 @@ func TestReloadPromotedServicesReloadsPanelCaddyWithoutNaiveInbound(t *testing.T
 	}
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.reloadPromotedServicesLocked([]string{caddyPath})
+	results := ctx.reloadPromotedServices([]string{caddyPath})
 	found := false
 	for _, r := range results {
 		if r.Name == unitCaddy {
@@ -78,7 +78,7 @@ func TestReloadPromotedServicesTreatsSuccessfulCaddyFallbackAsSuccess(t *testing
 		t.Fatalf("write caddy config: %v", err)
 	}
 
-	results := NewManagementApplyContext(state).reloadPromotedServicesLocked([]string{caddyPath})
+	results := NewManagementApplyContext(state).reloadPromotedServices([]string{caddyPath})
 	caddyResults := 0
 	for _, result := range results {
 		if !result.Success {

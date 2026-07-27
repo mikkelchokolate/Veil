@@ -127,6 +127,17 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 		<-releaseAudit
 		return nil
 	}
+	for _, body := range []string{
+		`{"username":"alice","password":"alice-password-123","role":"viewer"}`,
+		`{"username":"bob","password":"bob-password-12345","role":"viewer"}`,
+	} {
+		request := adminJSONRequest(http.MethodPost, "/api/users", body)
+		response := httptest.NewRecorder()
+		state.handleUsersRoute(response, request)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("seed restored user status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
 	state.handleBackups(createResponse, create)
@@ -202,7 +213,8 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if _, ok := state.sessionRegistry().Get(otherSession.Token); ok {
 		t.Fatal("restore did not revoke another active session")
 	}
-	status := adminJSONRequest(http.MethodGet, "/api/backup-restore-jobs/"+accepted.ID, "")
+	status := httptest.NewRequest(http.MethodGet, "/api/backup-restore-jobs/"+accepted.ID, nil)
+	status = status.WithContext(context.WithValue(status.Context(), contextKeyRole, "viewer"))
 	status.AddCookie(&http.Cookie{Name: "veil_session", Value: ownerSession.Token})
 	statusResponse := httptest.NewRecorder()
 	state.handleBackupRestoreJob(statusResponse, status)

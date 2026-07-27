@@ -16,7 +16,7 @@ func TestDeleteUsernamePersistedRollsBackOnSaveFailure(t *testing.T) {
 	if deleted != 1 || err == nil {
 		t.Fatalf("DeleteUsernamePersisted deleted=%d err=%v", deleted, err)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed persistent user revocation removed the session")
 	}
 }
@@ -40,10 +40,10 @@ func TestDeleteAllExceptPersistedRollsBackOnSaveFailure(t *testing.T) {
 	if deleted != 1 || err == nil {
 		t.Fatalf("DeleteAllExceptPersisted deleted=%d err=%v", deleted, err)
 	}
-	if _, ok := registry.Get(current.Token); !ok {
+	if !sessionPresentInMemory(registry, current.Token) {
 		t.Fatal("current session was removed")
 	}
-	if _, ok := registry.Get(other.Token); !ok {
+	if !sessionPresentInMemory(registry, other.Token) {
 		t.Fatal("failed bulk revocation removed the other session")
 	}
 }
@@ -84,7 +84,7 @@ func TestAtomicUserUpdateStopsWhenSessionPersistenceFails(t *testing.T) {
 			t.Fatalf("user changed despite revocation failure: %+v", user)
 		}
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("session disappeared despite rollback")
 	}
 }
@@ -98,7 +98,7 @@ func TestBackupOwnerRevocationKeepsRetryTokenOnPersistenceFailure(t *testing.T) 
 
 	state.revokeBackupRestoreOwnerSession("job", session.Token)
 
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed backup owner revocation removed the session")
 	}
 	if got := state.backupJobs["job"].ownerSessionToken; got != session.Token {

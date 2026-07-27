@@ -43,6 +43,8 @@
 
 export interface ClientBindingInput {
   inboundId: string;
+  /** @pattern ^[A-Za-z0-9_-]{1,48}$ */
+  runtimeIdentity?: string;
   /** Optional explicit credential; server-generated when empty. */
   credential?: string;
   enabled?: boolean;

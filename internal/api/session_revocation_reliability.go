@@ -30,10 +30,15 @@ func (r *SessionRegistry) mutateAndPersistSessions(mutate func() int) (int, erro
 	if changed == 0 {
 		return 0, nil
 	}
-	if err := r.saveLocked(); err != nil {
-		r.sessions = previousSessions
-		r.rawCSRF = previousCSRF
-		return changed, err
+	for tokenHash := range previousSessions {
+		if _, stillPresent := r.sessions[tokenHash]; stillPresent {
+			continue
+		}
+		if err := r.persistDeleteLocked(tokenHash); err != nil {
+			r.sessions = previousSessions
+			r.rawCSRF = previousCSRF
+			return changed, err
+		}
 	}
 	return changed, nil
 }

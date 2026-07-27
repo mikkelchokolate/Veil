@@ -82,7 +82,7 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	plan := NewManagementApplyContext(s).buildApplyPlanLocked()
+	plan := NewManagementApplyContextWithContext(s, r.Context()).buildApplyPlanLocked()
 	status := http.StatusOK
 	if !plan.Valid {
 		status = http.StatusBadRequest
@@ -124,7 +124,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		defer s.serviceActionMu.Unlock()
 	}
 	s.mu.Lock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, r.Context())).RunLocked(req)
 	s.mu.Unlock()
 	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
 		status = http.StatusUnprocessableEntity
@@ -154,7 +154,11 @@ func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool)
 		return ApplyResponse{}, false
 	}
 	defer s.serviceActionMu.Unlock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	operationContext := s.lifecycleContext()
+	if r != nil {
+		operationContext = r.Context()
+	}
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, operationContext)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
 	success := err == nil && status == http.StatusOK
 	details := ""
 	if err != nil {
@@ -225,13 +229,20 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 	}
 	rev, err := s.applyRevisions.Get()
 	if err != nil {
+		resp.State = apply.StateDegraded
+		resp.LastError = &applyErrorView{Code: "database_unavailable", Message: "apply state is unavailable"}
 		return resp
 	}
 	resp.DesiredRevision = rev.Desired
 	resp.AppliedRevision = rev.Applied
 	resp.State = deriveSystemState(rev, nil)
 	jobs, err := s.applyJobs.List(1)
-	if err == nil && len(jobs) > 0 {
+	if err != nil {
+		resp.State = apply.StateDegraded
+		resp.LastError = &applyErrorView{Code: "database_unavailable", Message: "apply jobs are unavailable"}
+		return resp
+	}
+	if len(jobs) > 0 {
 		latest := jobs[0]
 		resp.State = deriveSystemState(rev, &latest)
 		if latest.Active() {

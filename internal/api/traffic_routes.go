@@ -1,8 +1,6 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -173,50 +171,11 @@ func (s *managementState) handleV1TrafficTop(w http.ResponseWriter, r *http.Requ
 // handleV1TrafficStream streams periodic traffic snapshots as SSE events.
 // Clients (panel dashboards) subscribe for live counters without polling.
 func (s *managementState) handleV1TrafficStream(w http.ResponseWriter, r *http.Request) {
-	if s.trafficStore == nil {
-		writeError(w, "traffic store unavailable", http.StatusServiceUnavailable)
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	// Use ResponseController to reach through middleware-wrapped writers.
-	rc := http.NewResponseController(w)
-	if err := rc.Flush(); err != nil {
-		writeError(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	// Emit one immediate snapshot, then on each tick.
-	emit := func() bool {
-		clients, _, err := s.clientService.List(client.ListFilter{PageSize: 1000})
-		if err != nil {
-			return false
-		}
-		snap := map[string]any{"at": time.Now().Unix(), "clients": map[string]any{}}
-		for _, c := range clients {
-			up, down, _ := s.trafficStore.TotalsForClient(c.ID)
-			snap["clients"].(map[string]any)[c.ID] = map[string]int64{"upload": up, "download": down}
-		}
-		data, _ := json.Marshal(snap)
-		fmt.Fprintf(w, "event: traffic\ndata: %s\n\n", data)
-		rc.Flush()
-		return true
-	}
-	if !emit() {
-		return
-	}
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-ticker.C:
-			if !emit() {
-				return
-			}
-		}
-	}
+	s.serveSharedSSE(w, r, map[string]bool{"traffic": true})
 }
 
 func parseInt64Default(v string, def int64) int64 {

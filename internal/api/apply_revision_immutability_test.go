@@ -202,7 +202,10 @@ func TestPinnedSnapshotDoesNotFallBackToMutableState(t *testing.T) {
 	svc.Delete(view.ID)
 
 	// Render from pinned snapshot — must still see the client.
-	inbounds := s.inboundsWithRuntimeCredentialsLocked()
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(inbounds) == 0 || len(inbounds[0].RuntimeCredentials) == 0 {
 		t.Fatal("pinned render lost client credentials after live mutation — fell back to mutable state")
 	}

@@ -43,13 +43,13 @@ func TestSyncFirewallLocked(t *testing.T) {
 	t.Cleanup(func() { firewallApplierInstance = old })
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.syncFirewallLocked()
+	results := ctx.syncFirewall()
 	if len(results) != 1 || !results[0].Success {
 		t.Fatalf("expected firewall success, got %+v", results)
 	}
 
 	firewallApplierInstance = &recordingFirewallApplier{ensureErr: errors.New("ufw not found")}
-	results = ctx.syncFirewallLocked()
+	results = ctx.syncFirewall()
 	if len(results) != 1 || results[0].Success {
 		t.Fatalf("expected firewall failure, got %+v", results)
 	}

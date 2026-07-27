@@ -8,9 +8,9 @@ import (
 type applyWorkflowState interface {
 	buildApplyPlanLocked() ApplyPlanResponse
 	writeApplyStageLocked(ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error)
-	promoteStagedConfigsLocked([]string) ([]string, []string, []livePromotionRecord, error)
-	reloadPromotedServicesLocked([]string) []ServiceActionResult
-	rollbackPromotedConfigsLocked([]livePromotionRecord, []string) ([]string, []ServiceActionResult)
+	promoteStagedConfigs([]string) ([]string, []string, []livePromotionRecord, error)
+	reloadPromotedServices([]string) []ServiceActionResult
+	rollbackPromotedConfigs([]livePromotionRecord, []string) ([]string, []ServiceActionResult)
 	appendApplyHistoryLocked(string, bool, ApplyResponse) error
 }
 
@@ -29,9 +29,9 @@ func (w ApplyWorkflow) RunLocked(req ApplyRequest) (ApplyResponse, int, error) {
 		}).Check(actions)
 	}
 	if state, ok := w.state.(interface {
-		checkServiceHealthLocked([]ServiceActionResult) []ServiceHealthResult
+		checkServiceHealth([]ServiceActionResult) []ServiceHealthResult
 	}); ok {
-		checkHealth = state.checkServiceHealthLocked
+		checkHealth = state.checkServiceHealth
 	}
 	return applyflow.NewWorkflow(applyWorkflowStateAdapter(w), checkHealth).RunLocked(req)
 }
@@ -49,15 +49,15 @@ func (a applyWorkflowStateAdapter) WriteApplyStageLocked(plan ApplyPlanResponse)
 }
 
 func (a applyWorkflowStateAdapter) PromoteStagedConfigsLocked(paths []string) ([]string, []string, []applyflow.PromotionRecord, error) {
-	return a.state.promoteStagedConfigsLocked(paths)
+	return a.state.promoteStagedConfigs(paths)
 }
 
 func (a applyWorkflowStateAdapter) ReloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
-	return a.state.reloadPromotedServicesLocked(liveFiles)
+	return a.state.reloadPromotedServices(liveFiles)
 }
 
 func (a applyWorkflowStateAdapter) RollbackPromotedConfigsLocked(records []applyflow.PromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
-	return a.state.rollbackPromotedConfigsLocked(records, liveFiles)
+	return a.state.rollbackPromotedConfigs(records, liveFiles)
 }
 
 func (a applyWorkflowStateAdapter) AppendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {

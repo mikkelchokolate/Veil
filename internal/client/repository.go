@@ -349,15 +349,21 @@ func (q queries) CreateBinding(b Binding) (Binding, error) {
 	if b.ID == "" {
 		b.ID = uuid.NewString()
 	}
+	if b.RuntimeIdentity == "" {
+		b.RuntimeIdentity = GenerateRuntimeIdentity(b.ID)
+	}
+	if err := ValidateRuntimeIdentity(b.RuntimeIdentity); err != nil {
+		return Binding{}, err
+	}
 	now := nowUnix()
 	b.CreatedAt, b.UpdatedAt, b.Version = now, now, 1
 	if b.ProtocolSettings == "" {
 		b.ProtocolSettings = "{}"
 	}
 	_, err := q.q.Exec(`INSERT INTO client_bindings
-  (id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version)
-  VALUES(?,?,?,?,?,?,?,?)`,
-		b.ID, b.ClientID, b.InboundID, boolToInt(b.Enabled), b.ProtocolSettings,
+  (id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version)
+  VALUES(?,?,?,?,?,?,?,?,?)`,
+		b.ID, b.ClientID, b.InboundID, b.RuntimeIdentity, boolToInt(b.Enabled), b.ProtocolSettings,
 		b.CreatedAt, b.UpdatedAt, b.Version)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -369,13 +375,13 @@ func (q queries) CreateBinding(b Binding) (Binding, error) {
 }
 
 func (q queries) GetBinding(id string) (Binding, error) {
-	row := q.q.QueryRow(`SELECT id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version
+	row := q.q.QueryRow(`SELECT id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version
   FROM client_bindings WHERE id=?`, id)
 	return scanBinding(row)
 }
 
 func (q queries) BindingsForClient(clientID string) ([]Binding, error) {
-	rows, err := q.q.Query(`SELECT id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version
+	rows, err := q.q.Query(`SELECT id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version
   FROM client_bindings WHERE client_id=? ORDER BY created_at ASC`, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("client: bindings: %w", err)
@@ -452,7 +458,7 @@ func (q queries) AllClients() ([]Client, error) {
 
 // AllBindings returns every binding (no pagination) for revision snapshots.
 func (q queries) AllBindings() ([]Binding, error) {
-	rows, err := q.q.Query(`SELECT id, client_id, inbound_id, enabled, protocol_settings, created_at, updated_at, version
+	rows, err := q.q.Query(`SELECT id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version
   FROM client_bindings ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("client: list all bindings: %w", err)
@@ -563,7 +569,7 @@ func scanClient(row scanner) (Client, error) {
 func scanBinding(row scanner) (Binding, error) {
 	var b Binding
 	var enabled int
-	err := row.Scan(&b.ID, &b.ClientID, &b.InboundID, &enabled, &b.ProtocolSettings,
+	err := row.Scan(&b.ID, &b.ClientID, &b.InboundID, &b.RuntimeIdentity, &enabled, &b.ProtocolSettings,
 		&b.CreatedAt, &b.UpdatedAt, &b.Version)
 	if err != nil {
 		return Binding{}, err

@@ -52,9 +52,10 @@ type v1CreateClientRequest struct {
 }
 
 type v1BindingRequest struct {
-	InboundID  string `json:"inboundId"`
-	Credential string `json:"credential"`
-	Enabled    *bool  `json:"enabled"`
+	InboundID       string `json:"inboundId"`
+	RuntimeIdentity string `json:"runtimeIdentity"`
+	Credential      string `json:"credential"`
+	Enabled         *bool  `json:"enabled"`
 }
 
 type patchField[T any] struct {
@@ -441,7 +442,7 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		if b.InboundID == "" {
 			continue
 		}
-		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, Credential: b.Credential})
+		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Credential: b.Credential})
 	}
 	var createdID string
 	var issued []client.IssuedCredential
@@ -652,7 +653,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			}
 			var b client.Binding
 			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
-				nb, err := s.clientService.AddBindingTx(tx, clientID, req.InboundID)
+				nb, err := s.clientService.AddBindingWithIdentityTx(tx, clientID, req.InboundID, req.RuntimeIdentity)
 				if err != nil {
 					return err
 				}

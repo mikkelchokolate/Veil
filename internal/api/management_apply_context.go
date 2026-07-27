@@ -36,10 +36,25 @@ var firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
 
 type ManagementApplyContext struct {
 	state *managementState
+	ctx   context.Context
 }
 
 func NewManagementApplyContext(state *managementState) ManagementApplyContext {
-	return ManagementApplyContext{state: state}
+	return ManagementApplyContext{state: state, ctx: state.lifecycleContext()}
+}
+
+func NewManagementApplyContextWithContext(state *managementState, operationContext context.Context) ManagementApplyContext {
+	if operationContext == nil {
+		operationContext = state.lifecycleContext()
+	}
+	return ManagementApplyContext{state: state, ctx: operationContext}
+}
+
+func (ctx ManagementApplyContext) operationContext() context.Context {
+	if ctx.ctx != nil {
+		return ctx.ctx
+	}
+	return context.TODO()
 }
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
@@ -52,7 +67,7 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 		RoutingSource: s.routingSource,
 		Warp:          s.warp,
 	}).BuildPlan()
-	if validation, ok := s.enforceValidationLocked(context.Background(), s.settings, s.inbounds, s.warp); !ok {
+	if validation, ok := s.enforceValidationLocked(ctx.operationContext(), s.settings, s.inbounds, s.warp); !ok {
 		plan.Valid = false
 		plan.Issues = append(plan.Issues, validation.Issues...)
 		for _, issue := range validation.Issues {
@@ -81,7 +96,7 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 	})
 }
 
-func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
+func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
 	generatedRoot := filepath.Join(ctx.state.applyRoot, "generated")
 	artifactIDs := make([]string, 0, len(stagedPaths))
 	for _, stagedPath := range stagedPaths {
@@ -127,7 +142,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 	if ctx.state.privileged == nil {
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
 	}
-	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{
+	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
 		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs,
 	})
 	if err != nil {
@@ -153,7 +168,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 	return liveFiles, backupFiles, records, nil
 }
 
-func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
+func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
 
 	// Retire legacy per-inbound Caddy instances before touching the singleton.
@@ -295,16 +310,16 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 	// Synchronize the complete firewall rule set for the panel and enabled
 	// inbounds. A failure is a failed service action: applyflow restores the
 	// promoted configs and runtime services instead of reporting success.
-	results = append(results, ctx.syncFirewallLocked()...)
+	results = append(results, ctx.syncFirewall()...)
 
 	return results
 }
 
-func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
 	if len(records) == 0 || records[0].BackupID == "" || ctx.state.privileged == nil {
 		return nil, nil
 	}
-	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{
+	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
 		RestoreBackupID: records[0].BackupID,
 	})
 	if err != nil {
@@ -317,7 +332,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 	// The units removed during the failed apply are about to be restored; do not
 	// stop/disable them again while reloading services for the restored state.
 	ctx.state.orphanedUnits = nil
-	rollbackActions := ctx.reloadPromotedServicesLocked(rollbackFiles)
+	rollbackActions := ctx.reloadPromotedServices(rollbackFiles)
 
 	liveFilesMap := make(map[string]bool)
 	for _, lf := range liveFiles {
@@ -458,7 +473,7 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
-	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
+	syncResult, err := ctx.state.privileged.SyncCaddyCert(ctx.operationContext(), privileged.SyncCaddyCertRequest{
 		Domain: domain,
 		OutDir: "/etc/veil/certs",
 	})
@@ -474,7 +489,7 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	return result
 }
 
-func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
+func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	// Firewall management is enabled by default. A nil pointer means the setting
 	// is absent from an older state file, which we treat as enabled.
 	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
@@ -496,7 +511,7 @@ func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
 		for i, r := range rules {
 			reqRules[i] = privileged.FirewallRule{Command: r.Command, Args: r.Args}
 		}
-		if _, err := ctx.state.privileged.FirewallApply(context.Background(), privileged.FirewallRequest{Rules: reqRules}); err != nil {
+		if _, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules}); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
@@ -522,7 +537,7 @@ func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
-	if err := ctx.state.privileged.ServiceAction(context.Background(), privileged.ServiceActionRequest{
+	if err := ctx.state.privileged.ServiceAction(ctx.operationContext(), privileged.ServiceActionRequest{
 		Unit: unit, Action: action,
 	}); err != nil {
 		result.Error = err.Error()
@@ -538,7 +553,7 @@ func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
 	if ctx.state.privileged == nil {
 		return false
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(context.Background(), privileged.ServiceStatusRequest{
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
 		Units: []string{renderer.UnitWarp},
 	})
 	if err != nil {
@@ -602,7 +617,7 @@ func serviceActionRequiresActiveUnit(action ServiceActionResult) bool {
 	return len(action.Command) >= 3 && action.Command[0] == "caddy" && action.Command[1] == "admin" && action.Command[2] == "load"
 }
 
-func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
+func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
 	healthActions := filterHealthCheckableActions(actions)
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
@@ -616,7 +631,7 @@ func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActi
 	if len(units) == 0 {
 		return nil
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(context.Background(), privileged.ServiceStatusRequest{Units: units})
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{Units: units})
 	if err != nil {
 		return []ServiceHealthResult{{
 			Name: "managed-services", Command: []string{"helper", "service-status"},

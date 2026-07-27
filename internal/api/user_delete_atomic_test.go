@@ -37,7 +37,7 @@ func TestAtomicUserDeleteStopsWhenSessionPersistenceFails(t *testing.T) {
 	if len(state.users) != 2 {
 		t.Fatalf("user was deleted despite revocation failure: %+v", state.users)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("session disappeared despite rollback")
 	}
 }
@@ -96,7 +96,7 @@ func TestAtomicUserDeletePreservesLastAdministrator(t *testing.T) {
 	if len(state.users) != 1 {
 		t.Fatalf("last admin was deleted: %+v", state.users)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("last admin session was revoked")
 	}
 }

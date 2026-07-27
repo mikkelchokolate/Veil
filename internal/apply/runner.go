@@ -4,21 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-// ErrApplyBusy is returned when another apply job is already active. The apply
-// workflow is serialized: only one job mutates runtime at a time.
 var (
-	ErrApplyBusy        = errors.New("apply: another apply job is active")
-	ErrStaleRevision    = errors.New("apply: revision is not current desired")
-	ErrRevisionRollback = errors.New("apply: revision is below current applied")
+	ErrApplyBusy       = errors.New("apply: another apply job is active")
+	ErrStaleRevision   = errors.New("apply: requested revision is not the current desired revision")
+	ErrRevisionApplied = errors.New("apply: requested revision is older than the applied revision")
 )
 
-// Result is the outcome of executing the underlying staged-apply pipeline for
-// one revision. Success is true only when the configuration was rendered,
-// promoted, services reloaded, and health checks passed.
+type Executor interface {
+	Execute(revision uint64) (Result, error)
+}
+
 type Result struct {
 	Success      bool
 	RolledBack   bool
@@ -27,32 +27,57 @@ type Result struct {
 	Operations   []OperationResult
 }
 
-// ExecuteFunc applies one immutable desired revision to the runtime and
-// reports the outcome. It is the seam over the existing staged-apply pipeline
-// (applyflow). The function must apply exactly the revision it is given.
-type ExecuteFunc func(revision uint64) (Result, error)
+type ExecutorFunc func(revision uint64) (Result, error)
 
-// Runner orchestrates apply jobs: it persists a durable job record, runs the
-// executor for the pinned revision, and advances applied_revision only on
-// success. A Runner is safe for concurrent use; jobs are serialized.
+func (f ExecutorFunc) Execute(revision uint64) (Result, error) { return f(revision) }
+
 type Runner struct {
-	revisions *RevisionStore
-	jobs      *JobStore
-	execute   ExecuteFunc
+	mu       sync.Mutex
+	active   bool
+	revs     *RevisionStore
+	jobs     *JobStore
+	leases   *LeaseStore
+	executor Executor
+	ownerID  string
 
-	mu     sync.Mutex
-	active bool
+	leaseTTL          time.Duration
+	heartbeatInterval time.Duration
+	now               func() time.Time
+	startupErr        error
 }
 
-func NewRunner(rs *RevisionStore, js *JobStore, execute ExecuteFunc) *Runner {
-	return &Runner{revisions: rs, jobs: js, execute: execute}
+func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
+	var resolved Executor
+	switch value := executor.(type) {
+	case Executor:
+		resolved = value
+	case func(uint64) (Result, error):
+		resolved = ExecutorFunc(value)
+	default:
+		resolved = ExecutorFunc(func(uint64) (Result, error) {
+			return Result{}, errors.New("apply: executor is not configured")
+		})
+	}
+	runner := &Runner{
+		revs: revs, jobs: jobs, executor: resolved,
+		ownerID: uuid.NewString(), leaseTTL: 30 * time.Second,
+		heartbeatInterval: 10 * time.Second, now: time.Now,
+	}
+	if revs == nil || revs.db == nil || jobs == nil {
+		runner.startupErr = errors.New("apply: runner stores are not configured")
+		return runner
+	}
+	runner.leases = NewLeaseStore(revs.db)
+	valid, err := runner.leases.Valid(runner.now())
+	if err != nil {
+		runner.startupErr = fmt.Errorf("apply: inspect startup lease: %w", err)
+	} else if !valid {
+		runner.startupErr = jobs.MarkApplyingInterrupted("panel process restarted before apply completed")
+	}
+	return runner
 }
 
-// Run creates and executes a job for the given desired revision. It returns
-// the final job record. A non-nil error indicates the job failed (the durable
-// record still reflects the terminal state); ErrApplyBusy indicates a
-// concurrent apply is in progress.
-func (r *Runner) Run(revision uint64, trigger, actor string) (Job, error) {
+func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr error) {
 	r.mu.Lock()
 	if r.active {
 		r.mu.Unlock()
@@ -66,64 +91,106 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (Job, error) {
 		r.mu.Unlock()
 	}()
 
-	rev, err := r.revisions.Get()
+	if r.startupErr != nil {
+		return Job{}, r.startupErr
+	}
+	operation := trigger + ":revision:" + fmt.Sprint(revision)
+	acquired, err := r.leases.Acquire(r.ownerID, operation, r.now(), r.leaseTTL)
+	if err != nil {
+		return Job{}, fmt.Errorf("apply: acquire durable lease: %w", err)
+	}
+	if !acquired {
+		return Job{}, ErrApplyBusy
+	}
+	defer func() {
+		if err := r.leases.Release(r.ownerID); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("apply: release durable lease: %w", err))
+		}
+	}()
+
+	revs, err := r.revs.Get()
 	if err != nil {
 		return Job{}, err
 	}
-	if revision != rev.Desired {
-		return Job{}, fmt.Errorf("%w: requested=%d current=%d", ErrStaleRevision, revision, rev.Desired)
+	if revision != revs.Desired {
+		return Job{}, fmt.Errorf("%w: requested=%d current=%d", ErrStaleRevision, revision, revs.Desired)
 	}
-	if revision < rev.Applied {
-		return Job{}, fmt.Errorf("%w: requested=%d applied=%d", ErrRevisionRollback, revision, rev.Applied)
+	if revision < revs.Applied {
+		return Job{}, fmt.Errorf("%w: requested=%d applied=%d", ErrRevisionApplied, revision, revs.Applied)
 	}
-	job := Job{
-		ID:              uuid.NewString(),
-		DesiredRevision: revision,
-		BaseRevision:    rev.Applied,
-		Status:          StatusPending,
-		Trigger:         trigger,
-		ActorID:         actor,
-		CreatedAt:       nowUnix(),
+
+	job = Job{
+		ID: uuid.NewString(), DesiredRevision: revision, BaseRevision: revs.Applied,
+		Status: StatusPending, Trigger: trigger, ActorID: actor, CreatedAt: nowUnix(),
 	}
 	if err := r.jobs.Create(job); err != nil {
-		return Job{}, err
+		return job, err
+	}
+	if err := r.jobs.MarkStatus(job.ID, StatusApplying, "", ""); err != nil {
+		_ = r.jobs.Finish(job.ID, StatusFailed, "job_store", err.Error())
+		return job, err
+	}
+	job.Status = StatusApplying
+
+	stopHeartbeat := make(chan struct{})
+	heartbeatErr := make(chan error, 1)
+	go r.heartbeat(stopHeartbeat, heartbeatErr)
+	result, execErr := r.executor.Execute(revision)
+	if execErr == nil && !result.Success {
+		message := result.ErrorMessage
+		if message == "" {
+			message = "apply executor reported an unsuccessful result"
+		}
+		execErr = errors.New(message)
+	}
+	close(stopHeartbeat)
+	if err := <-heartbeatErr; err != nil {
+		execErr = errors.Join(execErr, err)
 	}
 
-	_ = r.jobs.MarkStatus(job.ID, StatusApplying, "", "")
-	res, execErr := r.execute(revision)
-	job.Operations = res.Operations
-	_ = r.jobs.SetOperations(job.ID, res.Operations)
+	ops := result.Operations
+	if err := r.jobs.SetOperations(job.ID, ops); err != nil {
+		execErr = errors.Join(execErr, err)
+	}
+	if execErr != nil {
+		code := result.ErrorCode
+		if code == "" {
+			code = "apply_failed"
+		}
+		finishErr := r.jobs.Finish(job.ID, StatusFailed, code, execErr.Error())
+		job.Status = StatusFailed
+		job.ErrorCode = code
+		job.ErrorMessage = execErr.Error()
+		job.Operations = ops
+		return job, errors.Join(execErr, finishErr)
+	}
+	if err := r.revs.MarkApplied(revision); err != nil {
+		_ = r.jobs.Finish(job.ID, StatusFailed, "revision_update_failed", err.Error())
+		job.Status = StatusFailed
+		return job, err
+	}
+	if err := r.jobs.Finish(job.ID, StatusSucceeded, "", ""); err != nil {
+		job.Status = StatusApplying
+		return job, err
+	}
+	job.Status = StatusSucceeded
+	job.Operations = ops
+	return job, nil
+}
 
-	if execErr == nil && res.Success {
-		if err := r.revisions.MarkApplied(revision); err != nil {
-			execErr = err
-			res.ErrorCode = "REVISION_MARK_FAILED"
-			res.ErrorMessage = err.Error()
-		} else {
-			_ = r.jobs.Finish(job.ID, StatusSucceeded, "", "")
-			job.Status = StatusSucceeded
-			return job, nil
+func (r *Runner) heartbeat(stop <-chan struct{}, result chan<- error) {
+	ticker := time.NewTicker(r.heartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			result <- nil
+			return
+		case <-ticker.C:
+			if err := r.leases.Heartbeat(r.ownerID, r.now(), r.leaseTTL); err != nil {
+				result <- fmt.Errorf("apply: heartbeat durable lease: %w", err)
+				return
+			}
 		}
 	}
-
-	code := res.ErrorCode
-	if code == "" {
-		code = "APPLY_FAILED"
-	}
-	msg := res.ErrorMessage
-	if msg == "" && execErr != nil {
-		msg = execErr.Error()
-	}
-	status := StatusFailed
-	if res.RolledBack {
-		status = StatusRolledBack
-	}
-	_ = r.jobs.Finish(job.ID, status, code, msg)
-	job.Status = status
-	job.ErrorCode = code
-	job.ErrorMessage = msg
-	if execErr == nil {
-		execErr = fmt.Errorf("apply revision %d failed: %s", revision, msg)
-	}
-	return job, execErr
 }

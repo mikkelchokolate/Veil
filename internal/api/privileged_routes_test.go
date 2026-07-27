@@ -56,7 +56,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 	}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, Privileged: client})
 	context := NewManagementApplyContext(state)
-	liveFiles, _, records, err := context.promoteStagedConfigsLocked([]string{staged})
+	liveFiles, _, records, err := context.promoteStagedConfigs([]string{staged})
 	if err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		BackupID:         "20260605T120000.000000000Z",
 		WrittenArtifacts: []string{"caddy/config.json"},
 	}
-	rollbackFiles, _ := context.rollbackPromotedConfigsLocked(records, liveFiles)
+	rollbackFiles, _ := context.rollbackPromotedConfigs(records, liveFiles)
 	if len(client.promotions) != 2 || client.promotions[1].RestoreBackupID != "20260605T120000.000000000Z" {
 		t.Fatalf("rollback promotions=%+v", client.promotions)
 	}
@@ -88,7 +88,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
-	results := NewManagementApplyContext(state).checkServiceHealthLocked([]ServiceActionResult{{
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
 		Name: "veil-caddy.service", Command: []string{"systemctl", "reload", "veil-caddy.service"}, Success: true,
 	}})
 	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{{
@@ -104,7 +104,7 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
-	results := NewManagementApplyContext(state).checkServiceHealthLocked([]ServiceActionResult{
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{
 		{Name: "veil-hysteria2@new.service", Command: []string{"systemctl", "restart", "veil-hysteria2@new.service"}, Success: true},
 		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "stop", "veil-hysteria2@old.service"}, Success: true},
 		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "disable", "veil-hysteria2@old.service"}, Success: true},

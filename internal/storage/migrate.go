@@ -182,6 +182,32 @@ CREATE TABLE apply_rollbacks (
 );
 `,
 	},
+	{
+		version: 6,
+		name:    "durable_apply_lease",
+		sql: `
+CREATE TABLE apply_lease (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  owner_process TEXT NOT NULL DEFAULT '',
+  lease_expires_at INTEGER NOT NULL DEFAULT 0,
+  heartbeat_at INTEGER NOT NULL DEFAULT 0,
+  current_operation TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO apply_lease(id) VALUES(1);
+`,
+	},
+	{
+		version: 7,
+		name:    "binding_runtime_identity",
+		sql: `
+ALTER TABLE client_bindings ADD COLUMN runtime_identity TEXT NOT NULL DEFAULT '';
+UPDATE client_bindings
+SET runtime_identity = 'v_' || lower(replace(id, '-', ''))
+WHERE runtime_identity = '';
+CREATE UNIQUE INDEX idx_client_bindings_inbound_runtime_identity
+ON client_bindings(inbound_id, runtime_identity);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

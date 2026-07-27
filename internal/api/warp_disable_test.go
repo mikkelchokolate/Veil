@@ -28,7 +28,7 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 	state.warp = WarpConfig{Enabled: false}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	if len(client.promotions) != 1 {
@@ -38,7 +38,7 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 		t.Fatalf("remove artifact ids = %+v, want [sing-box/warp.json]", client.promotions[0].RemoveArtifactIDs)
 	}
 
-	ctx.reloadPromotedServicesLocked(nil)
+	ctx.reloadPromotedServices(nil)
 	wantActions := []privileged.ServiceActionRequest{
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionStop},
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionDisable},
@@ -55,7 +55,7 @@ func TestReloadEnablesWarpUnitForBootPersistenceWhenWarpEnabled(t *testing.T) {
 	ctx := NewManagementApplyContext(state)
 
 	warpLive := filepath.Join(state.liveRoot, "sing-box", "warp.json")
-	ctx.reloadPromotedServicesLocked([]string{warpLive})
+	ctx.reloadPromotedServices([]string{warpLive})
 
 	wantWarp := []privileged.ServiceActionRequest{
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionEnable},
@@ -81,7 +81,7 @@ func TestPromoteDoesNotTouchWarpWhenDisabledAndUnitInactive(t *testing.T) {
 	state.warp = WarpConfig{Enabled: false, PrivateKey: "provisioned-key"}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	for _, prom := range client.promotions {
@@ -91,7 +91,7 @@ func TestPromoteDoesNotTouchWarpWhenDisabledAndUnitInactive(t *testing.T) {
 			}
 		}
 	}
-	ctx.reloadPromotedServicesLocked(nil)
+	ctx.reloadPromotedServices(nil)
 	for _, action := range client.serviceActions {
 		if action.Unit == "veil-warp.service" {
 			t.Fatalf("inactive WARP unit must not receive service actions: %+v", client.serviceActions)
@@ -107,7 +107,7 @@ func TestPromoteDoesNotRemoveWarpConfigWhenWarpEnabled(t *testing.T) {
 	state.warp = WarpConfig{Enabled: true}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	for _, prom := range client.promotions {

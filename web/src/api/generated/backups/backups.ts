@@ -904,7 +904,7 @@ export const getGetApiBackupRestoreJobsIdUrl = (id: string,) => {
 }
 
 /**
- * Requires an admin token or admin session.
+ * Requires an admin session or the restore owner's one-time revalidated recovery session.
  * @summary Read queued restore progress
  */
 export const getApiBackupRestoreJobsId = async (id: string, options?: RequestInit): Promise<getApiBackupRestoreJobsIdResponse> => {

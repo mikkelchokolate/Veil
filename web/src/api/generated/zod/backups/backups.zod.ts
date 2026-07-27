@@ -253,7 +253,7 @@ export const PostApiBackupsNameRestoreResponse = zod.object({
 })
 
 /**
- * Requires an admin token or admin session.
+ * Requires an admin session or the restore owner's one-time revalidated recovery session.
  * @summary Read queued restore progress
  */
 export const getApiBackupRestoreJobsIdPathIdRegExp = new RegExp('^[0-9a-f]{32}$');

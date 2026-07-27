@@ -310,6 +310,7 @@ type BindingSnapshot struct {
 	ID               string `json:"id"`
 	ClientID         string `json:"clientId"`
 	InboundID        string `json:"inboundId"`
+	RuntimeIdentity  string `json:"runtimeIdentity"`
 	Enabled          bool   `json:"enabled"`
 	ProtocolSettings string `json:"protocolSettings,omitempty"`
 	CreatedAt        int64  `json:"createdAt,omitempty"`

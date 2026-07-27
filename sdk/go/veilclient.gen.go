@@ -930,12 +930,13 @@ type BindingCapability struct {
 
 // BindingView defines model for BindingView.
 type BindingView struct {
-	Capability *BindingCapability `json:"capability,omitempty"`
-	Credential *CredentialMeta    `json:"credential,omitempty"`
-	Enabled    bool               `json:"enabled"`
-	Id         string             `json:"id"`
-	InboundId  string             `json:"inboundId"`
-	Version    int                `json:"version"`
+	Capability      *BindingCapability `json:"capability,omitempty"`
+	Credential      *CredentialMeta    `json:"credential,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	Id              string             `json:"id"`
+	InboundId       string             `json:"inboundId"`
+	RuntimeIdentity string             `json:"runtimeIdentity"`
+	Version         int                `json:"version"`
 }
 
 // ClientArtifact defines model for ClientArtifact.
@@ -950,9 +951,10 @@ type ClientArtifact struct {
 // ClientBindingInput defines model for ClientBindingInput.
 type ClientBindingInput struct {
 	// Credential Optional explicit credential; server-generated when empty.
-	Credential *string `json:"credential,omitempty"`
-	Enabled    *bool   `json:"enabled,omitempty"`
-	InboundId  string  `json:"inboundId"`
+	Credential      *string `json:"credential,omitempty"`
+	Enabled         *bool   `json:"enabled,omitempty"`
+	InboundId       string  `json:"inboundId"`
+	RuntimeIdentity *string `json:"runtimeIdentity,omitempty"`
 }
 
 // ClientCreateRequest defines model for ClientCreateRequest.
@@ -2252,7 +2254,7 @@ type ClientInterface interface {
 
 	// GetApiBackupRestoreJobsId Read queued restore progress
 	//
-	// Requires an admin token or admin session.
+	// Requires an admin session or the restore owner's one-time revalidated recovery session.
 	//
 	// Corresponds with GET /api/backup-restore-jobs/{id} (the `GetApiBackupRestoreJobsId` operationId).
 	GetApiBackupRestoreJobsId(ctx context.Context, id RestoreJobID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3377,7 +3379,7 @@ func (c *Client) GetApiAuthStatus(ctx context.Context, reqEditors ...RequestEdit
 
 // GetApiBackupRestoreJobsId Read queued restore progress
 //
-// Requires an admin token or admin session.
+// Requires an admin session or the restore owner's one-time revalidated recovery session.
 //
 // Corresponds with GET /api/backup-restore-jobs/{id} (the `GetApiBackupRestoreJobsId` operationId).
 func (c *Client) GetApiBackupRestoreJobsId(ctx context.Context, id RestoreJobID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -8950,7 +8952,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiBackupRestoreJobsIdWithResponse Read queued restore progress
 	//
-	// Requires an admin token or admin session.
+	// Requires an admin session or the restore owner's one-time revalidated recovery session.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -14023,7 +14025,7 @@ func (c *ClientWithResponses) GetApiAuthStatusWithResponse(ctx context.Context, 
 
 // GetApiBackupRestoreJobsIdWithResponse Read queued restore progress
 //
-// Requires an admin token or admin session.
+// Requires an admin session or the restore owner's one-time revalidated recovery session.
 //
 // Returns a wrapper object for the known response body format(s).
 //

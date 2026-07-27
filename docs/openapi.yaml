@@ -711,10 +711,10 @@ paths:
     parameters:
       - $ref: "#/components/parameters/RestoreJobID"
     get:
-      x-veil-role: admin-metadata
+      x-veil-role: self-service
       tags: [backups]
       summary: Read queued restore progress
-      description: Requires an admin token or admin session.
+      description: Requires an admin session or the restore owner's one-time revalidated recovery session.
       responses:
         "200":
           description: Current restore job state.
@@ -1526,7 +1526,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/validation:
     post:
-      x-veil-role: viewer
+      x-veil-role: admin-metadata
       tags: [validation]
       summary: Validate a candidate configuration against live host state
       description: |
@@ -4085,6 +4085,9 @@ components:
       properties:
         inboundId:
           type: string
+        runtimeIdentity:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,48}$'
         credential:
           type: string
           description: Optional explicit credential; server-generated when empty.
@@ -4196,11 +4199,13 @@ components:
             $ref: "#/components/schemas/BindingView"
     BindingView:
       type: object
-      required: [id, inboundId, enabled, version]
+      required: [id, inboundId, runtimeIdentity, enabled, version]
       properties:
         id:
           type: string
         inboundId:
+          type: string
+        runtimeIdentity:
           type: string
         enabled:
           type: boolean

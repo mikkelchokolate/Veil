@@ -204,10 +204,10 @@ func TestRequestHasAdminRoleFallsBackToCookie(t *testing.T) {
 	}
 }
 
-func TestClientIPRespectsXForwardedFor(t *testing.T) {
+func TestClientIPIgnoresXForwardedForFromUntrustedPeer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Forwarded-For", " 10.0.0.1 , 10.0.0.2")
-	if got := clientIP(req); got != "10.0.0.1" {
+	if got := clientIP(req); got != "192.0.2.1" {
 		t.Fatalf("clientIP=%q", got)
 	}
 }
