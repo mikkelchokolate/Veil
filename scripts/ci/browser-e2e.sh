@@ -26,6 +26,8 @@ run_as_veil() {
 }
 WORK="${CI_ARTIFACT_DIR}/browser-e2e"
 mkdir -p "${WORK}"
+PANEL_WORK="$(mktemp -d /tmp/veil-browser-e2e.XXXXXX)"
+chmod 0755 "${PANEL_WORK}"
 
 ci_step "web/dist (embedded into the binary)"
 (cd web && pnpm install --frozen-lockfile && pnpm build)
@@ -60,32 +62,34 @@ cleanup_panels() {
   for pid in "${PIDS[@]:-}"; do
     if [ -n "${pid}" ]; then ${SUDO} kill "${pid}" 2>/dev/null || true; fi
   done
+  ${SUDO} rm -rf "${PANEL_WORK}"
 }
 trap cleanup_panels EXIT
 
 start_panel() { # <name> <listen-args...>
-	local name="$1"; shift
-	local root="${WORK}/${name}"
-	mkdir -p "${root}"
-	${SUDO} mkdir -p "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
-	${SUDO} chown -R veil:veil "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
-	run_as_veil env \
-		VEIL_STATE_PATH="${root}/state/state.json" \
-		VEIL_KEY_PATH="${root}/etc/state.key" \
-		VEIL_APPLY_ROOT="${root}/apply" \
-		VEIL_LIVE_ROOT="${root}/live" \
-		VEIL_API_TOKEN=browser-e2e-token \
-		./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
-			--role admin --state "${root}/state/state.json" --key-path "${root}/etc/state.key"
-	run_as_veil env \
-		VEIL_STATE_PATH="${root}/state/state.json" \
-		VEIL_KEY_PATH="${root}/etc/state.key" \
-		VEIL_APPLY_ROOT="${root}/apply" \
-		VEIL_LIVE_ROOT="${root}/live" \
-		VEIL_HELPER_SOCKET=/run/veil/helper.sock \
-		VEIL_API_TOKEN=browser-e2e-token \
-		./dist/veil serve "$@" >"${root}/panel.log" 2>&1 &
-	PIDS+=($!)
+  local name="$1"; shift
+  local root="${PANEL_WORK}/${name}"
+  local log_root="${WORK}/${name}"
+  mkdir -p "${log_root}"
+  ${SUDO} mkdir -p "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
+  ${SUDO} chown -R veil:veil "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
+  run_as_veil env \
+    VEIL_STATE_PATH="${root}/state/state.json" \
+    VEIL_KEY_PATH="${root}/etc/state.key" \
+    VEIL_APPLY_ROOT="${root}/apply" \
+    VEIL_LIVE_ROOT="${root}/live" \
+    VEIL_API_TOKEN=browser-e2e-token \
+    ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+      --role admin --state "${root}/state/state.json" --key-path "${root}/etc/state.key"
+  run_as_veil env \
+    VEIL_STATE_PATH="${root}/state/state.json" \
+    VEIL_KEY_PATH="${root}/etc/state.key" \
+    VEIL_APPLY_ROOT="${root}/apply" \
+    VEIL_LIVE_ROOT="${root}/live" \
+    VEIL_HELPER_SOCKET=/run/veil/helper.sock \
+    VEIL_API_TOKEN=browser-e2e-token \
+    ./dist/veil serve "$@" >"${log_root}/panel.log" 2>&1 &
+  PIDS+=($!)
 }
 
 ci_step "start root helper and production-layout state"
@@ -96,13 +100,13 @@ openssl rand -hex 32 | ${SUDO} tee /etc/veil/backup.passphrase >/dev/null
 ${SUDO} chown veil:veil /etc/veil/backup.passphrase
 ${SUDO} chmod 600 /etc/veil/backup.passphrase
 run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
-	--role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
+  --role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
 ${SUDO} ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
 if [ ! -S /run/veil/helper.sock ]; then
-	cat "${WORK}/helper.log" >&2 || true
-	ci_die "root helper socket did not appear"
+  cat "${WORK}/helper.log" >&2 || true
+  ci_die "root helper socket did not appear"
 fi
 ${SUDO} chgrp veil /run/veil/helper.sock
 
