@@ -8,10 +8,10 @@ import { ApiError, apiFetch } from "../api/fetcher";
 import {
 	deleteApiV1ClientsId,
 	deleteApiV1ClientsIdBindingsBindingId,
+	patchApiV1ClientsId,
 	patchApiV1ClientsIdBindingsBindingId,
 	postApiV1ClientsIdBindings,
 	postApiV1ClientsIdCredentialsBindingIdRotate,
-	putApiV1ClientsId,
 } from "../api/generated/clients/clients";
 import type { BindingView, ClientView } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
@@ -199,14 +199,24 @@ export function ClientDetailPage() {
 			const expires = v.expiresAt
 				? Math.floor(new Date(v.expiresAt).getTime() / 1000)
 				: undefined;
-			const res = await putApiV1ClientsId(clientId, {
-				name: v.name,
-				...(v.email ? { email: v.email } : {}),
-				enabled: v.enabled,
-				...(quota != null ? { quotaBytes: quota } : {}),
-				...(expires != null ? { expiresAt: expires } : {}),
-				...(v.notes ? { notes: v.notes } : {}),
+			const res = await patchApiV1ClientsId(clientId, {
 				version: c.version ?? 0,
+				...(form.getFieldState("name").isDirty ? { name: v.name } : {}),
+				...(form.getFieldState("email").isDirty
+					? { email: v.email || null }
+					: {}),
+				...(form.getFieldState("enabled").isDirty
+					? { enabled: v.enabled }
+					: {}),
+				...(form.getFieldState("quotaBytes").isDirty
+					? { quotaBytes: quota ?? null }
+					: {}),
+				...(form.getFieldState("expiresAt").isDirty
+					? { expiresAt: expires ?? null }
+					: {}),
+				...(form.getFieldState("notes").isDirty
+					? { notes: v.notes || null }
+					: {}),
 			});
 			return res.data;
 		},
@@ -225,12 +235,8 @@ export function ClientDetailPage() {
 		mutationFn: async () => {
 			const c = client.data;
 			if (!c) throw new Error("client not loaded");
-			const res = await putApiV1ClientsId(clientId, {
-				name: c.name,
-				...(c.email ? { email: c.email } : {}),
+			const res = await patchApiV1ClientsId(clientId, {
 				enabled: !c.enabled,
-				...(c.quotaBytes != null ? { quotaBytes: c.quotaBytes } : {}),
-				...(c.expiresAt != null ? { expiresAt: c.expiresAt } : {}),
 				version: c.version ?? 0,
 			});
 			return res.data;

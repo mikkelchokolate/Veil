@@ -57,9 +57,13 @@ export const GetApiV1ClientsResponse = zod.object({
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
+  "groupId": zod.string().optional(),
   "quotaBytes": zod.number().min(getApiV1ClientsResponseItemsItemQuotaBytesMin).max(getApiV1ClientsResponseItemsItemQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
+  "quotaResetAt": zod.number().optional(),
   "expiresAt": zod.number().optional(),
+  "deviceLimit": zod.number().optional(),
+  "notes": zod.string().optional(),
   "depleted": zod.boolean().optional(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
@@ -95,23 +99,26 @@ export const GetApiV1ClientsResponse = zod.object({
 export const postApiV1ClientsBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
+export const postApiV1ClientsBodyDeviceLimitMin = 0;
+
 
 
 export const PostApiV1ClientsBody = zod.object({
   "name": zod.string(),
-  "email": zod.string().optional(),
+  "email": zod.string().nullish(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().min(postApiV1ClientsBodyQuotaBytesMin).max(postApiV1ClientsBodyQuotaBytesMax).optional(),
+  "groupId": zod.string().nullish(),
+  "quotaBytes": zod.number().min(postApiV1ClientsBodyQuotaBytesMin).max(postApiV1ClientsBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
-  "expiresAt": zod.number().optional(),
-  "deviceLimit": zod.number().optional(),
+  "quotaResetAt": zod.number().nullish(),
+  "expiresAt": zod.number().nullish(),
+  "deviceLimit": zod.number().min(postApiV1ClientsBodyDeviceLimitMin).nullish(),
   "notes": zod.string().optional(),
-  "version": zod.number().optional().describe('Required on update for optimistic concurrency.'),
   "bindings": zod.array(zod.object({
   "inboundId": zod.string(),
   "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
   "enabled": zod.boolean().optional()
-})).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
+})).optional().describe('Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
 })
 
 export const postApiV1ClientsResponseClientQuotaBytesMin = 0;
@@ -125,9 +132,13 @@ export const PostApiV1ClientsResponse = zod.object({
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
+  "groupId": zod.string().optional(),
   "quotaBytes": zod.number().min(postApiV1ClientsResponseClientQuotaBytesMin).max(postApiV1ClientsResponseClientQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
+  "quotaResetAt": zod.number().optional(),
   "expiresAt": zod.number().optional(),
+  "deviceLimit": zod.number().optional(),
+  "notes": zod.string().optional(),
   "depleted": zod.boolean().optional(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
@@ -321,9 +332,13 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
+  "groupId": zod.string().optional(),
   "quotaBytes": zod.number().min(getApiV1ClientsIdResponseQuotaBytesMin).max(getApiV1ClientsIdResponseQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
+  "quotaResetAt": zod.number().optional(),
   "expiresAt": zod.number().optional(),
+  "deviceLimit": zod.number().optional(),
+  "notes": zod.string().optional(),
   "depleted": zod.boolean().optional(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
@@ -352,50 +367,54 @@ export const GetApiV1ClientsIdResponse = zod.object({
 })
 
 /**
- * @summary Update a client (optimistic concurrency via version)
+ * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
 
 
 
-export const PutApiV1ClientsIdParams = zod.object({
+export const PatchApiV1ClientsIdParams = zod.object({
   "id": zod.string().min(1)
 })
 
-export const putApiV1ClientsIdBodyQuotaBytesMin = 0;
-export const putApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
+
+export const patchApiV1ClientsIdBodyQuotaBytesMin = 0;
+export const patchApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
+
+export const patchApiV1ClientsIdBodyDeviceLimitMin = 0;
 
 
 
-export const PutApiV1ClientsIdBody = zod.object({
-  "name": zod.string(),
-  "email": zod.string().optional(),
-  "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().min(putApiV1ClientsIdBodyQuotaBytesMin).max(putApiV1ClientsIdBodyQuotaBytesMax).optional(),
-  "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
-  "expiresAt": zod.number().optional(),
-  "deviceLimit": zod.number().optional(),
-  "notes": zod.string().optional(),
-  "version": zod.number().optional().describe('Required on update for optimistic concurrency.'),
-  "bindings": zod.array(zod.object({
-  "inboundId": zod.string(),
-  "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
-  "enabled": zod.boolean().optional()
-})).optional().describe('Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
-})
+export const PatchApiV1ClientsIdBody = zod.object({
+  "version": zod.number().min(1).describe('Optimistic concurrency version.'),
+  "name": zod.string().optional(),
+  "email": zod.string().nullish(),
+  "enabled": zod.boolean().nullish(),
+  "groupId": zod.string().nullish(),
+  "quotaBytes": zod.number().min(patchApiV1ClientsIdBodyQuotaBytesMin).max(patchApiV1ClientsIdBodyQuotaBytesMax).nullish(),
+  "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).nullish(),
+  "quotaResetAt": zod.number().nullish(),
+  "expiresAt": zod.number().nullish(),
+  "deviceLimit": zod.number().min(patchApiV1ClientsIdBodyDeviceLimitMin).nullish(),
+  "notes": zod.string().nullish()
+}).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable\/defaultable fields, and supplied values replace them.')
 
-export const putApiV1ClientsIdResponseQuotaBytesMin = 0;
-export const putApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
+export const patchApiV1ClientsIdResponseQuotaBytesMin = 0;
+export const patchApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
 
 
 
-export const PutApiV1ClientsIdResponse = zod.object({
+export const PatchApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
-  "quotaBytes": zod.number().min(putApiV1ClientsIdResponseQuotaBytesMin).max(putApiV1ClientsIdResponseQuotaBytesMax).optional(),
+  "groupId": zod.string().optional(),
+  "quotaBytes": zod.number().min(patchApiV1ClientsIdResponseQuotaBytesMin).max(patchApiV1ClientsIdResponseQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
+  "quotaResetAt": zod.number().optional(),
   "expiresAt": zod.number().optional(),
+  "deviceLimit": zod.number().optional(),
+  "notes": zod.string().optional(),
   "depleted": zod.boolean().optional(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),

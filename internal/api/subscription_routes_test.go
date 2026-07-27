@@ -118,7 +118,7 @@ func TestPublicSubscriptionDisabledClientEmpty(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 	// Disable the client.
-	v1Request(t, r, http.MethodPut, "/api/v1/clients/"+clientID, `{"version":1,"name":"alice","enabled":false}`)
+	v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+clientID, `{"version":1,"name":"alice","enabled":false}`)
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext+"?format=raw", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

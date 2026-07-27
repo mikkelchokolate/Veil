@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -183,24 +184,48 @@ func (e BackupVerificationReportEncryptionVersion) Valid() bool {
 	}
 }
 
-// Defines values for ClientUpsertRequestQuotaResetPolicy.
+// Defines values for ClientCreateRequestQuotaResetPolicy.
 const (
-	Daily   ClientUpsertRequestQuotaResetPolicy = "daily"
-	Monthly ClientUpsertRequestQuotaResetPolicy = "monthly"
-	Never   ClientUpsertRequestQuotaResetPolicy = "never"
-	Weekly  ClientUpsertRequestQuotaResetPolicy = "weekly"
+	ClientCreateRequestQuotaResetPolicyDaily   ClientCreateRequestQuotaResetPolicy = "daily"
+	ClientCreateRequestQuotaResetPolicyMonthly ClientCreateRequestQuotaResetPolicy = "monthly"
+	ClientCreateRequestQuotaResetPolicyNever   ClientCreateRequestQuotaResetPolicy = "never"
+	ClientCreateRequestQuotaResetPolicyWeekly  ClientCreateRequestQuotaResetPolicy = "weekly"
 )
 
-// Valid indicates whether the value is a known member of the ClientUpsertRequestQuotaResetPolicy enum.
-func (e ClientUpsertRequestQuotaResetPolicy) Valid() bool {
+// Valid indicates whether the value is a known member of the ClientCreateRequestQuotaResetPolicy enum.
+func (e ClientCreateRequestQuotaResetPolicy) Valid() bool {
 	switch e {
-	case Daily:
+	case ClientCreateRequestQuotaResetPolicyDaily:
 		return true
-	case Monthly:
+	case ClientCreateRequestQuotaResetPolicyMonthly:
 		return true
-	case Never:
+	case ClientCreateRequestQuotaResetPolicyNever:
 		return true
-	case Weekly:
+	case ClientCreateRequestQuotaResetPolicyWeekly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientPatchRequestQuotaResetPolicy.
+const (
+	ClientPatchRequestQuotaResetPolicyDaily   ClientPatchRequestQuotaResetPolicy = "daily"
+	ClientPatchRequestQuotaResetPolicyMonthly ClientPatchRequestQuotaResetPolicy = "monthly"
+	ClientPatchRequestQuotaResetPolicyNever   ClientPatchRequestQuotaResetPolicy = "never"
+	ClientPatchRequestQuotaResetPolicyWeekly  ClientPatchRequestQuotaResetPolicy = "weekly"
+)
+
+// Valid indicates whether the value is a known member of the ClientPatchRequestQuotaResetPolicy enum.
+func (e ClientPatchRequestQuotaResetPolicy) Valid() bool {
+	switch e {
+	case ClientPatchRequestQuotaResetPolicyDaily:
+		return true
+	case ClientPatchRequestQuotaResetPolicyMonthly:
+		return true
+	case ClientPatchRequestQuotaResetPolicyNever:
+		return true
+	case ClientPatchRequestQuotaResetPolicyWeekly:
 		return true
 	default:
 		return false
@@ -915,6 +940,25 @@ type ClientBindingInput struct {
 	InboundId  string  `json:"inboundId"`
 }
 
+// ClientCreateRequest defines model for ClientCreateRequest.
+type ClientCreateRequest struct {
+	// Bindings Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.
+	Bindings         *[]ClientBindingInput                `json:"bindings,omitempty"`
+	DeviceLimit      nullable.Nullable[int]               `json:"deviceLimit,omitempty"`
+	Email            nullable.Nullable[string]            `json:"email,omitempty"`
+	Enabled          *bool                                `json:"enabled,omitempty"`
+	ExpiresAt        nullable.Nullable[int64]             `json:"expiresAt,omitempty"`
+	GroupId          nullable.Nullable[string]            `json:"groupId,omitempty"`
+	Name             string                               `json:"name"`
+	Notes            *string                              `json:"notes,omitempty"`
+	QuotaBytes       nullable.Nullable[int64]             `json:"quotaBytes,omitempty"`
+	QuotaResetAt     nullable.Nullable[int64]             `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy *ClientCreateRequestQuotaResetPolicy `json:"quotaResetPolicy,omitempty"`
+}
+
+// ClientCreateRequestQuotaResetPolicy defines model for ClientCreateRequest.QuotaResetPolicy.
+type ClientCreateRequestQuotaResetPolicy string
+
 // ClientCreateResponse Atomic create envelope: the committed client, any server-generated credentials (plaintext shown exactly once), the new desired revision, and the apply job that ran for that revision. success=false means the client committed but the apply did not finish cleanly.
 type ClientCreateResponse struct {
 	ApplyJob          *ApplyJob           `json:"applyJob,omitempty"`
@@ -963,6 +1007,26 @@ type ClientListResponse struct {
 	Total int          `json:"total"`
 }
 
+// ClientPatchRequest Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
+type ClientPatchRequest struct {
+	DeviceLimit      nullable.Nullable[int]                                `json:"deviceLimit,omitempty"`
+	Email            nullable.Nullable[string]                             `json:"email,omitempty"`
+	Enabled          nullable.Nullable[bool]                               `json:"enabled,omitempty"`
+	ExpiresAt        nullable.Nullable[int64]                              `json:"expiresAt,omitempty"`
+	GroupId          nullable.Nullable[string]                             `json:"groupId,omitempty"`
+	Name             *string                                               `json:"name,omitempty"`
+	Notes            nullable.Nullable[string]                             `json:"notes,omitempty"`
+	QuotaBytes       nullable.Nullable[int64]                              `json:"quotaBytes,omitempty"`
+	QuotaResetAt     nullable.Nullable[int64]                              `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy nullable.Nullable[ClientPatchRequestQuotaResetPolicy] `json:"quotaResetPolicy,omitempty"`
+
+	// Version Optimistic concurrency version.
+	Version int `json:"version"`
+}
+
+// ClientPatchRequestQuotaResetPolicy defines model for ClientPatchRequest.QuotaResetPolicy.
+type ClientPatchRequestQuotaResetPolicy string
+
 // ClientProfile defines model for ClientProfile.
 type ClientProfile struct {
 	Enabled  bool    `json:"enabled"`
@@ -971,39 +1035,23 @@ type ClientProfile struct {
 	Username *string `json:"username,omitempty"`
 }
 
-// ClientUpsertRequest defines model for ClientUpsertRequest.
-type ClientUpsertRequest struct {
-	// Bindings Create-only: bind the client to inbounds atomically with the create. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.
-	Bindings         *[]ClientBindingInput                `json:"bindings,omitempty"`
-	DeviceLimit      *int                                 `json:"deviceLimit,omitempty"`
-	Email            *string                              `json:"email,omitempty"`
-	Enabled          *bool                                `json:"enabled,omitempty"`
-	ExpiresAt        *int64                               `json:"expiresAt,omitempty"`
-	Name             string                               `json:"name"`
-	Notes            *string                              `json:"notes,omitempty"`
-	QuotaBytes       *int64                               `json:"quotaBytes,omitempty"`
-	QuotaResetPolicy *ClientUpsertRequestQuotaResetPolicy `json:"quotaResetPolicy,omitempty"`
-
-	// Version Required on update for optimistic concurrency.
-	Version *int `json:"version,omitempty"`
-}
-
-// ClientUpsertRequestQuotaResetPolicy defines model for ClientUpsertRequest.QuotaResetPolicy.
-type ClientUpsertRequestQuotaResetPolicy string
-
 // ClientView defines model for ClientView.
 type ClientView struct {
 	Bindings         *[]BindingView `json:"bindings,omitempty"`
 	CreatedAt        *int64         `json:"createdAt,omitempty"`
 	Depleted         *bool          `json:"depleted,omitempty"`
+	DeviceLimit      *int           `json:"deviceLimit,omitempty"`
 	Email            *string        `json:"email,omitempty"`
 	Enabled          *bool          `json:"enabled,omitempty"`
 	ExpiresAt        *int64         `json:"expiresAt,omitempty"`
+	GroupId          *string        `json:"groupId,omitempty"`
 	HasCreds         *bool          `json:"hasCreds,omitempty"`
 	Id               string         `json:"id"`
 	InboundIds       *[]string      `json:"inboundIds,omitempty"`
 	Name             string         `json:"name"`
+	Notes            *string        `json:"notes,omitempty"`
 	QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
+	QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
 	QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
 
 	// Status Effective status.
@@ -1896,13 +1944,13 @@ type PostApiUsersJSONRequestBody = UserCreateRequest
 type PutApiUsersUsernameJSONRequestBody = UserUpdateRequest
 
 // PostApiV1ClientsJSONRequestBody defines body for PostApiV1Clients for application/json ContentType.
-type PostApiV1ClientsJSONRequestBody = ClientUpsertRequest
+type PostApiV1ClientsJSONRequestBody = ClientCreateRequest
 
 // PostApiV1ClientsBulkJSONRequestBody defines body for PostApiV1ClientsBulk for application/json ContentType.
 type PostApiV1ClientsBulkJSONRequestBody PostApiV1ClientsBulkJSONBody
 
-// PutApiV1ClientsIdJSONRequestBody defines body for PutApiV1ClientsId for application/json ContentType.
-type PutApiV1ClientsIdJSONRequestBody = ClientUpsertRequest
+// PatchApiV1ClientsIdJSONRequestBody defines body for PatchApiV1ClientsId for application/json ContentType.
+type PatchApiV1ClientsIdJSONRequestBody = ClientPatchRequest
 
 // PostApiV1ClientsIdBindingsJSONRequestBody defines body for PostApiV1ClientsIdBindings for application/json ContentType.
 type PostApiV1ClientsIdBindingsJSONRequestBody PostApiV1ClientsIdBindingsJSONBody
@@ -2637,19 +2685,19 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/clients/{id} (the `GetApiV1ClientsId` operationId).
 	GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PutApiV1ClientsIdWithBody Update a client (optimistic concurrency via version)
+	// PatchApiV1ClientsIdWithBody Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-	PutApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+	PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PutApiV1ClientsId Update a client (optimistic concurrency via version)
+	// PatchApiV1ClientsId Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes a body of the `application/json` content type.
 	//
-	// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-	PutApiV1ClientsId(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+	PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsIdBindings List client bindings
 	//
@@ -4444,13 +4492,13 @@ func (c *Client) GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors 
 	return c.Client.Do(req)
 }
 
-// PutApiV1ClientsIdWithBody Update a client (optimistic concurrency via version)
+// PatchApiV1ClientsIdWithBody Patch explicitly supplied client fields without clearing omitted durable fields
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-func (c *Client) PutApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
+// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4461,13 +4509,13 @@ func (c *Client) PutApiV1ClientsIdWithBody(ctx context.Context, id ClientId, con
 	return c.Client.Do(req)
 }
 
-// PutApiV1ClientsId Update a client (optimistic concurrency via version)
+// PatchApiV1ClientsId Patch explicitly supplied client fields without clearing omitted durable fields
 //
 // Takes a body of the `application/json` content type.
 //
-// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-func (c *Client) PutApiV1ClientsId(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiV1ClientsIdRequest(c.Server, id, body)
+// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -7428,19 +7476,19 @@ func NewGetApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, err
 	return req, nil
 }
 
-// NewPutApiV1ClientsIdRequest calls the generic PutApiV1ClientsId builder with application/json body
-func NewPutApiV1ClientsIdRequest(server string, id ClientId, body PutApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
+// NewPatchApiV1ClientsIdRequest calls the generic PatchApiV1ClientsId builder with application/json body
+func NewPatchApiV1ClientsIdRequest(server string, id ClientId, body PatchApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
+	return NewPatchApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
 }
 
-// NewPutApiV1ClientsIdRequestWithBody constructs an http.Request for the PutApiV1ClientsId method, with any body, and a specified content type
-func NewPutApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+// NewPatchApiV1ClientsIdRequestWithBody constructs an http.Request for the PatchApiV1ClientsId method, with any body, and a specified content type
+func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7465,7 +7513,7 @@ func NewPutApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -9303,19 +9351,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/clients/{id} (the `GetApiV1ClientsId` operationId).
 	GetApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdResponse, error)
 
-	// PutApiV1ClientsIdWithBodyWithResponse Update a client (optimistic concurrency via version)
+	// PatchApiV1ClientsIdWithBodyWithResponse Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-	PutApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error)
+	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+	PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
-	// PutApiV1ClientsIdWithResponse Update a client (optimistic concurrency via version)
+	// PatchApiV1ClientsIdWithResponse Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-	PutApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error)
+	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
 	// GetApiV1ClientsIdBindingsWithResponse List client bindings
 	//
@@ -12455,7 +12503,7 @@ func (r GetApiV1ClientsIdResponse) ContentType() string {
 	return ""
 }
 
-type PutApiV1ClientsIdResponse struct {
+type PatchApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -12463,17 +12511,17 @@ type PutApiV1ClientsIdResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutApiV1ClientsIdResponse) GetJSON200() *ClientView {
+func (r PatchApiV1ClientsIdResponse) GetJSON200() *ClientView {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r PutApiV1ClientsIdResponse) GetBody() []byte {
+func (r PatchApiV1ClientsIdResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r PutApiV1ClientsIdResponse) Status() string {
+func (r PatchApiV1ClientsIdResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -12481,7 +12529,7 @@ func (r PutApiV1ClientsIdResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r PutApiV1ClientsIdResponse) StatusCode() int {
+func (r PatchApiV1ClientsIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -12489,7 +12537,7 @@ func (r PutApiV1ClientsIdResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r PutApiV1ClientsIdResponse) ContentType() string {
+func (r PatchApiV1ClientsIdResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -14744,30 +14792,30 @@ func (c *ClientWithResponses) GetApiV1ClientsIdWithResponse(ctx context.Context,
 	return ParseGetApiV1ClientsIdResponse(rsp)
 }
 
-// PutApiV1ClientsIdWithBodyWithResponse Update a client (optimistic concurrency via version)
+// PatchApiV1ClientsIdWithBodyWithResponse Patch explicitly supplied client fields without clearing omitted durable fields
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-func (c *ClientWithResponses) PutApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error) {
-	rsp, err := c.PutApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
+// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParsePutApiV1ClientsIdResponse(rsp)
+	return ParsePatchApiV1ClientsIdResponse(rsp)
 }
 
-// PutApiV1ClientsIdWithResponse Update a client (optimistic concurrency via version)
+// PatchApiV1ClientsIdWithResponse Patch explicitly supplied client fields without clearing omitted durable fields
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /api/v1/clients/{id} (the `PutApiV1ClientsId` operationId).
-func (c *ClientWithResponses) PutApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PutApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1ClientsIdResponse, error) {
-	rsp, err := c.PutApiV1ClientsId(ctx, id, body, reqEditors...)
+// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsId(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParsePutApiV1ClientsIdResponse(rsp)
+	return ParsePatchApiV1ClientsIdResponse(rsp)
 }
 
 // GetApiV1ClientsIdBindingsWithResponse List client bindings
@@ -17171,15 +17219,15 @@ func ParseGetApiV1ClientsIdResponse(rsp *http.Response) (*GetApiV1ClientsIdRespo
 	return response, nil
 }
 
-// ParsePutApiV1ClientsIdResponse parses an HTTP response from a PutApiV1ClientsIdWithResponse call
-func ParsePutApiV1ClientsIdResponse(rsp *http.Response) (*PutApiV1ClientsIdResponse, error) {
+// ParsePatchApiV1ClientsIdResponse parses an HTTP response from a PatchApiV1ClientsIdWithResponse call
+func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &PutApiV1ClientsIdResponse{
+	response := &PatchApiV1ClientsIdResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

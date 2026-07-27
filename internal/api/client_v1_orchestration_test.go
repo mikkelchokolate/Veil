@@ -150,7 +150,7 @@ func TestClientMutationOrchestration(t *testing.T) {
 	}
 
 	// --- UPDATE (revision+job, not two jobs) ---
-	putReq := httptest.NewRequest(http.MethodPut, "/api/v1/clients/"+clientID, strings.NewReader(`{"version":1,"name":"orch-renamed"}`))
+	putReq := httptest.NewRequest(http.MethodPatch, "/api/v1/clients/"+clientID, strings.NewReader(`{"version":1,"name":"orch-renamed"}`))
 	putReq.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, putReq)
@@ -444,7 +444,7 @@ func TestV1ClientAudit(t *testing.T) {
 	}
 	// Trigger a client-scoped mutation so there is at least one entry with
 	// target == clientID.
-	putReq := httptest.NewRequest(http.MethodPut, "/api/v1/clients/"+clientID, strings.NewReader(`{"name":"audit-client","version":1}`))
+	putReq := httptest.NewRequest(http.MethodPatch, "/api/v1/clients/"+clientID, strings.NewReader(`{"name":"audit-client","version":1}`))
 	putReq.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, putReq)

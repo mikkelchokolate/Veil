@@ -72,7 +72,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/v1/clients":                              {"get", "post"},
 		"/api/v1/clients/bulk":                         {"post"},
 		"/api/v1/clients/migrate-legacy":               {"post"},
-		"/api/v1/clients/{id}":                         {"delete", "get", "put"},
+		"/api/v1/clients/{id}":                         {"delete", "get", "patch"},
 		"/api/v1/clients/{id}/bindings":                {"get", "post"},
 		"/api/v1/clients/{id}/bindings/{bindingId}":    {"delete", "patch"},
 		"/api/v1/clients/{id}/credentials/{bindingId}": {"post"},

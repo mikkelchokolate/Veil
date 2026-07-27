@@ -40,32 +40,41 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BindingView } from './bindingView.msw.ts';
-import type { ClientViewStatus } from './clientViewStatus.msw.ts';
+import type { ClientPatchRequestQuotaResetPolicy } from './clientPatchRequestQuotaResetPolicy.ts';
 
-export interface ClientView {
-  id: string;
-  name: string;
-  email?: string;
-  enabled?: boolean;
-  groupId?: string;
+/**
+ * Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
+ */
+export interface ClientPatchRequest {
+  /**
+     * Optimistic concurrency version.
+     * @minimum 1
+     */
+  version: number;
+  name?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  enabled?: boolean | null;
+  /** @nullable */
+  groupId?: string | null;
   /**
      * @minimum 0
      * @maximum 9007199254740991
+     * @nullable
      */
-  quotaBytes?: number;
-  quotaResetPolicy?: string;
-  quotaResetAt?: number;
-  expiresAt?: number;
-  deviceLimit?: number;
-  notes?: string;
-  depleted?: boolean;
-  /** Effective status. */
-  status: ClientViewStatus;
-  inboundIds?: string[];
-  hasCreds?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  version?: number;
-  bindings?: BindingView[];
+  quotaBytes?: number | null;
+  /** @nullable */
+  quotaResetPolicy?: ClientPatchRequestQuotaResetPolicy;
+  /** @nullable */
+  quotaResetAt?: number | null;
+  /** @nullable */
+  expiresAt?: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  deviceLimit?: number | null;
+  /** @nullable */
+  notes?: string | null;
 }

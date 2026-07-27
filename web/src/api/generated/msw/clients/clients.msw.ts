@@ -61,9 +61,10 @@ import type {
 
 import type {
   BadRequestResponse,
+  ClientCreateRequest,
   ClientCreateResponse,
   ClientListResponse,
-  ClientUpsertRequest,
+  ClientPatchRequest,
   ClientView,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
@@ -238,14 +239,14 @@ export const getPostApiV1ClientsUrl = () => {
 /**
  * @summary Create a client
  */
-export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<postApiV1ClientsResponse> => {
+export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: RequestInit): Promise<postApiV1ClientsResponse> => {
 
   return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(clientUpsertRequest)
+    body: JSON.stringify(clientCreateRequest)
   }
 );}
 
@@ -254,8 +255,8 @@ export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest,
 
 
 export const getPostApiV1ClientsMutationOptions = <TError = BadRequestResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientUpsertRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientUpsertRequest}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext> => {
 
 const mutationKey = ['postApiV1Clients'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -267,7 +268,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1Clients>>, {data: ClientUpsertRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1Clients>>, {data: ClientCreateRequest}> = (props) => {
           const {data} = props ?? {};
 
           return  postApiV1Clients(data,requestOptions)
@@ -281,18 +282,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiV1ClientsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1Clients>>>
-    export type PostApiV1ClientsMutationBody = ClientUpsertRequest
+    export type PostApiV1ClientsMutationBody = ClientCreateRequest
     export type PostApiV1ClientsMutationError = BadRequestResponse
 
     /**
  * @summary Create a client
  */
 export const usePostApiV1Clients = <TError = BadRequestResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientUpsertRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1Clients>>,
         TError,
-        {data: ClientUpsertRequest},
+        {data: ClientCreateRequest},
         TContext
       > => {
       return useMutation(getPostApiV1ClientsMutationOptions(options), queryClient);
@@ -1114,26 +1115,26 @@ export function useGetApiV1ClientsId<TData = Awaited<ReturnType<typeof getApiV1C
 
 
 
-export type putApiV1ClientsIdResponse200 = {
+export type patchApiV1ClientsIdResponse200 = {
   data: ClientView
   status: 200
 }
 
-export type putApiV1ClientsIdResponse409 = {
+export type patchApiV1ClientsIdResponse409 = {
   data: void
   status: 409
 }
 
-export type putApiV1ClientsIdResponseSuccess = (putApiV1ClientsIdResponse200) & {
+export type patchApiV1ClientsIdResponseSuccess = (patchApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type putApiV1ClientsIdResponseError = (putApiV1ClientsIdResponse409) & {
+export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409) & {
   headers: Headers;
 };
 
-export type putApiV1ClientsIdResponse = (putApiV1ClientsIdResponseSuccess | putApiV1ClientsIdResponseError)
+export type patchApiV1ClientsIdResponse = (patchApiV1ClientsIdResponseSuccess | patchApiV1ClientsIdResponseError)
 
-export const getPutApiV1ClientsIdUrl = (id: string,) => {
+export const getPatchApiV1ClientsIdUrl = (id: string,) => {
 
 
 
@@ -1142,17 +1143,17 @@ export const getPutApiV1ClientsIdUrl = (id: string,) => {
 }
 
 /**
- * @summary Update a client (optimistic concurrency via version)
+ * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
-export const putApiV1ClientsId = async (id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<putApiV1ClientsIdResponse> => {
+export const patchApiV1ClientsId = async (id: string,
+    clientPatchRequest: ClientPatchRequest, options?: RequestInit): Promise<patchApiV1ClientsIdResponse> => {
 
-  return apiFetch<putApiV1ClientsIdResponse>(getPutApiV1ClientsIdUrl(id),
+  return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
   {
     ...options,
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(clientUpsertRequest)
+    body: JSON.stringify(clientPatchRequest)
   }
 );}
 
@@ -1160,11 +1161,11 @@ export const putApiV1ClientsId = async (id: string,
 
 
 
-export const getPutApiV1ClientsIdMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError,{id: string;data: ClientUpsertRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError,{id: string;data: ClientUpsertRequest}, TContext> => {
+export const getPatchApiV1ClientsIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext> => {
 
-const mutationKey = ['putApiV1ClientsId'];
+const mutationKey = ['patchApiV1ClientsId'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1174,10 +1175,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiV1ClientsId>>, {id: string;data: ClientUpsertRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiV1ClientsId>>, {id: string;data: ClientPatchRequest}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  putApiV1ClientsId(id,data,requestOptions)
+          return  patchApiV1ClientsId(id,data,requestOptions)
         }
 
 
@@ -1187,22 +1188,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PutApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiV1ClientsId>>>
-    export type PutApiV1ClientsIdMutationBody = ClientUpsertRequest
-    export type PutApiV1ClientsIdMutationError = void
+    export type PatchApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsId>>>
+    export type PatchApiV1ClientsIdMutationBody = ClientPatchRequest
+    export type PatchApiV1ClientsIdMutationError = void
 
     /**
- * @summary Update a client (optimistic concurrency via version)
+ * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
-export const usePutApiV1ClientsId = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError,{id: string;data: ClientUpsertRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+export const usePatchApiV1ClientsId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiV1ClientsId>>,
+        Awaited<ReturnType<typeof patchApiV1ClientsId>>,
         TError,
-        {id: string;data: ClientUpsertRequest},
+        {id: string;data: ClientPatchRequest},
         TContext
       > => {
-      return useMutation(getPutApiV1ClientsIdMutationOptions(options), queryClient);
+      return useMutation(getPatchApiV1ClientsIdMutationOptions(options), queryClient);
     }
     export type deleteApiV1ClientsIdResponse200 = {
   data: void

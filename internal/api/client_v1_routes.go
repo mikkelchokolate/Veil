@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,18 +57,60 @@ type v1BindingRequest struct {
 	Enabled    *bool  `json:"enabled"`
 }
 
-type v1UpdateClientRequest struct {
-	Version          int     `json:"version"` // optimistic locking: must match current
-	Name             string  `json:"name"`
-	Email            *string `json:"email"`
-	Enabled          *bool   `json:"enabled"`
-	GroupID          *string `json:"groupId"`
-	QuotaBytes       *int64  `json:"quotaBytes"`
-	QuotaResetPolicy string  `json:"quotaResetPolicy"`
-	QuotaResetAt     *int64  `json:"quotaResetAt"`
-	ExpiresAt        *int64  `json:"expiresAt"`
-	DeviceLimit      *int    `json:"deviceLimit"`
-	Notes            string  `json:"notes"`
+type patchField[T any] struct {
+	Present bool
+	Null    bool
+	Value   T
+}
+
+func (f *patchField[T]) UnmarshalJSON(body []byte) error {
+	f.Present = true
+	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
+		f.Null = true
+		var zero T
+		f.Value = zero
+		return nil
+	}
+	f.Null = false
+	return json.Unmarshal(body, &f.Value)
+}
+
+type v1PatchClientRequest struct {
+	Version          int                `json:"version"`
+	Name             patchField[string] `json:"name"`
+	Email            patchField[string] `json:"email"`
+	Enabled          patchField[bool]   `json:"enabled"`
+	GroupID          patchField[string] `json:"groupId"`
+	QuotaBytes       patchField[int64]  `json:"quotaBytes"`
+	QuotaResetPolicy patchField[string] `json:"quotaResetPolicy"`
+	QuotaResetAt     patchField[int64]  `json:"quotaResetAt"`
+	ExpiresAt        patchField[int64]  `json:"expiresAt"`
+	DeviceLimit      patchField[int]    `json:"deviceLimit"`
+	Notes            patchField[string] `json:"notes"`
+}
+
+func optionalStringPatch(field patchField[string]) *string {
+	if field.Null {
+		return nil
+	}
+	value := field.Value
+	return &value
+}
+
+func optionalInt64Patch(field patchField[int64]) *int64 {
+	if field.Null {
+		return nil
+	}
+	value := field.Value
+	return &value
+}
+
+func optionalIntPatch(field patchField[int]) *int {
+	if field.Null {
+		return nil
+	}
+	value := field.Value
+	return &value
 }
 
 func (s *managementState) handleV1Clients(w http.ResponseWriter, r *http.Request) {
@@ -457,7 +500,7 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		writeJSON(w, view)
-	case http.MethodPut:
+	case http.MethodPatch:
 		s.handleV1UpdateClient(w, r, id)
 	case http.MethodDelete:
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
@@ -470,12 +513,12 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 		s.logUserAction(r, "delete_client", id, true, "")
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": id}, outcome)
 	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
+		methodNotAllowed(w, http.MethodGet, http.MethodPatch, http.MethodDelete)
 	}
 }
 
 func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Request, id string) {
-	var req v1UpdateClientRequest
+	var req v1PatchClientRequest
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
@@ -484,22 +527,44 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 		writeNotFound(w)
 		return
 	}
-	enabled := existing.Enabled
-	if req.Enabled != nil {
-		enabled = *req.Enabled
+	c := existing.Client
+	if req.Name.Present {
+		c.Name = req.Name.Value
 	}
-	c := client.Client{
-		ID:               id,
-		Name:             req.Name,
-		Email:            req.Email,
-		Enabled:          enabled,
-		GroupID:          req.GroupID,
-		QuotaBytes:       req.QuotaBytes,
-		QuotaResetPolicy: req.QuotaResetPolicy,
-		QuotaResetAt:     req.QuotaResetAt,
-		ExpiresAt:        req.ExpiresAt,
-		DeviceLimit:      req.DeviceLimit,
-		Notes:            req.Notes,
+	if req.Email.Present {
+		c.Email = optionalStringPatch(req.Email)
+	}
+	if req.Enabled.Present {
+		c.Enabled = !req.Enabled.Null && req.Enabled.Value
+	}
+	if req.GroupID.Present {
+		c.GroupID = optionalStringPatch(req.GroupID)
+	}
+	if req.QuotaBytes.Present {
+		c.QuotaBytes = optionalInt64Patch(req.QuotaBytes)
+	}
+	if req.QuotaResetPolicy.Present {
+		if req.QuotaResetPolicy.Null {
+			c.QuotaResetPolicy = client.ResetNever
+		} else {
+			c.QuotaResetPolicy = req.QuotaResetPolicy.Value
+		}
+	}
+	if req.QuotaResetAt.Present {
+		c.QuotaResetAt = optionalInt64Patch(req.QuotaResetAt)
+	}
+	if req.ExpiresAt.Present {
+		c.ExpiresAt = optionalInt64Patch(req.ExpiresAt)
+	}
+	if req.DeviceLimit.Present {
+		c.DeviceLimit = optionalIntPatch(req.DeviceLimit)
+	}
+	if req.Notes.Present {
+		if req.Notes.Null {
+			c.Notes = ""
+		} else {
+			c.Notes = req.Notes.Value
+		}
 	}
 	updated, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
 		return s.clientService.UpdateTx(tx, c, req.Version)

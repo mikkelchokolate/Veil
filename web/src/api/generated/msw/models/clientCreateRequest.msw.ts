@@ -40,13 +40,33 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { ClientBindingInput } from './clientBindingInput.msw.ts';
+import type { ClientCreateRequestQuotaResetPolicy } from './clientCreateRequestQuotaResetPolicy.msw.ts';
 
-export type ClientUpsertRequestQuotaResetPolicy = typeof ClientUpsertRequestQuotaResetPolicy[keyof typeof ClientUpsertRequestQuotaResetPolicy];
-
-
-export const ClientUpsertRequestQuotaResetPolicy = {
-  never: 'never',
-  daily: 'daily',
-  weekly: 'weekly',
-  monthly: 'monthly',
-} as const;
+export interface ClientCreateRequest {
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  enabled?: boolean;
+  /** @nullable */
+  groupId?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     * @nullable
+     */
+  quotaBytes?: number | null;
+  quotaResetPolicy?: ClientCreateRequestQuotaResetPolicy;
+  /** @nullable */
+  quotaResetAt?: number | null;
+  /** @nullable */
+  expiresAt?: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  deviceLimit?: number | null;
+  notes?: string;
+  /** Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials. */
+  bindings?: ClientBindingInput[];
+}

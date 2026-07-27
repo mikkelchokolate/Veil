@@ -48,13 +48,17 @@ export interface ClientView {
   name: string;
   email?: string;
   enabled?: boolean;
+  groupId?: string;
   /**
      * @minimum 0
      * @maximum 9007199254740991
      */
   quotaBytes?: number;
   quotaResetPolicy?: string;
+  quotaResetAt?: number;
   expiresAt?: number;
+  deviceLimit?: number;
+  notes?: string;
   depleted?: boolean;
   /** Effective status. */
   status: ClientViewStatus;

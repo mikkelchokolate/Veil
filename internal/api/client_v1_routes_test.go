@@ -73,7 +73,7 @@ func TestV1UpdateRenameKeepsID(t *testing.T) {
 	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 
-	w2 := v1Request(t, r, http.MethodPut, "/api/v1/clients/"+id, `{"version":1,"name":"alice-renamed"}`)
+	w2 := v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id, `{"version":1,"name":"alice-renamed"}`)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("update: %d %s", w2.Code, w2.Body.String())
 	}
@@ -97,9 +97,9 @@ func TestV1OptimisticLockingConflict(t *testing.T) {
 	id := created["id"].(string)
 
 	// First update OK.
-	v1Request(t, r, http.MethodPut, "/api/v1/clients/"+id, `{"version":1,"name":"v2"}`)
+	v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id, `{"version":1,"name":"v2"}`)
 	// Second update with stale version 1 -> 409.
-	w = v1Request(t, r, http.MethodPut, "/api/v1/clients/"+id, `{"version":1,"name":"v3"}`)
+	w = v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id, `{"version":1,"name":"v3"}`)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 on stale version, got %d %s", w.Code, w.Body.String())
 	}

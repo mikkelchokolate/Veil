@@ -61,9 +61,10 @@ import type {
 
 import type {
   BadRequestResponse,
+  ClientCreateRequest,
   ClientCreateResponse,
   ClientListResponse,
-  ClientUpsertRequest,
+  ClientPatchRequest,
   ClientView,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
@@ -208,14 +209,14 @@ export const getPostApiV1ClientsUrl = () => {
 /**
  * @summary Create a client
  */
-export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<postApiV1ClientsResponse> => {
+export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: RequestInit): Promise<postApiV1ClientsResponse> => {
 
   return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(clientUpsertRequest)
+    body: JSON.stringify(clientCreateRequest)
   }
 );}
 
@@ -223,23 +224,23 @@ export const postApiV1Clients = async (clientUpsertRequest: ClientUpsertRequest,
 
 
 
-export const getPostApiV1ClientsQueryKey = (clientUpsertRequest?: ClientUpsertRequest,) => {
+export const getPostApiV1ClientsQueryKey = (clientCreateRequest?: ClientCreateRequest,) => {
     return [
-    'POST', `/api/v1/clients`, clientUpsertRequest
+    'POST', `/api/v1/clients`, clientCreateRequest
     ] as const;
     }
 
 
-export const getPostApiV1ClientsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1ClientsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsQueryKey(clientUpsertRequest);
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsQueryKey(clientCreateRequest);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1Clients>>> = ({ signal }) => postApiV1Clients(clientUpsertRequest, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1Clients>>> = ({ signal }) => postApiV1Clients(clientCreateRequest, { signal, ...requestOptions });
 
 
 
@@ -253,7 +254,7 @@ export type PostApiV1ClientsQueryError = BadRequestResponse
 
 
 export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
- clientUpsertRequest: ClientUpsertRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
+ clientCreateRequest: ClientCreateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1Clients>>,
           TError,
@@ -263,7 +264,7 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
- clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
+ clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1Clients>>,
           TError,
@@ -273,7 +274,7 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
- clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -281,11 +282,11 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
  */
 
 export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
- clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getPostApiV1ClientsQueryOptions(clientUpsertRequest,options)
+  const queryOptions = getPostApiV1ClientsQueryOptions(clientCreateRequest,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -1312,26 +1313,26 @@ export const useGetApiV1ClientsId = <TError = void,
       > => {
       return useMutation(getGetApiV1ClientsIdMutationOptions(options), queryClient);
     }
-    export type putApiV1ClientsIdResponse200 = {
+    export type patchApiV1ClientsIdResponse200 = {
   data: ClientView
   status: 200
 }
 
-export type putApiV1ClientsIdResponse409 = {
+export type patchApiV1ClientsIdResponse409 = {
   data: void
   status: 409
 }
 
-export type putApiV1ClientsIdResponseSuccess = (putApiV1ClientsIdResponse200) & {
+export type patchApiV1ClientsIdResponseSuccess = (patchApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type putApiV1ClientsIdResponseError = (putApiV1ClientsIdResponse409) & {
+export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409) & {
   headers: Headers;
 };
 
-export type putApiV1ClientsIdResponse = (putApiV1ClientsIdResponseSuccess | putApiV1ClientsIdResponseError)
+export type patchApiV1ClientsIdResponse = (patchApiV1ClientsIdResponseSuccess | patchApiV1ClientsIdResponseError)
 
-export const getPutApiV1ClientsIdUrl = (id: string,) => {
+export const getPatchApiV1ClientsIdUrl = (id: string,) => {
 
 
 
@@ -1340,17 +1341,17 @@ export const getPutApiV1ClientsIdUrl = (id: string,) => {
 }
 
 /**
- * @summary Update a client (optimistic concurrency via version)
+ * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
-export const putApiV1ClientsId = async (id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: RequestInit): Promise<putApiV1ClientsIdResponse> => {
+export const patchApiV1ClientsId = async (id: string,
+    clientPatchRequest: ClientPatchRequest, options?: RequestInit): Promise<patchApiV1ClientsIdResponse> => {
 
-  return apiFetch<putApiV1ClientsIdResponse>(getPutApiV1ClientsIdUrl(id),
+  return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
   {
     ...options,
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(clientUpsertRequest)
+    body: JSON.stringify(clientPatchRequest)
   }
 );}
 
@@ -1358,75 +1359,75 @@ export const putApiV1ClientsId = async (id: string,
 
 
 
-export const getPutApiV1ClientsIdQueryKey = (id: string,
-    clientUpsertRequest?: ClientUpsertRequest,) => {
+export const getPatchApiV1ClientsIdQueryKey = (id: string,
+    clientPatchRequest?: ClientPatchRequest,) => {
     return [
-    'PUT', `/api/v1/clients/${id}`, clientUpsertRequest
+    'PATCH', `/api/v1/clients/${id}`, clientPatchRequest
     ] as const;
     }
 
 
-export const getPutApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPatchApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(id: string,
+    clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getPutApiV1ClientsIdQueryKey(id,clientUpsertRequest);
+  const queryKey =  queryOptions?.queryKey ?? getPatchApiV1ClientsIdQueryKey(id,clientPatchRequest);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiV1ClientsId>>> = ({ signal }) => putApiV1ClientsId(id,clientUpsertRequest, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof patchApiV1ClientsId>>> = ({ signal }) => patchApiV1ClientsId(id,clientPatchRequest, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type PutApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof putApiV1ClientsId>>>
-export type PutApiV1ClientsIdQueryError = void
+export type PatchApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsId>>>
+export type PatchApiV1ClientsIdQueryError = void
 
 
-export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
  id: string,
-    clientUpsertRequest: ClientUpsertRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>> & Pick<
+    clientPatchRequest: ClientPatchRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putApiV1ClientsId>>,
+          Awaited<ReturnType<typeof patchApiV1ClientsId>>,
           TError,
-          Awaited<ReturnType<typeof putApiV1ClientsId>>
+          Awaited<ReturnType<typeof patchApiV1ClientsId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
  id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>> & Pick<
+    clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putApiV1ClientsId>>,
+          Awaited<ReturnType<typeof patchApiV1ClientsId>>,
           TError,
-          Awaited<ReturnType<typeof putApiV1ClientsId>>
+          Awaited<ReturnType<typeof patchApiV1ClientsId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
  id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+    clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Update a client (optimistic concurrency via version)
+ * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
 
-export function usePutApiV1ClientsId<TData = Awaited<ReturnType<typeof putApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
  id: string,
-    clientUpsertRequest: ClientUpsertRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+    clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getPutApiV1ClientsIdQueryOptions(id,clientUpsertRequest,options)
+  const queryOptions = getPatchApiV1ClientsIdQueryOptions(id,clientPatchRequest,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

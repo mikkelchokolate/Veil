@@ -41,7 +41,7 @@ func TestV1ClientUpdateReturnsMutationEnvelope(t *testing.T) {
 	id := createV1Client(t, r, "upd-client")
 
 	body := strings.NewReader(`{"version":1,"name":"upd-client-renamed"}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/clients/"+id, body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/clients/"+id, body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -68,6 +68,7 @@ tags:
 paths:
   /healthz:
     get:
+      x-veil-role: public
       tags: [status]
       summary: Liveness/readiness probe
       description: Authenticated on public Panel listeners; public on loopback-only development listeners.
@@ -97,6 +98,7 @@ paths:
                     error: "stat /var/lib/veil/state.json: no such file or directory"
   /metrics:
     get:
+      x-veil-role: public
       tags: [status]
       summary: Prometheus metrics exposition
       description: |
@@ -122,6 +124,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
   /api/setup/status:
     get:
+      x-veil-role: public
       tags: [setup]
       summary: Inspect first-run setup state
       description: Available without authentication only on a local loopback listener.
@@ -141,6 +144,7 @@ paths:
                     panelAccess: local
   /api/setup/complete:
     post:
+      x-veil-role: public
       tags: [setup]
       summary: Create the initial administrator
       description: Single-use operation available only on an unconfigured local loopback listener.
@@ -184,6 +188,7 @@ paths:
                 $ref: "#/components/schemas/ErrorText"
   /api/auth/login:
     post:
+      x-veil-role: public
       tags: [auth]
       summary: Create a browser session
       security: []
@@ -224,6 +229,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
   /api/auth/logout:
     post:
+      x-veil-role: public
       tags: [auth]
       summary: Delete the browser session cookie
       security: []
@@ -240,6 +246,7 @@ paths:
                     success: true
   /api/auth/status:
     get:
+      x-veil-role: public
       tags: [auth]
       summary: Inspect the current browser session
       security: []
@@ -263,6 +270,7 @@ paths:
                     authenticated: false
   /api/auth/locale:
     post:
+      x-veil-role: self-service
       tags: [auth]
       summary: Update the current browser user's locale
       description: |
@@ -310,6 +318,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/auth/sessions:
     get:
+      x-veil-role: admin-metadata
       tags: [auth]
       summary: List active browser sessions
       description: Requires an admin token or admin session.
@@ -344,6 +353,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     delete:
+      x-veil-role: admin-mutation
       tags: [auth]
       summary: Revoke an active browser session
       description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
@@ -383,6 +393,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/audit:
     get:
+      x-veil-role: admin-metadata
       tags: [audit]
       summary: List structured Panel audit history
       description: |
@@ -436,6 +447,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/admin/rotate-key:
     post:
+      x-veil-role: admin-mutation
       tags: [admin]
       summary: Rotate the state-encryption key
       description: |
@@ -478,6 +490,7 @@ paths:
           $ref: "#/components/responses/PrivilegedFailure"
   /api/backups:
     get:
+      x-veil-role: admin-metadata
       tags: [backups]
       summary: List managed disaster-recovery archives
       description: Requires an admin token or admin session.
@@ -503,6 +516,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
+      x-veil-role: admin-mutation
       tags: [backups]
       summary: Create and verify an encrypted archive
       description: |
@@ -544,6 +558,7 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
   /api/backups/prune:
     post:
+      x-veil-role: admin-mutation
       tags: [backups]
       summary: Apply managed archive retention
       description: Requires admin and CSRF for a cookie session.
@@ -581,6 +596,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/BackupName"
     get:
+      x-veil-role: admin-secret
       tags: [backups]
       summary: Download an encrypted archive
       description: Requires an admin token or admin session.
@@ -607,6 +623,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/BackupName"
     post:
+      x-veil-role: admin-mutation
       tags: [backups]
       summary: Decrypt and verify an archive without writing state
       security:
@@ -645,6 +662,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/BackupName"
     post:
+      x-veil-role: admin-mutation
       tags: [backups]
       summary: Queue a verified state and key restore
       description: |
@@ -693,6 +711,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/RestoreJobID"
     get:
+      x-veil-role: admin-metadata
       tags: [backups]
       summary: Read queued restore progress
       description: Requires an admin token or admin session.
@@ -724,6 +743,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/users:
     get:
+      x-veil-role: admin-metadata
       tags: [auth]
       summary: List registered Panel users
       responses:
@@ -736,6 +756,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/UserResponse"
     post:
+      x-veil-role: admin-mutation
       tags: [auth]
       summary: Create a Panel user
       description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
@@ -774,6 +795,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Username"
     put:
+      x-veil-role: admin-mutation
       tags: [auth]
       summary: Update a Panel user
       security:
@@ -801,6 +823,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      x-veil-role: admin-mutation
       tags: [auth]
       summary: Delete a Panel user
       security:
@@ -819,6 +842,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/status:
     get:
+      x-veil-role: viewer
       tags: [status]
       summary: Service status snapshot for managed systemd units
       responses:
@@ -846,6 +870,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
   /api/version:
     get:
+      x-veil-role: viewer
       tags: [version]
       summary: Current Veil version
       responses:
@@ -859,6 +884,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
   /api/version/update:
     post:
+      x-veil-role: admin-mutation
       tags: [version]
       summary: Trigger a staged self-update to the latest release
       security:
@@ -901,6 +927,7 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
   /api/settings:
     get:
+      x-veil-role: viewer
       tags: [settings]
       summary: Read Panel settings with secrets redacted
       responses:
@@ -922,6 +949,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     put:
+      x-veil-role: admin-mutation
       tags: [settings]
       summary: Update Panel settings
       security:
@@ -948,6 +976,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/protocols:
     get:
+      x-veil-role: viewer
       tags: [protocols]
       summary: List supported protocols and their UI/runtime metadata
       security:
@@ -969,6 +998,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/inbounds:
     get:
+      x-veil-role: viewer
       tags: [inbounds]
       summary: List inbounds
       responses:
@@ -983,6 +1013,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
+      x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Create an inbound
       security:
@@ -1019,6 +1050,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     get:
+      x-veil-role: viewer
       tags: [inbounds]
       summary: Read one inbound
       responses:
@@ -1031,6 +1063,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Update an inbound
       security:
@@ -1058,6 +1091,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Delete an inbound
       security:
@@ -1074,6 +1108,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/routing/rules:
     get:
+      x-veil-role: viewer
       tags: [routing]
       summary: List routing rules
       responses:
@@ -1086,6 +1121,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/RoutingRule"
     post:
+      x-veil-role: admin-mutation
       tags: [routing]
       summary: Create a routing rule
       security:
@@ -1119,6 +1155,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     get:
+      x-veil-role: viewer
       tags: [routing]
       summary: Read a routing rule
       responses:
@@ -1131,6 +1168,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      x-veil-role: admin-mutation
       tags: [routing]
       summary: Update a routing rule
       security:
@@ -1156,6 +1194,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      x-veil-role: admin-mutation
       tags: [routing]
       summary: Delete a routing rule
       security:
@@ -1170,6 +1209,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/routing/presets:
     get:
+      x-veil-role: viewer
       tags: [routing]
       summary: List routing presets and source material
       responses:
@@ -1183,6 +1223,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     post:
+      x-veil-role: admin-mutation
       tags: [routing]
       summary: Apply a routing preset
       security:
@@ -1201,6 +1242,7 @@ paths:
           $ref: "#/components/responses/NotFound"
   /api/warp:
     get:
+      x-veil-role: viewer
       tags: [warp]
       summary: Read WARP state with secrets redacted
       responses:
@@ -1211,6 +1253,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/WarpConfig"
     put:
+      x-veil-role: admin-mutation
       tags: [warp]
       summary: Update WARP state
       security:
@@ -1235,6 +1278,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/client-links:
     get:
+      x-veil-role: admin-secret
       tags: [client-links]
       summary: Client links derived from enabled inbounds and profiles
       responses:
@@ -1246,6 +1290,7 @@ paths:
                 $ref: "#/components/schemas/ClientLinksResponse"
   /api/client-links/subscription:
     get:
+      x-veil-role: admin-secret
       tags: [client-links]
       summary: Subscription-format client links
       parameters:
@@ -1268,6 +1313,7 @@ paths:
                 contentEncoding: base64
   /api/client-links/qr:
     post:
+      x-veil-role: admin-secret
       tags: [client-links]
       summary: Render a client URI as a local QR PNG
       description: Generates the QR image inside Veil so client URIs are not sent to a third-party QR service.
@@ -1306,6 +1352,7 @@ paths:
                 $ref: "#/components/schemas/ErrorText"
   /api/firewall:
     get:
+      x-veil-role: viewer
       tags: [status]
       summary: Firewall rule plan and status
       responses:
@@ -1319,6 +1366,7 @@ paths:
                   $ref: "#/components/schemas/FirewallRule"
   /api/apply/state:
     get:
+      x-veil-role: viewer
       tags: [apply]
       summary: Desired/applied revisions and derived system state
       security:
@@ -1330,6 +1378,7 @@ paths:
           description: Revision and system state.
   /api/apply/jobs:
     get:
+      x-veil-role: viewer
       tags: [apply]
       summary: List apply jobs (newest first)
       security:
@@ -1351,6 +1400,7 @@ paths:
                       $ref: "#/components/schemas/ApplyJob"
   /api/apply/jobs/{id}:
     get:
+      x-veil-role: viewer
       tags: [apply]
       summary: Get one apply job
       security:
@@ -1370,6 +1420,7 @@ paths:
           description: Not found.
   /api/apply/jobs/{id}/retry:
     post:
+      x-veil-role: admin-mutation
       tags: [apply]
       summary: Create a NEW apply job for the same desired revision
       security:
@@ -1392,6 +1443,7 @@ paths:
           description: Another apply is active.
   /api/apply/reconcile:
     post:
+      x-veil-role: admin-mutation
       tags: [apply]
       summary: Apply current desired revision if ahead of applied (idempotent)
       security:
@@ -1406,6 +1458,7 @@ paths:
           description: Another apply is active.
   /api/apply:
     post:
+      x-veil-role: admin-mutation
       tags: [apply]
       summary: Stage and optionally promote current management state
       security:
@@ -1436,6 +1489,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/validation:
     post:
+      x-veil-role: viewer
       tags: [validation]
       summary: Validate a candidate configuration against live host state
       description: |
@@ -1499,6 +1553,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/apply/plan:
     post:
+      x-veil-role: viewer
       tags: [apply]
       summary: Preview the apply plan without writing live files
       security:
@@ -1543,6 +1598,7 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
   /api/apply/history:
     get:
+      x-veil-role: viewer
       tags: [apply]
       summary: Apply workflow history
       responses:
@@ -1556,6 +1612,7 @@ paths:
                   $ref: "#/components/schemas/ApplyHistoryEntry"
   /api/profiles/ru-recommended/preview:
     post:
+      x-veil-role: viewer
       tags: [apply]
       summary: Preview the ru-recommended install profile
       requestBody:
@@ -1594,6 +1651,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     post:
+      x-veil-role: admin-mutation
       tags: [services]
       summary: Restart a managed systemd unit
       security:
@@ -1628,6 +1686,7 @@ paths:
                 $ref: "#/components/schemas/ServiceActionResponse"
   /api/system:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: System resource observation
       responses:
@@ -1639,6 +1698,7 @@ paths:
                 $ref: "#/components/schemas/SystemStats"
   /api/tls:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Panel TLS observation
       responses:
@@ -1650,6 +1710,7 @@ paths:
                 $ref: "#/components/schemas/TLSCertInfo"
   /api/network:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Network counters observation
       responses:
@@ -1661,6 +1722,7 @@ paths:
                 $ref: "#/components/schemas/NetworkStats"
   /api/connections:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Listening ports / connections observation
       responses:
@@ -1672,6 +1734,7 @@ paths:
                 $ref: "#/components/schemas/ConnectionsStats"
   /api/processes:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Managed processes observation
       responses:
@@ -1683,6 +1746,7 @@ paths:
                 $ref: "#/components/schemas/ProcessesStats"
   /api/disk:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Disk usage observation
       responses:
@@ -1694,6 +1758,7 @@ paths:
                 $ref: "#/components/schemas/DiskStats"
   /api/runtime/observation:
     get:
+      x-veil-role: viewer
       tags: [runtime]
       summary: Combined runtime observation
       responses:
@@ -1705,6 +1770,7 @@ paths:
                 $ref: "#/components/schemas/RuntimeObservation"
   /api/logs:
     get:
+      x-veil-role: admin-secret
       tags: [runtime]
       summary: Bounded journald reads for managed units
       parameters:
@@ -1733,6 +1799,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/dns-lookup:
     post:
+      x-veil-role: viewer
       tags: [diagnostics]
       summary: DNS lookup diagnostic
       security:
@@ -1757,6 +1824,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/ping:
     post:
+      x-veil-role: viewer
       tags: [diagnostics]
       summary: Ping diagnostic
       security:
@@ -1781,6 +1849,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/speedtest:
     post:
+      x-veil-role: viewer
       tags: [diagnostics]
       summary: Speedtest diagnostic
       security:
@@ -1807,6 +1876,7 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/clients:
     get:
+      x-veil-role: viewer
       tags: [clients]
       summary: List clients with effective status
       security:
@@ -1819,6 +1889,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ClientListResponse"
     post:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Create a client
       security:
@@ -1829,7 +1900,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClientUpsertRequest"
+              $ref: "#/components/schemas/ClientCreateRequest"
       responses:
         "201":
           description: Created client with issued credentials and apply outcome.
@@ -1841,6 +1912,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/v1/clients/bulk:
     post:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Bulk action across clients; per-client results
       security:
@@ -1879,6 +1951,7 @@ paths:
           description: '{"action,total,succeeded,skipped,failed,results[],revision,applyJob,success}'
   /api/v1/clients/{id}/bindings:
     get:
+      x-veil-role: viewer
       tags: [clients]
       summary: List client bindings
       security:
@@ -1891,6 +1964,7 @@ paths:
         "200":
           description: Bindings.
     post:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Add a binding (optional credential)
       security:
@@ -1918,6 +1992,7 @@ paths:
           description: Created binding.
   /api/v1/clients/{id}/bindings/{bindingId}:
     patch:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Update a binding (toggle enabled, optimistic locking)
       security:
@@ -1948,6 +2023,7 @@ paths:
         "200":
           description: Updated binding with mutation envelope.
     delete:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Remove a binding
       security:
@@ -1967,6 +2043,7 @@ paths:
           description: '{"id": ...}'
   /api/v1/clients/{id}/credentials/{bindingId}:
     post:
+      x-veil-role: admin-secret
       tags: [clients]
       summary: Set a binding credential
       security:
@@ -1997,6 +2074,7 @@ paths:
           description: Set credential.
   /api/v1/clients/{id}/credentials/{bindingId}/rotate:
     post:
+      x-veil-role: admin-secret
       tags: [clients]
       summary: Rotate a binding credential
       security:
@@ -2028,6 +2106,7 @@ paths:
           description: Rotated credential; server-generated rotate returns {credential,plaintext}.
   /api/v1/clients/migrate-legacy:
     post:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Convert legacy inbound-embedded profiles to normalized clients (idempotent)
       security:
@@ -2040,6 +2119,7 @@ paths:
           description: '{"migrated,inbounds[],revision,applyJob,success}'
   /api/v1/clients/{id}:
     get:
+      x-veil-role: viewer
       tags: [clients]
       summary: Get a client with bindings and effective status
       security:
@@ -2055,9 +2135,10 @@ paths:
                 $ref: "#/components/schemas/ClientView"
         "404":
           description: Client not found.
-    put:
+    patch:
+      x-veil-role: admin-mutation
       tags: [clients]
-      summary: Update a client (optimistic concurrency via version)
+      summary: Patch explicitly supplied client fields without clearing omitted durable fields
       security:
         - sessionCookie: []
           csrfToken: []
@@ -2068,7 +2149,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClientUpsertRequest"
+              $ref: "#/components/schemas/ClientPatchRequest"
       responses:
         "200":
           description: Updated client.
@@ -2079,6 +2160,7 @@ paths:
         "409":
           description: Version conflict.
     delete:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Delete a client
       security:
@@ -2093,6 +2175,7 @@ paths:
           description: Client not found.
   /api/v1/clients/{id}/tokens:
     get:
+      x-veil-role: admin-metadata
       tags: [clients]
       summary: List a client's subscription tokens (redacted)
       security:
@@ -2103,6 +2186,7 @@ paths:
         "200":
           description: Token metadata list (no plaintext).
     post:
+      x-veil-role: admin-secret
       tags: [clients]
       summary: Issue a subscription token; plaintext returned once
       security:
@@ -2131,6 +2215,7 @@ paths:
                 $ref: "#/components/schemas/SubscriptionTokenResponse"
   /api/v1/clients/{id}/tokens/{tokenId}:
     delete:
+      x-veil-role: admin-mutation
       tags: [clients]
       summary: Revoke a subscription token
       security:
@@ -2148,6 +2233,7 @@ paths:
           description: Token revoked.
   /api/v1/clients/{id}/tokens/{tokenId}/rotate:
     post:
+      x-veil-role: admin-secret
       tags: [clients]
       summary: Rotate a subscription token; new plaintext returned once
       security:
@@ -2169,6 +2255,7 @@ paths:
                 $ref: "#/components/schemas/SubscriptionTokenResponse"
   /api/v1/traffic/summary:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Aggregate traffic totals + honest telemetry provider state
       security:
@@ -2180,6 +2267,7 @@ paths:
           description: '{"state,providerCount,uploadBytes,downloadBytes,usedBytes}'
   /api/v1/traffic/top:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Top talkers ranked by cumulative usage
       security:
@@ -2193,6 +2281,7 @@ paths:
                 $ref: "#/components/schemas/TrafficTopResponse"
   /api/v1/traffic/{id}:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Per-client cumulative traffic totals
       security:
@@ -2210,6 +2299,7 @@ paths:
           description: Client not found.
   /api/v1/traffic/{id}/history:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Per-client bucketed traffic samples over a window
       security:
@@ -2247,6 +2337,7 @@ paths:
                 $ref: "#/components/schemas/TrafficHistoryResponse"
   /api/v1/traffic/stream:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Server-sent stream of live traffic snapshots
       description: Emits a JSON snapshot per client every ~5s as SSE data frames.
@@ -2261,6 +2352,7 @@ paths:
                 type: string
   /api/v1/events:
     get:
+      x-veil-role: viewer
       tags: [traffic]
       summary: Unified Server-Sent Events stream (A10)
       description: |
@@ -2285,6 +2377,7 @@ paths:
                 type: string
   /s/{token}:
     get:
+      x-veil-role: public
       tags: [subscription]
       summary: Public subscription endpoint (token is the capability)
       description: |
@@ -2317,6 +2410,7 @@ paths:
         "404":
           description: Token unknown, disabled, revoked, or expired.
     head:
+      x-veil-role: public
       tags: [subscription]
       summary: HEAD variant of the public subscription endpoint (headers only)
       security: []
@@ -3869,45 +3963,85 @@ components:
           type: number
         raw:
           type: string
-    ClientUpsertRequest:
+    ClientCreateRequest:
       type: object
       required: [name]
+      additionalProperties: false
       properties:
         name:
           type: string
         email:
-          type: string
+          type: [string, "null"]
         enabled:
           type: boolean
+        groupId:
+          type: [string, "null"]
         quotaBytes:
-          type: integer
+          type: [integer, "null"]
           format: int64
           minimum: 0
-          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
-          # JS number; larger int64s would lose precision silently.
           maximum: 9007199254740991
         quotaResetPolicy:
           type: string
           enum: [never, daily, weekly, monthly]
+        quotaResetAt:
+          type: [integer, "null"]
+          format: int64
         expiresAt:
-          type: integer
+          type: [integer, "null"]
           format: int64
         deviceLimit:
-          type: integer
+          type: [integer, "null"]
+          minimum: 0
         notes:
           type: string
-        version:
-          type: integer
-          description: Required on update for optimistic concurrency.
         bindings:
           type: array
           description: >-
-            Create-only: bind the client to inbounds atomically with the
-            create. When credential is empty the server generates a
-            high-entropy secret and returns its plaintext once in
-            issuedCredentials.
+            Bind the client to inbounds atomically with creation. When
+            credential is empty the server generates a high-entropy secret and
+            returns its plaintext once in issuedCredentials.
           items:
             $ref: "#/components/schemas/ClientBindingInput"
+    ClientPatchRequest:
+      type: object
+      required: [version]
+      additionalProperties: false
+      description: >-
+        Presence-aware patch. Omitted fields are preserved, explicit null
+        clears nullable/defaultable fields, and supplied values replace them.
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Optimistic concurrency version.
+        name:
+          type: string
+        email:
+          type: [string, "null"]
+        enabled:
+          type: [boolean, "null"]
+        groupId:
+          type: [string, "null"]
+        quotaBytes:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+        quotaResetPolicy:
+          type: [string, "null"]
+          enum: [never, daily, weekly, monthly]
+        quotaResetAt:
+          type: [integer, "null"]
+          format: int64
+        expiresAt:
+          type: [integer, "null"]
+          format: int64
+        deviceLimit:
+          type: [integer, "null"]
+          minimum: 0
+        notes:
+          type: [string, "null"]
     ClientBindingInput:
       type: object
       required: [inboundId]
@@ -3978,6 +4112,8 @@ components:
           type: string
         enabled:
           type: boolean
+        groupId:
+          type: string
         quotaBytes:
           type: integer
           format: int64
@@ -3987,9 +4123,16 @@ components:
           maximum: 9007199254740991
         quotaResetPolicy:
           type: string
+        quotaResetAt:
+          type: integer
+          format: int64
         expiresAt:
           type: integer
           format: int64
+        deviceLimit:
+          type: integer
+        notes:
+          type: string
         depleted:
           type: boolean
         status:

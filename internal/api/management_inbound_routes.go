@@ -14,7 +14,12 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, mutation.Settings())
+			settings := mutation.Settings()
+			if role, _ := r.Context().Value(contextKeyRole).(string); role == "viewer" {
+				writeJSON(w, newViewerSettingsMetadata(settings))
+			} else {
+				writeJSON(w, settings)
+			}
 		case http.MethodPut:
 			var settings Settings
 			if !decodeJSONRequest(w, r, &settings) {

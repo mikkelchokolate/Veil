@@ -158,7 +158,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, mutation.Warp())
+			warp := mutation.Warp()
+			if role, _ := r.Context().Value(contextKeyRole).(string); role == "viewer" {
+				writeJSON(w, newViewerWarpMetadata(warp))
+			} else {
+				writeJSON(w, warp)
+			}
 		case http.MethodPut:
 			var warp WarpConfig
 			if !decodeJSONRequest(w, r, &warp) {

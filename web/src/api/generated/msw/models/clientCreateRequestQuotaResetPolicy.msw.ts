@@ -40,32 +40,13 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { BindingView } from './bindingView.msw.ts';
-import type { ClientViewStatus } from './clientViewStatus.msw.ts';
 
-export interface ClientView {
-  id: string;
-  name: string;
-  email?: string;
-  enabled?: boolean;
-  groupId?: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  quotaBytes?: number;
-  quotaResetPolicy?: string;
-  quotaResetAt?: number;
-  expiresAt?: number;
-  deviceLimit?: number;
-  notes?: string;
-  depleted?: boolean;
-  /** Effective status. */
-  status: ClientViewStatus;
-  inboundIds?: string[];
-  hasCreds?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  version?: number;
-  bindings?: BindingView[];
-}
+export type ClientCreateRequestQuotaResetPolicy = typeof ClientCreateRequestQuotaResetPolicy[keyof typeof ClientCreateRequestQuotaResetPolicy];
+
+
+export const ClientCreateRequestQuotaResetPolicy = {
+  never: 'never',
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;

@@ -61,23 +61,21 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			writeError(w, "management state unavailable", http.StatusServiceUnavailable)
 			return
 		}
-
-		requiresAuth := strings.HasPrefix(path, "/api/")
-		if path == "/api/auth/login" ||
-			path == "/api/auth/logout" ||
-			path == "/api/auth/status" {
-			requiresAuth = false
-		}
-		if opts.AllowSetup && (path == "/api/setup/status" || path == "/api/setup/complete") {
-			requiresAuth = false
+		capability, known := capabilityForEndpoint(r.Method, path)
+		if !known {
+			writeError(w, "endpoint authorization policy is not defined", http.StatusNotFound)
+			return
 		}
 		if path == "/healthz" && opts.ProtectHealthz {
-			requiresAuth = true
+			capability = capabilityViewer
 		}
 		if path == "/metrics" && opts.ProtectMetrics {
-			requiresAuth = true
+			capability = capabilityViewer
 		}
-		if !requiresAuth {
+		if path == "/api/setup/complete" && !opts.AllowSetup {
+			capability = capabilityAdminMutation
+		}
+		if capability == capabilityPublic {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -85,6 +83,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var username string
 		var role string
 		var isCookieSession bool
+		var sessionToken string
 
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
@@ -96,11 +95,29 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
+				sessionToken = cookie.Value
 				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
 					username = sess.Username
 					role = sess.Role
 					isCookieSession = true
 				}
+			}
+		}
+
+		if isCookieSession {
+			state.mu.Lock()
+			matched := false
+			for _, user := range state.users {
+				if user.Username == username {
+					role = user.Role
+					matched = true
+					break
+				}
+			}
+			state.mu.Unlock()
+			if !matched {
+				state.sessionRegistry().Delete(sessionToken)
+				username, role, isCookieSession = "", "", false
 			}
 		}
 
@@ -120,8 +137,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			return
 		}
 
-		// Cookie-session POST/PUT/DELETE requests always remain CSRF-protected,
-		// including read-only diagnostic POST actions available to viewers.
 		if isCookieSession && isMutatingRequest(r) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
 			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
@@ -129,12 +144,8 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 				return
 			}
 		}
-
-		// A small exact-path allowlist covers read-only operations that use POST
-		// only to carry structured input or trigger an in-memory preview. All
-		// actual state mutations still require admin.
-		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
-			writeError(w, "forbidden: admin role required", http.StatusForbidden)
+		if !capabilityAllowsRole(capability, role) {
+			writeError(w, "forbidden: endpoint capability requires admin role", http.StatusForbidden)
 			return
 		}
 
@@ -142,13 +153,17 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		ctx = context.WithValue(ctx, contextKeyUsername, username)
 		ctx = context.WithValue(ctx, contextKeyRole, role)
 		r = r.WithContext(ctx)
-
 		next.ServeHTTP(w, r)
 	})
 }
 
 func isMutatingRequest(r *http.Request) bool {
-	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func isSelfServiceMutation(r *http.Request) bool {
