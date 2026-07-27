@@ -64,21 +64,47 @@ cleanup_panels() {
 trap cleanup_panels EXIT
 
 start_panel() { # <name> <listen-args...>
-  local name="$1"; shift
-  local root="${WORK}/${name}"
-  mkdir -p "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
-  (
-    export VEIL_STATE_PATH="${root}/state/state.json"
-    export VEIL_KEY_PATH="${root}/etc/state.key"
-    export VEIL_APPLY_ROOT="${root}/apply"
-    export VEIL_LIVE_ROOT="${root}/live"
-    export VEIL_API_TOKEN=browser-e2e-token
-    ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
-      --role admin --state "${VEIL_STATE_PATH}" --key-path "${VEIL_KEY_PATH}"
-    exec ./dist/veil serve "$@"
-  ) >"${root}/panel.log" 2>&1 &
-  PIDS+=($!)
+	local name="$1"; shift
+	local root="${WORK}/${name}"
+	mkdir -p "${root}"
+	${SUDO} mkdir -p "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
+	${SUDO} chown -R veil:veil "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
+	run_as_veil env \
+		VEIL_STATE_PATH="${root}/state/state.json" \
+		VEIL_KEY_PATH="${root}/etc/state.key" \
+		VEIL_APPLY_ROOT="${root}/apply" \
+		VEIL_LIVE_ROOT="${root}/live" \
+		VEIL_API_TOKEN=browser-e2e-token \
+		./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+			--role admin --state "${root}/state/state.json" --key-path "${root}/etc/state.key"
+	run_as_veil env \
+		VEIL_STATE_PATH="${root}/state/state.json" \
+		VEIL_KEY_PATH="${root}/etc/state.key" \
+		VEIL_APPLY_ROOT="${root}/apply" \
+		VEIL_LIVE_ROOT="${root}/live" \
+		VEIL_HELPER_SOCKET=/run/veil/helper.sock \
+		VEIL_API_TOKEN=browser-e2e-token \
+		./dist/veil serve "$@" >"${root}/panel.log" 2>&1 &
+	PIDS+=($!)
 }
+
+ci_step "start root helper and production-layout state"
+${SUDO} useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin veil 2>/dev/null || true
+${SUDO} mkdir -p /var/lib/veil/backups /etc/veil /run/veil
+${SUDO} chown -R veil:veil /var/lib/veil /etc/veil
+openssl rand -hex 32 | ${SUDO} tee /etc/veil/backup.passphrase >/dev/null
+${SUDO} chown veil:veil /etc/veil/backup.passphrase
+${SUDO} chmod 600 /etc/veil/backup.passphrase
+run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+	--role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
+${SUDO} ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
+PIDS+=($!)
+for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
+if [ ! -S /run/veil/helper.sock ]; then
+	cat "${WORK}/helper.log" >&2 || true
+	ci_die "root helper socket did not appear"
+fi
+${SUDO} chgrp veil /run/veil/helper.sock
 
 ci_step "start authenticated panel (:2096)"
 start_panel main --listen 127.0.0.1:2096
@@ -91,18 +117,6 @@ wait_health http://127.0.0.1:2097/e2e-base-x9/healthz "${WORK}/pathed/panel.log"
 ci_step "start helper-backed panel (:2098, production layout)"
 # Backup operations are privileged: reproduce the production layout faithfully
 # (veil system user, /var/lib/veil state, root helper on /run/veil/helper.sock).
-${SUDO} useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin veil 2>/dev/null || true
-${SUDO} mkdir -p /var/lib/veil/backups /etc/veil /run/veil
-${SUDO} chown -R veil:veil /var/lib/veil /etc/veil
-openssl rand -hex 32 | ${SUDO} tee /etc/veil/backup.passphrase >/dev/null
-${SUDO} chown veil:veil /etc/veil/backup.passphrase
-${SUDO} chmod 600 /etc/veil/backup.passphrase
-run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
-  --role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
-${SUDO} ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
-PIDS+=($!)
-for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
-${SUDO} chgrp veil /run/veil/helper.sock
 run_as_veil env VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
   VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
   VEIL_API_TOKEN=browser-e2e-token ./dist/veil serve --listen 127.0.0.1:2098 >"${WORK}/backup-panel.log" 2>&1 &
