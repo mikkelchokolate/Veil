@@ -103,10 +103,13 @@ type ResolvedFirewall struct {
 }
 
 type ResolvedUpdate struct {
-	ArtifactID    string
-	Version       string
-	Path          string
-	ChecksumsPath string
+	ArtifactID           string
+	Version              string
+	Path                 string
+	ChecksumsPath        string
+	ChecksumsBundlePath  string
+	ProvenancePath       string
+	ProvenanceBundlePath string
 }
 
 func (p Policy) ValidateServiceAction(request ServiceActionRequest) error {
@@ -435,8 +438,21 @@ func (p Policy) ResolveUpdate(request UpdateRequest) (ResolvedUpdate, error) {
 	if err != nil {
 		return ResolvedUpdate{}, err
 	}
+	checksumsBundlePath, err := resolveBelow(p.UpdateRoot, "checksums.txt.bundle")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	provenancePath, err := resolveBelow(p.UpdateRoot, "veil.provenance.json")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	provenanceBundlePath, err := resolveBelow(p.UpdateRoot, "veil.provenance.json.bundle")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
 	return ResolvedUpdate{
 		ArtifactID: request.ArtifactID, Version: request.Version, Path: path, ChecksumsPath: checksumsPath,
+		ChecksumsBundlePath: checksumsBundlePath, ProvenancePath: provenancePath, ProvenanceBundlePath: provenanceBundlePath,
 	}, nil
 }
 

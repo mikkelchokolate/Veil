@@ -11,6 +11,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 )
 
 const maxPanelUpdateDownloadBytes int64 = 64 * 1024 * 1024
@@ -20,6 +21,7 @@ type panelUpdateStager struct {
 	assetName string
 	latest    func(context.Context) (*updateflow.Release, error)
 	download  func(context.Context, string) ([]byte, error)
+	verify    func(releaseverify.Evidence) error
 }
 
 func newPanelUpdateStager(root string) panelUpdateStager {
@@ -33,20 +35,21 @@ func newPanelUpdateStager(root string) panelUpdateStager {
 		download: func(ctx context.Context, url string) ([]byte, error) {
 			return downloadPanelUpdateAsset(ctx, client, url)
 		},
+		verify: releaseverify.Verify,
 	}
 }
 
 func (s panelUpdateStager) Stage(ctx context.Context) (string, error) {
-	if s.root == "" || s.latest == nil || s.download == nil || s.assetName == "" {
+	if s.root == "" || s.latest == nil || s.download == nil || s.assetName == "" || s.verify == nil {
 		return "", errors.New("panel update stager is not configured")
 	}
 	release, err := s.latest(ctx)
 	if err != nil {
 		return "", fmt.Errorf("fetch latest release: %w", err)
 	}
-	assets := updateflow.NewReleaseAssets(release, func(url string) ([]byte, error) {
+	assets := updateflow.NewReleaseAssetsWithVerifier(release, func(url string) ([]byte, error) {
 		return s.download(ctx, url)
-	})
+	}, s.verify)
 	archive, err := assets.DownloadVerifiedArchive()
 	if err != nil {
 		return "", err
@@ -56,6 +59,15 @@ func (s panelUpdateStager) Stage(ctx context.Context) (string, error) {
 	}
 	if err := atomicfile.Write(filepath.Join(s.root, "checksums.txt"), archive.Checksums, 0o600, 0o700); err != nil {
 		return "", fmt.Errorf("stage update checksums: %w", err)
+	}
+	for name, body := range map[string][]byte{
+		"checksums.txt.bundle":        archive.ChecksumsBundle,
+		"veil.provenance.json":        archive.Provenance,
+		"veil.provenance.json.bundle": archive.ProvenanceBundle,
+	} {
+		if err := atomicfile.Write(filepath.Join(s.root, name), body, 0o600, 0o700); err != nil {
+			return "", fmt.Errorf("stage update evidence %s: %w", name, err)
+		}
 	}
 	if err := atomicfile.Write(filepath.Join(s.root, "veil-update.tar.gz"), archive.Body, 0o600, 0o700); err != nil {
 		return "", fmt.Errorf("stage update archive: %w", err)

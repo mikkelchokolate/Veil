@@ -43,8 +43,12 @@ func TestEveryRuntimeDescriptorIsPinnedAndDeclaresIntegrityAndVersionProbe(t *te
 			if strings.Contains(strings.ToLower(descriptor.SourcePackage), "@latest") {
 				t.Errorf("runtime %s source package is mutable: %s", descriptor.Name, descriptor.SourcePackage)
 			}
-			if (descriptor.Method == runtimeinstall.MethodArchive || descriptor.Method == runtimeinstall.MethodRawBinary) && descriptor.ChecksumMatch == nil {
+			if (descriptor.Method == runtimeinstall.MethodArchive || descriptor.Method == runtimeinstall.MethodRawBinary) &&
+				descriptor.Integrity == "upstream-checksum" && descriptor.ChecksumMatch == nil {
 				t.Errorf("release runtime %s has no mandatory checksum selector", descriptor.Name)
+			}
+			if descriptor.Integrity == "pinned-sha256" && strings.TrimSpace(descriptor.PinnedSHA256) == "" {
+				t.Errorf("release runtime %s has no pinned archive digest", descriptor.Name)
 			}
 		})
 	}

@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/sha512"
+	"debug/buildinfo"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -61,6 +63,21 @@ type Runtime struct {
 	Method Method
 	// Repo is the GitHub "owner/name" for release-based methods.
 	Repo string
+	// Version is an immutable upstream tag or commit. "latest" is never valid.
+	Version string
+	// Integrity names the mandatory verification policy: upstream-checksum,
+	// pinned-sha256, go-module-sum, or reproducible-go-build.
+	Integrity string
+	// PinnedSHA256 is required when Integrity is pinned-sha256.
+	PinnedSHA256 string
+	// VersionArgs invokes the staged binary's version probe. The reserved
+	// __go_buildinfo__ probe verifies Go module build metadata for upstreams
+	// that do not expose a version flag.
+	VersionArgs []string
+	// VersionCommand is the human/audit representation of the staged probe.
+	VersionCommand string
+	// VersionPattern must match the version probe output.
+	VersionPattern string
 	// AssetMatch selects the release asset for the current platform.
 	AssetMatch func(assetName string) bool
 	// ChecksumMatch selects the checksums asset, when the project ships one.
@@ -76,17 +93,26 @@ type Runtime struct {
 // as WARP (sing-box). Protocol plugins supply their own descriptors via
 // RuntimeProvider.RuntimeInstall, so they are not duplicated here.
 func Catalog(arch string) []Runtime {
+	singBoxDigests := map[string]string{
+		"amd64": "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697",
+		"arm64": "4742df6a4314e8ecc41736849fca6d73b8f9e91b6e8b06ee794ff17ba180579e",
+	}
+	const singBoxVersion = "v1.13.14"
 	return []Runtime{
 		{
-			Name:        "warp",
-			Binary:      "sing-box",
-			Method:      MethodArchive,
-			Repo:        "SagerNet/sing-box",
-			Description: "sing-box is downloaded from its upstream GitHub release",
+			Name:           "warp",
+			Binary:         "sing-box",
+			Method:         MethodArchive,
+			Repo:           "SagerNet/sing-box",
+			Version:        singBoxVersion,
+			Integrity:      "pinned-sha256",
+			PinnedSHA256:   singBoxDigests[arch],
+			VersionArgs:    []string{"version"},
+			VersionCommand: "sing-box version",
+			VersionPattern: `(?i)1\.13\.14`,
+			Description:    "sing-box is downloaded from its pinned upstream GitHub release",
 			AssetMatch: func(name string) bool {
-				return strings.HasPrefix(name, "sing-box-") &&
-					strings.HasSuffix(name, "-linux-"+arch+".tar.gz") &&
-					!strings.Contains(name, "-musl") && !strings.Contains(name, "-glibc")
+				return name == "sing-box-1.13.14-linux-"+arch+".tar.gz"
 			},
 		},
 	}
@@ -117,6 +143,10 @@ type Options struct {
 	HTTPClient *http.Client
 	// FetchRelease resolves the latest release for a repo. Injectable for tests.
 	FetchRelease func(ctx context.Context, repo string) (*Release, error)
+	// FetchReleaseVersion resolves one exact immutable tag. When omitted, a
+	// legacy injected FetchRelease is wrapped for tests; production uses the
+	// GitHub releases/tags endpoint.
+	FetchReleaseVersion func(ctx context.Context, repo, version string) (*Release, error)
 	// Download fetches a URL's bytes. Injectable for tests.
 	Download func(ctx context.Context, url string) ([]byte, error)
 	// GoInstall builds a source package into BinDir. Injectable for tests.
@@ -131,21 +161,31 @@ type Options struct {
 	// LookPath resolves an executable in PATH. Injectable for tests; defaults
 	// to exec.LookPath. Used to detect whether a Go toolchain is present.
 	LookPath func(string) (string, error)
+	// RunVersion executes the staged binary's version command before publish.
+	RunVersion func(ctx context.Context, binary string, args []string) (string, error)
+	// VerifyPinnedSHA256 is injectable for deterministic tests; production
+	// computes SHA-256 over the downloaded archive and compares the public digest.
+	VerifyPinnedSHA256 func(body []byte, expected string) error
+	// ReadGoBuildInfo is injectable for fake binaries in tests. Production reads
+	// the Go build information embedded in the staged executable.
+	ReadGoBuildInfo func(path string) (string, error)
 	// Now supplies the clock (unused today, reserved for retry/backoff).
 	Now func() time.Time
 }
 
 // Result records the outcome for a single runtime.
 type Result struct {
-	Name       string
-	Binary     string
-	Path       string
-	Method     Method
-	Version    string
-	Installed  bool
-	Skipped    bool
-	SkipReason string
-	Err        error
+	Name            string
+	Binary          string
+	Path            string
+	Method          Method
+	Version         string
+	VerifiedVersion string
+	SHA256          string
+	Installed       bool
+	Skipped         bool
+	SkipReason      string
+	Err             error
 }
 
 const defaultBinDir = "/usr/local/bin"
@@ -154,6 +194,7 @@ const defaultBinDir = "/usr/local/bin"
 func DefaultBinDir() string { return defaultBinDir }
 
 func (o Options) withDefaults() Options {
+	legacyFetchRelease := o.FetchRelease
 	if o.BinDir == "" {
 		o.BinDir = defaultBinDir
 	}
@@ -169,6 +210,17 @@ func (o Options) withDefaults() Options {
 	if o.FetchRelease == nil {
 		o.FetchRelease = func(ctx context.Context, repo string) (*Release, error) {
 			return fetchLatestRelease(ctx, o.HTTPClient, repo)
+		}
+	}
+	if o.FetchReleaseVersion == nil {
+		if legacyFetchRelease != nil {
+			o.FetchReleaseVersion = func(ctx context.Context, repo, _ string) (*Release, error) {
+				return legacyFetchRelease(ctx, repo)
+			}
+		} else {
+			o.FetchReleaseVersion = func(ctx context.Context, repo, version string) (*Release, error) {
+				return fetchReleaseByTag(ctx, o.HTTPClient, repo, version)
+			}
 		}
 	}
 	if o.Download == nil {
@@ -207,6 +259,39 @@ func (o Options) withDefaults() Options {
 	if o.LookPath == nil {
 		o.LookPath = exec.LookPath
 	}
+	if o.RunVersion == nil {
+		o.RunVersion = func(ctx context.Context, binary string, args []string) (string, error) {
+			cmd := exec.CommandContext(ctx, binary, args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return string(output), fmt.Errorf("run %s version probe: %w", filepath.Base(binary), err)
+			}
+			return string(output), nil
+		}
+	}
+	if o.VerifyPinnedSHA256 == nil {
+		o.VerifyPinnedSHA256 = func(body []byte, expected string) error {
+			digest := sha256.Sum256(body)
+			if !strings.EqualFold(hex.EncodeToString(digest[:]), expected) {
+				return errors.New("runtime archive checksum mismatch")
+			}
+			return nil
+		}
+	}
+	if o.ReadGoBuildInfo == nil {
+		o.ReadGoBuildInfo = func(path string) (string, error) {
+			info, err := buildinfo.ReadFile(path)
+			if err != nil {
+				return "", err
+			}
+			var builder strings.Builder
+			fmt.Fprintf(&builder, "%s@%s", info.Path, info.Main.Version)
+			for _, dep := range info.Deps {
+				fmt.Fprintf(&builder, "\n%s@%s", dep.Path, dep.Version)
+			}
+			return builder.String(), nil
+		}
+	}
 	if o.Now == nil {
 		o.Now = time.Now
 	}
@@ -233,17 +318,27 @@ func installRuntimes(ctx context.Context, opts Options, runtimes []Runtime) []Re
 func Install(ctx context.Context, opts Options, runtime Runtime) Result {
 	opts = opts.withDefaults()
 	result := Result{Name: runtime.Name, Binary: runtime.Binary, Method: runtime.Method}
+	switch runtime.Method {
+	case MethodRawBinary, MethodArchive, MethodGoInstall, MethodCaddyNaive:
+	default:
+		result.Err = fmt.Errorf("unsupported method %q", runtime.Method)
+		return result
+	}
+	if err := validateRuntimeDescriptor(runtime); err != nil {
+		result.Err = err
+		return result
+	}
 	if err := os.MkdirAll(opts.BinDir, 0o755); err != nil {
 		result.Err = fmt.Errorf("create bin dir: %w", err)
 		return result
 	}
 	switch runtime.Method {
 	case MethodRawBinary:
-		path, version, err := installFromRelease(ctx, opts, runtime, false)
-		result.Path, result.Version, result.Err = path, version, err
+		path, version, verified, digest, err := installFromRelease(ctx, opts, runtime, false)
+		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, version, verified, digest, err
 	case MethodArchive:
-		path, version, err := installFromRelease(ctx, opts, runtime, true)
-		result.Path, result.Version, result.Err = path, version, err
+		path, version, verified, digest, err := installFromRelease(ctx, opts, runtime, true)
+		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, version, verified, digest, err
 	case MethodGoInstall:
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
@@ -255,8 +350,8 @@ func Install(ctx context.Context, opts Options, runtime Runtime) Result {
 			result.SkipReason = "go toolchain not found; install Go to build olcrtc from source, then run: veil runtime install --only olcrtc"
 			return result
 		}
-		path, err := installFromSource(ctx, opts, runtime)
-		result.Path, result.Err = path, err
+		path, verified, digest, err := installFromSource(ctx, opts, runtime)
+		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, runtime.Version, verified, digest, err
 	case MethodCaddyNaive:
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
@@ -268,8 +363,8 @@ func Install(ctx context.Context, opts Options, runtime Runtime) Result {
 			result.SkipReason = "go toolchain not found; install Go to build Caddy with forward_proxy, then run: veil runtime install --only naiveproxy"
 			return result
 		}
-		path, err := installCaddyNaive(ctx, opts, runtime)
-		result.Path, result.Err = path, err
+		path, verified, digest, err := installCaddyNaive(ctx, opts, runtime)
+		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, runtime.Version, verified, digest, err
 	default:
 		result.Err = fmt.Errorf("unsupported method %q", runtime.Method)
 	}
@@ -277,65 +372,237 @@ func Install(ctx context.Context, opts Options, runtime Runtime) Result {
 	return result
 }
 
-func installFromRelease(ctx context.Context, opts Options, runtime Runtime, archive bool) (string, string, error) {
-	release, err := opts.FetchRelease(ctx, runtime.Repo)
+func installFromRelease(ctx context.Context, opts Options, runtime Runtime, archive bool) (string, string, string, string, error) {
+	release, err := opts.FetchReleaseVersion(ctx, runtime.Repo, runtime.Version)
 	if err != nil {
-		return "", "", fmt.Errorf("resolve %s release: %w", runtime.Repo, err)
+		return "", "", "", "", fmt.Errorf("resolve %s release %s: %w", runtime.Repo, runtime.Version, err)
+	}
+	if release.TagName != runtime.Version {
+		return "", "", "", "", fmt.Errorf("resolved release tag %q does not match pinned version %q", release.TagName, runtime.Version)
 	}
 	asset, ok := findAsset(release.Assets, runtime.AssetMatch)
 	if !ok {
-		return "", "", fmt.Errorf("release %s has no asset for linux/%s", release.TagName, opts.Arch)
+		return "", "", "", "", fmt.Errorf("release %s has no asset for linux/%s", release.TagName, opts.Arch)
 	}
 	body, err := opts.Download(ctx, asset.BrowserDownloadURL)
 	if err != nil {
-		return "", "", fmt.Errorf("download %s: %w", asset.Name, err)
+		return "", "", "", "", fmt.Errorf("download %s: %w", asset.Name, err)
 	}
-	if runtime.ChecksumMatch != nil {
+	switch runtime.Integrity {
+	case "upstream-checksum":
 		checksumAsset, ok := findAsset(release.Assets, runtime.ChecksumMatch)
-		if ok {
-			checksums, err := opts.Download(ctx, checksumAsset.BrowserDownloadURL)
-			if err != nil {
-				return "", "", fmt.Errorf("download checksums: %w", err)
-			}
-			if err := VerifyChecksum(body, asset.Name, runtime.Binary, checksums); err != nil {
-				return "", "", err
-			}
+		if !ok {
+			return "", "", "", "", fmt.Errorf("release %s is missing the mandatory checksum asset for %s", release.TagName, asset.Name)
 		}
+		checksums, err := opts.Download(ctx, checksumAsset.BrowserDownloadURL)
+		if err != nil {
+			return "", "", "", "", fmt.Errorf("download checksums: %w", err)
+		}
+		if err := VerifyChecksum(body, asset.Name, runtime.Binary, checksums); err != nil {
+			return "", "", "", "", err
+		}
+	case "pinned-sha256":
+		if err := opts.VerifyPinnedSHA256(body, runtime.PinnedSHA256); err != nil {
+			return "", "", "", "", fmt.Errorf("runtime archive checksum mismatch for %s: %w", asset.Name, err)
+		}
+	default:
+		return "", "", "", "", fmt.Errorf("integrity policy %q is not valid for release runtime %s", runtime.Integrity, runtime.Name)
 	}
 	payload := body
 	if archive {
 		payload, err = ExtractArchiveBinary(body, runtime.Binary)
 		if err != nil {
-			return "", "", err
+			return "", "", "", "", err
 		}
 	}
-	path := filepath.Join(opts.BinDir, runtime.Binary)
-	if err := writeBinaryAtomic(path, payload); err != nil {
-		return "", "", err
-	}
-	return path, release.TagName, nil
+	path, verified, digest, err := publishVerifiedRuntime(ctx, opts, runtime, payload)
+	return path, release.TagName, verified, digest, err
 }
 
-func installFromSource(ctx context.Context, opts Options, runtime Runtime) (string, error) {
-	if err := opts.GoInstall(ctx, opts.BinDir, runtime.SourcePackage); err != nil {
-		return "", err
+func installFromSource(ctx context.Context, opts Options, runtime Runtime) (string, string, string, error) {
+	stageDir, err := os.MkdirTemp(opts.BinDir, ".veil-runtime-source-")
+	if err != nil {
+		return "", "", "", err
 	}
-	path := filepath.Join(opts.BinDir, runtime.Binary)
-	if err := os.Chmod(path, 0o755); err != nil {
-		return "", fmt.Errorf("set executable permissions on %s: %w", runtime.Binary, err)
+	defer os.RemoveAll(stageDir)
+	if err := opts.GoInstall(ctx, stageDir, runtime.SourcePackage); err != nil {
+		return "", "", "", err
 	}
-	return path, nil
+	return publishVerifiedRuntimePath(ctx, opts, runtime, filepath.Join(stageDir, runtime.Binary))
 }
 
-func installCaddyNaive(ctx context.Context, opts Options, runtime Runtime) (string, error) {
-	path := filepath.Join(opts.BinDir, runtime.Binary)
-	if err := opts.BuildCaddy(ctx, path); err != nil {
+func installCaddyNaive(ctx context.Context, opts Options, runtime Runtime) (string, string, string, error) {
+	stageDir, err := os.MkdirTemp(opts.BinDir, ".veil-runtime-caddy-")
+	if err != nil {
+		return "", "", "", err
+	}
+	defer os.RemoveAll(stageDir)
+	stagePath := filepath.Join(stageDir, runtime.Binary)
+	if err := opts.BuildCaddy(ctx, stagePath); err != nil {
+		return "", "", "", err
+	}
+	return publishVerifiedRuntimePath(ctx, opts, runtime, stagePath)
+}
+
+func publishVerifiedRuntime(ctx context.Context, opts Options, runtime Runtime, payload []byte) (string, string, string, error) {
+	tmp, err := os.CreateTemp(opts.BinDir, ".veil-runtime-binary-")
+	if err != nil {
+		return "", "", "", err
+	}
+	stagePath := tmp.Name()
+	defer os.Remove(stagePath)
+	if _, err := tmp.Write(payload); err != nil {
+		_ = tmp.Close()
+		return "", "", "", err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return "", "", "", err
+	}
+	if err := tmp.Chmod(0o755); err != nil {
+		_ = tmp.Close()
+		return "", "", "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", "", "", err
+	}
+	if err := syncRuntimeDirectory(opts.BinDir); err != nil {
+		return "", "", "", err
+	}
+	return publishVerifiedRuntimePath(ctx, opts, runtime, stagePath)
+}
+
+func publishVerifiedRuntimePath(ctx context.Context, opts Options, runtime Runtime, stagePath string) (string, string, string, error) {
+	info, err := os.Stat(stagePath)
+	if err != nil {
+		return "", "", "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", "", fmt.Errorf("staged runtime %s is not a regular file", runtime.Name)
+	}
+	if err := os.Chmod(stagePath, 0o755); err != nil {
+		return "", "", "", fmt.Errorf("set executable permissions on %s: %w", runtime.Binary, err)
+	}
+	verified, err := verifyRuntimeVersion(ctx, opts, runtime, stagePath)
+	if err != nil {
+		return "", "", "", err
+	}
+	digest, err := runtimeFileSHA256(stagePath)
+	if err != nil {
+		return "", "", "", err
+	}
+	destination := filepath.Join(opts.BinDir, runtime.Binary)
+	if err := os.Rename(stagePath, destination); err != nil {
+		return "", "", "", err
+	}
+	if err := syncRuntimeDirectory(opts.BinDir); err != nil {
+		return "", "", "", err
+	}
+	return destination, verified, digest, nil
+}
+
+var semanticVersionPattern = regexp.MustCompile(`(?i)v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)`)
+
+func verifyRuntimeVersion(ctx context.Context, opts Options, runtime Runtime, stagePath string) (string, error) {
+	var output string
+	if len(runtime.VersionArgs) == 1 && runtime.VersionArgs[0] == "__go_buildinfo__" {
+		var err error
+		output, err = opts.ReadGoBuildInfo(stagePath)
+		if err != nil {
+			return "", fmt.Errorf("read %s Go build metadata: %w", runtime.Name, err)
+		}
+		commit := strings.TrimPrefix(runtime.Version, "v")
+		if len(commit) > 12 {
+			commit = commit[:12]
+		}
+		if commit == "" || !strings.Contains(output, commit) {
+			return "", fmt.Errorf("%s build metadata does not contain pinned commit %s", runtime.Name, commit)
+		}
+	} else {
+		var err error
+		output, err = opts.RunVersion(ctx, stagePath, runtime.VersionArgs)
+		if err != nil {
+			return "", err
+		}
+	}
+	matcher, err := regexp.Compile(runtime.VersionPattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s version pattern: %w", runtime.Name, err)
+	}
+	if !matcher.MatchString(output) {
+		return "", fmt.Errorf("%s version output %q does not satisfy %q", runtime.Name, strings.TrimSpace(output), runtime.VersionPattern)
+	}
+	expected := semanticVersionPattern.FindStringSubmatch(runtime.Version)
+	actual := semanticVersionPattern.FindStringSubmatch(output)
+	if len(expected) > 1 {
+		if len(actual) <= 1 || expected[1] != actual[1] {
+			return "", fmt.Errorf("%s reports version %q; expected %q", runtime.Name, strings.TrimSpace(output), runtime.Version)
+		}
+	}
+	return strings.TrimSpace(output), nil
+}
+
+func runtimeFileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
 		return "", err
 	}
-	if err := os.Chmod(path, 0o755); err != nil {
-		return "", fmt.Errorf("set executable permissions on %s: %w", runtime.Binary, err)
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
 	}
-	return path, nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func syncRuntimeDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
+
+func validateRuntimeDescriptor(runtime Runtime) error {
+	if strings.TrimSpace(runtime.Name) == "" || strings.TrimSpace(runtime.Binary) == "" {
+		return errors.New("runtime name and binary are required")
+	}
+	version := strings.TrimSpace(runtime.Version)
+	if version == "" || strings.EqualFold(version, "latest") || strings.Contains(strings.ToLower(runtime.SourcePackage), "@latest") {
+		return fmt.Errorf("runtime %s must pin an immutable version", runtime.Name)
+	}
+	if len(runtime.VersionArgs) == 0 || strings.TrimSpace(runtime.VersionCommand) == "" || strings.TrimSpace(runtime.VersionPattern) == "" {
+		return fmt.Errorf("runtime %s must declare a version probe", runtime.Name)
+	}
+	if _, err := regexp.Compile(runtime.VersionPattern); err != nil {
+		return fmt.Errorf("runtime %s version pattern: %w", runtime.Name, err)
+	}
+	switch runtime.Integrity {
+	case "upstream-checksum":
+		if runtime.ChecksumMatch == nil {
+			return fmt.Errorf("runtime %s requires a checksum asset selector", runtime.Name)
+		}
+	case "pinned-sha256":
+		digest, err := hex.DecodeString(runtime.PinnedSHA256)
+		if err != nil || len(digest) != sha256.Size {
+			return fmt.Errorf("runtime %s has an invalid pinned SHA-256", runtime.Name)
+		}
+	case "go-module-sum":
+		if runtime.Method != MethodGoInstall || !strings.HasSuffix(runtime.SourcePackage, "@"+runtime.Version) {
+			return fmt.Errorf("runtime %s source package is not pinned to %s", runtime.Name, runtime.Version)
+		}
+	case "reproducible-go-build":
+		if runtime.Method != MethodCaddyNaive {
+			return fmt.Errorf("runtime %s has incompatible integrity policy %s", runtime.Name, runtime.Integrity)
+		}
+	default:
+		return fmt.Errorf("runtime %s has no mandatory integrity policy", runtime.Name)
+	}
+	if (runtime.Method == MethodRawBinary || runtime.Method == MethodArchive) && (runtime.Repo == "" || runtime.AssetMatch == nil) {
+		return fmt.Errorf("release runtime %s has an incomplete source descriptor", runtime.Name)
+	}
+	return nil
 }
 
 // runCaddyNaiveBuild builds a Caddy binary with the klzgrad/forwardproxy
@@ -541,9 +808,17 @@ func extractChecksum(checksums, assetName, binary string) string {
 	return ""
 }
 
+func fetchReleaseByTag(ctx context.Context, client *http.Client, repo, version string) (*Release, error) {
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, url.PathEscape(version))
+	return fetchReleaseAt(ctx, client, endpoint, "")
+}
+
 func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (*Release, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	return fetchReleaseAt(ctx, client, fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo), repo)
+}
+
+func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, latestFallbackRepo string) (*Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -555,10 +830,10 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-			return fetchLatestReleaseWeb(ctx, client, repo)
+		if latestFallbackRepo != "" && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
+			return fetchLatestReleaseWeb(ctx, client, latestFallbackRepo)
 		}
-		return nil, fmt.Errorf("GitHub API %s: %s", repo, resp.Status)
+		return nil, fmt.Errorf("GitHub API %s: %s", endpoint, resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {

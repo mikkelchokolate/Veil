@@ -715,38 +715,54 @@ func TestInstallAllRuntimesInstallsAllRuntimesWithInjectedProviders(t *testing.T
 
 	var mu sync.Mutex
 	var calls []string
+	hysteriaBody := []byte("#!hysteria\n")
+	mieruAsset := "mita_3.34.1_linux_amd64.tar.gz"
+	mieruArchive := makeTarGz(t, "mita", []byte("#!mita\n"))
+	warpAsset := "sing-box-1.13.14-linux-amd64.tar.gz"
+	warpArchive := makeTarGz(t, "sing-box", []byte("#!sing-box\n"))
 
 	opts := runtimeinstall.Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:             binDir,
+		Arch:               "amd64",
+		RunVersion:         fakeProtocolRuntimeVersion,
+		ReadGoBuildInfo:    fakeOlcrtcBuildInfo,
+		VerifyPinnedSHA256: func([]byte, string) error { return nil },
 		FetchRelease: func(ctx context.Context, repo string) (*runtimeinstall.Release, error) {
+			var tag string
 			var assets []runtimeinstall.Asset
 			switch repo {
 			case "apernet/hysteria":
+				tag = "app/v2.10.0"
 				assets = []runtimeinstall.Asset{
 					{Name: "hysteria-linux-amd64", BrowserDownloadURL: "hysteria://binary"},
+					{Name: "hashes.txt", BrowserDownloadURL: "hysteria://checksums"},
 				}
 			case "enfein/mieru":
+				tag = "v3.34.1"
 				assets = []runtimeinstall.Asset{
-					{Name: "mita_2.0.0_linux_amd64.tar.gz", BrowserDownloadURL: "mieru://archive"},
+					{Name: mieruAsset, BrowserDownloadURL: "mieru://archive"},
+					{Name: mieruAsset + ".sha256.txt", BrowserDownloadURL: "mieru://checksums"},
 				}
 			case "SagerNet/sing-box":
-				assets = []runtimeinstall.Asset{
-					{Name: "sing-box-1.0.0-linux-amd64.tar.gz", BrowserDownloadURL: "warp://archive"},
-				}
+				tag = "v1.13.14"
+				assets = []runtimeinstall.Asset{{Name: warpAsset, BrowserDownloadURL: "warp://archive"}}
 			default:
 				return nil, fmt.Errorf("unexpected repo %s", repo)
 			}
-			return &runtimeinstall.Release{TagName: "v1.0.0", Assets: assets}, nil
+			return &runtimeinstall.Release{TagName: tag, Assets: assets}, nil
 		},
 		Download: func(ctx context.Context, url string) ([]byte, error) {
-			switch {
-			case strings.HasPrefix(url, "hysteria://"):
-				return []byte("#!hysteria\n"), nil
-			case strings.HasPrefix(url, "mieru://"):
-				return makeTarGz(t, "mita", []byte("#!mita\n")), nil
-			case strings.HasPrefix(url, "warp://"):
-				return makeTarGz(t, "sing-box", []byte("#!sing-box\n")), nil
+			switch url {
+			case "hysteria://binary":
+				return hysteriaBody, nil
+			case "hysteria://checksums":
+				return fakeRuntimeChecksum("hysteria-linux-amd64", hysteriaBody), nil
+			case "mieru://archive":
+				return mieruArchive, nil
+			case "mieru://checksums":
+				return fakeRuntimeChecksum(mieruAsset, mieruArchive), nil
+			case "warp://archive":
+				return warpArchive, nil
 			default:
 				return nil, fmt.Errorf("unexpected download url %s", url)
 			}
@@ -803,32 +819,54 @@ func TestInstallAllRuntimesInstallsAllRuntimesWithInjectedProviders(t *testing.T
 func TestInstallAllRuntimesDefaultsToAmd64(t *testing.T) {
 	binDir := t.TempDir()
 	ctx := context.Background()
+	hysteriaBody := []byte("#!hysteria\n")
+	mieruAsset := "mita_3.34.1_linux_amd64.tar.gz"
+	mieruArchive := makeTarGz(t, "mita", []byte("#!mita\n"))
+	warpAsset := "sing-box-1.13.14-linux-amd64.tar.gz"
+	warpArchive := makeTarGz(t, "sing-box", []byte("#!sing-box\n"))
 
 	opts := runtimeinstall.Options{
-		BinDir: binDir,
+		BinDir:             binDir,
+		RunVersion:         fakeProtocolRuntimeVersion,
+		ReadGoBuildInfo:    fakeOlcrtcBuildInfo,
+		VerifyPinnedSHA256: func([]byte, string) error { return nil },
 		// Leave Arch empty so InstallAllRuntimes falls back to the default.
 		FetchRelease: func(ctx context.Context, repo string) (*runtimeinstall.Release, error) {
+			var tag string
 			var assets []runtimeinstall.Asset
 			switch repo {
 			case "apernet/hysteria":
-				assets = []runtimeinstall.Asset{{Name: "hysteria-linux-amd64", BrowserDownloadURL: "hysteria://binary"}}
+				tag = "app/v2.10.0"
+				assets = []runtimeinstall.Asset{
+					{Name: "hysteria-linux-amd64", BrowserDownloadURL: "hysteria://binary"},
+					{Name: "hashes.txt", BrowserDownloadURL: "hysteria://checksums"},
+				}
 			case "enfein/mieru":
-				assets = []runtimeinstall.Asset{{Name: "mita_2.0.0_linux_amd64.tar.gz", BrowserDownloadURL: "mieru://archive"}}
+				tag = "v3.34.1"
+				assets = []runtimeinstall.Asset{
+					{Name: mieruAsset, BrowserDownloadURL: "mieru://archive"},
+					{Name: mieruAsset + ".sha256.txt", BrowserDownloadURL: "mieru://checksums"},
+				}
 			case "SagerNet/sing-box":
-				assets = []runtimeinstall.Asset{{Name: "sing-box-1.0.0-linux-amd64.tar.gz", BrowserDownloadURL: "warp://archive"}}
+				tag = "v1.13.14"
+				assets = []runtimeinstall.Asset{{Name: warpAsset, BrowserDownloadURL: "warp://archive"}}
 			default:
 				return nil, fmt.Errorf("unexpected repo %s", repo)
 			}
-			return &runtimeinstall.Release{TagName: "v1", Assets: assets}, nil
+			return &runtimeinstall.Release{TagName: tag, Assets: assets}, nil
 		},
 		Download: func(ctx context.Context, url string) ([]byte, error) {
-			switch {
-			case strings.HasPrefix(url, "hysteria://"):
-				return []byte("#!bin\n"), nil
-			case strings.HasPrefix(url, "mieru://"):
-				return makeTarGz(t, "mita", []byte("#!mita\n")), nil
-			case strings.HasPrefix(url, "warp://"):
-				return makeTarGz(t, "sing-box", []byte("#!sing-box\n")), nil
+			switch url {
+			case "hysteria://binary":
+				return hysteriaBody, nil
+			case "hysteria://checksums":
+				return fakeRuntimeChecksum("hysteria-linux-amd64", hysteriaBody), nil
+			case "mieru://archive":
+				return mieruArchive, nil
+			case "mieru://checksums":
+				return fakeRuntimeChecksum(mieruAsset, mieruArchive), nil
+			case "warp://archive":
+				return warpArchive, nil
 			default:
 				return nil, fmt.Errorf("unexpected url %s", url)
 			}
@@ -911,18 +949,22 @@ func TestInstallAllRuntimesForSkipsPluginsWithoutRuntimeProvider(t *testing.T) {
 	r.Register(&mockRuntimeProvider{
 		mockPlugin: &mockPlugin{protocol: "demo", displayName: "Demo"},
 		runtime: runtimeinstall.Runtime{
-			Name:       "demo",
-			Binary:     "demo",
-			Method:     runtimeinstall.MethodRawBinary,
-			Repo:       "demo/repo",
+			Name:    "demo",
+			Binary:  "demo",
+			Method:  runtimeinstall.MethodRawBinary,
+			Repo:    "demo/repo",
+			Version: "v1", Integrity: "pinned-sha256", PinnedSHA256: "3895990f283af92fd6d8e40e20f6fde1726bfd2172f3b9cc67322ceb6bffa8c2",
+			VersionArgs: []string{"--version"}, VersionCommand: "demo --version", VersionPattern: `v1`,
 			AssetMatch: func(name string) bool { return name == "demo" },
 		},
 	})
 
 	called := false
 	opts := runtimeinstall.Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:             binDir,
+		Arch:               "amd64",
+		RunVersion:         fakeProtocolRuntimeVersion,
+		VerifyPinnedSHA256: func([]byte, string) error { return nil },
 		FetchRelease: func(ctx context.Context, repo string) (*runtimeinstall.Release, error) {
 			switch repo {
 			case "demo/repo":
@@ -930,8 +972,8 @@ func TestInstallAllRuntimesForSkipsPluginsWithoutRuntimeProvider(t *testing.T) {
 					{Name: "demo", BrowserDownloadURL: "demo://binary"},
 				}}, nil
 			case "SagerNet/sing-box":
-				return &runtimeinstall.Release{TagName: "v1", Assets: []runtimeinstall.Asset{
-					{Name: "sing-box-1.0.0-linux-amd64.tar.gz", BrowserDownloadURL: "warp://archive"},
+				return &runtimeinstall.Release{TagName: "v1.13.14", Assets: []runtimeinstall.Asset{
+					{Name: "sing-box-1.13.14-linux-amd64.tar.gz", BrowserDownloadURL: "warp://archive"},
 				}}, nil
 			default:
 				return nil, fmt.Errorf("unexpected repo %s", repo)

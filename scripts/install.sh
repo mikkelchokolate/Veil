@@ -230,14 +230,28 @@ esac
 
 asset="veil_${os}_${arch}.tar.gz"
 base_url="https://github.com/${REPO}/releases"
-# URL shape for latest installs: https://github.com/<owner>/<repo>/releases/latest/download/<asset>
 if [[ "${VERSION}" == "latest" ]]; then
-  download_url="${base_url}/latest/download/${asset}"
-  checksums_url="${base_url}/latest/download/checksums.txt"
-else
-  download_url="${base_url}/download/${VERSION}/${asset}"
-  checksums_url="${base_url}/download/${VERSION}/checksums.txt"
+  latest_url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${base_url}/latest")"
+  VERSION="${latest_url##*/}"
 fi
+if [[ ! "${VERSION}" =~ ^v[0-9][A-Za-z0-9._+-]*$ ]]; then
+  echo "Refusing non-canonical release tag: ${VERSION}" >&2
+  exit 1
+fi
+if ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign is required to verify Veil release signatures; no insecure fallback is available" >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to validate Veil SLSA provenance" >&2
+  exit 1
+fi
+
+download_url="${base_url}/download/${VERSION}/${asset}"
+checksums_url="${base_url}/download/${VERSION}/checksums.txt"
+checksums_bundle_url="${base_url}/download/${VERSION}/checksums.txt.bundle"
+provenance_url="${base_url}/download/${VERSION}/veil.provenance.json"
+provenance_bundle_url="${base_url}/download/${VERSION}/veil.provenance.json.bundle"
 
 tmpdir="$(mktemp -d)"
 cleanup() {
@@ -247,12 +261,61 @@ trap cleanup EXIT
 
 archive="${tmpdir}/${asset}"
 checksums="${tmpdir}/checksums.txt"
+checksums_bundle="${tmpdir}/checksums.txt.bundle"
+provenance="${tmpdir}/veil.provenance.json"
+provenance_bundle="${tmpdir}/veil.provenance.json.bundle"
 
 echo "Downloading Veil ${VERSION} for ${os}/${arch} from ${REPO}..."
 curl -fsSL "${download_url}" -o "${archive}"
 curl -fsSL "${checksums_url}" -o "${checksums}"
+curl -fsSL "${checksums_bundle_url}" -o "${checksums_bundle}"
+curl -fsSL "${provenance_url}" -o "${provenance}"
+curl -fsSL "${provenance_bundle_url}" -o "${provenance_bundle}"
 
-# Verify checksum with a uniqueness guard so a forged duplicate cannot mask the expected asset.
+identity="https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${VERSION}"
+cosign verify-blob --bundle "${checksums_bundle}" \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity="${identity}" \
+  "${checksums}"
+cosign verify-blob --bundle "${provenance_bundle}" \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity="${identity}" \
+  "${provenance}"
+
+ASSET="${asset}" ARCHIVE="${archive}" CHECKSUMS="${checksums}" PROVENANCE="${provenance}" \
+REPOSITORY="${REPO}" RELEASE_TAG="${VERSION}" WORKFLOW_IDENTITY="${identity}" python3 - <<'PY'
+import hashlib, json, os
+
+def digest(path):
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+with open(os.environ["PROVENANCE"], "r", encoding="utf-8") as handle:
+    statement = json.load(handle)
+if statement.get("_type") != "https://in-toto.io/Statement/v1":
+    raise SystemExit("invalid in-toto statement type")
+if statement.get("predicateType") != "https://slsa.dev/provenance/v1":
+    raise SystemExit("invalid SLSA provenance predicate")
+predicate = statement.get("predicate", {})
+build = predicate.get("buildDefinition", {})
+params = build.get("externalParameters", {})
+if params.get("repository") != "https://github.com/" + os.environ["REPOSITORY"]:
+    raise SystemExit("provenance repository mismatch")
+if params.get("ref") != "refs/tags/" + os.environ["RELEASE_TAG"]:
+    raise SystemExit("provenance tag/ref mismatch")
+if predicate.get("runDetails", {}).get("builder", {}).get("id") != os.environ["WORKFLOW_IDENTITY"]:
+    raise SystemExit("provenance workflow identity mismatch")
+subjects = {item.get("name"): item.get("digest", {}).get("sha256") for item in statement.get("subject", [])}
+expected = {
+    os.environ["ASSET"]: digest(os.environ["ARCHIVE"]),
+    "checksums.txt": digest(os.environ["CHECKSUMS"]),
+}
+for name, value in expected.items():
+    if subjects.get(name) != value:
+        raise SystemExit("provenance subject digest mismatch for " + name)
+PY
+
+# Trust checksums only after independent cosign identity and SLSA provenance verification.
 (
   cd "${tmpdir}"
   count=$(awk -v asset="${asset}" '$2 == asset { count++ } END { print count+0 }' checksums.txt)

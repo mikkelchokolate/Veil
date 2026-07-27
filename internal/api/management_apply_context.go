@@ -292,9 +292,9 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 	}
 	ctx.state.orphanedUnits = nil
 
-	// Synchronize firewall rules for the panel and enabled inbounds. This is
-	// intentionally non-fatal: a firewall misconfiguration should not roll back
-	// an otherwise successful apply.
+	// Synchronize the complete firewall rule set for the panel and enabled
+	// inbounds. A failure is a failed service action: applyflow restores the
+	// promoted configs and runtime services instead of reporting success.
 	results = append(results, ctx.syncFirewallLocked()...)
 
 	return results

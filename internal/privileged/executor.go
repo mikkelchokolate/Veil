@@ -20,6 +20,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
@@ -28,6 +29,7 @@ const (
 	maxBackupPassphraseBytes int64 = 64 * 1024
 	maxUpdateArchiveBytes    int64 = 64 * 1024 * 1024
 	maxChecksumsBytes        int64 = 1024 * 1024
+	maxReleaseEvidenceBytes  int64 = 8 * 1024 * 1024
 )
 
 // Test hooks for functions that touch global runtime state or external
@@ -99,6 +101,7 @@ type ProductionConfig struct {
 	UpdateWorkflow             func(context.Context, ResolvedUpdate) (UpdateResult, error)
 	RotateKeyWorkflow          func(context.Context) error
 	RecoverKeyRotationWorkflow func(context.Context) error
+	ReleaseVerifier            func(releaseverify.Evidence) error
 	Now                        func() time.Time
 }
 
@@ -119,6 +122,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	}
 	if config.RunCommand == nil {
 		config.RunCommand = runProductionCommand
+	}
+	if config.ReleaseVerifier == nil {
+		config.ReleaseVerifier = releaseverify.Verify
 	}
 	if config.BackupWorkflow == nil {
 		config.BackupWorkflow = func(ctx context.Context, request ResolvedBackup) (BackupResult, error) {
@@ -222,28 +228,26 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		},
 		RecoverKeyRotation: config.RecoverKeyRotationWorkflow,
 		Firewall: func(ctx context.Context, request ResolvedFirewall) (FirewallResult, error) {
-			result := FirewallResult{}
-			for _, id := range request.RuleIDs {
-				command, ok := config.FirewallCommands[id]
-				if !ok || len(command) == 0 {
-					return FirewallResult{}, fmt.Errorf("firewall rule %q has no production command", id)
-				}
-				if _, err := config.RunCommand(ctx, append([]string(nil), command...), 30*time.Second); err != nil {
-					return FirewallResult{}, err
-				}
-				result.AppliedRuleIDs = append(result.AppliedRuleIDs, id)
-			}
-			rulesResult, err := runFirewallRules(ctx, config.RunCommand, ResolvedFirewall{Rules: request.Rules})
-			if err != nil {
-				return FirewallResult{}, err
-			}
-			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rulesResult.AppliedRuleIDs...)
-			if len(result.AppliedRuleIDs) > 0 {
-				if _, err := config.RunCommand(ctx, []string{"ufw", "reload"}, 30*time.Second); err != nil {
-					return FirewallResult{}, fmt.Errorf("reload ufw: %w", err)
+			resolved := ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: append([]FirewallRule(nil), request.Rules...)}
+			if len(resolved.RuleIDs) > 0 && len(resolved.Rules) == 0 {
+				for _, id := range resolved.RuleIDs {
+					command, ok := config.FirewallCommands[id]
+					if !ok || len(command) < 3 || command[0] != "ufw" {
+						return FirewallResult{}, fmt.Errorf("firewall rule %q has no validated production ufw command", id)
+					}
+					resolved.Rules = append(resolved.Rules, FirewallRule{Command: "ufw", Args: append([]string(nil), command[1:]...)})
 				}
 			}
-			return result, nil
+			if len(resolved.Rules) > 0 && len(resolved.RuleIDs) == 0 {
+				for _, rule := range resolved.Rules {
+					id := "dynamic"
+					if len(rule.Args) >= 2 {
+						id += ":" + rule.Args[1]
+					}
+					resolved.RuleIDs = append(resolved.RuleIDs, id)
+				}
+			}
+			return runFirewallRules(ctx, config.RunCommand, resolved)
 		},
 		Update: config.UpdateWorkflow,
 		RestartPanel: func(ctx context.Context) error {
@@ -265,6 +269,30 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	if err != nil {
 		return UpdateResult{}, fmt.Errorf("read staged checksums: %w", err)
 	}
+	checksumsBundle, err := readBoundedRegularFile(request.ChecksumsBundlePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged checksum bundle: %w", err)
+	}
+	provenance, err := readBoundedRegularFile(request.ProvenancePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged provenance: %w", err)
+	}
+	provenanceBundle, err := readBoundedRegularFile(request.ProvenanceBundlePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged provenance bundle: %w", err)
+	}
+	if config.ReleaseVerifier == nil {
+		return UpdateResult{}, errors.New("release verifier is not configured")
+	}
+	if err := config.ReleaseVerifier(releaseverify.Evidence{
+		Repository:   updateflow.RepoOwner + "/" + updateflow.RepoName,
+		WorkflowPath: ".github/workflows/release.yml", ReleaseTag: request.Version,
+		ArchiveName: updateflow.AssetName(), Archive: archive,
+		ChecksumsName: "checksums.txt", Checksums: checksums, ChecksumsBundle: checksumsBundle,
+		Provenance: provenance, ProvenanceBundle: provenanceBundle,
+	}); err != nil {
+		return UpdateResult{}, fmt.Errorf("verify staged release provenance: %w", err)
+	}
 	if err := updateflow.VerifyAssetChecksum(archive, updateflow.AssetName(), string(checksums)); err != nil {
 		return UpdateResult{}, fmt.Errorf("verify staged update: %w", err)
 	}
@@ -278,8 +306,9 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	if _, err := updateflow.ReplaceBinaryFromArchive(binaryPath, archive, true); err != nil {
 		return UpdateResult{}, fmt.Errorf("install staged update: %w", err)
 	}
-	_ = os.Remove(request.Path)
-	_ = os.Remove(request.ChecksumsPath)
+	for _, path := range []string{request.Path, request.ChecksumsPath, request.ChecksumsBundlePath, request.ProvenancePath, request.ProvenanceBundlePath} {
+		_ = os.Remove(path)
+	}
 	return UpdateResult{
 		ArtifactID: request.ArtifactID,
 		Staged:     true,
@@ -354,32 +383,7 @@ func runProductionCommand(ctx context.Context, command []string, timeout time.Du
 }
 
 func runFirewallRules(ctx context.Context, runCommand CommandRunner, request ResolvedFirewall) (FirewallResult, error) {
-	result := FirewallResult{}
-	for _, id := range request.RuleIDs {
-		_ = id
-	}
-	if len(request.Rules) == 0 {
-		return result, nil
-	}
-	status, err := runCommand(ctx, []string{"ufw", "status"}, 15*time.Second)
-	if err != nil {
-		return FirewallResult{}, fmt.Errorf("read ufw status: %w", err)
-	}
-	if !strings.Contains(status, "Status: active") {
-		if _, err := runCommand(ctx, []string{"ufw", "--force", "enable"}, 15*time.Second); err != nil {
-			return FirewallResult{}, fmt.Errorf("enable ufw: %w", err)
-		}
-	}
-	for _, rule := range request.Rules {
-		output, err := runCommand(ctx, append([]string{"ufw"}, rule.Args...), 15*time.Second)
-		if err != nil && !isUFWDuplicateRule(output) {
-			return FirewallResult{}, fmt.Errorf("ufw %v: %w", rule.Args, err)
-		}
-		if len(rule.Args) >= 2 {
-			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rule.Args[1])
-		}
-	}
-	return result, nil
+	return reconcileUFW(ctx, runCommand, request)
 }
 
 func isUFWDuplicateRule(output string) bool {

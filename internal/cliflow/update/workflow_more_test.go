@@ -18,12 +18,13 @@ func newValidWorkflowDeps(t *testing.T) (WorkflowDependencies, []byte) {
 	hash := sha256.Sum256(archive)
 	assetName := AssetName()
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), assetName))
-	release := &Release{TagName: "v1.2.4", Assets: []Asset{
+	release := &Release{TagName: "v1.2.4", Assets: append([]Asset{
 		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
 		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}
+	}, testReleaseEvidenceAssets()...)}
 	return WorkflowDependencies{
-		FetchRelease: func() (*Release, error) { return release, nil },
+		FetchRelease:          func() (*Release, error) { return release, nil },
+		VerifyReleaseEvidence: acceptTestReleaseEvidence,
 		DownloadAsset: func(url string) ([]byte, error) {
 			if strings.Contains(url, "checksums") {
 				return checksums, nil

@@ -36,10 +36,7 @@ func TestReleaseAssetsReturnsErrorWhenChecksumsMissing(t *testing.T) {
 
 func TestReleaseAssetsReturnsErrorWhenArchiveDownloadFails(t *testing.T) {
 	assetName := AssetName()
-	assets := NewReleaseAssets(&Release{TagName: "v1.0.0", Assets: []Asset{
-		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
-		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}, func(url string) ([]byte, error) {
+	assets := newTestReleaseAssets(assetName, func(url string) ([]byte, error) {
 		if url == "https://example.com/archive" {
 			return nil, errors.New("network down")
 		}
@@ -54,10 +51,7 @@ func TestReleaseAssetsReturnsErrorWhenArchiveDownloadFails(t *testing.T) {
 
 func TestReleaseAssetsReturnsErrorWhenChecksumsDownloadFails(t *testing.T) {
 	assetName := AssetName()
-	assets := NewReleaseAssets(&Release{TagName: "v1.0.0", Assets: []Asset{
-		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
-		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}, func(url string) ([]byte, error) {
+	assets := newTestReleaseAssets(assetName, func(url string) ([]byte, error) {
 		if url == "https://example.com/checksums" {
 			return nil, errors.New("network down")
 		}
@@ -72,10 +66,7 @@ func TestReleaseAssetsReturnsErrorWhenChecksumsDownloadFails(t *testing.T) {
 
 func TestReleaseAssetsReturnsErrorWhenChecksumVerificationFails(t *testing.T) {
 	assetName := AssetName()
-	assets := NewReleaseAssets(&Release{TagName: "v1.0.0", Assets: []Asset{
-		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
-		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}, func(url string) ([]byte, error) {
+	assets := newTestReleaseAssets(assetName, func(url string) ([]byte, error) {
 		if url == "https://example.com/archive" {
 			return []byte("archive"), nil
 		}

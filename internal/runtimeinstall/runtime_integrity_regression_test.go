@@ -19,7 +19,12 @@ func TestInstallRejectsRuntimeReleaseWhenChecksumAssetIsMissing(t *testing.T) {
 		AssetMatch: func(name string) bool {
 			return name == "unsigned-runtime-linux-amd64"
 		},
-		ChecksumMatch: func(string) bool { return false },
+		ChecksumMatch:  func(string) bool { return false },
+		Version:        "v1.2.3",
+		Integrity:      "upstream-checksum",
+		VersionArgs:    []string{"--version"},
+		VersionCommand: "test-runtime --version",
+		VersionPattern: `1\.2\.3`,
 	}
 	result := Install(context.Background(), Options{
 		BinDir: t.TempDir(),
@@ -41,10 +46,15 @@ func TestInstallRejectsInstalledBinaryVersionMismatchBeforePublication(t *testin
 	checksums := []byte(fmt.Sprintf("%s  %s\n", sha256Hex(binary), assetName))
 	binDir := t.TempDir()
 	runtime := Runtime{
-		Name:   "versioned-runtime",
-		Binary: "versioned-runtime",
-		Method: MethodRawBinary,
-		Repo:   "example/versioned-runtime",
+		Name:           "versioned-runtime",
+		Binary:         "versioned-runtime",
+		Method:         MethodRawBinary,
+		Repo:           "example/versioned-runtime",
+		Version:        expectedTag,
+		Integrity:      "upstream-checksum",
+		VersionArgs:    []string{"--version"},
+		VersionCommand: "test-runtime --version",
+		VersionPattern: `1\.2\.3`,
 		AssetMatch: func(name string) bool {
 			return name == assetName
 		},
@@ -79,12 +89,17 @@ func TestSuccessfulRuntimeInstallRecordsActualDigestAndVerifiedUpstreamVersion(t
 	assetName := "runtime-linux-amd64"
 	checksums := []byte(fmt.Sprintf("%s  %s\n", sha256Hex(binary), assetName))
 	runtime := Runtime{
-		Name:          "versioned-runtime",
-		Binary:        "versioned-runtime",
-		Method:        MethodRawBinary,
-		Repo:          "example/versioned-runtime",
-		AssetMatch:    func(name string) bool { return name == assetName },
-		ChecksumMatch: func(name string) bool { return name == "checksums.txt" },
+		Name:           "versioned-runtime",
+		Binary:         "versioned-runtime",
+		Method:         MethodRawBinary,
+		Repo:           "example/versioned-runtime",
+		Version:        "v1.2.3",
+		Integrity:      "upstream-checksum",
+		VersionArgs:    []string{"--version"},
+		VersionCommand: "test-runtime --version",
+		VersionPattern: `1\.2\.3`,
+		AssetMatch:     func(name string) bool { return name == assetName },
+		ChecksumMatch:  func(name string) bool { return name == "checksums.txt" },
 	}
 	result := Install(context.Background(), Options{
 		BinDir: t.TempDir(),

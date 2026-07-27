@@ -309,12 +309,20 @@ jobs:
           path: .
           format: spdx-json
           output-file: dist/veil.sbom.spdx.json
+      - name: Generate SLSA v1 release provenance
+        run: |
+          python3 scripts/release-provenance.py \
+            --dist dist \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${GITHUB_REF_NAME}" \
+            --commit "${GITHUB_SHA}" \
+            --output dist/veil.provenance.json
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign checksums and SBOM (keyless)
         run: |
           set -euo pipefail
-          for f in dist/checksums.txt dist/veil.sbom.spdx.json; do
+          for f in dist/checksums.txt dist/veil.sbom.spdx.json dist/veil.provenance.json; do
             cosign sign-blob --yes \
               --bundle "${f}.bundle" \
               "${f}"
@@ -325,6 +333,7 @@ jobs:
           subject-path: |
             dist/checksums.txt
             dist/veil.sbom.spdx.json
+            dist/veil.provenance.json
             dist/veil_linux_*.tar.gz
             dist/*.deb
             dist/*.rpm

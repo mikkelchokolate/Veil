@@ -6,6 +6,7 @@ import (
 	"os"
 
 	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -23,6 +24,7 @@ type WorkflowOptions struct {
 type WorkflowDependencies struct {
 	FetchRelease             func() (*Release, error)
 	DownloadAsset            func(string) ([]byte, error)
+	VerifyReleaseEvidence    func(releaseverify.Evidence) error
 	Executable               func() (string, error)
 	ReplaceBinaryFromArchive func(currentPath string, archive []byte, yes bool) (string, error)
 	RestartUpdated           func(currentPath string, backupPath string, opts WorkflowOptions) error
@@ -39,6 +41,9 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	}
 	if deps.DownloadAsset == nil {
 		return fmt.Errorf("update asset downloader is not configured")
+	}
+	if deps.VerifyReleaseEvidence == nil {
+		deps.VerifyReleaseEvidence = releaseverify.Verify
 	}
 	if deps.Executable == nil {
 		deps.Executable = os.Executable
@@ -76,7 +81,7 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	assetName := AssetName()
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
-	asset, err := NewReleaseAssets(release, deps.DownloadAsset).DownloadVerifiedArchive()
+	asset, err := NewReleaseAssetsWithVerifier(release, deps.DownloadAsset, deps.VerifyReleaseEvidence).DownloadVerifiedArchive()
 	if err != nil {
 		return err
 	}

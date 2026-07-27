@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 
 	"testing"
 	"time"
@@ -25,21 +27,39 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 	if m.failAt == call {
 		return "injected ufw failure", errors.New("injected ufw failure")
 	}
-	if len(command) < 2 || command[0] != "ufw" {
+	normalized := command
+	if len(normalized) >= 4 && normalized[0] == "env" {
+		normalized = normalized[3:]
+	}
+	if len(normalized) < 2 || normalized[0] != "ufw" {
 		return "", fmt.Errorf("unexpected command %v", command)
 	}
+	command = normalized
 	switch command[1] {
 	case "status":
+		var output strings.Builder
 		if m.localized {
 			if m.enabled {
-				return "Состояние: включён", nil
+				output.WriteString("Состояние: включён\n")
+			} else {
+				output.WriteString("Состояние: выключен\n")
 			}
-			return "Состояние: выключен", nil
+		} else if m.enabled {
+			output.WriteString("Status: active\n")
+		} else {
+			output.WriteString("Status: inactive\n")
 		}
-		if m.enabled {
-			return "Status: active", nil
+		targets := make([]string, 0, len(m.rules))
+		for target := range m.rules {
+			targets = append(targets, target)
 		}
-		return "Status: inactive", nil
+		sort.Strings(targets)
+		for _, target := range targets {
+			fmt.Fprintf(&output, "%s ALLOW Anywhere # %s\n", target, m.rules[target])
+		}
+		return output.String(), nil
+	case "--dry-run":
+		return "dry-run ok", nil
 	case "--force":
 		if len(command) >= 3 && command[2] == "enable" {
 			m.enabled = true
@@ -78,7 +98,7 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 }
 
 func TestFirewallFailureAtEveryCommandRestoresRulesAndEnabledState(t *testing.T) {
-	for failAt := 1; failAt <= 5; failAt++ {
+	for failAt := 1; failAt <= 8; failAt++ {
 		t.Run(fmt.Sprintf("command-%d", failAt), func(t *testing.T) {
 			initialRules := map[string]string{"22/tcp": "OpenSSH", "9999/tcp": "Veil stale"}
 			model := &transactionalUFWModel{rules: cloneFirewallRules(initialRules), failAt: failAt}

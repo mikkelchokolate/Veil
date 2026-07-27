@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 )
 
 func TestPanelUpdateStagerPersistsVerifiedArchiveAndChecksums(t *testing.T) {
@@ -24,6 +25,9 @@ func TestPanelUpdateStagerPersistsVerifiedArchiveAndChecksums(t *testing.T) {
 			return &updateflow.Release{TagName: "v0.6.0", Assets: []updateflow.Asset{
 				{Name: updateflow.AssetName(), BrowserDownloadURL: "https://example.invalid/archive"},
 				{Name: "checksums.txt", BrowserDownloadURL: "https://example.invalid/checksums"},
+				{Name: "checksums.txt.bundle", BrowserDownloadURL: "https://example.invalid/checksums.bundle"},
+				{Name: "veil.provenance.json", BrowserDownloadURL: "https://example.invalid/provenance"},
+				{Name: "veil.provenance.json.bundle", BrowserDownloadURL: "https://example.invalid/provenance.bundle"},
 			}}, nil
 		},
 		download: func(_ context.Context, url string) ([]byte, error) {
@@ -33,9 +37,10 @@ func TestPanelUpdateStagerPersistsVerifiedArchiveAndChecksums(t *testing.T) {
 			case "https://example.invalid/checksums":
 				return checksums, nil
 			default:
-				return nil, fmt.Errorf("unexpected URL %s", url)
+				return []byte("signed-evidence"), nil
 			}
 		},
+		verify: func(releaseverify.Evidence) error { return nil },
 	}
 
 	version, err := stager.Stage(context.Background())
