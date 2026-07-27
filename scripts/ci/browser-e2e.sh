@@ -28,6 +28,7 @@ WORK="${CI_ARTIFACT_DIR}/browser-e2e"
 mkdir -p "${WORK}"
 PANEL_WORK="$(mktemp -d /tmp/veil-browser-e2e.XXXXXX)"
 chmod 0755 "${PANEL_WORK}"
+BROWSER_HELPER_SOCKET=/run/veil/helper-browser.sock
 
 ci_step "web/dist (embedded into the binary)"
 (cd web && pnpm install --frozen-lockfile && pnpm build)
@@ -62,6 +63,7 @@ cleanup_panels() {
   for pid in "${PIDS[@]:-}"; do
     if [ -n "${pid}" ]; then ${SUDO} kill "${pid}" 2>/dev/null || true; fi
   done
+  ${SUDO} rm -f "${BROWSER_HELPER_SOCKET}"
   ${SUDO} rm -rf "${PANEL_WORK}"
 }
 trap cleanup_panels EXIT
@@ -86,7 +88,7 @@ start_panel() { # <name> <listen-args...>
     VEIL_KEY_PATH="${root}/etc/state.key" \
     VEIL_APPLY_ROOT="${root}/apply" \
     VEIL_LIVE_ROOT="${root}/live" \
-    VEIL_HELPER_SOCKET=/run/veil/helper.sock \
+    VEIL_HELPER_SOCKET="${BROWSER_HELPER_SOCKET}" \
     VEIL_API_TOKEN=browser-e2e-token \
     ./dist/veil serve "$@" >"${log_root}/panel.log" 2>&1 &
   PIDS+=($!)
@@ -109,6 +111,9 @@ if [ ! -S /run/veil/helper.sock ]; then
   ci_die "root helper socket did not appear"
 fi
 ${SUDO} chgrp veil /run/veil/helper.sock
+${SUDO} rm -f "${BROWSER_HELPER_SOCKET}"
+${SUDO} ln /run/veil/helper.sock "${BROWSER_HELPER_SOCKET}"
+${SUDO} chgrp veil "${BROWSER_HELPER_SOCKET}"
 
 ci_step "start authenticated panel (:2096)"
 start_panel main --listen 127.0.0.1:2096
@@ -117,6 +122,9 @@ wait_health http://127.0.0.1:2096/healthz "${WORK}/main/panel.log"
 ci_step "start WebBasePath panel (:2097, /e2e-base-x9/)"
 start_panel pathed --listen 127.0.0.1:2097 --web-base-path /e2e-base-x9/
 wait_health http://127.0.0.1:2097/e2e-base-x9/healthz "${WORK}/pathed/panel.log"
+
+ci_step "detach browser helper alias after coherent startup"
+${SUDO} rm -f "${BROWSER_HELPER_SOCKET}"
 
 ci_step "start helper-backed panel (:2098, production layout)"
 # Backup operations are privileged: reproduce the production layout faithfully

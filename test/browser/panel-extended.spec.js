@@ -197,8 +197,9 @@ test.describe('Veil Panel — extended critical flows', () => {
   });
 
   test('failed apply job can be retried and produces a NEW job record', async ({ request }) => {
-    // The browser-gate panel has no privileged helper: every apply fails
-    // honestly at the firewall-sync step. A plain client mutation is enough
+    // The browser-gate Panel uses a helper alias for startup recovery, then
+    // the harness removes that alias. Every later apply therefore fails
+    // honestly at the privileged boundary. A plain client mutation is enough
     // to enqueue one.
     const stamp = Date.now();
     await createClientAPI(request, `e2e-apply-${stamp}`);
@@ -219,7 +220,7 @@ test.describe('Veil Panel — extended critical flows', () => {
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .not.toBeNull();
-    expect(latest.status, 'apply must fail without the privileged helper').toBe('failed');
+    expect(latest.status, 'apply must fail after the browser helper alias is detached').toBe('failed');
 
     // Retry creates a NEW job for the same desired revision; the old record
     // is immutable history.
@@ -231,9 +232,9 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(newJob.id).not.toBe(latest.id);
     expect(newJob.desiredRevision).toBe(latest.desiredRevision);
 
-    // The retried job also reaches a terminal state (still no helper ->
-    // failed again), proving the retry actually executed rather than being
-    // parked silently.
+    // The retried job also reaches a terminal state (the helper alias remains
+    // detached), proving the retry actually executed rather than being parked
+    // silently.
     await expect
       .poll(
         async () => {
