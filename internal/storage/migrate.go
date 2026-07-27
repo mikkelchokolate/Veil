@@ -168,6 +168,20 @@ ALTER TABLE revision_snapshots
   ADD COLUMN state_sha256 TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		version: 5,
+		name:    "immutable_apply_rollbacks",
+		sql: `
+CREATE TABLE apply_rollbacks (
+  id TEXT PRIMARY KEY,
+  selected_revision INTEGER NOT NULL,
+  new_revision INTEGER NOT NULL UNIQUE,
+  actor_id TEXT NOT NULL,
+  selected_snapshot_sha256 TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

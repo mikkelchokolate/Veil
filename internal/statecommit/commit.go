@@ -169,14 +169,16 @@ func snapshotClientRows(
 			ID: item.ID, Name: item.Name, Email: item.Email, Enabled: item.Enabled,
 			GroupID: item.GroupID, QuotaBytes: item.QuotaBytes, QuotaResetPolicy: item.QuotaResetPolicy,
 			QuotaResetAt: item.QuotaResetAt, ExpiresAt: item.ExpiresAt, DeviceLimit: item.DeviceLimit,
-			Depleted: item.Depleted, Version: item.Version,
+			Notes: item.Notes, Depleted: item.Depleted,
+			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})
 	}
 	bindingRows := make([]model.BindingSnapshot, 0, len(bindings))
 	for _, item := range bindings {
 		bindingRows = append(bindingRows, model.BindingSnapshot{
 			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID, Enabled: item.Enabled,
-			ProtocolSettings: item.ProtocolSettings, Version: item.Version,
+			ProtocolSettings: item.ProtocolSettings,
+			CreatedAt:        item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})
 	}
 	credentialRows := make([]model.CredentialSnapshot, 0, len(credentials))
@@ -184,6 +186,7 @@ func snapshotClientRows(
 		credentialRows = append(credentialRows, model.CredentialSnapshot{
 			ID: item.ID, BindingID: item.BindingID, Kind: item.Kind, EncryptedValue: item.EncryptedValue,
 			KeyVersion: item.KeyVersion, CredentialVersion: item.CredentialVersion,
+			CreatedAt: item.CreatedAt, RotatedAt: item.RotatedAt,
 		})
 	}
 	return clientRows, bindingRows, credentialRows

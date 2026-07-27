@@ -155,14 +155,14 @@ func clientSnapshotRows(
 			ID: c.ID, Name: c.Name, Email: c.Email, Enabled: c.Enabled,
 			GroupID: c.GroupID, QuotaBytes: c.QuotaBytes, QuotaResetPolicy: c.QuotaResetPolicy,
 			QuotaResetAt: c.QuotaResetAt, ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit,
-			Depleted: c.Depleted, Version: c.Version,
+			Notes: c.Notes, Depleted: c.Depleted, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, Version: c.Version,
 		})
 	}
 	bs := make([]model.BindingSnapshot, 0, len(bindings))
 	for _, b := range bindings {
 		bs = append(bs, model.BindingSnapshot{
 			ID: b.ID, ClientID: b.ClientID, InboundID: b.InboundID, Enabled: b.Enabled,
-			ProtocolSettings: b.ProtocolSettings, Version: b.Version,
+			ProtocolSettings: b.ProtocolSettings, CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt, Version: b.Version,
 		})
 	}
 	ks := make([]model.CredentialSnapshot, 0, len(creds))
@@ -170,6 +170,7 @@ func clientSnapshotRows(
 		ks = append(ks, model.CredentialSnapshot{
 			ID: c.ID, BindingID: c.BindingID, Kind: c.Kind, EncryptedValue: c.EncryptedValue,
 			KeyVersion: c.KeyVersion, CredentialVersion: c.CredentialVersion,
+			CreatedAt: c.CreatedAt, RotatedAt: c.RotatedAt,
 		})
 	}
 	return cs, bs, ks

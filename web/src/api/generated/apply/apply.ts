@@ -66,6 +66,7 @@ import type {
   ApplyResponse,
   BadRequestResponse,
   GetApiApplyJobs200,
+  PostApiApplyRollbackBody,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
   ValidationFailedResponse
@@ -578,6 +579,136 @@ export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postA
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getPostApiApplyReconcileQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiApplyRollbackResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiApplyRollbackResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type postApiApplyRollbackResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiApplyRollbackResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postApiApplyRollbackResponseSuccess = (postApiApplyRollbackResponse200) & {
+  headers: Headers;
+};
+export type postApiApplyRollbackResponseError = (postApiApplyRollbackResponse400 | postApiApplyRollbackResponse404 | postApiApplyRollbackResponse409) & {
+  headers: Headers;
+};
+
+export type postApiApplyRollbackResponse = (postApiApplyRollbackResponseSuccess | postApiApplyRollbackResponseError)
+
+export const getPostApiApplyRollbackUrl = () => {
+
+
+
+
+  return `/api/apply/rollback`
+}
+
+/**
+ * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+ * @summary Create a new desired revision from an older immutable snapshot
+ */
+export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: RequestInit): Promise<postApiApplyRollbackResponse> => {
+
+  return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiApplyRollbackBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiApplyRollbackQueryKey = (postApiApplyRollbackBody?: PostApiApplyRollbackBody,) => {
+    return [
+    'POST', `/api/apply/rollback`, postApiApplyRollbackBody
+    ] as const;
+    }
+
+
+export const getPostApiApplyRollbackQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyRollback>>, TError = BadRequestResponse | void>(postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiApplyRollbackQueryKey(postApiApplyRollbackBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiApplyRollback>>> = ({ signal }) => postApiApplyRollback(postApiApplyRollbackBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiApplyRollbackQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApplyRollback>>>
+export type PostApiApplyRollbackQueryError = BadRequestResponse | void
+
+
+export function usePostApiApplyRollback<TData = Awaited<ReturnType<typeof postApiApplyRollback>>, TError = BadRequestResponse | void>(
+ postApiApplyRollbackBody: PostApiApplyRollbackBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyRollback>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyRollback>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyRollback<TData = Awaited<ReturnType<typeof postApiApplyRollback>>, TError = BadRequestResponse | void>(
+ postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiApplyRollback>>,
+          TError,
+          Awaited<ReturnType<typeof postApiApplyRollback>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiApplyRollback<TData = Awaited<ReturnType<typeof postApiApplyRollback>>, TError = BadRequestResponse | void>(
+ postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Create a new desired revision from an older immutable snapshot
+ */
+
+export function usePostApiApplyRollback<TData = Awaited<ReturnType<typeof postApiApplyRollback>>, TError = BadRequestResponse | void>(
+ postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiApplyRollbackQueryOptions(postApiApplyRollbackBody,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

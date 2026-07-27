@@ -182,7 +182,7 @@ func TestQuotaRolloverCallbackFailureRollsBackUsageAndClientState(t *testing.T) 
 
 func TestFixedIntervalQuotaPolicyIsRejectedUntilCanonicalIntervalExists(t *testing.T) {
 	quota := int64(100)
-	err := validate(Client{Name: "no-ambiguous-period", Enabled: true, QuotaBytes: &quota, QuotaResetPolicy: ResetFixedInterval})
+	err := validate(Client{Name: "no-ambiguous-period", Enabled: true, QuotaBytes: &quota, QuotaResetPolicy: "fixed_interval"})
 	if !errors.Is(err, ErrValidation) {
 		t.Fatalf("fixed_interval accepted without canonical interval/anchor: %v", err)
 	}

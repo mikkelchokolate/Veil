@@ -1456,6 +1456,43 @@ paths:
           description: '{"reconciled": ..., "applyJob": ..., "revision": ..., "state": ...}'
         "409":
           description: Another apply is active.
+  /api/apply/rollback:
+    post:
+      x-veil-role: admin-mutation
+      tags: [apply]
+      summary: Create a new desired revision from an older immutable snapshot
+      description: >-
+        Intentional rollback. Never decrements desired or applied revisions;
+        creates a new immutable desired revision and audit record.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - bearerAuth: []
+        - veilToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [selectedRevision, confirm]
+              properties:
+                selectedRevision:
+                  type: integer
+                  minimum: 1
+                confirm:
+                  type: boolean
+                  const: true
+      responses:
+        "200":
+          description: New desired revision and its apply outcome.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Selected immutable revision not found.
+        "409":
+          description: Selection is not older or another apply owns the lease.
   /api/apply:
     post:
       x-veil-role: admin-mutation

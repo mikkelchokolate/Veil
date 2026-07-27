@@ -53,6 +53,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/apply/jobs/{id}":                         {"get"},
 		"/api/apply/jobs/{id}/retry":                   {"post"},
 		"/api/apply/reconcile":                         {"post"},
+		"/api/apply/rollback":                          {"post"},
 		"/api/validation":                              {"post"},
 		"/api/apply/plan":                              {"post"},
 		"/api/apply/history":                           {"get"},

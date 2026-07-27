@@ -154,13 +154,32 @@ func initClientSubsystem(s *managementState) {
 	// the depleted state.
 	startReconciler := false
 	if s.trafficReconciler == nil {
-		s.trafficReconciler = client.NewReconciler(clientRepo, s.trafficStore, 0, func(clientID string, depleted bool) error {
+		s.trafficReconciler = client.NewTransactionalReconciler(clientRepo, s.trafficStore, 0, func(mutation client.QuotaMutation) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			if _, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
-				return tx.SetDepleted(clientID, depleted)
-			}); err != nil {
-				log.Printf("traffic: reconcile client %s depleted=%v: %v", clientID, depleted, err)
+			err := s.trafficStore.WithRecordLock(func() error {
+				_, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
+					if mutation.ResetPeriod {
+						if err := client.ResetQuotaPeriodTx(tx, mutation.ClientID); err != nil {
+							return err
+						}
+					}
+					current, err := tx.Get(mutation.ClientID)
+					if err != nil {
+						return err
+					}
+					current.Depleted = mutation.Depleted
+					if mutation.NextResetAt != nil {
+						next := *mutation.NextResetAt
+						current.QuotaResetAt = &next
+					}
+					_, err = tx.Update(current, current.Version)
+					return err
+				})
+				return err
+			})
+			if err != nil {
+				log.Printf("traffic: reconcile client %s depleted=%v reset=%v: %v", mutation.ClientID, mutation.Depleted, mutation.ResetPeriod, err)
 				return err
 			}
 			s.autoApplyResultLocked(nil, "system")

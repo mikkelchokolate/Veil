@@ -10,7 +10,11 @@ import (
 
 // ErrApplyBusy is returned when another apply job is already active. The apply
 // workflow is serialized: only one job mutates runtime at a time.
-var ErrApplyBusy = errors.New("apply: another apply job is active")
+var (
+	ErrApplyBusy        = errors.New("apply: another apply job is active")
+	ErrStaleRevision    = errors.New("apply: revision is not current desired")
+	ErrRevisionRollback = errors.New("apply: revision is below current applied")
+)
 
 // Result is the outcome of executing the underlying staged-apply pipeline for
 // one revision. Success is true only when the configuration was rendered,
@@ -65,6 +69,12 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (Job, error) {
 	rev, err := r.revisions.Get()
 	if err != nil {
 		return Job{}, err
+	}
+	if revision != rev.Desired {
+		return Job{}, fmt.Errorf("%w: requested=%d current=%d", ErrStaleRevision, revision, rev.Desired)
+	}
+	if revision < rev.Applied {
+		return Job{}, fmt.Errorf("%w: requested=%d applied=%d", ErrRevisionRollback, revision, rev.Applied)
 	}
 	job := Job{
 		ID:              uuid.NewString(),

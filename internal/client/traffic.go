@@ -19,14 +19,22 @@ type Sample struct {
 	ClientID      string // denormalized attribution; resolved when empty
 }
 
-// TrafficStore persists byte counters and bucketed samples. Counters are
-// absolute (client totals); samples are per-bucket deltas for history.
+// TrafficStore persists current-quota-period counters and lifetime bucketed
+// samples. A quota rollover resets only counters; analytics history remains.
 type TrafficStore struct {
 	db       *sql.DB
 	recordMu sync.Mutex
 }
 
 func NewTrafficStore(db *sql.DB) *TrafficStore { return &TrafficStore{db: db} }
+
+// WithRecordLock serializes quota rollover with sample recording. The callback
+// may open its own SQLite transaction; it must not call RecordSample.
+func (s *TrafficStore) WithRecordLock(fn func() error) error {
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	return fn()
+}
 
 // RecordSample attributes a sample to its binding/client, bumping the
 // absolute counter and writing a bucketed delta. For monotonic samples the
@@ -106,7 +114,7 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	return nil
 }
 
-// TotalsForClient returns absolute upload/download byte totals for a client.
+// TotalsForClient returns current quota-period upload/download usage.
 func (s *TrafficStore) TotalsForClient(clientID string) (upload, download int64, err error) {
 	row := s.db.QueryRow(`SELECT COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0)
 	  FROM traffic_counters WHERE client_id=?`, clientID)
@@ -116,15 +124,29 @@ func (s *TrafficStore) TotalsForClient(clientID string) (upload, download int64,
 	return upload, download, nil
 }
 
-// ResetForClient zeroes a client's cumulative counters and bucketed samples.
-// Called by the reconciler when a quota reset window rolls over so the new
-// period starts from a clean slate.
+// ResetForClient zeroes current-period usage while retaining lifetime samples.
 func (s *TrafficStore) ResetForClient(clientID string) error {
-	if _, err := s.db.Exec(`DELETE FROM traffic_counters WHERE client_id=?`, clientID); err != nil {
+	return s.WithRecordLock(func() error {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("client: begin quota reset transaction: %w", err)
+		}
+		defer tx.Rollback()
+		if err := ResetQuotaPeriodTx(tx, clientID); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("client: commit quota reset transaction: %w", err)
+		}
+		return nil
+	})
+}
+
+// ResetQuotaPeriodTx joins a caller-managed transaction. It intentionally does
+// not delete traffic_samples: those rows are lifetime analytics.
+func ResetQuotaPeriodTx(q DBTX, clientID string) error {
+	if _, err := q.Exec(`DELETE FROM traffic_counters WHERE client_id=?`, clientID); err != nil {
 		return fmt.Errorf("client: traffic reset counters: %w", err)
-	}
-	if _, err := s.db.Exec(`DELETE FROM traffic_samples WHERE client_id=?`, clientID); err != nil {
-		return fmt.Errorf("client: traffic reset samples: %w", err)
 	}
 	return nil
 }

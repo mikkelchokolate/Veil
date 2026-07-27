@@ -17,6 +17,7 @@ func (s *managementState) registerApplyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/apply/jobs", s.handleApplyJobs)
 	mux.HandleFunc("/api/apply/jobs/", s.handleApplyJobByID)
 	mux.HandleFunc("/api/apply/reconcile", s.handleApplyReconcile)
+	mux.HandleFunc("/api/apply/rollback", s.handleApplyRollback)
 }
 
 // handleApplyState returns desired/applied revisions and the derived system

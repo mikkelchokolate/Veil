@@ -91,6 +91,20 @@ export const PostApiApplyJobsIdRetryResponse = zod.unknown()
 export const PostApiApplyReconcileResponse = zod.unknown()
 
 /**
+ * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+ * @summary Create a new desired revision from an older immutable snapshot
+ */
+
+
+
+export const PostApiApplyRollbackBody = zod.object({
+  "selectedRevision": zod.number().min(1),
+  "confirm": zod.boolean()
+})
+
+export const PostApiApplyRollbackResponse = zod.unknown()
+
+/**
  * @summary Stage and optionally promote current management state
  */
 export const PostApiApplyBody = zod.object({

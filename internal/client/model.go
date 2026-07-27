@@ -9,11 +9,10 @@ import "time"
 
 // Quota reset policies.
 const (
-	ResetNever         = "never"
-	ResetDaily         = "daily"
-	ResetWeekly        = "weekly"
-	ResetMonthly       = "monthly"
-	ResetFixedInterval = "fixed_interval"
+	ResetNever   = "never"
+	ResetDaily   = "daily"
+	ResetWeekly  = "weekly"
+	ResetMonthly = "monthly"
 )
 
 // Client is the durable identity. ID is an immutable UUID; name is mutable and

@@ -66,6 +66,7 @@ import type {
   ApplyResponse,
   BadRequestResponse,
   GetApiApplyJobs200,
+  PostApiApplyRollbackBody,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
   ValidationFailedResponse
@@ -618,6 +619,106 @@ export const usePostApiApplyReconcile = <TError = void,
         TContext
       > => {
       return useMutation(getPostApiApplyReconcileMutationOptions(options), queryClient);
+    }
+    export type postApiApplyRollbackResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiApplyRollbackResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type postApiApplyRollbackResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiApplyRollbackResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postApiApplyRollbackResponseSuccess = (postApiApplyRollbackResponse200) & {
+  headers: Headers;
+};
+export type postApiApplyRollbackResponseError = (postApiApplyRollbackResponse400 | postApiApplyRollbackResponse404 | postApiApplyRollbackResponse409) & {
+  headers: Headers;
+};
+
+export type postApiApplyRollbackResponse = (postApiApplyRollbackResponseSuccess | postApiApplyRollbackResponseError)
+
+export const getPostApiApplyRollbackUrl = () => {
+
+
+
+
+  return `/api/apply/rollback`
+}
+
+/**
+ * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+ * @summary Create a new desired revision from an older immutable snapshot
+ */
+export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: RequestInit): Promise<postApiApplyRollbackResponse> => {
+
+  return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiApplyRollbackBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiApplyRollbackMutationOptions = <TError = BadRequestResponse | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext> => {
+
+const mutationKey = ['postApiApplyRollback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApplyRollback>>, {data: PostApiApplyRollbackBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiApplyRollback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiApplyRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyRollback>>>
+    export type PostApiApplyRollbackMutationBody = PostApiApplyRollbackBody
+    export type PostApiApplyRollbackMutationError = BadRequestResponse | void
+
+    /**
+ * @summary Create a new desired revision from an older immutable snapshot
+ */
+export const usePostApiApplyRollback = <TError = BadRequestResponse | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiApplyRollback>>,
+        TError,
+        {data: PostApiApplyRollbackBody},
+        TContext
+      > => {
+      return useMutation(getPostApiApplyRollbackMutationOptions(options), queryClient);
     }
     export type postApiApplyResponse200 = {
   data: ApplyResponse

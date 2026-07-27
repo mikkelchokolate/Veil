@@ -79,12 +79,13 @@ func (s *RevisionStore) MarkApplied(rev uint64) error {
 	if err := s.ensureRow(); err != nil {
 		return err
 	}
-	res, err := s.db.Exec(`UPDATE revisions SET applied_revision=? WHERE id=1 AND ? <= desired_revision`, rev, rev)
+	res, err := s.db.Exec(`UPDATE revisions SET applied_revision=?
+	  WHERE id=1 AND ? <= desired_revision AND ? >= applied_revision`, rev, rev, rev)
 	if err != nil {
 		return fmt.Errorf("apply: mark applied: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("apply: cannot mark applied revision %d beyond desired", rev)
+		return fmt.Errorf("apply: cannot move applied revision to %d outside [applied, desired]", rev)
 	}
 	return nil
 }

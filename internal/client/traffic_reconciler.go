@@ -1,22 +1,32 @@
 package client
 
 import (
+	"fmt"
+	"log"
 	"sync"
 	"time"
 )
 
-// Reconciler periodically marks clients as depleted when their cumulative
-// usage crosses their quota, and clears the flag when a reset policy window
-// rolls over. The onChange callback OWNS the depleted-flag write: callers
-// route it through the unified mutation orchestration (atomic flag flip +
-// desired-revision bump + immutable snapshot + one apply job). When onChange
-// is nil the reconciler flips the flag directly (standalone/test use).
+// QuotaMutation is one atomic quota-state transition. ResetPeriod clears only
+// current-period counters; NextResetAt is the first future UTC boundary.
+type QuotaMutation struct {
+	ClientID    string
+	Depleted    bool
+	ResetPeriod bool
+	NextResetAt *int64
+}
+
+// Reconciler periodically evaluates current-period usage. Production supplies
+// onMutation so counter reset, Client fields, revision and snapshot can share
+// one transaction. onChange is retained for compatibility with standalone
+// callers and is never used by the Panel production path.
 type Reconciler struct {
-	repo     *Repository
-	traffic  *TrafficStore
-	interval time.Duration
-	now      func() time.Time
-	onChange func(clientID string, depleted bool) error
+	repo       *Repository
+	traffic    *TrafficStore
+	interval   time.Duration
+	now        func() time.Time
+	onChange   func(clientID string, depleted bool) error
+	onMutation func(QuotaMutation) error
 
 	mu      sync.Mutex
 	running bool
@@ -25,71 +35,168 @@ type Reconciler struct {
 }
 
 func NewReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool) error) *Reconciler {
+	return newReconciler(repo, traffic, interval, onChange, nil)
+}
+
+func NewTransactionalReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onMutation func(QuotaMutation) error) *Reconciler {
+	return newReconciler(repo, traffic, interval, nil, onMutation)
+}
+
+func newReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool) error, onMutation func(QuotaMutation) error) *Reconciler {
 	if interval <= 0 {
 		interval = 60 * time.Second
 	}
-	return &Reconciler{repo: repo, traffic: traffic, interval: interval, now: time.Now, onChange: onChange}
+	return &Reconciler{
+		repo: repo, traffic: traffic, interval: interval, now: time.Now,
+		onChange: onChange, onMutation: onMutation,
+	}
 }
 
-// ReconcileOnce scans all clients and flips the depleted flag where usage has
-// crossed quota. Returns the number of clients whose state changed.
+// ReconcileOnce applies at most one atomic mutation per affected client.
 func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 	clients, _, err := r.repo.List(ListFilter{PageSize: 10000})
 	if err != nil {
 		return 0, err
 	}
-	now := r.now()
-	for _, c := range clients {
-		depleted, reset := r.evaluate(c, now)
-		if reset {
-			// Reset window rolled over: clear counters. The flag flip (when the
-			// client was depleted) goes through onChange like any other flip.
-			_ = r.traffic.ResetForClient(c.ID)
-			if c.Depleted {
-				if err := r.applyChange(c.ID, false); err != nil {
-					return changed, err
-				}
-				changed++
-			}
+	now := r.now().UTC()
+	for _, current := range clients {
+		mutation, needed, err := r.plan(current, now)
+		if err != nil {
+			return changed, err
+		}
+		if !needed {
 			continue
 		}
-		if depleted != c.Depleted {
-			if err := r.applyChange(c.ID, depleted); err != nil {
-				return changed, err
-			}
-			changed++
+		if err := r.applyMutation(mutation); err != nil {
+			return changed, err
 		}
+		changed++
 	}
 	return changed, nil
 }
 
-// applyChange performs the depleted-flag flip: through the owning callback
-// when one is attached (the callback persists the flag inside its atomic
-// mutation), or directly when running standalone.
-func (r *Reconciler) applyChange(clientID string, depleted bool) error {
-	if r.onChange != nil {
-		return r.onChange(clientID, depleted)
+func (r *Reconciler) plan(current Client, now time.Time) (QuotaMutation, bool, error) {
+	mutation := QuotaMutation{ClientID: current.ID, Depleted: current.Depleted}
+	if current.QuotaBytes == nil {
+		if current.Depleted {
+			mutation.Depleted = false
+			return mutation, true, nil
+		}
+		return QuotaMutation{}, false, nil
 	}
-	return r.repo.SetDepleted(clientID, depleted)
+
+	switch current.QuotaResetPolicy {
+	case "", ResetNever:
+	case ResetDaily, ResetWeekly, ResetMonthly:
+		if current.QuotaResetAt == nil {
+			next, err := nextQuotaBoundary(current.QuotaResetPolicy, now)
+			if err != nil {
+				return QuotaMutation{}, false, err
+			}
+			mutation.NextResetAt = &next
+		} else if now.Unix() >= *current.QuotaResetAt {
+			next, err := nextQuotaBoundary(current.QuotaResetPolicy, now)
+			if err != nil {
+				return QuotaMutation{}, false, err
+			}
+			mutation.Depleted = false
+			mutation.ResetPeriod = true
+			mutation.NextResetAt = &next
+			return mutation, true, nil
+		}
+	default:
+		return QuotaMutation{}, false, fmt.Errorf("client: unsupported quota reset policy %q", current.QuotaResetPolicy)
+	}
+
+	upload, download, err := r.traffic.TotalsForClient(current.ID)
+	if err != nil {
+		return QuotaMutation{}, false, err
+	}
+	mutation.Depleted = quotaReached(upload, download, *current.QuotaBytes)
+	return mutation, mutation.Depleted != current.Depleted || mutation.NextResetAt != nil, nil
 }
 
-// evaluate decides whether the client is depleted and whether a reset window
-// rolled over (so usage should reset to zero for the new period).
-func (r *Reconciler) evaluate(c Client, now time.Time) (depleted, reset bool) {
-	if c.QuotaBytes == nil {
-		return false, false
+func quotaReached(upload, download, quota int64) bool {
+	if quota <= 0 {
+		return true
 	}
-	// Reset rollover.
-	if c.QuotaResetPolicy != "" && c.QuotaResetPolicy != ResetNever {
-		if c.QuotaResetAt != nil && now.Unix() >= *c.QuotaResetAt {
-			return false, true
+	if upload >= quota || download >= quota {
+		return true
+	}
+	return upload >= 0 && download >= quota-upload
+}
+
+func nextQuotaBoundary(policy string, now time.Time) (int64, error) {
+	now = now.UTC()
+	var next time.Time
+	switch policy {
+	case ResetDaily:
+		next = time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	case ResetWeekly:
+		days := (int(time.Monday) - int(now.Weekday()) + 7) % 7
+		if days == 0 {
+			days = 7
+		}
+		next = time.Date(now.Year(), now.Month(), now.Day()+days, 0, 0, 0, 0, time.UTC)
+	case ResetMonthly:
+		next = time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return 0, fmt.Errorf("client: unsupported quota reset policy %q", policy)
+	}
+	return next.Unix(), nil
+}
+
+func (r *Reconciler) applyMutation(mutation QuotaMutation) error {
+	if r.onMutation != nil {
+		return r.onMutation(mutation)
+	}
+	// Compatibility callback runs before any period reset, so an error cannot
+	// leave counters reset while the Client mutation failed.
+	if r.onChange != nil {
+		if mutation.ResetPeriod {
+			if err := r.preflightPeriodReset(mutation.ClientID); err != nil {
+				return err
+			}
+		}
+		if err := r.onChange(mutation.ClientID, mutation.Depleted); err != nil {
+			return err
 		}
 	}
-	up, down, err := r.traffic.TotalsForClient(c.ID)
-	if err != nil {
-		return c.Depleted, false
-	}
-	return (up + down) >= *c.QuotaBytes, false
+	return r.applyDirect(mutation)
+}
+
+func (r *Reconciler) preflightPeriodReset(clientID string) error {
+	return r.traffic.WithRecordLock(func() error {
+		tx, err := r.repo.BeginTx()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		return ResetQuotaPeriodTx(tx, clientID)
+	})
+}
+
+func (r *Reconciler) applyDirect(mutation QuotaMutation) error {
+	return r.traffic.WithRecordLock(func() error {
+		return r.repo.WithTx(func(tx *Tx) error {
+			if mutation.ResetPeriod {
+				if err := ResetQuotaPeriodTx(tx, mutation.ClientID); err != nil {
+					return err
+				}
+			}
+			current, err := tx.Get(mutation.ClientID)
+			if err != nil {
+				return err
+			}
+			current.Depleted = mutation.Depleted
+			if mutation.NextResetAt != nil {
+				next := *mutation.NextResetAt
+				current.QuotaResetAt = &next
+			}
+			_, err = tx.Update(current, current.Version)
+			return err
+		})
+	})
 }
 
 // Start begins periodic reconciliation until Stop. Non-blocking.
@@ -107,20 +214,22 @@ func (r *Reconciler) Start() {
 	r.mu.Unlock()
 	go func() {
 		defer close(done)
-		t := time.NewTicker(r.interval)
-		defer t.Stop()
+		ticker := time.NewTicker(r.interval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-stop:
 				return
-			case <-t.C:
-				_, _ = r.ReconcileOnce()
+			case <-ticker.C:
+				if _, err := r.ReconcileOnce(); err != nil {
+					log.Printf("traffic: quota reconciliation failed: %v", err)
+				}
 			}
 		}
 	}()
 }
 
-// Stop halts periodic reconciliation.
+// Stop halts periodic reconciliation and joins the worker.
 func (r *Reconciler) Stop() {
 	r.mu.Lock()
 	if !r.running {
@@ -145,7 +254,6 @@ func (r *Reconciler) Stop() {
 	r.mu.Unlock()
 }
 
-// Running reports whether the periodic reconciliation loop is active.
 func (r *Reconciler) Running() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

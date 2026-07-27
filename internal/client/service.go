@@ -103,7 +103,7 @@ func validate(c Client) error {
 		}
 	}
 	switch c.QuotaResetPolicy {
-	case "", ResetNever, ResetDaily, ResetWeekly, ResetMonthly, ResetFixedInterval:
+	case "", ResetNever, ResetDaily, ResetWeekly, ResetMonthly:
 	default:
 		return fmt.Errorf("%w: invalid quotaResetPolicy %q", ErrValidation, c.QuotaResetPolicy)
 	}

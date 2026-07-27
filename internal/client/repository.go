@@ -91,6 +91,10 @@ func (t *Tx) Rollback() error { return t.tx.Rollback() }
 // that join the same atomic commit.
 func (t *Tx) Exec(query string, args ...any) (sql.Result, error) { return t.q.Exec(query, args...) }
 
+// Query exposes the underlying transaction for cross-store operations that
+// share the client DBTX contract.
+func (t *Tx) Query(query string, args ...any) (*sql.Rows, error) { return t.q.Query(query, args...) }
+
 // QueryRow exposes the underlying transaction; see Exec.
 func (t *Tx) QueryRow(query string, args ...any) *sql.Row { return t.q.QueryRow(query, args...) }
 

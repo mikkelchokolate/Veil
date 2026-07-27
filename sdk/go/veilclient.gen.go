@@ -595,6 +595,21 @@ func (e ValidationIssueSource) Valid() bool {
 	}
 }
 
+// Defines values for PostApiApplyRollbackJSONBodyConfirm.
+const (
+	PostApiApplyRollbackJSONBodyConfirmTrue PostApiApplyRollbackJSONBodyConfirm = true
+)
+
+// Valid indicates whether the value is a known member of the PostApiApplyRollbackJSONBodyConfirm enum.
+func (e PostApiApplyRollbackJSONBodyConfirm) Valid() bool {
+	switch e {
+	case PostApiApplyRollbackJSONBodyConfirmTrue:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetApiClientLinksSubscriptionParamsFormat.
 const (
 	GetApiClientLinksSubscriptionParamsFormatBase64 GetApiClientLinksSubscriptionParamsFormat = "base64"
@@ -1771,6 +1786,15 @@ type PrivilegedFailure = PrivilegedErrorEnvelope
 // ValidationFailed defines model for ValidationFailed.
 type ValidationFailed = ValidationFailure
 
+// PostApiApplyRollbackJSONBody defines parameters for PostApiApplyRollback.
+type PostApiApplyRollbackJSONBody struct {
+	Confirm          PostApiApplyRollbackJSONBodyConfirm `json:"confirm"`
+	SelectedRevision int                                 `json:"selectedRevision"`
+}
+
+// PostApiApplyRollbackJSONBodyConfirm defines parameters for PostApiApplyRollback.
+type PostApiApplyRollbackJSONBodyConfirm bool
+
 // GetApiAuditParams defines parameters for GetApiAudit.
 type GetApiAuditParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1879,6 +1903,9 @@ type PostApiAdminRotateKeyJSONRequestBody = EmptyObject
 
 // PostApiApplyJSONRequestBody defines body for PostApiApply for application/json ContentType.
 type PostApiApplyJSONRequestBody = ApplyRequest
+
+// PostApiApplyRollbackJSONRequestBody defines body for PostApiApplyRollback for application/json ContentType.
+type PostApiApplyRollbackJSONRequestBody PostApiApplyRollbackJSONBody
 
 // PostApiAuthLocaleJSONRequestBody defines body for PostApiAuthLocale for application/json ContentType.
 type PostApiAuthLocaleJSONRequestBody = LocaleUpdateRequest
@@ -2115,6 +2142,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
 	PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiApplyRollbackWithBody Create a new desired revision from an older immutable snapshot
+	//
+	// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+	PostApiApplyRollbackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiApplyRollback Create a new desired revision from an older immutable snapshot
+	//
+	// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+	PostApiApplyRollback(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiApplyState Desired/applied revisions and derived system state
 	//
@@ -3083,6 +3128,44 @@ func (c *Client) PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEdit
 // Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
 func (c *Client) PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiApplyReconcileRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiApplyRollbackWithBody Create a new desired revision from an older immutable snapshot
+//
+// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+func (c *Client) PostApiApplyRollbackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRollbackRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiApplyRollback Create a new desired revision from an older immutable snapshot
+//
+// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+func (c *Client) PostApiApplyRollback(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRollbackRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5336,6 +5419,46 @@ func NewPostApiApplyReconcileRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostApiApplyRollbackRequest calls the generic PostApiApplyRollback builder with application/json body
+func NewPostApiApplyRollbackRequest(server string, body PostApiApplyRollbackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiApplyRollbackRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiApplyRollbackRequestWithBody constructs an http.Request for the PostApiApplyRollback method, with any body, and a specified content type
+func NewPostApiApplyRollbackRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/apply/rollback")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -8708,6 +8831,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
 	PostApiApplyReconcileWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error)
 
+	// PostApiApplyRollbackWithBodyWithResponse Create a new desired revision from an older immutable snapshot
+	//
+	// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+	PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
+
+	// PostApiApplyRollbackWithResponse Create a new desired revision from an older immutable snapshot
+	//
+	// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+	PostApiApplyRollbackWithResponse(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
+
 	// GetApiApplyStateWithResponse Desired/applied revisions and derived system state
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -9953,6 +10094,40 @@ func (r PostApiApplyReconcileResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostApiApplyReconcileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostApiApplyRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiApplyRollbackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiApplyRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiApplyRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiApplyRollbackResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -13651,6 +13826,36 @@ func (c *ClientWithResponses) PostApiApplyReconcileWithResponse(ctx context.Cont
 	return ParsePostApiApplyReconcileResponse(rsp)
 }
 
+// PostApiApplyRollbackWithBodyWithResponse Create a new desired revision from an older immutable snapshot
+//
+// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+func (c *ClientWithResponses) PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
+	rsp, err := c.PostApiApplyRollbackWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiApplyRollbackResponse(rsp)
+}
+
+// PostApiApplyRollbackWithResponse Create a new desired revision from an older immutable snapshot
+//
+// Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
+func (c *ClientWithResponses) PostApiApplyRollbackWithResponse(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
+	rsp, err := c.PostApiApplyRollback(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiApplyRollbackResponse(rsp)
+}
+
 // GetApiApplyStateWithResponse Desired/applied revisions and derived system state
 //
 // Returns a wrapper object for the known response body format(s).
@@ -15478,6 +15683,22 @@ func ParsePostApiApplyReconcileResponse(rsp *http.Response) (*PostApiApplyReconc
 	}
 
 	response := &PostApiApplyReconcileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiApplyRollbackResponse parses an HTTP response from a PostApiApplyRollbackWithResponse call
+func ParsePostApiApplyRollbackResponse(rsp *http.Response) (*PostApiApplyRollbackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiApplyRollbackResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

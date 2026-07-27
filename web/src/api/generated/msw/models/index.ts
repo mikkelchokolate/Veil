@@ -131,6 +131,7 @@ export * from './notFoundResponse.msw.ts';
 export * from './patchApiV1ClientsIdBindingsBindingIdBody.msw.ts';
 export * from './pingRequest.msw.ts';
 export * from './pingResult.msw.ts';
+export * from './postApiApplyRollbackBody.msw.ts';
 export * from './postApiV1ClientsBulkBody.msw.ts';
 export * from './postApiV1ClientsBulkBodyAction.msw.ts';
 export * from './postApiV1ClientsIdBindingsBody.msw.ts';

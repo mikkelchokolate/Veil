@@ -297,7 +297,10 @@ type ClientSnapshot struct {
 	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
 	ExpiresAt        *int64  `json:"expiresAt,omitempty"`
 	DeviceLimit      *int    `json:"deviceLimit,omitempty"`
+	Notes            string  `json:"notes,omitempty"`
 	Depleted         bool    `json:"depleted"`
+	CreatedAt        int64   `json:"createdAt,omitempty"`
+	UpdatedAt        int64   `json:"updatedAt,omitempty"`
 	Version          int     `json:"version"`
 }
 
@@ -309,6 +312,8 @@ type BindingSnapshot struct {
 	InboundID        string `json:"inboundId"`
 	Enabled          bool   `json:"enabled"`
 	ProtocolSettings string `json:"protocolSettings,omitempty"`
+	CreatedAt        int64  `json:"createdAt,omitempty"`
+	UpdatedAt        int64  `json:"updatedAt,omitempty"`
 	Version          int    `json:"version"`
 }
 
@@ -323,4 +328,6 @@ type CredentialSnapshot struct {
 	EncryptedValue    []byte `json:"encryptedValue"`
 	KeyVersion        int    `json:"keyVersion"`
 	CredentialVersion int    `json:"credentialVersion"`
+	CreatedAt         int64  `json:"createdAt,omitempty"`
+	RotatedAt         *int64 `json:"rotatedAt,omitempty"`
 }
