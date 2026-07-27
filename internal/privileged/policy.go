@@ -62,6 +62,9 @@ type ResolvedArtifact struct {
 	ID          string
 	Source      string
 	Destination string
+	// SymlinkTarget is internal transaction metadata used only to restore a
+	// removed symlink without ever reading/copying its target contents.
+	SymlinkTarget string
 }
 
 type ResolvedPromotion struct {

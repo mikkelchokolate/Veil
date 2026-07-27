@@ -145,7 +145,6 @@ func newManagementState(info ServerInfo) *managementState {
 		state.privileged = newLocalPrivilegedClient(state)
 		state.privilegedLocal = true
 	}
-	initApplySubsystem(state)
 	lifecycle := NewManagementStateLifecycle(state)
 	if err := lifecycle.loadCoherentStateLocked(); err != nil {
 		log.Printf("error loading coherent management state for %s: %v", info.StatePath, err)
@@ -184,9 +183,9 @@ func (l ManagementStateLifecycle) loadOrCreateCipher() error {
 	return nil
 }
 
-// RecoverPendingKeyRotation runs the journal protocol through the privileged
-// helper before any key-dependent load. The helper owns the root-only journal,
-// safety artifacts, and /etc/veil key writes; the Panel never opens them.
+// RecoverPendingKeyRotation runs all root-owned management-state recovery
+// journals through the privileged helper before Panel opens state.key or
+// veil.db. The operation name remains backward compatible with older helpers.
 func (l ManagementStateLifecycle) RecoverPendingKeyRotation() error {
 	return l.RecoverPendingKeyRotationContext(context.Background())
 }

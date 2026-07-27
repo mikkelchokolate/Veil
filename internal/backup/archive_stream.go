@@ -246,6 +246,12 @@ func VerifyBackupFile(path, passphrase string, maxBytes int64) (VerificationRepo
 }
 
 func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase string, options RestoreOptions) (RestoreResult, error) {
+	if options.DatabasePath == "" && statePath != "" {
+		options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+	}
+	if err := RecoverInterruptedRestore(statePath, keyPath, options.DatabasePath); err != nil {
+		return RestoreResult{}, fmt.Errorf("recover interrupted restore: %w", err)
+	}
 	verified, err := inspectBackupFile(archivePath, passphrase, options.MaxBytes)
 	if err != nil {
 		return RestoreResult{}, err
@@ -256,12 +262,13 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 		return result, nil
 	}
 	if verified.databasePath != "" {
-		if options.DatabasePath == "" {
-			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
-		}
 		if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
 			return RestoreResult{}, fmt.Errorf("prepare database restore boundary: %w", err)
 		}
+	}
+	previousRevision, err := readRestoreRevision(options.DatabasePath)
+	if err != nil {
+		return RestoreResult{}, fmt.Errorf("read previous restore revision: %w", err)
 	}
 	now := options.Now
 	if now == nil {
@@ -280,6 +287,7 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 		return RestoreResult{}, fmt.Errorf("stage key restore: %w", err)
 	}
 	staged := []*stagedRestoreFile{stateBackup, keyBackup}
+	names := []string{"state.json", "state.key"}
 	var databaseBackup *stagedRestoreFile
 	databaseSafety := ""
 	if verified.databasePath != "" {
@@ -291,28 +299,34 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
 		}
 		staged = append(staged, databaseBackup)
+		names = append(names, "veil.db")
 	}
-	for i, file := range staged {
-		if err := file.commit(); err != nil {
-			for j := len(staged) - 1; j >= 0; j-- {
-				if j < i {
-					_ = staged[j].rollback()
-				} else {
-					_ = staged[j].cleanupStaged()
-				}
+	journal, err := prepareRestoreJournal(statePath, staged, names, previousRevision, verified.report.DesiredRevision)
+	if err != nil {
+		for _, file := range staged {
+			_ = file.cleanupStaged()
+		}
+		return RestoreResult{}, fmt.Errorf("prepare durable restore journal: %w", err)
+	}
+	root := filepath.Dir(statePath)
+	for index := range staged {
+		if err := publishRestoreJournalFile(root, &journal, index); err != nil {
+			if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+				return RestoreResult{}, fmt.Errorf("replace backup member %d: %v; rollback: %w", index, err, rollbackErr)
 			}
-			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", i, err)
+			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", index, err)
 		}
 	}
-	if databaseBackup != nil {
-		for _, sidecarSuffix := range []string{"-wal", "-shm"} {
-			if err := restoreRemove(options.DatabasePath + sidecarSuffix); err != nil && !os.IsNotExist(err) {
-				for j := len(staged) - 1; j >= 0; j-- {
-					_ = staged[j].rollback()
-				}
-				return RestoreResult{}, fmt.Errorf("remove stale database sidecar %s: %w", sidecarSuffix, err)
-			}
+	if err := completeRestoreJournal(root, func() string {
+		if databaseBackup != nil {
+			return options.DatabasePath
 		}
+		return ""
+	}(), &journal); err != nil {
+		if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+			return RestoreResult{}, fmt.Errorf("finalize restored backup: %v; rollback: %w", err, rollbackErr)
+		}
+		return RestoreResult{}, fmt.Errorf("finalize restored backup: %w", err)
 	}
 	if stateBackup.hadOriginal {
 		result.SafetyStatePath = stateSafety

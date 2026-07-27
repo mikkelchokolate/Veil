@@ -137,6 +137,13 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	}
 	if config.RecoverKeyRotationWorkflow == nil {
 		config.RecoverKeyRotationWorkflow = func(context.Context) error {
+			databasePath := ""
+			if config.StatePath != "" {
+				databasePath = filepath.Join(filepath.Dir(config.StatePath), "veil.db")
+			}
+			if err := backup.RecoverInterruptedRestore(config.StatePath, config.KeyPath, databasePath); err != nil {
+				return fmt.Errorf("recover interrupted backup restore: %w", err)
+			}
 			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
 		}
 	}
@@ -380,70 +387,37 @@ func isUFWDuplicateRule(output string) bool {
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
+	if err := recoverPromotionTransaction(backupRoot); err != nil {
+		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	}
 	if request.RestoreBackupID != "" {
 		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID)
 	}
-	result := PromoteResult{}
-	backupID := now().UTC().Format("20060102T150405.000000000Z")
-	manifest := promotionManifest{BackupID: backupID}
-	for _, artifact := range request.Artifacts {
-		body, err := readManagedConfigFile(artifact.Source)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := atomicfile.Write(artifact.Destination, body, 0o600, 0o700); err != nil {
-			return PromoteResult{}, err
-		}
-		if err := ensureRuntimeArtifactOwnership(artifact.ID, artifact.Destination); err != nil {
-			return PromoteResult{}, err
-		}
-		result.WrittenArtifacts = append(result.WrittenArtifacts, artifact.ID)
-		manifest.Records = append(manifest.Records, record)
-		if record.BackupPath != "" {
-			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
-		}
-	}
-	for _, artifact := range request.RemoveArtifacts {
-		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := os.Remove(artifact.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return PromoteResult{}, err
-		}
-		result.RemovedArtifacts = append(result.RemovedArtifacts, artifact.ID)
-		manifest.Records = append(manifest.Records, record)
-		if record.BackupPath != "" {
-			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
-		}
-	}
-	if len(result.WrittenArtifacts) > 0 || len(result.RemovedArtifacts) > 0 {
-		body, err := json.Marshal(manifest)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := atomicfile.Write(filepath.Join(backupRoot, backupID, "manifest.json"), body, 0o600, 0o700); err != nil {
-			return PromoteResult{}, err
-		}
-		result.BackupID = backupID
-	}
-	return result, nil
+	return executePromotionTransaction(backupRoot, now, "promotion", request.Artifacts, request.RemoveArtifacts)
 }
 
 type promotionManifest struct {
-	BackupID string                    `json:"backupId"`
-	Records  []promotionManifestRecord `json:"records"`
+	Version       int                       `json:"version,omitempty"`
+	TransactionID string                    `json:"transactionId,omitempty"`
+	BackupID      string                    `json:"backupId"`
+	Kind          string                    `json:"kind,omitempty"`
+	Phase         string                    `json:"phase,omitempty"`
+	Records       []promotionManifestRecord `json:"records"`
 }
 
 type promotionManifestRecord struct {
-	ArtifactID  string `json:"artifactId"`
-	Destination string `json:"destination"`
-	BackupPath  string `json:"backupPath,omitempty"`
-	HadPrevious bool   `json:"hadPrevious"`
+	TransactionID string `json:"transactionId,omitempty"`
+	ArtifactID    string `json:"artifactId"`
+	Destination   string `json:"destination"`
+	BackupPath    string `json:"backupPath,omitempty"`
+	SafetyPath    string `json:"safetyPath,omitempty"`
+	HadPrevious   bool   `json:"hadPrevious"`
+	OldDigest     string `json:"oldDigest,omitempty"`
+	NewDigest     string `json:"newDigest,omitempty"`
+	Operation     string `json:"operation,omitempty"`
+	Phase         string `json:"phase,omitempty"`
+	WasSymlink    bool   `json:"wasSymlink,omitempty"`
+	OldLinkTarget string `json:"oldLinkTarget,omitempty"`
 }
 
 func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
@@ -471,11 +445,16 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 		return promotionManifestRecord{}, err
 	}
 	record.BackupPath = path
+	record.SafetyPath = path
 	record.HadPrevious = true
+	record.OldDigest = promotionDigest(body)
 	return record, nil
 }
 
 func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
+	if err := recoverPromotionTransaction(root); err != nil {
+		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	}
 	body, err := os.ReadFile(filepath.Join(root, backupID, "manifest.json"))
 	if err != nil {
 		return PromoteResult{}, err
@@ -487,24 +466,55 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	if manifest.BackupID != backupID {
 		return PromoteResult{}, errors.New("promotion backup manifest mismatch")
 	}
-	result := PromoteResult{BackupID: backupID}
+	writes := make([]ResolvedArtifact, 0, len(manifest.Records))
+	removes := make([]ResolvedArtifact, 0, len(manifest.Records))
 	for _, record := range manifest.Records {
+		if record.ArtifactID == "" || record.Destination == "" {
+			return PromoteResult{}, errors.New("promotion backup manifest has an invalid record")
+		}
 		if record.HadPrevious {
-			previous, err := readManagedConfigFile(record.BackupPath)
+			if record.WasSymlink {
+				if record.OldLinkTarget == "" {
+					return PromoteResult{}, errors.New("promotion backup symlink metadata is invalid")
+				}
+				if record.OldDigest != "" && promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
+					return PromoteResult{}, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
+				}
+				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
+				continue
+			}
+			source := record.SafetyPath
+			if source == "" {
+				source = record.BackupPath
+			}
+			if source == "" || !pathWithin(root, source) {
+				return PromoteResult{}, errors.New("promotion backup manifest safety path is invalid")
+			}
+			previous, err := readManagedConfigFile(source)
 			if err != nil {
 				return PromoteResult{}, err
 			}
-			if err := atomicfile.Write(record.Destination, previous, 0o600, 0o700); err != nil {
-				return PromoteResult{}, err
+			if record.OldDigest != "" && promotionDigest(previous) != record.OldDigest {
+				return PromoteResult{}, fmt.Errorf("promotion backup digest mismatch for %s", record.ArtifactID)
 			}
-			if err := ensureRuntimeArtifactOwnership(record.ArtifactID, record.Destination); err != nil {
-				return PromoteResult{}, err
-			}
-		} else if err := os.Remove(record.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return PromoteResult{}, err
+			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination})
+		} else {
+			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
 		}
+	}
+	result, err := executePromotionTransaction(root, time.Now, "rollback", writes, removes)
+	if err != nil {
+		return PromoteResult{}, err
+	}
+	result.BackupID = backupID
+	// Historical callers treat both restored and removed destinations as written
+	// rollback artifacts. Preserve that API while the transaction manifest keeps
+	// the exact operation kind.
+	result.WrittenArtifacts = result.WrittenArtifacts[:0]
+	for _, record := range manifest.Records {
 		result.WrittenArtifacts = append(result.WrittenArtifacts, record.ArtifactID)
 	}
+	result.RemovedArtifacts = nil
 	return result, nil
 }
 

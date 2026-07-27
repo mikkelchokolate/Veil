@@ -754,6 +754,10 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 			return nil, err
 		}
 	}
+	if err := syncRestoreParent(tempPath); err != nil {
+		_ = restoreRemove(tempPath)
+		return nil, err
+	}
 	_, statErr := os.Stat(target)
 	return &stagedRestoreFile{
 		target:      target,
