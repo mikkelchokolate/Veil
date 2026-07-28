@@ -191,6 +191,17 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusOK, redactInbound(updated), outcome)
 		case http.MethodDelete:
+			if s.clientRepo != nil {
+				count, countErr := s.clientRepo.CountBindingsForInbound(name)
+				if countErr != nil {
+					writeError(w, "failed to check inbound bindings", http.StatusInternalServerError)
+					return nil
+				}
+				if count > 0 {
+					writeError(w, "inbound is referenced by client bindings", http.StatusConflict)
+					return nil
+				}
+			}
 			err := mutation.DeleteInbound(name)
 			s.logUserAction(r, "delete_inbound", name, err == nil, "")
 			if err != nil {

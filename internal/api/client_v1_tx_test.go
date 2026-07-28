@@ -13,6 +13,10 @@ import (
 // row remains.
 func TestV1ClientCreateTransactionalRollback(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
+	createdInbound := v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true,"protocolFields":{"domain":"vpn.example.test"}}`)
+	if createdInbound.Code != http.StatusCreated {
+		t.Fatalf("seed inbound: %d %s", createdInbound.Code, createdInbound.Body.String())
+	}
 
 	// The duplicate inboundId triggers a (client_id, inbound_id) unique
 	// violation on the second binding insert, so the create must fail.
@@ -44,6 +48,10 @@ func TestV1ClientCreateTransactionalRollback(t *testing.T) {
 // creates the client with all requested bindings and returns 201.
 func TestV1ClientCreateSuccessReturnsAllBindings(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
+	createdInbound := v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true,"protocolFields":{"domain":"vpn.example.test"}}`)
+	if createdInbound.Code != http.StatusCreated {
+		t.Fatalf("seed inbound: %d %s", createdInbound.Code, createdInbound.Body.String())
+	}
 	body := strings.NewReader(`{"name":"ok-client","bindings":[{"inboundId":"hy2","credential":"pass1"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clients", body)
 	req.Header.Set("Content-Type", "application/json")

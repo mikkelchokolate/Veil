@@ -243,7 +243,9 @@ func (c *StateCommit) cleanup() error {
 	if err := removeStateCommitFile(c.previousPath); err != nil {
 		return fmt.Errorf("remove previous management state copy: %w", err)
 	}
-	bestEffortSyncStoreDirectory(filepath.Dir(c.store.path))
+	if err := syncStoreDirectory(filepath.Dir(c.store.path)); err != nil {
+		return fmt.Errorf("sync state directory after cleanup: %w", err)
+	}
 	return nil
 }
 

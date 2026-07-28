@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -85,6 +86,25 @@ func TestOpenEnablesForeignKeysAndWAL(t *testing.T) {
 	if journal != "wal" {
 		t.Fatalf("expected journal_mode=wal, got %q", journal)
 	}
+}
+
+func TestOpenHandlesURIReservedPathCharacters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "veil ?#%.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open reserved path: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("database not created at exact path: %v", err)
+	}
+	db, err = OpenExisting(path)
+	if err != nil {
+		t.Fatalf("OpenExisting reserved path: %v", err)
+	}
+	_ = db.Close()
 }
 
 func openTestDB(t *testing.T) *sql.DB {

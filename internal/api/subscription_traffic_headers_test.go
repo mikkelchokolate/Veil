@@ -17,14 +17,20 @@ func TestSubscriptionUserinfoUsesRealTraffic(t *testing.T) {
 	r, state := newTrafficRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 
-	// Record real traffic for this client.
-	_ = state.trafficStore.RecordSample(client.Sample{
-		BindingID:     "b1",
+	// Record real traffic against the durable normalized binding.
+	var bindingID string
+	if err := state.db.QueryRow(`SELECT id FROM client_bindings WHERE client_id=? LIMIT 1`, clientID).Scan(&bindingID); err != nil {
+		t.Fatalf("lookup binding: %v", err)
+	}
+	if err := state.trafficStore.RecordSample(client.Sample{
+		BindingID:     bindingID,
 		ClientID:      clientID,
 		UploadBytes:   1234,
 		DownloadBytes: 5678,
 		AtUnix:        1000,
-	})
+	}); err != nil {
+		t.Fatalf("record traffic: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext, nil)
 	w := httptest.NewRecorder()

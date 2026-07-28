@@ -442,11 +442,20 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		if b.InboundID == "" {
 			continue
 		}
+		if !s.bindingInboundExists(b.InboundID) {
+			writeError(w, "binding inbound does not exist", http.StatusBadRequest)
+			return
+		}
 		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Credential: b.Credential})
 	}
 	var createdID string
 	var issued []client.IssuedCredential
 	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		for _, binding := range bindings {
+			if !s.bindingInboundExistsLocked(binding.InboundID) {
+				return fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
+			}
+		}
 		id, iss, err := s.clientService.CreateWithBindingsIssuedTx(tx, c, bindings)
 		if err != nil {
 			return err
@@ -644,6 +653,21 @@ func (s *managementState) handleV1ClientAudit(w http.ResponseWriter, r *http.Req
 	writeJSON(w, map[string]any{"items": items})
 }
 
+func (s *managementState) bindingInboundExists(inboundID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bindingInboundExistsLocked(inboundID)
+}
+
+func (s *managementState) bindingInboundExistsLocked(inboundID string) bool {
+	for _, inbound := range s.inbounds {
+		if inbound.Name == inboundID {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
 	if len(parts) == 1 { // /bindings
 		if r.Method == http.MethodPost {
@@ -651,8 +675,15 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			if !decodeJSONRequest(w, r, &req) {
 				return
 			}
+			if !s.bindingInboundExists(req.InboundID) {
+				writeError(w, "binding inbound does not exist", http.StatusBadRequest)
+				return
+			}
 			var b client.Binding
 			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+				if !s.bindingInboundExistsLocked(req.InboundID) {
+					return fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
+				}
 				nb, err := s.clientService.AddBindingWithIdentityTx(tx, clientID, req.InboundID, req.RuntimeIdentity)
 				if err != nil {
 					return err

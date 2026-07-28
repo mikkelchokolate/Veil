@@ -57,6 +57,21 @@ func TestTokenLookupUpdatesLastUsed(t *testing.T) {
 	}
 }
 
+func TestTokenLookupFailsClosedWhenLastUsedCannotPersist(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	store := NewTokenStore(db)
+	client, _ := repo.Create(Client{Name: "alice", Enabled: true, QuotaResetPolicy: ResetNever})
+	issued, _ := store.Issue(client.ID, "", nil)
+	if _, err := db.Exec(`CREATE TRIGGER fail_token_last_used BEFORE UPDATE OF last_used_at ON subscription_tokens BEGIN SELECT RAISE(ABORT, 'disk failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if token, err := store.LookupByPlaintext(issued.Plaintext); err == nil || token != nil {
+		t.Fatalf("lookup authenticated despite last_used_at failure: token=%v err=%v", token, err)
+	}
+}
+
 func TestRevokedTokenNoLongerWorks(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

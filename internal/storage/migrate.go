@@ -208,6 +208,33 @@ CREATE UNIQUE INDEX idx_client_bindings_inbound_runtime_identity
 ON client_bindings(inbound_id, runtime_identity);
 `,
 	},
+	{
+		version: 8,
+		name:    "domain_integrity_guards",
+		sql: `
+CREATE TRIGGER validate_clients_insert BEFORE INSERT ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0 OR NEW.device_limit < 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+CREATE TRIGGER validate_clients_update BEFORE UPDATE ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0 OR NEW.device_limit < 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+CREATE TRIGGER validate_traffic_counter BEFORE INSERT ON traffic_counters
+WHEN NEW.upload_bytes < 0 OR NEW.download_bytes < 0
+BEGIN SELECT RAISE(ABORT, 'invalid traffic counter'); END;
+CREATE TRIGGER validate_traffic_counter_update BEFORE UPDATE ON traffic_counters
+WHEN NEW.upload_bytes < 0 OR NEW.download_bytes < 0
+BEGIN SELECT RAISE(ABORT, 'invalid traffic counter'); END;
+CREATE TRIGGER validate_revision_insert BEFORE INSERT ON revisions
+WHEN NEW.desired_revision < NEW.applied_revision
+BEGIN SELECT RAISE(ABORT, 'desired revision below applied revision'); END;
+CREATE TRIGGER validate_revision_update BEFORE UPDATE ON revisions
+WHEN NEW.desired_revision < NEW.applied_revision
+BEGIN SELECT RAISE(ABORT, 'desired revision below applied revision'); END;
+CREATE TRIGGER validate_credential_version BEFORE INSERT ON client_credentials
+WHEN NEW.key_version < 1 OR NEW.credential_version < 1
+BEGIN SELECT RAISE(ABORT, 'invalid credential version'); END;
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
@@ -222,9 +249,26 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("storage: create schema_migrations: %w", err)
 	}
 
-	var current int
-	if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&current); err != nil {
-		return fmt.Errorf("storage: read schema version: %w", err)
+	rows, err := db.Query(`SELECT version, name FROM schema_migrations ORDER BY version`)
+	if err != nil {
+		return fmt.Errorf("storage: read migration history: %w", err)
+	}
+	current := 0
+	for rows.Next() {
+		var version int
+		var name string
+		if err := rows.Scan(&version, &name); err != nil {
+			rows.Close()
+			return err
+		}
+		if version != current+1 || version > len(migrations) || migrations[version-1].name != name {
+			rows.Close()
+			return fmt.Errorf("storage: invalid ordered migration history at version %d", version)
+		}
+		current = version
+	}
+	if err := rows.Close(); err != nil {
+		return err
 	}
 
 	for _, m := range migrations {
@@ -246,6 +290,12 @@ func Migrate(db *sql.DB) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("storage: commit migration %d: %w", m.version, err)
 		}
+	}
+	var fkTable string
+	if err := db.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&fkTable); err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("storage: foreign_key_check: %w", err)
+	} else if err == nil {
+		return fmt.Errorf("storage: foreign_key_check failed for %s", fkTable)
 	}
 	return nil
 }

@@ -138,6 +138,7 @@ export * from './postApiV1ClientsIdBindingsBody.msw.ts';
 export * from './postApiV1ClientsIdCredentialsBindingIdBody.msw.ts';
 export * from './postApiV1ClientsIdCredentialsBindingIdRotateBody.msw.ts';
 export * from './postApiV1ClientsIdTokensBody.msw.ts';
+export * from './postApiV1ClientsIdTokensTokenIdRotateBody.msw.ts';
 export * from './privilegedErrorEnvelope.msw.ts';
 export * from './privilegedFailureResponse.msw.ts';
 export * from './processesStats.msw.ts';

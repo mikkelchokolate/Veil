@@ -2283,6 +2283,18 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresAt:
+                  type: integer
+                  format: int64
+                  nullable: true
+                  description: Replacement expiry. A future value is required when rotating an expired token.
       responses:
         "200":
           description: Rotated token. Plaintext is returned only in this response.

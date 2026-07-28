@@ -72,6 +72,7 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdBody,
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
+  PostApiV1ClientsIdTokensTokenIdRotateBody,
   SubscriptionTokenResponse
 } from '../models';
 
@@ -1598,14 +1599,15 @@ export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
  * @summary Rotate a subscription token; new plaintext returned once
  */
 export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
-    tokenId: string, options?: RequestInit): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: RequestInit): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
 
   return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdTokensTokenIdRotateBody)
   }
 );}
 
@@ -1614,8 +1616,8 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
 
 
 export const getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext> => {
 
 const mutationKey = ['postApiV1ClientsIdTokensTokenIdRotate'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -1627,10 +1629,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, {id: string;tokenId: string}> = (props) => {
-          const {id,tokenId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, {id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}> = (props) => {
+          const {id,tokenId,data} = props ?? {};
 
-          return  postApiV1ClientsIdTokensTokenIdRotate(id,tokenId,requestOptions)
+          return  postApiV1ClientsIdTokensTokenIdRotate(id,tokenId,data,requestOptions)
         }
 
 
@@ -1641,18 +1643,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>>
-
+    export type PostApiV1ClientsIdTokensTokenIdRotateMutationBody = PostApiV1ClientsIdTokensTokenIdRotateBody | undefined
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationError = unknown
 
     /**
  * @summary Rotate a subscription token; new plaintext returned once
  */
 export const usePostApiV1ClientsIdTokensTokenIdRotate = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
         TError,
-        {id: string;tokenId: string},
+        {id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody},
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions(options), queryClient);

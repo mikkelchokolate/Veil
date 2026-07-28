@@ -517,6 +517,10 @@ export const PostApiV1ClientsIdTokensTokenIdRotateParams = zod.object({
   "tokenId": zod.string()
 })
 
+export const PostApiV1ClientsIdTokensTokenIdRotateBody = zod.object({
+  "expiresAt": zod.number().nullish().describe('Replacement expiry. A future value is required when rotating an expired token.')
+})
+
 export const PostApiV1ClientsIdTokensTokenIdRotateResponse = zod.object({
   "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
   "prefix": zod.string().describe('Public prefix used to identify the token.'),

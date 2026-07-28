@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
@@ -167,8 +168,29 @@ func (s *managementState) handleV1ClientTokenByID(w http.ResponseWriter, r *http
 		writeError(w, "token store unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	token, err := s.tokenStore.Get(tokenID)
+	if err != nil || token.ClientID != clientID {
+		writeNotFound(w)
+		return
+	}
 	if action == "rotate" && r.Method == http.MethodPost {
-		issued, err := s.tokenStore.Rotate(tokenID)
+		var req struct {
+			ExpiresAt patchField[int64] `json:"expiresAt"`
+		}
+		if r.ContentLength != 0 && !decodeJSONRequest(w, r, &req) {
+			return
+		}
+		var expiry *int64
+		if req.ExpiresAt.Present && !req.ExpiresAt.Null {
+			value := req.ExpiresAt.Value
+			expiry = &value
+		}
+		if token.ExpiresAt != nil && time.Now().UTC().Unix() >= *token.ExpiresAt &&
+			(!req.ExpiresAt.Present || req.ExpiresAt.Null || expiry == nil || *expiry <= time.Now().UTC().Unix()) {
+			writeError(w, "rotating an expired token requires a new future expiry", http.StatusBadRequest)
+			return
+		}
+		issued, err := s.tokenStore.RotateWithExpiry(tokenID, expiry, req.ExpiresAt.Present)
 		if err != nil {
 			s.writeV1ClientError(w, err)
 			return

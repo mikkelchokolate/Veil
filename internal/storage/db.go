@@ -8,6 +8,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -24,7 +25,7 @@ func OpenExisting(path string) (*sql.DB, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("storage: stat database: %w", err)
 	}
-	dsn := fmt.Sprintf("file:%s?mode=rw&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)", path)
+	dsn := sqliteFileDSN(path, true)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("storage: open existing database: %w", err)
@@ -49,7 +50,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("storage: create database dir: %w", err)
 	}
 	// modernc.org/sqlite honours PRAGMA via DSN query params.
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)", path)
+	dsn := sqliteFileDSN(path, false)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("storage: open database: %w", err)
@@ -66,4 +67,18 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func sqliteFileDSN(path string, existingOnly bool) string {
+	query := url.Values{}
+	if existingOnly {
+		query.Set("mode", "rw")
+	}
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "foreign_keys(1)")
+	if !existingOnly {
+		query.Add("_pragma", "journal_mode(WAL)")
+	}
+	query.Add("_pragma", "synchronous(FULL)")
+	return (&url.URL{Scheme: "file", Path: path, RawQuery: query.Encode()}).String()
 }

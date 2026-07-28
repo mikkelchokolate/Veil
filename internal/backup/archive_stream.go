@@ -12,10 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -30,6 +32,36 @@ const (
 	backupChunkBytes               = 1024 * 1024
 	chunkedEncryptionVersion       = byte(3)
 )
+
+var backupStatfs = syscall.Statfs
+
+func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes int64) error {
+	const safetyReserve = int64(64 * 1024 * 1024)
+	var sourceBytes int64
+	for _, sourcePath := range sourcePaths {
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			return fmt.Errorf("backup space preflight stat %s: %w", sourcePath, err)
+		}
+		if info.Size() < 0 || info.Size() > maxBytes || sourceBytes > math.MaxInt64-info.Size() {
+			return fmt.Errorf("source exceeds configured backup size policy")
+		}
+		sourceBytes += info.Size()
+	}
+	if sourceBytes > (math.MaxInt64-safetyReserve)/2 {
+		return fmt.Errorf("backup space estimate overflow")
+	}
+	required := sourceBytes*2 + safetyReserve
+	var stats syscall.Statfs_t
+	if err := backupStatfs(destinationDir, &stats); err != nil {
+		return fmt.Errorf("backup space preflight: %w", err)
+	}
+	available := uint64(stats.Bavail) * uint64(stats.Bsize)
+	if uint64(required) > available {
+		return fmt.Errorf("insufficient free space for backup: require %d bytes, available %d", required, available)
+	}
+	return nil
+}
 
 // ConfiguredMaxBackupBytes resolves the explicit production backup policy.
 // VEIL_BACKUP_MAX_BYTES is a positive byte count; when unset the default is
@@ -85,6 +117,9 @@ func createBackupFileWithOptionsUnlocked(destination, statePath, keyPath, passph
 	destinationDir := filepath.Dir(destination)
 	if err := os.MkdirAll(destinationDir, 0o700); err != nil {
 		return fmt.Errorf("create backup directory: %w", err)
+	}
+	if err := preflightBackupSpace(destinationDir, []string{statePath, keyPath, options.DatabasePath}, maxBytes); err != nil {
+		return err
 	}
 	workDir, err := os.MkdirTemp(destinationDir, ".veil-backup-create-*")
 	if err != nil {

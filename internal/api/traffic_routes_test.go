@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,8 +52,19 @@ func contains(s, sub string) bool { return strings.Contains(s, sub) }
 // in the store.
 func seedTrafficClient(t *testing.T, r http.Handler, st *managementState, name string, up, down int64) string {
 	t.Helper()
-	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"in-`+name+`","protocol":"hysteria2","transport":"udp","port":18443,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}}`)
+	port := 18000
+	for _, char := range name {
+		port += int(char)
+	}
+	inboundBody := fmt.Sprintf(`{"name":"in-%s","protocol":"hysteria2","transport":"udp","port":%d,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}}`, name, port)
+	inboundResponse := v1Request(t, r, http.MethodPost, "/api/inbounds", inboundBody)
+	if inboundResponse.Code != http.StatusCreated {
+		t.Fatalf("seed traffic inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"`+name+`","bindings":[{"inboundId":"in-`+name+`","credential":"pw"}]}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("seed traffic client: %d %s", w.Code, w.Body.String())
+	}
 	var c map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&c)
 	if nested, ok := c["client"].(map[string]any); ok {

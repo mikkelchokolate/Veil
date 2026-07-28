@@ -1864,6 +1864,12 @@ type PostApiV1ClientsIdTokensJSONBody struct {
 	Label     *string `json:"label,omitempty"`
 }
 
+// PostApiV1ClientsIdTokensTokenIdRotateJSONBody defines parameters for PostApiV1ClientsIdTokensTokenIdRotate.
+type PostApiV1ClientsIdTokensTokenIdRotateJSONBody struct {
+	// ExpiresAt Replacement expiry. A future value is required when rotating an expired token.
+	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+}
+
 // GetApiV1EventsParams defines parameters for GetApiV1Events.
 type GetApiV1EventsParams struct {
 	Types *string `form:"types,omitempty" json:"types,omitempty"`
@@ -1995,6 +2001,9 @@ type PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody PostApiV1Client
 
 // PostApiV1ClientsIdTokensJSONRequestBody defines body for PostApiV1ClientsIdTokens for application/json ContentType.
 type PostApiV1ClientsIdTokensJSONRequestBody PostApiV1ClientsIdTokensJSONBody
+
+// PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody defines body for PostApiV1ClientsIdTokensTokenIdRotate for application/json ContentType.
+type PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody PostApiV1ClientsIdTokensTokenIdRotateJSONBody
 
 // PostApiValidationJSONRequestBody defines body for PostApiValidation for application/json ContentType.
 type PostApiValidationJSONRequestBody = ValidationRequest
@@ -2836,10 +2845,19 @@ type ClientInterface interface {
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
 	DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostApiV1ClientsIdTokensTokenIdRotate Rotate a subscription token; new plaintext returned once
+	// PostApiV1ClientsIdTokensTokenIdRotateWithBody Rotate a subscription token; new plaintext returned once
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClientsIdTokensTokenIdRotate Rotate a subscription token; new plaintext returned once
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
+	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1Events Unified Server-Sent Events stream (A10)
 	//
@@ -4841,11 +4859,30 @@ func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id Clien
 	return c.Client.Do(req)
 }
 
-// PostApiV1ClientsIdTokensTokenIdRotate Rotate a subscription token; new plaintext returned once
+// PostApiV1ClientsIdTokensTokenIdRotateWithBody Rotate a subscription token; new plaintext returned once
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId)
+func (c *Client) PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(c.Server, id, tokenId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1ClientsIdTokensTokenIdRotate Rotate a subscription token; new plaintext returned once
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
+func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8054,8 +8091,19 @@ func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tok
 	return req, nil
 }
 
-// NewPostApiV1ClientsIdTokensTokenIdRotateRequest constructs an http.Request for the PostApiV1ClientsIdTokensTokenIdRotate method
-func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId, tokenId string) (*http.Request, error) {
+// NewPostApiV1ClientsIdTokensTokenIdRotateRequest calls the generic PostApiV1ClientsIdTokensTokenIdRotate builder with application/json body
+func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server, id, tokenId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody constructs an http.Request for the PostApiV1ClientsIdTokensTokenIdRotate method, with any body, and a specified content type
+func NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server string, id ClientId, tokenId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8087,10 +8135,12 @@ func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId,
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -9606,12 +9656,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
 	DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error)
 
-	// PostApiV1ClientsIdTokensTokenIdRotateWithResponse Rotate a subscription token; new plaintext returned once
+	// PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse Rotate a subscription token; new plaintext returned once
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
+	PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
+
+	// PostApiV1ClientsIdTokensTokenIdRotateWithResponse Rotate a subscription token; new plaintext returned once
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
+	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
 
 	// GetApiV1EventsWithResponse Unified Server-Sent Events stream (A10)
 	//
@@ -15207,13 +15264,26 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx 
 	return ParseDeleteApiV1ClientsIdTokensTokenIdResponse(rsp)
 }
 
-// PostApiV1ClientsIdTokensTokenIdRotateWithResponse Rotate a subscription token; new plaintext returned once
+// PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse Rotate a subscription token; new plaintext returned once
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotate(ctx, id, tokenId, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx, id, tokenId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClientsIdTokensTokenIdRotateResponse(rsp)
+}
+
+// PostApiV1ClientsIdTokensTokenIdRotateWithResponse Rotate a subscription token; new plaintext returned once
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotate(ctx, id, tokenId, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

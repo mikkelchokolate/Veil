@@ -78,7 +78,13 @@ func (s *TokenStore) LookupByPlaintext(plaintext string) (*SubscriptionToken, er
 		return nil, nil // expired
 	}
 	now := nowUnix()
-	_, _ = s.db.Exec(`UPDATE subscription_tokens SET last_used_at=? WHERE id=?`, now, t.ID)
+	result, err := s.db.Exec(`UPDATE subscription_tokens SET last_used_at=? WHERE id=?`, now, t.ID)
+	if err != nil {
+		return nil, fmt.Errorf("client: update token last_used_at: %w", err)
+	}
+	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
+		return nil, fmt.Errorf("client: update token last_used_at: expected one row")
+	}
 	t.LastUsedAt = &now
 	return &t, nil
 }
@@ -93,6 +99,17 @@ func (s *TokenStore) Revoke(id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// Get returns token metadata by ID.
+func (s *TokenStore) Get(id string) (SubscriptionToken, error) {
+	row := s.db.QueryRow(`SELECT id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, last_used_at, revoked_at, created_by
+  FROM subscription_tokens WHERE id=?`, id)
+	token, err := scanToken(row, false)
+	if err == sql.ErrNoRows {
+		return SubscriptionToken{}, ErrNotFound
+	}
+	return token, err
 }
 
 // SetEnabled toggles a token without revoking it.
@@ -112,12 +129,16 @@ func (s *TokenStore) SetEnabled(id string, enabled bool) error {
 // old implementation could revoke the token and then fail to issue the
 // replacement, leaving the client without a usable subscription token.
 func (s *TokenStore) Rotate(id string) (IssuedToken, error) {
+	return s.RotateWithExpiry(id, nil, false)
+}
+
+func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplied bool) (IssuedToken, error) {
 	raw, err := s.db.Begin()
 	if err != nil {
 		return IssuedToken{}, err
 	}
 	tx := &Tx{queries: queries{q: raw}, tx: raw}
-	issued, err := tx.RotateTokenTx(id)
+	issued, err := tx.RotateTokenWithExpiryTx(id, expiresAt, expirySupplied)
 	if err != nil {
 		_ = raw.Rollback()
 		return IssuedToken{}, err
@@ -205,6 +226,10 @@ func (t *Tx) SetTokenEnabledTx(id string, enabled bool) error {
 // client — revoke + issue inside the transaction so a token can never be
 // revoked without its replacement being stored.
 func (t *Tx) RotateTokenTx(id string) (IssuedToken, error) {
+	return t.RotateTokenWithExpiryTx(id, nil, false)
+}
+
+func (t *Tx) RotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied bool) (IssuedToken, error) {
 	row := t.q.QueryRow(`SELECT id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, last_used_at, revoked_at, created_by
   FROM subscription_tokens WHERE id=?`, id)
 	tok, err := scanToken(row, true)
@@ -216,6 +241,12 @@ func (t *Tx) RotateTokenTx(id string) (IssuedToken, error) {
 	}
 	if tok.RevokedAt != nil {
 		return IssuedToken{}, fmt.Errorf("%w: token already revoked", ErrValidation)
+	}
+	if tok.ExpiresAt != nil && nowUnix() >= *tok.ExpiresAt && !expirySupplied {
+		return IssuedToken{}, fmt.Errorf("%w: rotating an expired token requires a new expiry", ErrValidation)
+	}
+	if expirySupplied {
+		tok.ExpiresAt = expiresAt
 	}
 	if err := t.RevokeTokenTx(id); err != nil {
 		return IssuedToken{}, err

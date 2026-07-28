@@ -3,7 +3,10 @@ package client
 import (
 	"database/sql"
 	"fmt"
+	"math"
+	"regexp"
 	"sync"
+	"time"
 )
 
 // Sample is a single traffic observation. Deltas (non-monotonic) are summed;
@@ -28,6 +31,8 @@ type TrafficStore struct {
 
 func NewTrafficStore(db *sql.DB) *TrafficStore { return &TrafficStore{db: db} }
 
+var providerKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:._-]{1,160}$`)
+
 // WithRecordLock serializes quota rollover with sample recording. The callback
 // may open its own SQLite transaction; it must not call RecordSample.
 func (s *TrafficStore) WithRecordLock(fn func() error) error {
@@ -40,6 +45,12 @@ func (s *TrafficStore) WithRecordLock(fn func() error) error {
 // absolute counter and writing a bucketed delta. For monotonic samples the
 // delta is computed against the provider's last raw reading.
 func (s *TrafficStore) RecordSample(sm Sample) error {
+	if sm.UploadBytes < 0 || sm.DownloadBytes < 0 || sm.AtUnix < 0 || sm.AtUnix > time.Now().Add(5*time.Minute).Unix() {
+		return fmt.Errorf("client: traffic sample counters and timestamp are outside valid bounds")
+	}
+	if sm.Monotonic && !providerKeyPattern.MatchString(sm.ProviderKey) {
+		return fmt.Errorf("client: invalid traffic provider key")
+	}
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 
@@ -50,6 +61,21 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	defer tx.Rollback()
 
 	clientID := sm.ClientID
+	if sm.BindingID != "" {
+		var owner string
+		if err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&owner); err != nil {
+			return fmt.Errorf("client: traffic resolve binding ownership: %w", err)
+		}
+		if clientID != "" && clientID != owner {
+			return fmt.Errorf("client: traffic binding does not belong to client")
+		}
+		clientID = owner
+	} else if clientID != "" {
+		var exists int
+		if err := tx.QueryRow(`SELECT 1 FROM clients WHERE id=?`, clientID).Scan(&exists); err != nil {
+			return fmt.Errorf("client: traffic resolve client ownership: %w", err)
+		}
+	}
 	if clientID == "" {
 		var cid string
 		if err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&cid); err != nil {
@@ -69,15 +95,16 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 		} else if scanErr != nil {
 			return fmt.Errorf("client: traffic runtime state: %w", scanErr)
 		} else {
+			if sm.AtUnix < lastObserved {
+				return fmt.Errorf("client: stale traffic provider timestamp")
+			}
 			upDelta = sm.UploadBytes - lastUp
 			downDelta = sm.DownloadBytes - lastDown
-			if upDelta < 0 || downDelta < 0 {
-				// Provider counter reset (runtime restart): treat this reading as
-				// a fresh baseline, no negative delta.
+			if upDelta < 0 {
 				upDelta = 0
-				if downDelta < 0 {
-					downDelta = 0
-				}
+			}
+			if downDelta < 0 {
+				downDelta = 0
 			}
 		}
 		if _, err := tx.Exec(`INSERT INTO traffic_runtime_state (provider_key, last_upload_raw, last_download_raw, last_observed_at)
@@ -87,6 +114,14 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 			sm.ProviderKey, sm.UploadBytes, sm.DownloadBytes, sm.AtUnix); err != nil {
 			return fmt.Errorf("client: traffic runtime state update: %w", err)
 		}
+	}
+	var currentUpload, currentDownload int64
+	counterErr := tx.QueryRow(`SELECT upload_bytes, download_bytes FROM traffic_counters WHERE client_id=? AND binding_id=?`, clientID, sm.BindingID).Scan(&currentUpload, &currentDownload)
+	if counterErr != nil && counterErr != sql.ErrNoRows {
+		return fmt.Errorf("client: traffic counter read: %w", counterErr)
+	}
+	if currentUpload < 0 || currentDownload < 0 || upDelta > math.MaxInt64-currentUpload || downDelta > math.MaxInt64-currentDownload {
+		return fmt.Errorf("client: traffic counter overflow")
 	}
 	// Absolute counter.
 	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, updated_at)
@@ -100,6 +135,14 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	}
 	// Bucketed sample (bucket = truncated to minute).
 	bucket := sm.AtUnix - (sm.AtUnix % 60)
+	var bucketUpload, bucketDownload int64
+	bucketErr := tx.QueryRow(`SELECT upload_delta, download_delta FROM traffic_samples WHERE bucket_start=? AND client_id=? AND binding_id=?`, bucket, clientID, sm.BindingID).Scan(&bucketUpload, &bucketDownload)
+	if bucketErr != nil && bucketErr != sql.ErrNoRows {
+		return fmt.Errorf("client: traffic sample read: %w", bucketErr)
+	}
+	if bucketUpload < 0 || bucketDownload < 0 || upDelta > math.MaxInt64-bucketUpload || downDelta > math.MaxInt64-bucketDownload {
+		return fmt.Errorf("client: traffic sample overflow")
+	}
 	if _, err := tx.Exec(`INSERT INTO traffic_samples (bucket_start, client_id, binding_id, upload_delta, download_delta)
 	  VALUES(?,?,?,?,?)
 	  ON CONFLICT(bucket_start, client_id, binding_id) DO UPDATE SET

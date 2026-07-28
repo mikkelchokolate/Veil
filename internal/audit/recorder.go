@@ -1,7 +1,7 @@
 package audit
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,6 +99,8 @@ func (r *Recorder) Append(record Record) error {
 	if err := r.rotateIfNeededLocked(int64(len(body))); err != nil {
 		return err
 	}
+	_, statErr := os.Stat(r.path)
+	created := errors.Is(statErr, os.ErrNotExist)
 	file, err := os.OpenFile(r.path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -111,7 +113,13 @@ func (r *Recorder) Append(record Record) error {
 		_ = file.Close()
 		return err
 	}
-	return file.Close()
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if created {
+		return syncDirectory(filepath.Dir(r.path))
+	}
+	return nil
 }
 
 func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {
@@ -133,7 +141,7 @@ func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {
 		if generation > 0 {
 			path += "." + strconv.Itoa(generation)
 		}
-		fileRecords, err := readRecords(path)
+		fileRecords, err := readRecordsBounded(path, r.maxBytes)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -194,31 +202,54 @@ func (r *Recorder) rotateIfNeededLocked(incoming int64) error {
 	if err := os.Remove(first); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return os.Rename(r.path, first)
+	if err := os.Rename(r.path, first); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(r.path))
 }
 
 func readRecords(path string) ([]Record, error) {
-	file, err := os.Open(path)
+	return readRecordsBounded(path, defaultRecorderMaxBytes)
+}
+
+func readRecordsBounded(path string, maxBytes int64) ([]Record, error) {
+	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("audit log %s exceeds configured size limit", path)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 	records := make([]Record, 0)
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	line := 0
-	for scanner.Scan() {
-		line++
-		if strings.TrimSpace(scanner.Text()) == "" {
+	lines := bytes.Split(body, []byte{'\n'})
+	for index, raw := range lines {
+		line := index + 1
+		if len(bytes.TrimSpace(raw)) == 0 {
 			continue
 		}
 		var record Record
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+		if err := json.Unmarshal(raw, &record); err != nil {
+			if index == len(lines)-1 && !bytes.HasSuffix(body, []byte{'\n'}) {
+				break
+			}
 			return nil, fmt.Errorf("%s:%d: %w", path, line, err)
 		}
 		records = append(records, record)
 	}
-	return records, scanner.Err()
+	return records, nil
+}
+
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func redactDetails(details map[string]any) map[string]any {

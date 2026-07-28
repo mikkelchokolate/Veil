@@ -148,6 +148,14 @@ func (t *Tx) RollbackToSavepoint(name string) error {
 // supported way to perform a logical Client mutation that spans clients,
 // bindings, and credentials — compensating deletes across public service
 // methods are not a substitute for a real ROLLBACK.
+func (r *Repository) CountBindingsForInbound(inboundID string) (int, error) {
+	var count int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM client_bindings WHERE inbound_id=?`, inboundID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *Repository) WithTx(fn func(tx *Tx) error) error {
 	tx, err := r.BeginTx()
 	if err != nil {

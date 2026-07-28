@@ -138,6 +138,7 @@ export * from './postApiV1ClientsIdBindingsBody.ts';
 export * from './postApiV1ClientsIdCredentialsBindingIdBody.ts';
 export * from './postApiV1ClientsIdCredentialsBindingIdRotateBody.ts';
 export * from './postApiV1ClientsIdTokensBody.ts';
+export * from './postApiV1ClientsIdTokensTokenIdRotateBody.ts';
 export * from './privilegedErrorEnvelope.ts';
 export * from './privilegedFailureResponse.ts';
 export * from './processesStats.ts';

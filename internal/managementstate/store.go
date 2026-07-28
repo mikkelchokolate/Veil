@@ -91,8 +91,7 @@ func (s Store) RestoreEncoded(body []byte, existed bool) error {
 	if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	bestEffortSyncStoreDirectory(filepath.Dir(s.path))
-	return nil
+	return syncStoreDirectory(filepath.Dir(s.path))
 }
 
 type fileInfo struct {

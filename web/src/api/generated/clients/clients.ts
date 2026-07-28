@@ -72,6 +72,7 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdBody,
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
+  PostApiV1ClientsIdTokensTokenIdRotateBody,
   SubscriptionTokenResponse
 } from '../models';
 
@@ -1904,14 +1905,15 @@ export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
  * @summary Rotate a subscription token; new plaintext returned once
  */
 export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
-    tokenId: string, options?: RequestInit): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: RequestInit): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
 
   return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiV1ClientsIdTokensTokenIdRotateBody)
   }
 );}
 
@@ -1920,24 +1922,26 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
 
 
 export const getPostApiV1ClientsIdTokensTokenIdRotateQueryKey = (id: string,
-    tokenId: string,) => {
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody,) => {
     return [
-    'POST', `/api/v1/clients/${id}/tokens/${tokenId}/rotate`
+    'POST', `/api/v1/clients/${id}/tokens/${tokenId}/rotate`, postApiV1ClientsIdTokensTokenIdRotateBody
     ] as const;
     }
 
 
 export const getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(id: string,
-    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdTokensTokenIdRotateQueryKey(id,tokenId);
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1ClientsIdTokensTokenIdRotateQueryKey(id,tokenId,postApiV1ClientsIdTokensTokenIdRotateBody);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>> = ({ signal }) => postApiV1ClientsIdTokensTokenIdRotate(id,tokenId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>> = ({ signal }) => postApiV1ClientsIdTokensTokenIdRotate(id,tokenId,postApiV1ClientsIdTokensTokenIdRotateBody, { signal, ...requestOptions });
 
 
 
@@ -1952,7 +1956,8 @@ export type PostApiV1ClientsIdTokensTokenIdRotateQueryError = unknown
 
 export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
  id: string,
-    tokenId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody: undefined |  PostApiV1ClientsIdTokensTokenIdRotateBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
           TError,
@@ -1963,7 +1968,8 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
  id: string,
-    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
           TError,
@@ -1974,7 +1980,8 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
  id: string,
-    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -1983,11 +1990,12 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
 
 export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
  id: string,
-    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+    tokenId: string,
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions(id,tokenId,options)
+  const queryOptions = getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions(id,tokenId,postApiV1ClientsIdTokensTokenIdRotateBody,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
