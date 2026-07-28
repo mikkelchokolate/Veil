@@ -9,11 +9,9 @@ import (
 	"testing"
 )
 
-func TestRoutingSourceMaterialFetchUsesDefaultDownloader(t *testing.T) {
-	old := routeDatDownloader
-	t.Cleanup(func() { routeDatDownloader = old })
+func TestRoutingSourceMaterialFetchUsesInjectedDownloader(t *testing.T) {
 	called := false
-	routeDatDownloader = func(url string) ([]byte, error) {
+	download := func(url string) ([]byte, error) {
 		called = true
 		if url == "https://example.test/geoip.dat.sha256sum" {
 			sum := sha256.Sum256([]byte("body"))
@@ -22,7 +20,7 @@ func TestRoutingSourceMaterialFetchUsesDefaultDownloader(t *testing.T) {
 		return []byte("body"), nil
 	}
 
-	material := RoutingSourceMaterial{applyRoot: "/etc/veil", source: RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}}
+	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(download)
 	body, err := material.Fetch(material.source.Files[0])
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)

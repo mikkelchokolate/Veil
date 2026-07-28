@@ -235,6 +235,56 @@ WHEN NEW.key_version < 1 OR NEW.credential_version < 1
 BEGIN SELECT RAISE(ABORT, 'invalid credential version'); END;
 `,
 	},
+	{
+		version: 9,
+		name:    "domain_integrity_completion",
+		sql: `
+CREATE TRIGGER validate_apply_job_insert BEFORE INSERT ON apply_jobs
+WHEN NEW.status NOT IN ('pending','planning','validating','applying','health_check','succeeded','failed','rolling_back','rolled_back','rollback_failed')
+  OR NEW.desired_revision < 0 OR NEW.base_revision < 0
+BEGIN SELECT RAISE(ABORT, 'invalid apply job domain values'); END;
+CREATE TRIGGER validate_apply_job_update BEFORE UPDATE ON apply_jobs
+WHEN NEW.status NOT IN ('pending','planning','validating','applying','health_check','succeeded','failed','rolling_back','rolled_back','rollback_failed')
+  OR NEW.desired_revision < 0 OR NEW.base_revision < 0
+BEGIN SELECT RAISE(ABORT, 'invalid apply job domain values'); END;
+CREATE TRIGGER validate_client_domain_insert_v2 BEFORE INSERT ON clients
+WHEN NEW.quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR NEW.version < 1
+BEGIN SELECT RAISE(ABORT, 'invalid client reset policy or version'); END;
+CREATE TRIGGER validate_client_domain_update_v2 BEFORE UPDATE ON clients
+WHEN NEW.quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR NEW.version < 1
+BEGIN SELECT RAISE(ABORT, 'invalid client reset policy or version'); END;
+CREATE TRIGGER validate_binding_insert BEFORE INSERT ON client_bindings
+WHEN NEW.enabled NOT IN (0,1) OR NEW.version < 1
+BEGIN SELECT RAISE(ABORT, 'invalid binding domain values'); END;
+CREATE TRIGGER validate_binding_update BEFORE UPDATE ON client_bindings
+WHEN NEW.enabled NOT IN (0,1) OR NEW.version < 1
+BEGIN SELECT RAISE(ABORT, 'invalid binding domain values'); END;
+CREATE TRIGGER validate_token_insert BEFORE INSERT ON subscription_tokens
+WHEN NEW.enabled NOT IN (0,1)
+BEGIN SELECT RAISE(ABORT, 'invalid token domain values'); END;
+CREATE TRIGGER validate_token_update BEFORE UPDATE ON subscription_tokens
+WHEN NEW.enabled NOT IN (0,1)
+BEGIN SELECT RAISE(ABORT, 'invalid token domain values'); END;
+CREATE TRIGGER validate_traffic_sample_insert BEFORE INSERT ON traffic_samples
+WHEN NEW.bucket_start < 0 OR NEW.upload_delta < 0 OR NEW.download_delta < 0
+  OR NOT EXISTS (SELECT 1 FROM clients WHERE id=NEW.client_id)
+  OR (NEW.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings WHERE id=NEW.binding_id AND client_id=NEW.client_id))
+BEGIN SELECT RAISE(ABORT, 'invalid traffic sample ownership or counters'); END;
+CREATE TRIGGER validate_traffic_sample_update BEFORE UPDATE ON traffic_samples
+WHEN NEW.bucket_start < 0 OR NEW.upload_delta < 0 OR NEW.download_delta < 0
+  OR NOT EXISTS (SELECT 1 FROM clients WHERE id=NEW.client_id)
+  OR (NEW.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings WHERE id=NEW.binding_id AND client_id=NEW.client_id))
+BEGIN SELECT RAISE(ABORT, 'invalid traffic sample ownership or counters'); END;
+CREATE TRIGGER validate_traffic_counter_ownership_insert BEFORE INSERT ON traffic_counters
+WHEN NOT EXISTS (SELECT 1 FROM clients WHERE id=NEW.client_id)
+  OR (NEW.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings WHERE id=NEW.binding_id AND client_id=NEW.client_id))
+BEGIN SELECT RAISE(ABORT, 'invalid traffic counter ownership'); END;
+CREATE TRIGGER validate_traffic_counter_ownership_update BEFORE UPDATE ON traffic_counters
+WHEN NOT EXISTS (SELECT 1 FROM clients WHERE id=NEW.client_id)
+  OR (NEW.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings WHERE id=NEW.binding_id AND client_id=NEW.client_id))
+BEGIN SELECT RAISE(ABORT, 'invalid traffic counter ownership'); END;
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
@@ -296,6 +346,33 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("storage: foreign_key_check: %w", err)
 	} else if err == nil {
 		return fmt.Errorf("storage: foreign_key_check failed for %s", fkTable)
+	}
+	if err := validateDomainIntegrity(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDomainIntegrity(db *sql.DB) error {
+	checks := []struct {
+		name  string
+		query string
+	}{
+		{"apply jobs", `SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status NOT IN ('pending','planning','validating','applying','health_check','succeeded','failed','rolling_back','rolled_back','rollback_failed') OR desired_revision < 0 OR base_revision < 0)`},
+		{"clients", `SELECT EXISTS(SELECT 1 FROM clients WHERE enabled NOT IN (0,1) OR depleted NOT IN (0,1) OR quota_bytes < 0 OR device_limit < 0 OR quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR version < 1)`},
+		{"bindings", `SELECT EXISTS(SELECT 1 FROM client_bindings WHERE enabled NOT IN (0,1) OR version < 1)`},
+		{"tokens", `SELECT EXISTS(SELECT 1 FROM subscription_tokens WHERE enabled NOT IN (0,1))`},
+		{"traffic counters", `SELECT EXISTS(SELECT 1 FROM traffic_counters t WHERE upload_bytes < 0 OR download_bytes < 0 OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=t.client_id) OR (t.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings b WHERE b.id=t.binding_id AND b.client_id=t.client_id)))`},
+		{"traffic samples", `SELECT EXISTS(SELECT 1 FROM traffic_samples t WHERE bucket_start < 0 OR upload_delta < 0 OR download_delta < 0 OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=t.client_id) OR (t.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings b WHERE b.id=t.binding_id AND b.client_id=t.client_id)))`},
+	}
+	for _, check := range checks {
+		var invalid int
+		if err := db.QueryRow(check.query).Scan(&invalid); err != nil {
+			return fmt.Errorf("storage: validate %s: %w", check.name, err)
+		}
+		if invalid != 0 {
+			return fmt.Errorf("storage: invalid %s domain rows", check.name)
+		}
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,6 +20,11 @@ type Executor interface {
 	Execute(revision uint64) (Result, error)
 }
 
+type ContextExecutor interface {
+	Executor
+	ExecuteContext(context.Context, uint64) (Result, error)
+}
+
 type Result struct {
 	Success      bool
 	RolledBack   bool
@@ -30,6 +36,15 @@ type Result struct {
 type ExecutorFunc func(revision uint64) (Result, error)
 
 func (f ExecutorFunc) Execute(revision uint64) (Result, error) { return f(revision) }
+
+type ContextExecutorFunc func(context.Context, uint64) (Result, error)
+
+func (f ContextExecutorFunc) Execute(revision uint64) (Result, error) {
+	return f(context.Background(), revision)
+}
+func (f ContextExecutorFunc) ExecuteContext(ctx context.Context, revision uint64) (Result, error) {
+	return f(ctx, revision)
+}
 
 type Runner struct {
 	mu       sync.Mutex
@@ -49,6 +64,8 @@ type Runner struct {
 func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 	var resolved Executor
 	switch value := executor.(type) {
+	case ContextExecutor:
+		resolved = value
 	case Executor:
 		resolved = value
 	case func(uint64) (Result, error):
@@ -78,6 +95,13 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 }
 
 func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr error) {
+	return r.RunContext(context.Background(), revision, trigger, actor)
+}
+
+func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor string) (job Job, runErr error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	r.mu.Lock()
 	if r.active {
 		r.mu.Unlock()
@@ -134,8 +158,14 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr er
 
 	stopHeartbeat := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
-	go r.heartbeat(stopHeartbeat, heartbeatErr)
-	result, execErr := r.executor.Execute(revision)
+	go r.heartbeat(ctx, stopHeartbeat, heartbeatErr)
+	var result Result
+	var execErr error
+	if executor, ok := r.executor.(ContextExecutor); ok {
+		result, execErr = executor.ExecuteContext(ctx, revision)
+	} else {
+		result, execErr = r.executor.Execute(revision)
+	}
 	if execErr == nil && !result.Success {
 		message := result.ErrorMessage
 		if message == "" {
@@ -178,11 +208,14 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr er
 	return job, nil
 }
 
-func (r *Runner) heartbeat(stop <-chan struct{}, result chan<- error) {
+func (r *Runner) heartbeat(ctx context.Context, stop <-chan struct{}, result chan<- error) {
 	ticker := time.NewTicker(r.heartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			result <- ctx.Err()
+			return
 		case <-stop:
 			result <- nil
 			return

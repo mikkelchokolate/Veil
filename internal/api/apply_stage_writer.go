@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"sort"
@@ -11,9 +12,10 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
-var routeDatDownloader = generatedconfig.DownloadRouteDat
+var routeDatDownloader generatedconfig.RoutingSourceContextDownloader = generatedconfig.DownloadRouteDatContext
 
 type ApplyStageInput struct {
+	Context       context.Context
 	ApplyRoot     string
 	Cipher        *secrets.Cipher
 	Plan          ApplyPlanResponse
@@ -49,7 +51,8 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		}
 		written = append(written, path)
 	}
-	routingFiles, err := generatedconfig.NewRoutingSourceMaterial(input.ApplyRoot, input.RoutingSource).WithDownloader(routeDatDownloader).WriteGenerated()
+	routingFiles, err := generatedconfig.NewRoutingSourceMaterial(input.ApplyRoot, input.RoutingSource).
+		WithContextDownloader(routeDatDownloader).WithContext(input.Context).WriteGenerated()
 	if err != nil {
 		return nil, nil, nil, err
 	}

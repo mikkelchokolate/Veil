@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 
 func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	oldDownloader := routeDatDownloader
-	routeDatDownloader = func(url string) ([]byte, error) {
+	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("fake geoip dat"), nil
 		}
@@ -79,7 +80,7 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 
 func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	oldDownloader := routeDatDownloader
-	routeDatDownloader = func(url string) ([]byte, error) {
+	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("tampered geoip dat"), nil
 		}

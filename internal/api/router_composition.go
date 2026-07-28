@@ -40,7 +40,8 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	LogRoutes{State: state}.Register(mux)
 
 	state.idempotency = newIdempotencyStore()
-	var handler http.Handler = state.idempotency.Middleware(mux)
+	gated := clientRequestGateMiddleware(state, mux)
+	var handler http.Handler = state.idempotency.Middleware(gated)
 	if basePath != "/" {
 		handler = stripBasePathMiddleware(basePath, handler)
 	}

@@ -31,6 +31,15 @@ policy applied to both encrypted archive size and expanded member total; its
 production default is 17179869184 bytes (16 GiB). Native services read it from
 `/etc/veil/veil.env`; standalone CLI invocations may export it directly.
 
+Before privileged verify or restore starts, Veil checks free space for the
+worst-case configured expansion, staging copies, current-file safety copies,
+and a reserve. Requirements on the same filesystem are summed. Restore-job
+history is persisted; a queued or running job found after process restart is
+marked failed rather than disappearing. Before a new restore, only the newest
+two prior safety copies per state/key/database target are retained so the new
+copy becomes the third; older regular files are overwritten, synced, removed,
+and their parent directory synced. Symlinks and multi-link files are rejected.
+
 Losing `state.key` makes `state.json` unrecoverable. Store encrypted archives
 off-host and keep the archive passphrase outside the backup destination.
 

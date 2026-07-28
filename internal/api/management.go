@@ -278,6 +278,8 @@ func (s *managementState) Close() error {
 	if s.lifecycleCancel != nil {
 		s.lifecycleCancel()
 	}
+	s.clientRequestMu.Lock()
+	defer s.clientRequestMu.Unlock()
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)

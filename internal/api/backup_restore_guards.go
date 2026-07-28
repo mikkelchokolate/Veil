@@ -81,13 +81,7 @@ func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, tok
 	if err != nil || valid {
 		return
 	}
-	s.backupJobsMu.Lock()
-	defer s.backupJobsMu.Unlock()
-	job, ok := s.backupJobs[jobID]
-	if ok && job.ownerSessionToken == token {
-		job.ownerSessionToken = ""
-		s.backupJobs[jobID] = job
-	}
+	s.revokeBackupRestoreOwnerSession(jobID, token)
 }
 
 func (s *managementState) revokeBackupRestoreOwnerSession(jobID, token string) {

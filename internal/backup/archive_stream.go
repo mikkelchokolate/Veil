@@ -63,6 +63,90 @@ func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes 
 	return nil
 }
 
+func PreflightVerifySpace(archivePath string, maxBytes int64) error {
+	return preflightBackupOperationSpace(archivePath, "", "", "", maxBytes, false)
+}
+
+func PreflightRestoreSpace(archivePath, statePath, keyPath, databasePath string, maxBytes int64) error {
+	return preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath, maxBytes, true)
+}
+
+func preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath string, configuredMax int64, restoring bool) error {
+	maxBytes, err := normalizeBackupMaxBytes(configuredMax)
+	if err != nil {
+		return err
+	}
+	archiveInfo, err := os.Lstat(archivePath)
+	if err != nil {
+		return fmt.Errorf("backup space preflight archive: %w", err)
+	}
+	if !archiveInfo.Mode().IsRegular() || archiveInfo.Size() < 0 || archiveInfo.Size() > maxBytes {
+		return backupPolicyError(archiveInfo.Size(), maxBytes)
+	}
+	requirements := map[string][]int64{
+		filepath.Dir(archivePath): {archiveInfo.Size(), maxBytes},
+	}
+	if restoring {
+		stateDir := filepath.Dir(statePath)
+		components := []int64{maxBytes}
+		for _, currentPath := range []string{statePath, keyPath, databasePath} {
+			if currentPath == "" {
+				continue
+			}
+			info, statErr := os.Stat(currentPath)
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			if statErr != nil {
+				return fmt.Errorf("restore space preflight stat %s: %w", currentPath, statErr)
+			}
+			if !info.Mode().IsRegular() || info.Size() < 0 {
+				return fmt.Errorf("restore space preflight source is not a regular file")
+			}
+			components = append(components, info.Size())
+		}
+		requirements[stateDir] = append(requirements[stateDir], components...)
+	}
+	return requireBackupSpaceByFilesystem(requirements)
+}
+
+func requireBackupSpaceByFilesystem(requirements map[string][]int64) error {
+	const safetyReserve = int64(64 * 1024 * 1024)
+	type filesystemNeed struct {
+		required  int64
+		available uint64
+	}
+	needs := make(map[string]filesystemNeed)
+	for directory, components := range requirements {
+		var stats syscall.Statfs_t
+		if err := backupStatfs(directory, &stats); err != nil {
+			return fmt.Errorf("backup operation space preflight: %w", err)
+		}
+		key := fmt.Sprintf("%v", stats.Fsid)
+		need := needs[key]
+		if need.available == 0 {
+			need.available = uint64(stats.Bavail) * uint64(stats.Bsize)
+		}
+		for _, component := range components {
+			if component < 0 || need.required > math.MaxInt64-component {
+				return fmt.Errorf("backup operation space estimate overflow")
+			}
+			need.required += component
+		}
+		needs[key] = need
+	}
+	for key, need := range needs {
+		if need.required > math.MaxInt64-safetyReserve {
+			return fmt.Errorf("backup operation space estimate overflow")
+		}
+		need.required += safetyReserve
+		if uint64(need.required) > need.available {
+			return fmt.Errorf("insufficient free space for backup operation on filesystem %s: require %d bytes, available %d", key, need.required, need.available)
+		}
+	}
+	return nil
+}
+
 // ConfiguredMaxBackupBytes resolves the explicit production backup policy.
 // VEIL_BACKUP_MAX_BYTES is a positive byte count; when unset the default is
 // 16 GiB. The policy applies to both encrypted bytes and expanded members.

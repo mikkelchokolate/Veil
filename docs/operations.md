@@ -116,17 +116,29 @@ service controls and logs, encrypted backup lifecycle, state-key rotation,
 verified binary installation, firewall material, and Panel restart. A rootless
 container cannot perform those host operations.
 
-Ordinary validation and HTTP failures use `text/plain`. Helper failures use the
-OpenAPI `PrivilegedErrorEnvelope` JSON shape:
+All API failures use the OpenAPI `ErrorEnvelope` JSON shape. Internal failures
+are sanitized; detailed filesystem and helper errors remain in the service/audit
+logs rather than crossing the HTTP boundary:
 
 ```json
 {
   "error": {
     "code": "operation_failed",
-    "message": "privileged helper is unavailable"
+    "message": "privileged helper is unavailable",
+    "requestId": "server-generated-request-id"
   }
 }
 ```
 
-Clients should branch on the structured `code`; the `message` is intended for
-operators and may contain a bounded underlying system error.
+Clients should branch on the structured `code` and include `requestId` in
+operator reports.
+
+## Routing source policy
+
+Remote `geoip.dat` and `geosite.dat` material must use HTTPS and a mandatory
+SHA-256 sidecar. Veil only accepts GitHub release/raw asset hosts by default,
+rechecks every redirect, resolves and pins a public IP for the connection, and
+rejects private, loopback, link-local, or userinfo targets. Operators may add
+explicit public hosts with a comma-separated `VEIL_ROUTING_ALLOWED_HOSTS` value
+in `/etc/veil/veil.env`; this does not permit private-address targets. Downloads
+are size-bounded and cancellation interrupts both HTTP I/O and retry backoff.

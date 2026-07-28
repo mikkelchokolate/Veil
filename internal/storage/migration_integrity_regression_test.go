@@ -4,8 +4,45 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestMigrationDomainIntegrityCompletionRejectsInvalidRows(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO apply_jobs(id,desired_revision,base_revision,status,trigger,created_at) VALUES('bad',1,0,'mystery','test',1)`); err == nil {
+		t.Fatal("expected invalid apply status rejection")
+	}
+	if _, err := db.Exec(`INSERT INTO traffic_samples(bucket_start,client_id,binding_id,upload_delta,download_delta) VALUES(1,'missing','',1,1)`); err == nil {
+		t.Fatal("expected orphan traffic sample rejection")
+	}
+}
+
+func TestMigrateRejectsPreexistingInvalidDomainRows(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "invalid-domain.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at INTEGER NOT NULL DEFAULT (strftime('%s','now')))`); err != nil {
+		t.Fatal(err)
+	}
+	for _, migration := range migrations[:8] {
+		if _, err := db.Exec(migration.sql); err != nil {
+			t.Fatalf("apply migration %d: %v", migration.version, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations(version,name) VALUES(?,?)`, migration.version, migration.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO apply_jobs(id,desired_revision,base_revision,status,trigger,created_at) VALUES('bad',1,0,'mystery','test',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(db); err == nil || !strings.Contains(err.Error(), "invalid apply jobs") {
+		t.Fatalf("expected invalid pre-existing domain rejection, got %v", err)
+	}
+}
 
 func TestMigrateRejectsNonCanonicalHistory(t *testing.T) {
 	for _, fixture := range []struct {

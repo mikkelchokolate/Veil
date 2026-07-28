@@ -47,6 +47,7 @@ type managementSnapshot = model.ManagementSnapshot
 type managementState struct {
 	mu                             sync.Mutex
 	clientLifecycleMu              sync.RWMutex
+	clientRequestMu                sync.RWMutex
 	lifecycleCtx                   context.Context
 	lifecycleCancel                context.CancelFunc
 	statePath                      string
@@ -84,6 +85,7 @@ type managementState struct {
 	backupMutationMu               sync.Mutex
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
+	backupJobsPath                 string
 	backupRestoreAudit             func(audit.Record) error
 	backupRestoreOwnerSessionGrace time.Duration
 	serviceActionMu                sync.Mutex

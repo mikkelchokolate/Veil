@@ -32,12 +32,13 @@ func TestMain(m *testing.M) {
 		panic("create API test root: " + err.Error())
 	}
 	isolatedEnv := map[string]string{
-		"VEIL_STATE_PATH":    testRoot + "/state.json",
-		"VEIL_KEY_PATH":      testRoot + "/state.key",
-		"VEIL_APPLY_ROOT":    testRoot + "/staging",
-		"VEIL_LIVE_ROOT":     testRoot + "/live",
-		"VEIL_HELPER_SOCKET": testRoot + "/helper.sock",
-		"VEIL_AUTO_TLS_DIR":  testRoot + "/autocert",
+		"VEIL_STATE_PATH":       testRoot + "/state.json",
+		"VEIL_KEY_PATH":         testRoot + "/state.key",
+		"VEIL_APPLY_ROOT":       testRoot + "/staging",
+		"VEIL_LIVE_ROOT":        testRoot + "/live",
+		"VEIL_HELPER_SOCKET":    testRoot + "/helper.sock",
+		"VEIL_AUTO_TLS_DIR":     testRoot + "/autocert",
+		"VEIL_BACKUP_MAX_BYTES": "8388608",
 	}
 	for name, value := range isolatedEnv {
 		if err := os.Setenv(name, value); err != nil {

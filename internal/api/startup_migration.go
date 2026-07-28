@@ -162,7 +162,9 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 
 	// One apply job for the new revision: the runtime must converge to the
 	// migrated state before anything can report synced.
+	s.mu.Lock()
 	s.autoApplyResultLocked(nil, "system")
+	s.mu.Unlock()
 
 	if created > 0 {
 		log.Printf("startup: migrated %d legacy profiles to normalized clients (backup: %s)", created, backupPath)

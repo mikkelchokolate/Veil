@@ -72,6 +72,8 @@ func (h *sseBroadcaster) refresh() {
 }
 
 func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
+	h.state.clientRequestMu.RLock()
+	defer h.state.clientRequestMu.RUnlock()
 	h.state.mu.Lock()
 	h.state.clientLifecycleMu.RLock()
 	view := h.state.applyStateViewLocked()

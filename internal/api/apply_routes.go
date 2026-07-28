@@ -102,10 +102,8 @@ func (s *managementState) handleApplyJobRetry(w http.ResponseWriter, r *http.Req
 	}
 	actor, _ := r.Context().Value(contextKeyUsername).(string)
 
-	s.mu.Lock()
-	job, runErr := s.applyRunner.Run(orig.DesiredRevision, "retry", actor)
+	job, runErr := s.applyRunner.RunContext(r.Context(), orig.DesiredRevision, "retry", actor)
 	after, _ := s.applyRevisions.Get()
-	s.mu.Unlock()
 
 	resp := map[string]any{
 		"applyJob": job,
@@ -154,7 +152,10 @@ func (s *managementState) handleApplyReconcile(w http.ResponseWriter, r *http.Re
 		writeJSON(w, map[string]any{"reconciled": false, "state": state})
 		return
 	}
-	job, runErr := s.applyRunner.Run(rev.Desired, "reconcile", actor)
+	runner := s.applyRunner
+	s.mu.Unlock()
+	job, runErr := runner.RunContext(r.Context(), rev.Desired, "reconcile", actor)
+	s.mu.Lock()
 	after, _ := s.applyRevisions.Get()
 	state := s.applyStateViewLocked()
 	s.mu.Unlock()

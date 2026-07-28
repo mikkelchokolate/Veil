@@ -854,6 +854,7 @@ func TestRunProductionBackupAllActions(t *testing.T) {
 		KeyPath:              keyPath,
 		BackupPassphrasePath: passphrasePath,
 		BackupRoot:           backupRoot,
+		BackupMaxBytes:       8 * 1024 * 1024,
 		VeilVersion:          "v0.0.1",
 		Now:                  func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	}
@@ -945,7 +946,7 @@ func TestRunProductionBackupConcurrentCreatesDoNotReplace(t *testing.T) {
 	fixedNow := time.Date(2026, 6, 5, 12, 0, 0, 123456789, time.UTC)
 	config := ProductionConfig{
 		StatePath: statePath, KeyPath: keyPath, BackupPassphrasePath: passphrasePath,
-		BackupRoot: backupRoot, VeilVersion: "v0.0.1", Now: func() time.Time { return fixedNow },
+		BackupRoot: backupRoot, BackupMaxBytes: 8 * 1024 * 1024, VeilVersion: "v0.0.1", Now: func() time.Time { return fixedNow },
 	}
 	request := ResolvedBackup{
 		Action: BackupActionCreate, BackupRoot: backupRoot, StateRoot: root,
@@ -1169,6 +1170,7 @@ func TestRunProductionBackupCreateUsesDefaultArchiveName(t *testing.T) {
 		KeyPath:              keyPath,
 		BackupPassphrasePath: passphrasePath,
 		BackupRoot:           backupRoot,
+		BackupMaxBytes:       8 * 1024 * 1024,
 		VeilVersion:          "v0.0.1",
 		Now:                  func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	}

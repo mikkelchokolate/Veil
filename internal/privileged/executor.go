@@ -722,6 +722,9 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return BackupResult{ArchiveName: name, Verified: true, Verification: privilegedBackupVerification(report)}, nil
 	case BackupActionVerify:
+		if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
+			return BackupResult{}, err
+		}
 		report, err := backup.VerifyBackupFile(request.ArchivePath, passphrase, maxBytes)
 		if err != nil {
 			return BackupResult{}, err
@@ -731,6 +734,15 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		databasePath := request.DatabasePath
 		if databasePath == "" {
 			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
+		}
+		if request.CheckOnly {
+			if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
+				return BackupResult{}, err
+			}
+		} else if err := backup.PreflightRestoreSpace(request.ArchivePath, request.StatePath, request.KeyPath, databasePath, maxBytes); err != nil {
+			return BackupResult{}, err
+		} else if _, err := backup.PruneRestoreSafetyFiles(request.StatePath, request.KeyPath, databasePath, 2); err != nil {
+			return BackupResult{}, fmt.Errorf("prune restore safety files: %w", err)
 		}
 		restored, err := backup.RestoreBackupFileWithOptions(
 			request.ArchivePath,

@@ -86,6 +86,7 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 		return nil, nil, nil, err
 	}
 	return WriteApplyStage(ApplyStageInput{
+		Context:       ctx.operationContext(),
 		ApplyRoot:     s.applyRoot,
 		Cipher:        s.cipher,
 		Plan:          plan,

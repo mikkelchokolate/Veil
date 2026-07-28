@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -18,6 +19,27 @@ func (f *fakeExecutor) apply(rev uint64) (Result, error) {
 		return Result{ErrorCode: "HEALTH_CHECK_FAILED", ErrorMessage: f.err.Error()}, f.err
 	}
 	return Result{Success: true}, nil
+}
+
+func TestRunnerRunContextCancelsContextAwareExecutor(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	revisions := NewRevisionStore(db)
+	jobs := NewJobStore(db)
+	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
+		<-ctx.Done()
+		return Result{ErrorCode: "canceled", ErrorMessage: ctx.Err().Error()}, ctx.Err()
+	}))
+	desired, err := revisions.BumpDesired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	job, err := runner.RunContext(ctx, desired, "mutation", "admin")
+	if !errors.Is(err, context.Canceled) || job.Status != StatusFailed {
+		t.Fatalf("job=%+v err=%v", job, err)
+	}
 }
 
 func TestRunnerSuccessfulJobMarksApplied(t *testing.T) {

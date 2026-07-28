@@ -153,6 +153,10 @@ func newManagementState(info ServerInfo) *managementState {
 	state.sessions = sessionRegistry
 	if info.StatePath != "" {
 		state.backupDir = filepath.Join(filepath.Dir(info.StatePath), "backups")
+		state.backupJobsPath = filepath.Join(filepath.Dir(info.StatePath), "backup-restore-jobs.json")
+		if err := state.loadBackupRestoreJobs(); err != nil {
+			log.Printf("error loading backup restore job history: %v", err)
+		}
 	}
 	state.backupPassphrasePath = filepath.Join(filepath.Dir(keyPath), "backup.passphrase")
 	auditPath := ""

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/protocols/hysteria2"
 	"github.com/mikkelchokolate/Veil/internal/storage"
@@ -87,7 +89,7 @@ func initApplySubsystem(s *managementState) {
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
 	s.applySnapshots = apply.NewSnapshotStore(s.db)
-	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, s.executeApplyRevision)
+	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
 }
 
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
@@ -355,26 +357,33 @@ func stateFileDigest(path string) (string, error) {
 }
 
 // executeApplyRevision applies one immutable desired revision to the runtime.
-// It is the apply.ExecuteFunc seam for the Runner. IMPORTANT: callers invoke
-// the Runner while already holding s.mu (via autoApplyResultLocked), so this
-// function must NOT acquire s.mu again (the mutation that produced the
-// revision is already committed and the apply runner serializes execution).
+// It loads a revision-pinned snapshot under the state mutex, then runs the
+// filesystem/service workflow against a private execution state. New mutations
+// may commit while this apply is in flight, but cannot change what it renders.
 func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, error) {
-	// Pin the job to the immutable snapshot recorded for this revision. While
-	// s.mu is held by the caller no newer mutation can interleave, but a retry
-	// or reconcile may run for an OLDER revision after newer ones committed —
-	// in that case render from the pinned snapshot, not live state.
-	restore, err := s.pinStateToRevisionLocked(revision)
+	return s.executeApplyRevisionContext(s.lifecycleContext(), revision)
+}
+
+func (s *managementState) executeApplyRevisionContext(operationContext context.Context, revision uint64) (apply.Result, error) {
+	if operationContext == nil {
+		operationContext = s.lifecycleContext()
+	}
+	s.mu.Lock()
+	snapshot, err := s.loadRevisionSnapshotLocked(revision)
 	if err != nil {
-		// A3: no immutable snapshot → apply must fail, not fall back to current
-		// mutable state (which would violate revision immutability).
+		s.mu.Unlock()
 		return apply.Result{Success: false, ErrorCode: "SNAPSHOT_UNAVAILABLE", ErrorMessage: err.Error()}, err
 	}
-	if restore != nil {
-		defer restore()
-	}
-	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).
+	execution := s.newApplyExecutionStateLocked(snapshot)
+	s.mu.Unlock()
+
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(execution, operationContext)).
 		RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+
+	s.mu.Lock()
+	s.orphanedUnits = append([]string(nil), execution.orphanedUnits...)
+	s.mu.Unlock()
+
 	res := apply.Result{Success: err == nil && status == http.StatusOK, RolledBack: response.RolledBack}
 	if err != nil {
 		res.ErrorCode = "APPLY_ERROR"
@@ -386,6 +395,51 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 		res.ErrorMessage = applyFailureMessage(response, status)
 	}
 	return res, nil
+}
+
+func (s *managementState) loadRevisionSnapshotLocked(revision uint64) (managementSnapshot, error) {
+	if s.applySnapshots == nil {
+		return managementSnapshot{}, fmt.Errorf("apply: snapshot store unavailable for revision %d", revision)
+	}
+	payload, err := s.applySnapshots.Load(revision)
+	if err != nil {
+		return managementSnapshot{}, fmt.Errorf("apply: no immutable snapshot for revision %d: %w", revision, err)
+	}
+	var snapshot managementSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		return managementSnapshot{}, fmt.Errorf("apply: decode revision %d snapshot: %w", revision, err)
+	}
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		return managementSnapshot{}, fmt.Errorf("apply: decrypt revision %d snapshot: %w", revision, err)
+	}
+	return snapshot, nil
+}
+
+func (s *managementState) newApplyExecutionStateLocked(snapshot managementSnapshot) *managementState {
+	return &managementState{
+		lifecycleCtx:                   s.lifecycleCtx,
+		statePath:                      s.statePath,
+		applyRoot:                      s.applyRoot,
+		liveRoot:                       s.liveRoot,
+		keyPath:                        s.keyPath,
+		cipher:                         s.cipher,
+		setup:                          snapshot.Setup,
+		settings:                       snapshot.Settings,
+		inbounds:                       append([]Inbound(nil), snapshot.Inbounds...),
+		rules:                          append([]RoutingRule(nil), snapshot.Rules...),
+		routingPreset:                  snapshot.RoutingPreset,
+		routingSource:                  snapshot.RoutingSource,
+		warp:                           snapshot.Warp,
+		users:                          append([]User(nil), snapshot.Users...),
+		orphanedUnits:                  append([]string(nil), s.orphanedUnits...),
+		configurationValidator:         s.configurationValidator,
+		enforceConfigurationValidation: s.enforceConfigurationValidation,
+		privileged:                     s.privileged,
+		privilegedLocal:                s.privilegedLocal,
+		renderClients:                  append([]model.ClientSnapshot(nil), snapshot.Clients...),
+		renderBindings:                 append([]model.BindingSnapshot(nil), snapshot.Bindings...),
+		renderCredentials:              append([]model.CredentialSnapshot(nil), snapshot.Credentials...),
+	}
 }
 
 // pinStateToRevisionLocked swaps the live mutable configuration for the

@@ -260,7 +260,15 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 	}
 	s.backupJobsMu.Lock()
 	s.backupJobs[id] = job
+	persistErr := s.persistBackupRestoreJobsLocked()
+	if persistErr != nil {
+		delete(s.backupJobs, id)
+	}
 	s.backupJobsMu.Unlock()
+	if persistErr != nil {
+		writeError(w, "failed to persist restore job", http.StatusInternalServerError)
+		return
+	}
 	actor, role := s.auditActor(r)
 	ip := clientIP(r)
 	userAgent := r.UserAgent()
@@ -271,10 +279,23 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 
 func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, actor, role, ip, userAgent string) {
 	defer s.backupMutationMu.Unlock()
-	s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
+	s.clientRequestMu.Lock()
+	defer s.clientRequestMu.Unlock()
+	if err := s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 		job.Status = "running"
 		job.StartedAt = time.Now().UTC()
-	})
+	}); err != nil {
+		s.backupJobsMu.Lock()
+		job := s.backupJobs[id]
+		job.Status = "failed"
+		job.FinishedAt = time.Now().UTC()
+		job.Error = "failed to persist restore job state"
+		s.backupJobs[id] = job
+		_ = s.persistBackupRestoreJobsLocked()
+		s.backupJobsMu.Unlock()
+		_ = s.appendBackupRestoreAudit(audit.Record{Actor: actor, Role: role, Action: "backup.restore", Target: name, IP: ip, UserAgent: userAgent, Success: false, Error: "persist restore job state"})
+		return
+	}
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)
@@ -319,20 +340,23 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		Error:     errorString(err),
 	})
 	finished := time.Now().UTC()
-	s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
+	if err == nil {
+		s.scheduleBackupRestoreOwnerSessionRevocation(id, ownerSessionToken)
+	}
+	persistJobErr := s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 		job.FinishedAt = finished
 		job.SafetyStatePath = result.SafetyStatePath
 		job.SafetyKeyPath = result.SafetyKeyPath
 		job.SafetyDatabasePath = result.SafetyDatabasePath
 		if err != nil {
 			job.Status = "failed"
-			job.Error = err.Error()
+			job.Error = "restore operation failed"
 			return
 		}
 		job.Status = "succeeded"
 	})
-	if err == nil {
-		s.scheduleBackupRestoreOwnerSessionRevocation(id, ownerSessionToken)
+	if persistJobErr != nil {
+		_ = s.appendBackupRestoreAudit(audit.Record{Actor: actor, Role: role, Action: "backup.restore.job_persist", Target: id, Success: false, Error: "persist restore job state"})
 	}
 }
 
@@ -381,12 +405,16 @@ func (s *managementState) backupRestoreJob(id string) (BackupRestoreJob, bool) {
 	return job, ok
 }
 
-func (s *managementState) updateBackupRestoreJob(id string, update func(*BackupRestoreJob)) {
+func (s *managementState) updateBackupRestoreJob(id string, update func(*BackupRestoreJob)) error {
 	s.backupJobsMu.Lock()
 	defer s.backupJobsMu.Unlock()
-	job := s.backupJobs[id]
+	job, ok := s.backupJobs[id]
+	if !ok {
+		return fmt.Errorf("restore job not found")
+	}
 	update(&job)
 	s.backupJobs[id] = job
+	return s.persistBackupRestoreJobsLocked()
 }
 
 func parsePanelBackupPath(r *http.Request) (string, string, bool) {
