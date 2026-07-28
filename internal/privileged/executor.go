@@ -214,12 +214,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			if err != nil {
 				return JournalResult{}, err
 			}
-			lines := []string{}
-			for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-				if line != "" {
-					lines = append(lines, line)
-				}
-			}
+			lines := boundedJournalLines(output, 256*1024, 16*1024)
 			return JournalResult{Unit: request.Unit, Lines: lines}, nil
 		},
 		Backup: config.BackupWorkflow,

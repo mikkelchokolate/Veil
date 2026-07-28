@@ -71,7 +71,13 @@ type managementState struct {
 	orphanedUnits                  []string
 	sessions                       *SessionRegistry
 	loginUsernameLimiter           *observability.RateLimiterEngine
+	httpRateLimiter                *observability.RateLimiter
+	idempotency                    *idempotencyStore
+	loginBackoff                   map[string]loginBackoffState
+	loginBackoffNow                func() time.Time
 	audit                          *audit.Recorder
+	auditHealthMu                  sync.RWMutex
+	auditDegraded                  bool
 	version                        string
 	backupDir                      string
 	backupPassphrasePath           string

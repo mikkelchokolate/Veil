@@ -130,6 +130,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
+		server["errors"] = panelErrorRoutes()
 	case caddyassembly.CaddyOwnerNaive:
 		authCreds := make([]string, 0, len(owner.NaiveUsers))
 		for _, user := range owner.NaiveUsers {
@@ -200,6 +201,23 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 		"listen":          []string{listenString(key)},
 		"automatic_https": map[string]any{"disable_redirects": true},
 		"routes":          []map[string]any{},
+	}
+}
+
+func panelErrorRoutes() map[string]any {
+	const body = `{"error":{"code":"gateway_error","message":"panel backend unavailable"}}`
+	return map[string]any{
+		"routes": []map[string]any{{
+			"handle": []map[string]any{{
+				"handler":     "static_response",
+				"status_code": "{http.error.status_code}",
+				"body":        body,
+				"headers": map[string]any{
+					"Content-Type":  []string{"application/json; charset=utf-8"},
+					"Cache-Control": []string{"no-store"},
+				},
+			}},
+		}},
 	}
 }
 

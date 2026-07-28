@@ -83,17 +83,47 @@ export const PostApiApplyJobsIdRetryParams = zod.object({
   "id": zod.string()
 })
 
+export const postApiApplyJobsIdRetryHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiApplyJobsIdRetryHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiApplyJobsIdRetryHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiApplyJobsIdRetryHeaderIdempotencyKeyMax).regex(postApiApplyJobsIdRetryHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiApplyJobsIdRetryResponse = zod.unknown()
 
 /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
  */
+export const postApiApplyReconcileHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiApplyReconcileHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiApplyReconcileHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiApplyReconcileHeaderIdempotencyKeyMax).regex(postApiApplyReconcileHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiApplyReconcileResponse = zod.unknown()
 
 /**
  * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
  * @summary Create a new desired revision from an older immutable snapshot
  */
+export const postApiApplyRollbackHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiApplyRollbackHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiApplyRollbackHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiApplyRollbackHeaderIdempotencyKeyMax).regex(postApiApplyRollbackHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 
 
 
@@ -107,6 +137,16 @@ export const PostApiApplyRollbackResponse = zod.unknown()
 /**
  * @summary Stage and optionally promote current management state
  */
+export const postApiApplyHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiApplyHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiApplyHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiApplyHeaderIdempotencyKeyMax).regex(postApiApplyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiApplyBody = zod.object({
   "confirm": zod.boolean(),
   "applyLive": zod.boolean(),
@@ -182,6 +222,16 @@ export const PostApiApplyResponse = zod.object({
 /**
  * @summary Preview the apply plan without writing live files
  */
+export const postApiApplyPlanHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiApplyPlanHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiApplyPlanHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiApplyPlanHeaderIdempotencyKeyMax).regex(postApiApplyPlanHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiApplyPlanResponse = zod.object({
   "valid": zod.boolean(),
   "errors": zod.array(zod.string()).optional(),
@@ -286,6 +336,16 @@ export const GetApiApplyHistoryResponse = zod.array(GetApiApplyHistoryResponseIt
 /**
  * @summary Preview the ru-recommended install profile
  */
+export const postApiProfilesRuRecommendedPreviewHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiProfilesRuRecommendedPreviewHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiProfilesRuRecommendedPreviewHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiProfilesRuRecommendedPreviewHeaderIdempotencyKeyMax).regex(postApiProfilesRuRecommendedPreviewHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 
 
 

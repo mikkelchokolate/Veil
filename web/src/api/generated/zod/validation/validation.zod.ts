@@ -50,6 +50,16 @@ import * as zod from 'zod';
  * again immediately before mutation.
  * @summary Validate a candidate configuration against live host state
  */
+export const postApiValidationHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiValidationHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiValidationHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiValidationHeaderIdempotencyKeyMax).regex(postApiValidationHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiValidationBodyInboundsItemPortMax = 65535;
 
 

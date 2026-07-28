@@ -70,7 +70,7 @@ import type {
   BackupVerificationReport,
   BadRequestResponse,
   EmptyObject,
-  ErrorText,
+  ErrorEnvelope,
   ForbiddenResponse,
   NotFoundResponse,
   ServiceUnavailableResponse,
@@ -582,7 +582,7 @@ export type postApiBackupsNameVerifyResponse404 = {
 }
 
 export type postApiBackupsNameVerifyResponse422 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 422
 }
 
@@ -627,7 +627,7 @@ export const postApiBackupsNameVerify = async (name: string,
 
 
 
-export const getPostApiBackupsNameVerifyMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse,
+export const getPostApiBackupsNameVerifyMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext> => {
 
@@ -656,12 +656,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiBackupsNameVerifyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameVerify>>>
     export type PostApiBackupsNameVerifyMutationBody = EmptyObject | undefined
-    export type PostApiBackupsNameVerifyMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse
+    export type PostApiBackupsNameVerifyMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
 
     /**
  * @summary Decrypt and verify an archive without writing state
  */
-export const usePostApiBackupsNameVerify = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse,
+export const usePostApiBackupsNameVerify = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackupsNameVerify>>,
@@ -697,7 +697,7 @@ export type postApiBackupsNameRestoreResponse404 = {
 }
 
 export type postApiBackupsNameRestoreResponse422 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 422
 }
 
@@ -745,7 +745,7 @@ export const postApiBackupsNameRestore = async (name: string,
 
 
 
-export const getPostApiBackupsNameRestoreMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse,
+export const getPostApiBackupsNameRestoreMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext> => {
 
@@ -774,12 +774,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiBackupsNameRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameRestore>>>
     export type PostApiBackupsNameRestoreMutationBody = BackupRestoreRequest
-    export type PostApiBackupsNameRestoreMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse
+    export type PostApiBackupsNameRestoreMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
 
     /**
  * @summary Queue a verified state and key restore
  */
-export const usePostApiBackupsNameRestore = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse,
+export const usePostApiBackupsNameRestore = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackupsNameRestore>>,

@@ -144,6 +144,8 @@ paths:
                     panelAccess: local
   /api/setup/complete:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: public
       tags: [setup]
       summary: Create the initial administrator
@@ -183,9 +185,9 @@ paths:
         "409":
           description: Setup was already completed or a user already exists.
           content:
-            text/plain:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorText"
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/auth/login:
     post:
       x-veil-role: public
@@ -270,6 +272,8 @@ paths:
                     authenticated: false
   /api/auth/locale:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: self-service
       tags: [auth]
       summary: Update the current browser user's locale
@@ -353,6 +357,8 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     delete:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [auth]
       summary: Revoke an active browser session
@@ -447,6 +453,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/admin/rotate-key:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [admin]
       summary: Rotate the state-encryption key
@@ -516,6 +524,8 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [backups]
       summary: Create and verify an encrypted archive
@@ -558,6 +568,8 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
   /api/backups/prune:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [backups]
       summary: Apply managed archive retention
@@ -623,6 +635,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/BackupName"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [backups]
       summary: Decrypt and verify an archive without writing state
@@ -653,15 +667,17 @@ paths:
         "422":
           description: Archive decryption, checksum, state/key, or schema validation failed.
           content:
-            text/plain:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorText"
+                $ref: "#/components/schemas/ErrorEnvelope"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /api/backups/{name}/restore:
     parameters:
       - $ref: "#/components/parameters/BackupName"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [backups]
       summary: Queue a verified state and key restore
@@ -702,9 +718,9 @@ paths:
         "422":
           description: Archive verification failed before the job was queued.
           content:
-            text/plain:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorText"
+                $ref: "#/components/schemas/ErrorEnvelope"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /api/backup-restore-jobs/{id}:
@@ -756,6 +772,8 @@ paths:
                 items:
                   $ref: "#/components/schemas/UserResponse"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [auth]
       summary: Create a Panel user
@@ -795,6 +813,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Username"
     put:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [auth]
       summary: Update a Panel user
@@ -823,6 +843,8 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [auth]
       summary: Delete a Panel user
@@ -884,6 +906,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
   /api/version/update:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [version]
       summary: Trigger a staged self-update to the latest release
@@ -920,9 +944,9 @@ paths:
         "502":
           description: GitHub release metadata or assets could not be downloaded or verified.
           content:
-            text/plain:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorText"
+                $ref: "#/components/schemas/ErrorEnvelope"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /api/settings:
@@ -949,6 +973,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     put:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [settings]
       summary: Update Panel settings
@@ -1013,6 +1039,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Create an inbound
@@ -1063,6 +1091,8 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Update an inbound
@@ -1091,6 +1121,8 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [inbounds]
       summary: Delete an inbound
@@ -1121,6 +1153,8 @@ paths:
                 items:
                   $ref: "#/components/schemas/RoutingRule"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [routing]
       summary: Create a routing rule
@@ -1168,6 +1202,8 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [routing]
       summary: Update a routing rule
@@ -1194,6 +1230,8 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [routing]
       summary: Delete a routing rule
@@ -1223,6 +1261,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [routing]
       summary: Apply a routing preset
@@ -1253,6 +1293,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WarpConfig"
     put:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [warp]
       summary: Update WARP state
@@ -1313,6 +1355,8 @@ paths:
                 contentEncoding: base64
   /api/client-links/qr:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-secret
       tags: [client-links]
       summary: Render a client URI as a local QR PNG
@@ -1347,9 +1391,9 @@ paths:
         "413":
           description: Submitted URI is too large for QR export.
           content:
-            text/plain:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorText"
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/firewall:
     get:
       x-veil-role: viewer
@@ -1429,6 +1473,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - name: id
           in: path
           required: true
@@ -1443,6 +1488,8 @@ paths:
           description: Another apply is active.
   /api/apply/reconcile:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [apply]
       summary: Apply current desired revision if ahead of applied (idempotent)
@@ -1458,6 +1505,8 @@ paths:
           description: Another apply is active.
   /api/apply/rollback:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [apply]
       summary: Create a new desired revision from an older immutable snapshot
@@ -1495,6 +1544,8 @@ paths:
           description: Selection is not older or another apply owns the lease.
   /api/apply:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [apply]
       summary: Stage and optionally promote current management state
@@ -1526,6 +1577,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/validation:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-metadata
       tags: [validation]
       summary: Validate a candidate configuration against live host state
@@ -1590,6 +1643,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
   /api/apply/plan:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: viewer
       tags: [apply]
       summary: Preview the apply plan without writing live files
@@ -1649,6 +1704,8 @@ paths:
                   $ref: "#/components/schemas/ApplyHistoryEntry"
   /api/profiles/ru-recommended/preview:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: viewer
       tags: [apply]
       summary: Preview the ru-recommended install profile
@@ -1688,6 +1745,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/Name"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [services]
       summary: Restart a managed systemd unit
@@ -1836,6 +1895,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/dns-lookup:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: viewer
       tags: [diagnostics]
       summary: DNS lookup diagnostic
@@ -1861,6 +1922,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/ping:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: viewer
       tags: [diagnostics]
       summary: Ping diagnostic
@@ -1886,6 +1949,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/tools/speedtest:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: viewer
       tags: [diagnostics]
       summary: Speedtest diagnostic
@@ -1926,6 +1991,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ClientListResponse"
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [clients]
       summary: Create a client
@@ -1949,6 +2016,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
   /api/v1/clients/bulk:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [clients]
       summary: Bulk action across clients; per-client results
@@ -2010,6 +2079,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
       requestBody:
         required: true
@@ -2038,6 +2108,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: bindingId
           in: path
@@ -2069,6 +2140,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: bindingId
           in: path
@@ -2089,6 +2161,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: bindingId
           in: path
@@ -2120,6 +2193,7 @@ paths:
         - bearerAuth: []
         - veilToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: bindingId
           in: path
@@ -2143,6 +2217,8 @@ paths:
           description: Rotated credential; server-generated rotate returns {credential,plaintext}.
   /api/v1/clients/migrate-legacy:
     post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       x-veil-role: admin-mutation
       tags: [clients]
       summary: Convert legacy inbound-embedded profiles to normalized clients (idempotent)
@@ -2180,6 +2256,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
       requestBody:
         required: true
@@ -2204,6 +2281,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
       responses:
         "200":
@@ -2230,6 +2308,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
       requestBody:
         required: true
@@ -2259,6 +2338,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: tokenId
           in: path
@@ -2277,6 +2357,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/ClientId"
         - name: tokenId
           in: path
@@ -2497,6 +2578,16 @@ components:
       in: header
       name: X-CSRF-Token
   parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[!-~]+$'
     Name:
       name: name
       in: path
@@ -2536,12 +2627,13 @@ components:
     BadRequest:
       description: Request body, query string, or path failed validation.
       content:
-        text/plain:
+        application/json:
           schema:
-            $ref: "#/components/schemas/ErrorText"
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             invalid:
-              value: "invalid JSON\n"
+              value:
+                error: {code: invalid_request, message: invalid JSON, requestId: example-request-id}
     Unauthorized:
       description: Missing or invalid token/session.
       headers:
@@ -2550,36 +2642,39 @@ components:
             type: string
           description: Present on authenticated API challenges.
       content:
-        text/plain:
+        application/json:
           schema:
-            $ref: "#/components/schemas/ErrorText"
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             missing:
-              value: "missing or invalid API token or session\n"
+              value:
+                error: {code: unauthorized, message: missing or invalid API token or session, requestId: example-request-id}
     Forbidden:
       description: Authenticated principal is not allowed to perform the operation.
       content:
-        text/plain:
+        application/json:
           schema:
-            $ref: "#/components/schemas/ErrorText"
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             csrf:
-              value: "invalid or missing CSRF token\n"
+              value:
+                error: {code: forbidden, message: invalid or missing CSRF token, requestId: example-request-id}
     NotFound:
       description: Resource not found.
       content:
-        text/plain:
+        application/json:
           schema:
-            $ref: "#/components/schemas/ErrorText"
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             not-found:
-              value: "404 page not found\n"
+              value:
+                error: {code: not_found, message: not found, requestId: example-request-id}
     ServiceUnavailable:
       description: Runtime dependency is unavailable.
       content:
-        text/plain:
+        application/json:
           schema:
-            $ref: "#/components/schemas/ErrorText"
+            $ref: "#/components/schemas/ErrorEnvelope"
     ValidationFailed:
       description: Candidate configuration failed authoritative validation and was not mutated.
       content:
@@ -2616,18 +2711,25 @@ components:
     EmptyObject:
       type: object
       additionalProperties: false
-    ErrorText:
-      type: string
-      description: Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
     ErrorObject:
       type: object
-      required: [code, message]
+      required: [code, message, requestId]
       additionalProperties: false
       properties:
         code:
           type: string
         message:
           type: string
+        requestId:
+          type: string
+          description: Server-generated request identifier.
     PrivilegedErrorEnvelope:
       type: object
       required: [error]

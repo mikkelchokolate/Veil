@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from './errorText.msw.ts';
+import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
 
 /**
  * Resource not found.
  */
-export type NotFoundResponse = ErrorText;
+export type NotFoundResponse = ErrorEnvelope;

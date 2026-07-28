@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,7 +61,7 @@ func (s *managementState) auditRecorder() *audit.Recorder {
 	return audit.NewRecorder("", audit.RecorderOptions{})
 }
 
-func (s *managementState) recordRequestAudit(r *http.Request, record audit.Record) {
+func (s *managementState) recordRequestAudit(r *http.Request, record audit.Record) error {
 	if r != nil {
 		if record.Actor == "" {
 			record.Actor, record.Role = s.auditActor(r)
@@ -68,11 +69,37 @@ func (s *managementState) recordRequestAudit(r *http.Request, record audit.Recor
 		record.IP = clientIP(r)
 		record.UserAgent = r.UserAgent()
 		record.RequestID = r.Header.Get("X-Request-ID")
+		record.ClientRequestID = clientProvidedRequestID(r)
 	}
 	if record.Actor == "" {
 		record.Actor = "system"
 	}
-	_ = s.auditRecorder().Append(record)
+	if err := s.auditRecorder().Append(record); err != nil {
+		s.auditHealthMu.Lock()
+		s.auditDegraded = true
+		s.auditHealthMu.Unlock()
+		log.Printf("SECURITY AUDIT DEGRADED: audit record persistence failed: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (s *managementState) isAuditDegraded() bool {
+	if s == nil {
+		return false
+	}
+	s.auditHealthMu.RLock()
+	defer s.auditHealthMu.RUnlock()
+	return s.auditDegraded
+}
+
+func auditHealthMiddleware(state *managementState, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if state.isAuditDegraded() {
+			w.Header().Set("X-Veil-Audit-Degraded", "true")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *managementState) auditActor(r *http.Request) (string, string) {

@@ -63,7 +63,7 @@ import type {
   BadRequestResponse,
   ClientLinkQRRequest,
   ClientLinksResponse,
-  ErrorText,
+  ErrorEnvelope,
   GetApiClientLinksSubscriptionParams,
   UnauthorizedResponse
 } from '../models';
@@ -342,7 +342,7 @@ export type postApiClientLinksQrResponse401 = {
 }
 
 export type postApiClientLinksQrResponse413 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 413
 }
 
@@ -382,7 +382,7 @@ export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequ
 
 
 
-export const getPostApiClientLinksQrMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ErrorText,
+export const getPostApiClientLinksQrMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext> => {
 
@@ -411,12 +411,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiClientLinksQrMutationResult = NonNullable<Awaited<ReturnType<typeof postApiClientLinksQr>>>
     export type PostApiClientLinksQrMutationBody = ClientLinkQRRequest
-    export type PostApiClientLinksQrMutationError = BadRequestResponse | UnauthorizedResponse | ErrorText
+    export type PostApiClientLinksQrMutationError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope
 
     /**
  * @summary Render a client URI as a local QR PNG
  */
-export const usePostApiClientLinksQr = <TError = BadRequestResponse | UnauthorizedResponse | ErrorText,
+export const usePostApiClientLinksQr = <TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiClientLinksQr>>,

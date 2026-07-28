@@ -89,9 +89,7 @@ func TestRURecommendedPreviewEndpointRejectsRemovedStackField(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	var errResp struct{ Message string }
-	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
-	if w.Code != http.StatusBadRequest || !strings.Contains(errResp.Message, `json: unknown field "stack"`) {
+	if w.Code != http.StatusBadRequest || !strings.Contains(responseErrorMessage(t, w.Body.Bytes()), `json: unknown field "stack"`) {
 		t.Fatalf("expected removed stack field rejection, got %d: %s", w.Code, w.Body.String())
 	}
 }

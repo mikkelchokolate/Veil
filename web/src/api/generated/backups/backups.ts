@@ -70,7 +70,7 @@ import type {
   BackupVerificationReport,
   BadRequestResponse,
   EmptyObject,
-  ErrorText,
+  ErrorEnvelope,
   ForbiddenResponse,
   NotFoundResponse,
   ServiceUnavailableResponse,
@@ -582,7 +582,7 @@ export type postApiBackupsNameVerifyResponse404 = {
 }
 
 export type postApiBackupsNameVerifyResponse422 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 422
 }
 
@@ -635,7 +635,7 @@ export const getPostApiBackupsNameVerifyQueryKey = (name: string,
     }
 
 
-export const getPostApiBackupsNameVerifyQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(name: string,
+export const getPostApiBackupsNameVerifyQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -655,10 +655,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsNameVerifyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameVerify>>>
-export type PostApiBackupsNameVerifyQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse
+export type PostApiBackupsNameVerifyQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
 
 
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -669,7 +669,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -680,7 +680,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -689,7 +689,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
  * @summary Decrypt and verify an archive without writing state
  */
 
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -733,7 +733,7 @@ export type postApiBackupsNameRestoreResponse404 = {
 }
 
 export type postApiBackupsNameRestoreResponse422 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 422
 }
 
@@ -789,7 +789,7 @@ export const getPostApiBackupsNameRestoreQueryKey = (name: string,
     }
 
 
-export const getPostApiBackupsNameRestoreQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(name: string,
+export const getPostApiBackupsNameRestoreQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -809,10 +809,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsNameRestoreQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameRestore>>>
-export type PostApiBackupsNameRestoreQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse
+export type PostApiBackupsNameRestoreQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
 
 
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -823,7 +823,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -834,7 +834,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -843,7 +843,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
  * @summary Queue a verified state and key restore
  */
 
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorText | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient

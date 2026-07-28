@@ -62,6 +62,16 @@ export const GetApiWarpResponse = zod.object({
 /**
  * @summary Update WARP state
  */
+export const putApiWarpHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiWarpHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiWarpHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiWarpHeaderIdempotencyKeyMax).regex(putApiWarpHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PutApiWarpBody = zod.object({
   "enabled": zod.boolean(),
   "licenseKey": zod.string().optional(),

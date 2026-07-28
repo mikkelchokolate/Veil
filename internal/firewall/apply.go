@@ -39,6 +39,7 @@ func (a UFWApplier) EnsureActive() error {
 	out := a.runner.Run(veilruntime.RuntimeCommandInput{
 		Command: []string{"ufw", "--force", "enable"},
 		Timeout: 15 * time.Second,
+		Env:     stableUFWEnv,
 	})
 	if out.Err != nil {
 		return fmt.Errorf("enable ufw: %w (output: %s)", out.Err, out.Output)
@@ -57,6 +58,7 @@ func (a UFWApplier) ApplyRules(rules []Rule) error {
 		out := a.runner.Run(veilruntime.RuntimeCommandInput{
 			Command: append([]string{"ufw"}, rule.Args...),
 			Timeout: 15 * time.Second,
+			Env:     stableUFWEnv,
 		})
 		// ufw returns exit code 1 when the rule already exists; treat that as success.
 		if out.Err != nil && !isUFWDuplicateRule(out.Output) {
@@ -68,6 +70,7 @@ func (a UFWApplier) ApplyRules(rules []Rule) error {
 		out := a.runner.Run(veilruntime.RuntimeCommandInput{
 			Command: []string{"ufw", "reload"},
 			Timeout: 15 * time.Second,
+			Env:     stableUFWEnv,
 		})
 		if out.Err != nil {
 			return fmt.Errorf("reload ufw: %w (output: %s)", out.Err, out.Output)

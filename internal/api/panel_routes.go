@@ -140,7 +140,7 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 			if _, err := os.Stat(routes.Info.StatePath); err != nil {
 				writeJSONStatus(w, http.StatusServiceUnavailable, map[string]string{
 					"status": "unhealthy",
-					"error":  err.Error(),
+					"error":  "management state unavailable",
 				})
 				return
 			}
@@ -234,10 +234,6 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 }
 
 func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
-	writeJSONStatus(w, http.StatusServiceUnavailable, map[string]any{
-		"error": map[string]string{
-			"code":    string(privileged.ErrorOperationFailed),
-			"message": "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`.",
-		},
-	})
+	const message = "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`."
+	writeErrorEnvelope(w, string(privileged.ErrorOperationFailed), message, http.StatusServiceUnavailable)
 }

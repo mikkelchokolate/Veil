@@ -57,6 +57,16 @@ export const GetApiSetupStatusResponse = zod.object({
  * Single-use operation available only on an unconfigured local loopback listener.
  * @summary Create the initial administrator
  */
+export const postApiSetupCompleteHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiSetupCompleteHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiSetupCompleteHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiSetupCompleteHeaderIdempotencyKeyMax).regex(postApiSetupCompleteHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiSetupCompleteBodyUsernameMin = 3;
 export const postApiSetupCompleteBodyUsernameMax = 64;
 

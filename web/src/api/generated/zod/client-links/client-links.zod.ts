@@ -88,6 +88,16 @@ export const GetApiClientLinksSubscriptionResponse = zod.string()
  * Generates the QR image inside Veil so client URIs are not sent to a third-party QR service.
  * @summary Render a client URI as a local QR PNG
  */
+export const postApiClientLinksQrHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiClientLinksQrHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiClientLinksQrHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiClientLinksQrHeaderIdempotencyKeyMax).regex(postApiClientLinksQrHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiClientLinksQrBodyUriMax = 4096;
 
 

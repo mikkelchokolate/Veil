@@ -287,8 +287,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidatio
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unsupported subscription query, got %d: %s", w.Code, w.Body.String())
 	}
-	var errResp struct{ Message string }
-	if err := json.Unmarshal(w.Body.Bytes(), &errResp); err != nil || !strings.Contains(errResp.Message, `unsupported subscription query "offset"`) {
+	if message := responseErrorMessage(t, w.Body.Bytes()); !strings.Contains(message, `unsupported subscription query "offset"`) {
 		t.Fatalf("unexpected unsupported query error: %q", w.Body.String())
 	}
 }

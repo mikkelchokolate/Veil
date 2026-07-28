@@ -49,6 +49,16 @@ import * as zod from 'zod';
  * except the initiating session are revoked after a successful rotation.
  * @summary Rotate the state-encryption key
  */
+export const postApiAdminRotateKeyHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiAdminRotateKeyHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiAdminRotateKeyHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiAdminRotateKeyHeaderIdempotencyKeyMax).regex(postApiAdminRotateKeyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiAdminRotateKeyBody = zod.object({
 
 })

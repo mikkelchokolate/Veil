@@ -58,11 +58,21 @@ function extractMessage(
 ): { message: string; code?: string } {
 	if (body && typeof body === "object") {
 		const o = body as Record<string, unknown>;
+		const nested =
+			o.error && typeof o.error === "object"
+				? (o.error as Record<string, unknown>)
+				: undefined;
 		const message =
+			(typeof nested?.message === "string" && nested.message) ||
 			(typeof o.message === "string" && o.message) ||
 			(typeof o.error === "string" && o.error) ||
 			fallback;
-		const code = typeof o.code === "string" ? o.code : undefined;
+		const code =
+			typeof nested?.code === "string"
+				? nested.code
+				: typeof o.code === "string"
+					? o.code
+					: undefined;
 		return { message, ...(code ? { code } : {}) };
 	}
 	return { message: fallback };

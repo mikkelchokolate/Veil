@@ -53,6 +53,16 @@ export const PostApiServicesNameRestartParams = zod.object({
   "name": zod.string().min(1)
 })
 
+export const postApiServicesNameRestartHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiServicesNameRestartHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiServicesNameRestartHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiServicesNameRestartHeaderIdempotencyKeyMax).regex(postApiServicesNameRestartHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiServicesNameRestartBody = zod.object({
   "confirm": zod.boolean()
 })

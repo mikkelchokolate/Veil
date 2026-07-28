@@ -111,8 +111,8 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 
 	apply := httptest.NewRecorder()
 	r.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
-	if apply.Code != http.StatusInternalServerError || !strings.Contains(apply.Body.String(), "checksum mismatch") {
-		t.Fatalf("apply expected checksum mismatch 500, got %d: %s", apply.Code, apply.Body.String())
+	if apply.Code != http.StatusInternalServerError || responseErrorMessage(t, apply.Body.Bytes()) != "internal server error" || strings.Contains(apply.Body.String(), "checksum mismatch") {
+		t.Fatalf("apply expected non-leaking 500, got %d: %s", apply.Code, apply.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "rules", "geoip.dat")); !os.IsNotExist(err) {
 		t.Fatalf("geoip.dat should not be staged after checksum mismatch, stat err: %v", err)

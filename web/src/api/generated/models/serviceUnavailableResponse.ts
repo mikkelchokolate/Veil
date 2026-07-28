@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from './errorText.ts';
+import type { ErrorEnvelope } from './errorEnvelope.ts';
 
 /**
  * Runtime dependency is unavailable.
  */
-export type ServiceUnavailableResponse = ErrorText;
+export type ServiceUnavailableResponse = ErrorEnvelope;

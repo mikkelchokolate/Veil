@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from './errorText.ts';
+import type { ErrorEnvelope } from './errorEnvelope.ts';
 
 /**
  * Request body, query string, or path failed validation.
  */
-export type BadRequestResponse = ErrorText;
+export type BadRequestResponse = ErrorEnvelope;

@@ -42,6 +42,6 @@
  */
 
 /**
- * Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
+ * Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
  */
-export type ErrorText = string;
+export type IdempotencyKeyParameter = string;

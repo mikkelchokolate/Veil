@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -60,7 +59,7 @@ func TestEffectiveAuthStatusReportsCSRFPersistenceFailure(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "session storage unavailable") {
+	if responseErrorMessage(t, rec.Body.Bytes()) != "internal server error" {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 	tokenHash := hashSessionSecret(session.Token)

@@ -283,10 +283,20 @@ func (s *managementState) Close() error {
 	workers := detachClientBackgroundWorkers(s)
 	hub := s.sse
 	s.sse = nil
+	limiter := s.httpRateLimiter
+	s.httpRateLimiter = nil
+	idempotency := s.idempotency
+	s.idempotency = nil
 	s.mu.Unlock()
 
 	if hub != nil {
 		hub.Close()
+	}
+	if limiter != nil {
+		_ = limiter.Close()
+	}
+	if idempotency != nil {
+		_ = idempotency.Close()
 	}
 	stopClientBackgroundWorkers(workers)
 

@@ -78,6 +78,16 @@ export const GetApiInboundsResponse = zod.array(GetApiInboundsResponseItem)
 /**
  * @summary Create an inbound
  */
+export const postApiInboundsHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiInboundsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiInboundsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiInboundsHeaderIdempotencyKeyMax).regex(postApiInboundsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiInboundsBodyPortMax = 65535;
 
 
@@ -182,6 +192,16 @@ export const PutApiInboundsNameParams = zod.object({
   "name": zod.string().min(1)
 })
 
+export const putApiInboundsNameHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiInboundsNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiInboundsNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiInboundsNameHeaderIdempotencyKeyMax).regex(putApiInboundsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const putApiInboundsNameBodyPortMax = 65535;
 
 
@@ -246,6 +266,16 @@ export const PutApiInboundsNameResponse = zod.object({
 
 export const DeleteApiInboundsNameParams = zod.object({
   "name": zod.string().min(1)
+})
+
+export const deleteApiInboundsNameHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiInboundsNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiInboundsNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiInboundsNameHeaderIdempotencyKeyMax).regex(deleteApiInboundsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const DeleteApiInboundsNameResponse = zod.unknown()

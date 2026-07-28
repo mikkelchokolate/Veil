@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorText } from './errorText.msw.ts';
+import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
 
 /**
  * Authenticated principal is not allowed to perform the operation.
  */
-export type ForbiddenResponse = ErrorText;
+export type ForbiddenResponse = ErrorEnvelope;

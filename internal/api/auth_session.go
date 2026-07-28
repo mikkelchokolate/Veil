@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"strconv"
@@ -17,6 +19,12 @@ import (
 )
 
 var errUserNotFound = errors.New("user not found")
+
+func constantTimePasswordEqual(supplied, expected string) bool {
+	suppliedDigest := sha256.Sum256([]byte(supplied))
+	expectedDigest := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(suppliedDigest[:], expectedDigest[:]) == 1
+}
 
 func (s *managementState) sessionRegistry() *SessionRegistry {
 	if s != nil && s.sessions != nil {
@@ -48,6 +56,11 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "too many login attempts", http.StatusTooManyRequests)
 		return
 	}
+	if retryAfter := s.loginBackoffRemaining(usernameKey); retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+		writeError(w, "too many login attempts", http.StatusTooManyRequests)
+		return
+	}
 
 	s.mu.Lock()
 	var matchedUser User
@@ -74,13 +87,15 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 			locale = panel.NormalizeLocale(matchedUser.Locale)
 		}
 	} else if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
-		if req.Password == fallbackPassword {
+		if constantTimePasswordEqual(req.Password, fallbackPassword) {
 			valid = true
 			role = "admin"
 		}
 	}
 
 	if !valid {
+		retryAfter := s.recordLoginFailure(usernameKey)
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
 			Actor:   req.Username,
 			Action:  "auth.login",
@@ -92,6 +107,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.clearLoginFailures(usernameKey)
 	session, err := s.sessionRegistry().Create(SessionCreateInput{
 		Username:   req.Username,
 		Role:       role,

@@ -57,6 +57,16 @@ export const GetApiRoutingRulesResponse = zod.array(GetApiRoutingRulesResponseIt
 /**
  * @summary Create a routing rule
  */
+export const postApiRoutingRulesHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiRoutingRulesHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiRoutingRulesHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiRoutingRulesHeaderIdempotencyKeyMax).regex(postApiRoutingRulesHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiRoutingRulesBody = zod.object({
   "name": zod.string(),
   "match": zod.string(),
@@ -98,6 +108,16 @@ export const PutApiRoutingRulesNameParams = zod.object({
   "name": zod.string().min(1)
 })
 
+export const putApiRoutingRulesNameHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiRoutingRulesNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiRoutingRulesNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiRoutingRulesNameHeaderIdempotencyKeyMax).regex(putApiRoutingRulesNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PutApiRoutingRulesNameBody = zod.object({
   "name": zod.string(),
   "match": zod.string(),
@@ -120,6 +140,16 @@ export const PutApiRoutingRulesNameResponse = zod.object({
 
 export const DeleteApiRoutingRulesNameParams = zod.object({
   "name": zod.string().min(1)
+})
+
+export const deleteApiRoutingRulesNameHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiRoutingRulesNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiRoutingRulesNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiRoutingRulesNameHeaderIdempotencyKeyMax).regex(deleteApiRoutingRulesNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const DeleteApiRoutingRulesNameResponse = zod.unknown()
@@ -171,6 +201,16 @@ export const GetApiRoutingPresetsResponse = zod.object({
 
 export const PostApiRoutingPresetsNameParams = zod.object({
   "name": zod.string().min(1)
+})
+
+export const postApiRoutingPresetsNameHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiRoutingPresetsNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiRoutingPresetsNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiRoutingPresetsNameHeaderIdempotencyKeyMax).regex(postApiRoutingPresetsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const PostApiRoutingPresetsNameResponse = zod.object({

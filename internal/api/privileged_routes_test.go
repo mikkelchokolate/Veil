@@ -24,6 +24,7 @@ type recordingPrivilegedClient struct {
 	statusRequests        []privileged.ServiceStatusRequest
 	statusActiveState     string
 	journals              []privileged.JournalRequest
+	journalLines          []string
 	backups               []privileged.BackupRequest
 	updates               []privileged.UpdateRequest
 	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
@@ -148,7 +149,11 @@ func (c *recordingPrivilegedClient) ServiceStatus(_ context.Context, request pri
 
 func (c *recordingPrivilegedClient) Journal(_ context.Context, request privileged.JournalRequest) (privileged.JournalResult, error) {
 	c.journals = append(c.journals, request)
-	return privileged.JournalResult{Unit: request.Unit, Lines: []string{"line one", "line two"}}, c.err
+	lines := c.journalLines
+	if lines == nil {
+		lines = []string{"line one", "line two"}
+	}
+	return privileged.JournalResult{Unit: request.Unit, Lines: lines}, c.err
 }
 
 func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {

@@ -55,6 +55,16 @@ export const GetApiVersionResponse = zod.object({
 /**
  * @summary Trigger a staged self-update to the latest release
  */
+export const postApiVersionUpdateHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiVersionUpdateHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiVersionUpdateHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiVersionUpdateHeaderIdempotencyKeyMax).regex(postApiVersionUpdateHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiVersionUpdateBody = zod.object({
 
 })

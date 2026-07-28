@@ -34,6 +34,7 @@ type RateLimiter struct {
 	endpointLimits map[string]EndpointLimit
 	mu             sync.RWMutex
 	stopCh         chan struct{}
+	doneCh         chan struct{}
 	stopOnce       sync.Once
 	resolver       clientaddr.Resolver
 	onRateLimited  func() // called when a request is rate-limited
@@ -47,6 +48,7 @@ func NewRateLimiter(ratePerMinute, burst int) *RateLimiter {
 		rate:   float64(ratePerMinute) / 60.0,
 		burst:  burst,
 		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
 	rl.engine = newRateLimiterEngineWithBuckets(&rl.buckets)
 	go rl.cleanupLoop()
@@ -66,7 +68,11 @@ func (rl *RateLimiter) Stop() {
 	rl.stopOnce.Do(func() { close(rl.stopCh) })
 }
 
-func (rl *RateLimiter) Close() error { rl.Stop(); return nil }
+func (rl *RateLimiter) Close() error {
+	rl.Stop()
+	<-rl.doneCh
+	return nil
+}
 
 func (rl *RateLimiter) SetClientAddressResolver(resolver clientaddr.Resolver) {
 	rl.mu.Lock()
@@ -130,6 +136,7 @@ func extractClientIP(r *http.Request) string {
 }
 
 func (rl *RateLimiter) cleanupLoop() {
+	defer close(rl.doneCh)
 	ticker := time.NewTicker(time.Duration(cleanupInterval.Load()))
 	defer ticker.Stop()
 	for {

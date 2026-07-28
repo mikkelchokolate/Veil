@@ -63,7 +63,7 @@ import type {
   BadRequestResponse,
   ClientLinkQRRequest,
   ClientLinksResponse,
-  ErrorText,
+  ErrorEnvelope,
   GetApiClientLinksSubscriptionParams,
   UnauthorizedResponse
 } from '../models';
@@ -282,7 +282,7 @@ export type postApiClientLinksQrResponse401 = {
 }
 
 export type postApiClientLinksQrResponse413 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 413
 }
 
@@ -329,7 +329,7 @@ export const getPostApiClientLinksQrQueryKey = (clientLinkQRRequest?: ClientLink
     }
 
 
-export const getPostApiClientLinksQrQueryOptions = <TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiClientLinksQrQueryOptions = <TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -348,10 +348,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiClientLinksQrQueryResult = NonNullable<Awaited<ReturnType<typeof postApiClientLinksQr>>>
-export type PostApiClientLinksQrQueryError = BadRequestResponse | UnauthorizedResponse | ErrorText
+export type PostApiClientLinksQrQueryError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope
 
 
-export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
  clientLinkQRRequest: ClientLinkQRRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiClientLinksQr>>,
@@ -361,7 +361,7 @@ export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
  clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiClientLinksQr>>,
@@ -371,7 +371,7 @@ export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
  clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -379,7 +379,7 @@ export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postAp
  * @summary Render a client URI as a local QR PNG
  */
 
-export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorText>(
+export function usePostApiClientLinksQr<TData = Awaited<ReturnType<typeof postApiClientLinksQr>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
  clientLinkQRRequest: ClientLinkQRRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

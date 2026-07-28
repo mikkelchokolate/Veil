@@ -39,7 +39,7 @@ func TestWriteInboundManagementError(t *testing.T) {
 		{inbounds.ErrInboundDuplicateTransportPort, http.StatusConflict, "transport/port already exists"},
 		{inbounds.ErrInboundUnsupportedProtocolTransport, http.StatusBadRequest, "unsupported inbound"},
 		{inbounds.ErrInboundNotFound, http.StatusNotFound, "404"},
-		{errors.New("custom failure"), http.StatusInternalServerError, "custom failure"},
+		{errors.New("custom failure"), http.StatusInternalServerError, "internal server error"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.err.Error(), func(t *testing.T) {

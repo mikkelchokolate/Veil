@@ -46,6 +46,16 @@ import * as zod from 'zod';
 /**
  * @summary DNS lookup diagnostic
  */
+export const postApiToolsDnsLookupHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiToolsDnsLookupHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiToolsDnsLookupHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiToolsDnsLookupHeaderIdempotencyKeyMax).regex(postApiToolsDnsLookupHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiToolsDnsLookupBody = zod.object({
   "hostname": zod.string()
 })
@@ -60,6 +70,16 @@ export const PostApiToolsDnsLookupResponse = zod.object({
 /**
  * @summary Ping diagnostic
  */
+export const postApiToolsPingHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiToolsPingHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiToolsPingHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiToolsPingHeaderIdempotencyKeyMax).regex(postApiToolsPingHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiToolsPingBodyCountDefault = 3;
 export const postApiToolsPingBodyCountMax = 10;
 
@@ -85,6 +105,16 @@ export const PostApiToolsPingResponse = zod.object({
 /**
  * @summary Speedtest diagnostic
  */
+export const postApiToolsSpeedtestHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiToolsSpeedtestHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiToolsSpeedtestHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiToolsSpeedtestHeaderIdempotencyKeyMax).regex(postApiToolsSpeedtestHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiToolsSpeedtestBody = zod.object({
 
 })

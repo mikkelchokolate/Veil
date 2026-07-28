@@ -44,4 +44,6 @@
 export interface ErrorObject {
   code: string;
   message: string;
+  /** Server-generated request identifier. */
+  requestId: string;
 }

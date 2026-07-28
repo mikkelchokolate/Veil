@@ -85,6 +85,16 @@ export const GetApiAuthStatusResponse = zod.object({
  * endpoint.
  * @summary Update the current browser user's locale
  */
+export const postApiAuthLocaleHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiAuthLocaleHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiAuthLocaleHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiAuthLocaleHeaderIdempotencyKeyMax).regex(postApiAuthLocaleHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiAuthLocaleBody = zod.object({
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.')
 })
@@ -120,6 +130,16 @@ export const GetApiAuthSessionsResponse = zod.array(GetApiAuthSessionsResponseIt
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Revoke an active browser session
  */
+export const deleteApiAuthSessionsHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiAuthSessionsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiAuthSessionsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiAuthSessionsHeaderIdempotencyKeyMax).regex(deleteApiAuthSessionsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const deleteApiAuthSessionsBodyIdMin = 16;
 export const deleteApiAuthSessionsBodyIdMax = 16;
 
@@ -147,6 +167,16 @@ export const GetApiUsersResponse = zod.array(GetApiUsersResponseItem)
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Create a Panel user
  */
+export const postApiUsersHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiUsersHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiUsersHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiUsersHeaderIdempotencyKeyMax).regex(postApiUsersHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiUsersBody = zod.object({
   "username": zod.string(),
   "password": zod.string(),
@@ -170,6 +200,16 @@ export const PutApiUsersUsernameParams = zod.object({
   "username": zod.string().min(1)
 })
 
+export const putApiUsersUsernameHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiUsersUsernameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiUsersUsernameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiUsersUsernameHeaderIdempotencyKeyMax).regex(putApiUsersUsernameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PutApiUsersUsernameBody = zod.object({
   "password": zod.string().optional(),
   "role": zod.enum(['admin', 'viewer']),
@@ -190,6 +230,16 @@ export const PutApiUsersUsernameResponse = zod.object({
 
 export const DeleteApiUsersUsernameParams = zod.object({
   "username": zod.string().min(1)
+})
+
+export const deleteApiUsersUsernameHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiUsersUsernameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiUsersUsernameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiUsersUsernameHeaderIdempotencyKeyMax).regex(deleteApiUsersUsernameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const DeleteApiUsersUsernameResponse = zod.void()

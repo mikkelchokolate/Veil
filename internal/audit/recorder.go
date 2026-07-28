@@ -24,17 +24,18 @@ const (
 )
 
 type Record struct {
-	Timestamp time.Time      `json:"timestamp"`
-	Actor     string         `json:"actor"`
-	Role      string         `json:"role,omitempty"`
-	Action    string         `json:"action"`
-	Target    string         `json:"target,omitempty"`
-	IP        string         `json:"ip,omitempty"`
-	UserAgent string         `json:"userAgent,omitempty"`
-	RequestID string         `json:"requestId,omitempty"`
-	Success   bool           `json:"success"`
-	Error     string         `json:"error,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
+	Timestamp       time.Time      `json:"timestamp"`
+	Actor           string         `json:"actor"`
+	Role            string         `json:"role,omitempty"`
+	Action          string         `json:"action"`
+	Target          string         `json:"target,omitempty"`
+	IP              string         `json:"ip,omitempty"`
+	UserAgent       string         `json:"userAgent,omitempty"`
+	RequestID       string         `json:"requestId,omitempty"`
+	ClientRequestID string         `json:"clientRequestId,omitempty"`
+	Success         bool           `json:"success"`
+	Error           string         `json:"error,omitempty"`
+	Details         map[string]any `json:"details,omitempty"`
 }
 
 type RecorderOptions struct {

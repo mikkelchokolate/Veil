@@ -97,6 +97,16 @@ export const GetApiV1ClientsResponse = zod.object({
 /**
  * @summary Create a client
  */
+export const postApiV1ClientsHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsHeaderIdempotencyKeyMax).regex(postApiV1ClientsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiV1ClientsBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
@@ -199,6 +209,16 @@ export const PostApiV1ClientsResponse = zod.object({
 /**
  * @summary Bulk action across clients; per-client results
  */
+export const postApiV1ClientsBulkHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsBulkHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsBulkHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsBulkHeaderIdempotencyKeyMax).regex(postApiV1ClientsBulkHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiV1ClientsBulkBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBulkBodyQuotaBytesMax = 9007199254740991;
 
@@ -236,6 +256,16 @@ export const PostApiV1ClientsIdBindingsParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const postApiV1ClientsIdBindingsHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsIdBindingsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsIdBindingsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsIdBindingsHeaderIdempotencyKeyMax).regex(postApiV1ClientsIdBindingsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiV1ClientsIdBindingsBody = zod.object({
   "inboundId": zod.string().optional(),
   "credential": zod.string().optional(),
@@ -253,6 +283,16 @@ export const PostApiV1ClientsIdBindingsResponse = zod.void()
 export const PatchApiV1ClientsIdBindingsBindingIdParams = zod.object({
   "id": zod.string().min(1),
   "bindingId": zod.string()
+})
+
+export const patchApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyMax = 128;
+
+
+export const patchApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PatchApiV1ClientsIdBindingsBindingIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(patchApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyMax).regex(patchApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const PatchApiV1ClientsIdBindingsBindingIdBody = zod.object({
@@ -273,6 +313,16 @@ export const DeleteApiV1ClientsIdBindingsBindingIdParams = zod.object({
   "bindingId": zod.string()
 })
 
+export const deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1ClientsIdBindingsBindingIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyMax).regex(deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const DeleteApiV1ClientsIdBindingsBindingIdResponse = zod.unknown()
 
 /**
@@ -284,6 +334,16 @@ export const DeleteApiV1ClientsIdBindingsBindingIdResponse = zod.unknown()
 export const PostApiV1ClientsIdCredentialsBindingIdParams = zod.object({
   "id": zod.string().min(1),
   "bindingId": zod.string()
+})
+
+export const postApiV1ClientsIdCredentialsBindingIdHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsIdCredentialsBindingIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsIdCredentialsBindingIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsIdCredentialsBindingIdHeaderIdempotencyKeyMax).regex(postApiV1ClientsIdCredentialsBindingIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const PostApiV1ClientsIdCredentialsBindingIdBody = zod.object({
@@ -304,6 +364,16 @@ export const PostApiV1ClientsIdCredentialsBindingIdRotateParams = zod.object({
   "bindingId": zod.string()
 })
 
+export const postApiV1ClientsIdCredentialsBindingIdRotateHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsIdCredentialsBindingIdRotateHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsIdCredentialsBindingIdRotateHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsIdCredentialsBindingIdRotateHeaderIdempotencyKeyMax).regex(postApiV1ClientsIdCredentialsBindingIdRotateHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiV1ClientsIdCredentialsBindingIdRotateBody = zod.object({
   "kind": zod.string().optional(),
   "value": zod.string().optional().describe('Optional; when empty the server generates a high-entropy secret returned once.')
@@ -314,6 +384,16 @@ export const PostApiV1ClientsIdCredentialsBindingIdRotateResponse = zod.unknown(
 /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
  */
+export const postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsMigrateLegacyHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyMax).regex(postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiV1ClientsMigrateLegacyResponse = zod.unknown()
 
 /**
@@ -379,6 +459,16 @@ export const GetApiV1ClientsIdResponse = zod.object({
 
 export const PatchApiV1ClientsIdParams = zod.object({
   "id": zod.string().min(1)
+})
+
+export const patchApiV1ClientsIdHeaderIdempotencyKeyMax = 128;
+
+
+export const patchApiV1ClientsIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PatchApiV1ClientsIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(patchApiV1ClientsIdHeaderIdempotencyKeyMax).regex(patchApiV1ClientsIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 
@@ -458,6 +548,16 @@ export const DeleteApiV1ClientsIdParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const deleteApiV1ClientsIdHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1ClientsIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1ClientsIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1ClientsIdHeaderIdempotencyKeyMax).regex(deleteApiV1ClientsIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const DeleteApiV1ClientsIdResponse = zod.unknown()
 
 /**
@@ -482,6 +582,16 @@ export const PostApiV1ClientsIdTokensParams = zod.object({
   "id": zod.string().min(1)
 })
 
+export const postApiV1ClientsIdTokensHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsIdTokensHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsIdTokensHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsIdTokensHeaderIdempotencyKeyMax).regex(postApiV1ClientsIdTokensHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiV1ClientsIdTokensBody = zod.object({
   "label": zod.string().optional(),
   "expiresAt": zod.number().optional()
@@ -504,6 +614,16 @@ export const DeleteApiV1ClientsIdTokensTokenIdParams = zod.object({
   "tokenId": zod.string()
 })
 
+export const deleteApiV1ClientsIdTokensTokenIdHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1ClientsIdTokensTokenIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1ClientsIdTokensTokenIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1ClientsIdTokensTokenIdHeaderIdempotencyKeyMax).regex(deleteApiV1ClientsIdTokensTokenIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const DeleteApiV1ClientsIdTokensTokenIdResponse = zod.unknown()
 
 /**
@@ -515,6 +635,16 @@ export const DeleteApiV1ClientsIdTokensTokenIdResponse = zod.unknown()
 export const PostApiV1ClientsIdTokensTokenIdRotateParams = zod.object({
   "id": zod.string().min(1),
   "tokenId": zod.string()
+})
+
+export const postApiV1ClientsIdTokensTokenIdRotateHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1ClientsIdTokensTokenIdRotateHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1ClientsIdTokensTokenIdRotateHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsIdTokensTokenIdRotateHeaderIdempotencyKeyMax).regex(postApiV1ClientsIdTokensTokenIdRotateHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const PostApiV1ClientsIdTokensTokenIdRotateBody = zod.object({

@@ -76,7 +76,7 @@ func TestAtomicUserUpdateStopsWhenSessionPersistenceFails(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), errSessionRevocationPersistence.Error()) {
+	if responseErrorMessage(t, rec.Body.Bytes()) != "internal server error" {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 	for _, user := range state.users {

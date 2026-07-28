@@ -61,7 +61,7 @@ import type {
 
 import type {
   BadRequestResponse,
-  ErrorText,
+  ErrorEnvelope,
   ForbiddenResponse,
   SetupCompleteRequest,
   SetupCompleteResponse,
@@ -219,7 +219,7 @@ export type postApiSetupCompleteResponse403 = {
 }
 
 export type postApiSetupCompleteResponse409 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 409
 }
 
@@ -259,7 +259,7 @@ export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRe
 
 
 
-export const getPostApiSetupCompleteMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ErrorText,
+export const getPostApiSetupCompleteMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext> => {
 
@@ -288,12 +288,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiSetupCompleteMutationResult = NonNullable<Awaited<ReturnType<typeof postApiSetupComplete>>>
     export type PostApiSetupCompleteMutationBody = SetupCompleteRequest
-    export type PostApiSetupCompleteMutationError = BadRequestResponse | ForbiddenResponse | ErrorText
+    export type PostApiSetupCompleteMutationError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope
 
     /**
  * @summary Create the initial administrator
  */
-export const usePostApiSetupComplete = <TError = BadRequestResponse | ForbiddenResponse | ErrorText,
+export const usePostApiSetupComplete = <TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiSetupComplete>>,

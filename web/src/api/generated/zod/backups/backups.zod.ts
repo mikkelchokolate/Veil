@@ -66,6 +66,16 @@ export const GetApiBackupsResponse = zod.array(GetApiBackupsResponseItem)
  * cookie session.
  * @summary Create and verify an encrypted archive
  */
+export const postApiBackupsHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiBackupsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiBackupsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiBackupsHeaderIdempotencyKeyMax).regex(postApiBackupsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiBackupsBodyPruneDefault = false;
 export const postApiBackupsBodyDailyDefault = 7;
 export const postApiBackupsBodyDailyMin = 0;
@@ -137,6 +147,16 @@ export const PostApiBackupsResponse = zod.object({
  * Requires admin and CSRF for a cookie session.
  * @summary Apply managed archive retention
  */
+export const postApiBackupsPruneHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiBackupsPruneHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiBackupsPruneHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiBackupsPruneHeaderIdempotencyKeyMax).regex(postApiBackupsPruneHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const postApiBackupsPruneBodyDailyDefault = 7;
 export const postApiBackupsPruneBodyDailyMin = 0;
 export const postApiBackupsPruneBodyDailyMax = 365;
@@ -186,6 +206,16 @@ export const PostApiBackupsNameVerifyParams = zod.object({
   "name": zod.string().regex(postApiBackupsNameVerifyPathNameRegExp)
 })
 
+export const postApiBackupsNameVerifyHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiBackupsNameVerifyHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiBackupsNameVerifyHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiBackupsNameVerifyHeaderIdempotencyKeyMax).regex(postApiBackupsNameVerifyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiBackupsNameVerifyBody = zod.object({
 
 })
@@ -230,6 +260,16 @@ export const postApiBackupsNameRestorePathNameRegExp = new RegExp('^veil_backup_
 
 export const PostApiBackupsNameRestoreParams = zod.object({
   "name": zod.string().regex(postApiBackupsNameRestorePathNameRegExp)
+})
+
+export const postApiBackupsNameRestoreHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiBackupsNameRestoreHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiBackupsNameRestoreHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiBackupsNameRestoreHeaderIdempotencyKeyMax).regex(postApiBackupsNameRestoreHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
 export const PostApiBackupsNameRestoreBody = zod.object({

@@ -68,6 +68,16 @@ export const GetApiSettingsResponse = zod.object({
 /**
  * @summary Update Panel settings
  */
+export const putApiSettingsHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiSettingsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiSettingsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiSettingsHeaderIdempotencyKeyMax).regex(putApiSettingsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PutApiSettingsBody = zod.object({
   "panelListen": zod.string(),
   "panelAccess": zod.enum(['local', 'direct', 'caddy', '']).optional(),

@@ -39,11 +39,13 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	ProfilePreviewRoutes{}.Register(mux)
 	LogRoutes{State: state}.Register(mux)
 
-	var handler http.Handler = mux
+	state.idempotency = newIdempotencyStore()
+	var handler http.Handler = state.idempotency.Middleware(mux)
 	if basePath != "/" {
-		handler = stripBasePathMiddleware(basePath, mux)
+		handler = stripBasePathMiddleware(basePath, handler)
 	}
-	rateLimited := rateLimitMiddleware(metrics, info.TrustedProxyCIDRs, handler)
+	rateLimited, limiter := newRateLimitMiddleware(metrics, info.TrustedProxyCIDRs, handler)
+	state.httpRateLimiter = limiter
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,
 		ProtectHealthz:    info.PublicListen,
@@ -52,5 +54,6 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
-	return metrics.MetricsMiddleware(secured), state
+	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
+	return requestIDMiddleware(healthAware), state
 }

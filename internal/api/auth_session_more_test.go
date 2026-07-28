@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -314,10 +315,12 @@ func TestHandleAuthLocalePersistsLocale(t *testing.T) {
 func TestHandleLoginValidation(t *testing.T) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
 	registry, _ := NewSessionRegistry("")
+	now := time.Now()
 	state := &managementState{
-		sessions: registry,
-		users:    []User{{Username: "alice", PasswordHash: string(hash), Role: "admin"}},
-		settings: Settings{NaivePassword: "naive-password", PanelAccess: "local"},
+		sessions:        registry,
+		users:           []User{{Username: "alice", PasswordHash: string(hash), Role: "admin"}},
+		settings:        Settings{NaivePassword: "naive-password", PanelAccess: "local"},
+		loginBackoffNow: func() time.Time { return now },
 	}
 
 	get := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
@@ -342,6 +345,7 @@ func TestHandleLoginValidation(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("bad creds status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	now = now.Add(2 * time.Second)
 
 	old := randomReader
 	randomReader = func(b []byte) (int, error) { return 0, errors.New("random failure") }

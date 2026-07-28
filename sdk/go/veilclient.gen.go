@@ -1141,14 +1141,19 @@ type DiskStats struct {
 // EmptyObject defines model for EmptyObject.
 type EmptyObject = map[string]interface{}
 
+// ErrorEnvelope defines model for ErrorEnvelope.
+type ErrorEnvelope struct {
+	Error ErrorObject `json:"error"`
+}
+
 // ErrorObject defines model for ErrorObject.
 type ErrorObject struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
-}
 
-// ErrorText Plain text error emitted by `writeError`; usually a single message line ending in `\n`.
-type ErrorText = string
+	// RequestId Server-generated request identifier.
+	RequestId string `json:"requestId"`
+}
 
 // FieldOption defines model for FieldOption.
 type FieldOption struct {
@@ -1773,6 +1778,9 @@ type BackupName = string
 // ClientId defines model for ClientId.
 type ClientId = string
 
+// IdempotencyKey defines model for IdempotencyKey.
+type IdempotencyKey = string
+
 // Name defines model for Name.
 type Name = string
 
@@ -1782,16 +1790,67 @@ type RestoreJobID = string
 // Username defines model for Username.
 type Username = string
 
+// BadRequest defines model for BadRequest.
+type BadRequest = ErrorEnvelope
+
+// Forbidden defines model for Forbidden.
+type Forbidden = ErrorEnvelope
+
+// NotFound defines model for NotFound.
+type NotFound = ErrorEnvelope
+
 // PrivilegedFailure defines model for PrivilegedFailure.
 type PrivilegedFailure = PrivilegedErrorEnvelope
 
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = ErrorEnvelope
+
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = ErrorEnvelope
+
 // ValidationFailed defines model for ValidationFailed.
 type ValidationFailed = ValidationFailure
+
+// PostApiAdminRotateKeyParams defines parameters for PostApiAdminRotateKey.
+type PostApiAdminRotateKeyParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiApplyParams defines parameters for PostApiApply.
+type PostApiApplyParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiApplyJobsIdRetryParams defines parameters for PostApiApplyJobsIdRetry.
+type PostApiApplyJobsIdRetryParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiApplyPlanParams defines parameters for PostApiApplyPlan.
+type PostApiApplyPlanParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiApplyReconcileParams defines parameters for PostApiApplyReconcile.
+type PostApiApplyReconcileParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
 
 // PostApiApplyRollbackJSONBody defines parameters for PostApiApplyRollback.
 type PostApiApplyRollbackJSONBody struct {
 	Confirm          PostApiApplyRollbackJSONBodyConfirm `json:"confirm"`
 	SelectedRevision int                                 `json:"selectedRevision"`
+}
+
+// PostApiApplyRollbackParams defines parameters for PostApiApplyRollback.
+type PostApiApplyRollbackParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // PostApiApplyRollbackJSONBodyConfirm defines parameters for PostApiApplyRollback.
@@ -1805,6 +1864,48 @@ type GetApiAuditParams struct {
 	Before *time.Time `form:"before,omitempty" json:"before,omitempty"`
 }
 
+// PostApiAuthLocaleParams defines parameters for PostApiAuthLocale.
+type PostApiAuthLocaleParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiAuthSessionsParams defines parameters for DeleteApiAuthSessions.
+type DeleteApiAuthSessionsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiBackupsParams defines parameters for PostApiBackups.
+type PostApiBackupsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiBackupsPruneParams defines parameters for PostApiBackupsPrune.
+type PostApiBackupsPruneParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiBackupsNameRestoreParams defines parameters for PostApiBackupsNameRestore.
+type PostApiBackupsNameRestoreParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiBackupsNameVerifyParams defines parameters for PostApiBackupsNameVerify.
+type PostApiBackupsNameVerifyParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiClientLinksQrParams defines parameters for PostApiClientLinksQr.
+type PostApiClientLinksQrParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // GetApiClientLinksSubscriptionParams defines parameters for GetApiClientLinksSubscription.
 type GetApiClientLinksSubscriptionParams struct {
 	Format *GetApiClientLinksSubscriptionParamsFormat `form:"format,omitempty" json:"format,omitempty"`
@@ -1813,10 +1914,118 @@ type GetApiClientLinksSubscriptionParams struct {
 // GetApiClientLinksSubscriptionParamsFormat defines parameters for GetApiClientLinksSubscription.
 type GetApiClientLinksSubscriptionParamsFormat string
 
+// PostApiInboundsParams defines parameters for PostApiInbounds.
+type PostApiInboundsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiInboundsNameParams defines parameters for DeleteApiInboundsName.
+type DeleteApiInboundsNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PutApiInboundsNameParams defines parameters for PutApiInboundsName.
+type PutApiInboundsNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // GetApiLogsParams defines parameters for GetApiLogs.
 type GetApiLogsParams struct {
 	Unit  *string `form:"unit,omitempty" json:"unit,omitempty"`
 	Lines *int    `form:"lines,omitempty" json:"lines,omitempty"`
+}
+
+// PostApiProfilesRuRecommendedPreviewParams defines parameters for PostApiProfilesRuRecommendedPreview.
+type PostApiProfilesRuRecommendedPreviewParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiRoutingPresetsNameParams defines parameters for PostApiRoutingPresetsName.
+type PostApiRoutingPresetsNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiRoutingRulesParams defines parameters for PostApiRoutingRules.
+type PostApiRoutingRulesParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiRoutingRulesNameParams defines parameters for DeleteApiRoutingRulesName.
+type DeleteApiRoutingRulesNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PutApiRoutingRulesNameParams defines parameters for PutApiRoutingRulesName.
+type PutApiRoutingRulesNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiServicesNameRestartParams defines parameters for PostApiServicesNameRestart.
+type PostApiServicesNameRestartParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PutApiSettingsParams defines parameters for PutApiSettings.
+type PutApiSettingsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiSetupCompleteParams defines parameters for PostApiSetupComplete.
+type PostApiSetupCompleteParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiToolsDnsLookupParams defines parameters for PostApiToolsDnsLookup.
+type PostApiToolsDnsLookupParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiToolsPingParams defines parameters for PostApiToolsPing.
+type PostApiToolsPingParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiToolsSpeedtestParams defines parameters for PostApiToolsSpeedtest.
+type PostApiToolsSpeedtestParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiUsersParams defines parameters for PostApiUsers.
+type PostApiUsersParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiUsersUsernameParams defines parameters for DeleteApiUsersUsername.
+type DeleteApiUsersUsernameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PutApiUsersUsernameParams defines parameters for PutApiUsersUsername.
+type PutApiUsersUsernameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1ClientsParams defines parameters for PostApiV1Clients.
+type PostApiV1ClientsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // PostApiV1ClientsBulkJSONBody defines parameters for PostApiV1ClientsBulk.
@@ -1828,8 +2037,32 @@ type PostApiV1ClientsBulkJSONBody struct {
 	QuotaBytes *int64                             `json:"quotaBytes,omitempty"`
 }
 
+// PostApiV1ClientsBulkParams defines parameters for PostApiV1ClientsBulk.
+type PostApiV1ClientsBulkParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsBulkJSONBodyAction defines parameters for PostApiV1ClientsBulk.
 type PostApiV1ClientsBulkJSONBodyAction string
+
+// PostApiV1ClientsMigrateLegacyParams defines parameters for PostApiV1ClientsMigrateLegacy.
+type PostApiV1ClientsMigrateLegacyParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1ClientsIdParams defines parameters for DeleteApiV1ClientsId.
+type DeleteApiV1ClientsIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PatchApiV1ClientsIdParams defines parameters for PatchApiV1ClientsId.
+type PatchApiV1ClientsIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
 
 // PostApiV1ClientsIdBindingsJSONBody defines parameters for PostApiV1ClientsIdBindings.
 type PostApiV1ClientsIdBindingsJSONBody struct {
@@ -1838,16 +2071,40 @@ type PostApiV1ClientsIdBindingsJSONBody struct {
 	InboundId  *string `json:"inboundId,omitempty"`
 }
 
+// PostApiV1ClientsIdBindingsParams defines parameters for PostApiV1ClientsIdBindings.
+type PostApiV1ClientsIdBindingsParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1ClientsIdBindingsBindingIdParams defines parameters for DeleteApiV1ClientsIdBindingsBindingId.
+type DeleteApiV1ClientsIdBindingsBindingIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PatchApiV1ClientsIdBindingsBindingIdJSONBody defines parameters for PatchApiV1ClientsIdBindingsBindingId.
 type PatchApiV1ClientsIdBindingsBindingIdJSONBody struct {
 	Enabled bool `json:"enabled"`
 	Version *int `json:"version,omitempty"`
 }
 
+// PatchApiV1ClientsIdBindingsBindingIdParams defines parameters for PatchApiV1ClientsIdBindingsBindingId.
+type PatchApiV1ClientsIdBindingsBindingIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsIdCredentialsBindingIdJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingId.
 type PostApiV1ClientsIdCredentialsBindingIdJSONBody struct {
 	Kind  *string `json:"kind,omitempty"`
 	Value *string `json:"value,omitempty"`
+}
+
+// PostApiV1ClientsIdCredentialsBindingIdParams defines parameters for PostApiV1ClientsIdCredentialsBindingId.
+type PostApiV1ClientsIdCredentialsBindingIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody defines parameters for PostApiV1ClientsIdCredentialsBindingIdRotate.
@@ -1858,16 +2115,40 @@ type PostApiV1ClientsIdCredentialsBindingIdRotateJSONBody struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// PostApiV1ClientsIdCredentialsBindingIdRotateParams defines parameters for PostApiV1ClientsIdCredentialsBindingIdRotate.
+type PostApiV1ClientsIdCredentialsBindingIdRotateParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsIdTokensJSONBody defines parameters for PostApiV1ClientsIdTokens.
 type PostApiV1ClientsIdTokensJSONBody struct {
 	ExpiresAt *int64  `json:"expiresAt,omitempty"`
 	Label     *string `json:"label,omitempty"`
 }
 
+// PostApiV1ClientsIdTokensParams defines parameters for PostApiV1ClientsIdTokens.
+type PostApiV1ClientsIdTokensParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1ClientsIdTokensTokenIdParams defines parameters for DeleteApiV1ClientsIdTokensTokenId.
+type DeleteApiV1ClientsIdTokensTokenIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsIdTokensTokenIdRotateJSONBody defines parameters for PostApiV1ClientsIdTokensTokenIdRotate.
 type PostApiV1ClientsIdTokensTokenIdRotateJSONBody struct {
 	// ExpiresAt Replacement expiry. A future value is required when rotating an expired token.
 	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+}
+
+// PostApiV1ClientsIdTokensTokenIdRotateParams defines parameters for PostApiV1ClientsIdTokensTokenIdRotate.
+type PostApiV1ClientsIdTokensTokenIdRotateParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // GetApiV1EventsParams defines parameters for GetApiV1Events.
@@ -1888,6 +2169,24 @@ type GetApiV1TrafficIdHistoryParams struct {
 
 	// Limit Max buckets returned (default 500).
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostApiValidationParams defines parameters for PostApiValidation.
+type PostApiValidationParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiVersionUpdateParams defines parameters for PostApiVersionUpdate.
+type PostApiVersionUpdateParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PutApiWarpParams defines parameters for PutApiWarp.
+type PutApiWarpParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // GetSTokenParams defines parameters for GetSToken.
@@ -2097,7 +2396,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-	PostApiAdminRotateKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiAdminRotateKeyWithBody(ctx context.Context, params *PostApiAdminRotateKeyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiAdminRotateKey Rotate the state-encryption key
 	//
@@ -2108,21 +2407,21 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-	PostApiAdminRotateKey(ctx context.Context, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiAdminRotateKey(ctx context.Context, params *PostApiAdminRotateKeyParams, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApplyWithBody Stage and optionally promote current management state
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/apply (the `PostApiApply` operationId).
-	PostApiApplyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyWithBody(ctx context.Context, params *PostApiApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApply Stage and optionally promote current management state
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/apply (the `PostApiApply` operationId).
-	PostApiApply(ctx context.Context, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApply(ctx context.Context, params *PostApiApplyParams, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiApplyHistory Apply workflow history
 	//
@@ -2142,17 +2441,17 @@ type ClientInterface interface {
 	// PostApiApplyJobsIdRetry Create a NEW apply job for the same desired revision
 	//
 	// Corresponds with POST /api/apply/jobs/{id}/retry (the `PostApiApplyJobsIdRetry` operationId).
-	PostApiApplyJobsIdRetry(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyJobsIdRetry(ctx context.Context, id string, params *PostApiApplyJobsIdRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApplyPlan Preview the apply plan without writing live files
 	//
 	// Corresponds with POST /api/apply/plan (the `PostApiApplyPlan` operationId).
-	PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyPlan(ctx context.Context, params *PostApiApplyPlanParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApplyReconcile Apply current desired revision if ahead of applied (idempotent)
 	//
 	// Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
-	PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyReconcile(ctx context.Context, params *PostApiApplyReconcileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApplyRollbackWithBody Create a new desired revision from an older immutable snapshot
 	//
@@ -2161,7 +2460,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-	PostApiApplyRollbackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyRollbackWithBody(ctx context.Context, params *PostApiApplyRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiApplyRollback Create a new desired revision from an older immutable snapshot
 	//
@@ -2170,7 +2469,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-	PostApiApplyRollback(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiApplyRollback(ctx context.Context, params *PostApiApplyRollbackParams, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiApplyState Desired/applied revisions and derived system state
 	//
@@ -2197,7 +2496,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-	PostApiAuthLocaleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiAuthLocaleWithBody(ctx context.Context, params *PostApiAuthLocaleParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiAuthLocale Update the current browser user's locale
 	//
@@ -2210,7 +2509,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-	PostApiAuthLocale(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiAuthLocale(ctx context.Context, params *PostApiAuthLocaleParams, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiAuthLoginWithBody Create a browser session
 	//
@@ -2238,7 +2537,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-	DeleteApiAuthSessionsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiAuthSessionsWithBody(ctx context.Context, params *DeleteApiAuthSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiAuthSessions Revoke an active browser session
 	//
@@ -2247,7 +2546,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-	DeleteApiAuthSessions(ctx context.Context, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiAuthSessions(ctx context.Context, params *DeleteApiAuthSessionsParams, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiAuthSessions List active browser sessions
 	//
@@ -2284,7 +2583,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-	PostApiBackupsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsWithBody(ctx context.Context, params *PostApiBackupsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackups Create and verify an encrypted archive
 	//
@@ -2295,7 +2594,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-	PostApiBackups(ctx context.Context, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackups(ctx context.Context, params *PostApiBackupsParams, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackupsPruneWithBody Apply managed archive retention
 	//
@@ -2304,7 +2603,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-	PostApiBackupsPruneWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsPruneWithBody(ctx context.Context, params *PostApiBackupsPruneParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackupsPrune Apply managed archive retention
 	//
@@ -2313,7 +2612,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-	PostApiBackupsPrune(ctx context.Context, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiBackupsNameDownload Download an encrypted archive
 	//
@@ -2331,7 +2630,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-	PostApiBackupsNameRestoreWithBody(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsNameRestoreWithBody(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackupsNameRestore Queue a verified state and key restore
 	//
@@ -2342,21 +2641,21 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-	PostApiBackupsNameRestore(ctx context.Context, name BackupName, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsNameRestore(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackupsNameVerifyWithBody Decrypt and verify an archive without writing state
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-	PostApiBackupsNameVerifyWithBody(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsNameVerifyWithBody(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiBackupsNameVerify Decrypt and verify an archive without writing state
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-	PostApiBackupsNameVerify(ctx context.Context, name BackupName, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiBackupsNameVerify(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiClientLinks Client links derived from enabled inbounds and profiles
 	//
@@ -2370,7 +2669,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-	PostApiClientLinksQrWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiClientLinksQrWithBody(ctx context.Context, params *PostApiClientLinksQrParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiClientLinksQr Render a client URI as a local QR PNG
 	//
@@ -2379,7 +2678,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-	PostApiClientLinksQr(ctx context.Context, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiClientLinksQr(ctx context.Context, params *PostApiClientLinksQrParams, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiClientLinksSubscription Subscription-format client links
 	//
@@ -2411,19 +2710,19 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-	PostApiInboundsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiInboundsWithBody(ctx context.Context, params *PostApiInboundsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiInbounds Create an inbound
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-	PostApiInbounds(ctx context.Context, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiInbounds(ctx context.Context, params *PostApiInboundsParams, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiInboundsName Delete an inbound
 	//
 	// Corresponds with DELETE /api/inbounds/{name} (the `DeleteApiInboundsName` operationId).
-	DeleteApiInboundsName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiInboundsName(ctx context.Context, name Name, params *DeleteApiInboundsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiInboundsName Read one inbound
 	//
@@ -2435,14 +2734,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-	PutApiInboundsNameWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiInboundsNameWithBody(ctx context.Context, name Name, params *PutApiInboundsNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiInboundsName Update an inbound
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-	PutApiInboundsName(ctx context.Context, name Name, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiInboundsName(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiLogs Bounded journald reads for managed units
 	//
@@ -2464,14 +2763,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-	PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiProfilesRuRecommendedPreview Preview the ru-recommended install profile
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-	PostApiProfilesRuRecommendedPreview(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiProfilesRuRecommendedPreview(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiProtocols List supported protocols and their UI/runtime metadata
 	//
@@ -2486,7 +2785,7 @@ type ClientInterface interface {
 	// PostApiRoutingPresetsName Apply a routing preset
 	//
 	// Corresponds with POST /api/routing/presets/{name} (the `PostApiRoutingPresetsName` operationId).
-	PostApiRoutingPresetsName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiRoutingPresetsName(ctx context.Context, name Name, params *PostApiRoutingPresetsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiRoutingRules List routing rules
 	//
@@ -2498,19 +2797,19 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-	PostApiRoutingRulesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiRoutingRulesWithBody(ctx context.Context, params *PostApiRoutingRulesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiRoutingRules Create a routing rule
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-	PostApiRoutingRules(ctx context.Context, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiRoutingRules(ctx context.Context, params *PostApiRoutingRulesParams, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiRoutingRulesName Delete a routing rule
 	//
 	// Corresponds with DELETE /api/routing/rules/{name} (the `DeleteApiRoutingRulesName` operationId).
-	DeleteApiRoutingRulesName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiRoutingRulesName(ctx context.Context, name Name, params *DeleteApiRoutingRulesNameParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiRoutingRulesName Read a routing rule
 	//
@@ -2522,14 +2821,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-	PutApiRoutingRulesNameWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiRoutingRulesNameWithBody(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiRoutingRulesName Update a routing rule
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-	PutApiRoutingRulesName(ctx context.Context, name Name, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiRoutingRulesName(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiRuntimeObservation Combined runtime observation
 	//
@@ -2541,14 +2840,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-	PostApiServicesNameRestartWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiServicesNameRestartWithBody(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiServicesNameRestart Restart a managed systemd unit
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-	PostApiServicesNameRestart(ctx context.Context, name Name, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiServicesNameRestart(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiSettings Read Panel settings with secrets redacted
 	//
@@ -2560,14 +2859,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-	PutApiSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiSettingsWithBody(ctx context.Context, params *PutApiSettingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiSettings Update Panel settings
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-	PutApiSettings(ctx context.Context, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiSettings(ctx context.Context, params *PutApiSettingsParams, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiSetupCompleteWithBody Create the initial administrator
 	//
@@ -2576,7 +2875,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-	PostApiSetupCompleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiSetupCompleteWithBody(ctx context.Context, params *PostApiSetupCompleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiSetupComplete Create the initial administrator
 	//
@@ -2585,7 +2884,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-	PostApiSetupComplete(ctx context.Context, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiSetupComplete(ctx context.Context, params *PostApiSetupCompleteParams, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiSetupStatus Inspect first-run setup state
 	//
@@ -2614,42 +2913,42 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-	PostApiToolsDnsLookupWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsDnsLookupWithBody(ctx context.Context, params *PostApiToolsDnsLookupParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsDnsLookup DNS lookup diagnostic
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-	PostApiToolsDnsLookup(ctx context.Context, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsDnsLookup(ctx context.Context, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsPingWithBody Ping diagnostic
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-	PostApiToolsPingWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsPingWithBody(ctx context.Context, params *PostApiToolsPingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsPing Ping diagnostic
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-	PostApiToolsPing(ctx context.Context, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsPing(ctx context.Context, params *PostApiToolsPingParams, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsSpeedtestWithBody Speedtest diagnostic
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-	PostApiToolsSpeedtestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsSpeedtestWithBody(ctx context.Context, params *PostApiToolsSpeedtestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsSpeedtest Speedtest diagnostic
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-	PostApiToolsSpeedtest(ctx context.Context, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiToolsSpeedtest(ctx context.Context, params *PostApiToolsSpeedtestParams, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiUsers List registered Panel users
 	//
@@ -2663,7 +2962,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/users (the `PostApiUsers` operationId).
-	PostApiUsersWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiUsersWithBody(ctx context.Context, params *PostApiUsersParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiUsers Create a Panel user
 	//
@@ -2672,26 +2971,26 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/users (the `PostApiUsers` operationId).
-	PostApiUsers(ctx context.Context, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiUsers(ctx context.Context, params *PostApiUsersParams, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiUsersUsername Delete a Panel user
 	//
 	// Corresponds with DELETE /api/users/{username} (the `DeleteApiUsersUsername` operationId).
-	DeleteApiUsersUsername(ctx context.Context, username Username, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiUsersUsername(ctx context.Context, username Username, params *DeleteApiUsersUsernameParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiUsersUsernameWithBody Update a Panel user
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-	PutApiUsersUsernameWithBody(ctx context.Context, username Username, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiUsersUsernameWithBody(ctx context.Context, username Username, params *PutApiUsersUsernameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiUsersUsername Update a Panel user
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-	PutApiUsersUsername(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiUsersUsername(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1Clients List clients with effective status
 	//
@@ -2703,38 +3002,38 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-	PostApiV1ClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsWithBody(ctx context.Context, params *PostApiV1ClientsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1Clients Create a client
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-	PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1Clients(ctx context.Context, params *PostApiV1ClientsParams, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsBulkWithBody Bulk action across clients; per-client results
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-	PostApiV1ClientsBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsBulkWithBody(ctx context.Context, params *PostApiV1ClientsBulkParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsBulk Bulk action across clients; per-client results
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-	PostApiV1ClientsBulk(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsBulk(ctx context.Context, params *PostApiV1ClientsBulkParams, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsMigrateLegacy Convert legacy inbound-embedded profiles to normalized clients (idempotent)
 	//
 	// Corresponds with POST /api/v1/clients/migrate-legacy (the `PostApiV1ClientsMigrateLegacy` operationId).
-	PostApiV1ClientsMigrateLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsMigrateLegacy(ctx context.Context, params *PostApiV1ClientsMigrateLegacyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiV1ClientsId Delete a client
 	//
 	// Corresponds with DELETE /api/v1/clients/{id} (the `DeleteApiV1ClientsId` operationId).
-	DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiV1ClientsId(ctx context.Context, id ClientId, params *DeleteApiV1ClientsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsId Get a client with bindings and effective status
 	//
@@ -2746,14 +3045,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-	PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchApiV1ClientsId Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-	PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PatchApiV1ClientsId(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsIdBindings List client bindings
 	//
@@ -2765,61 +3064,61 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-	PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdBindings Add a binding (optional credential)
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-	PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiV1ClientsIdBindingsBindingId Remove a binding
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
-	DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchApiV1ClientsIdBindingsBindingIdWithBody Update a binding (toggle enabled, optimistic locking)
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-	PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchApiV1ClientsIdBindingsBindingId Update a binding (toggle enabled, optimistic locking)
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-	PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdWithBody Set a binding credential
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdCredentialsBindingId Set a binding credential
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-	PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdRotateWithBody Rotate a binding credential
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdRotate Rotate a binding credential
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
 	//
@@ -2831,33 +3130,33 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-	PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdTokens Issue a subscription token; plaintext returned once
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-	PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiV1ClientsIdTokensTokenId Revoke a subscription token
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
-	DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotateWithBody Rotate a subscription token; new plaintext returned once
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotate Rotate a subscription token; new plaintext returned once
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1Events Unified Server-Sent Events stream (A10)
 	//
@@ -2906,7 +3205,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-	PostApiValidationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiValidationWithBody(ctx context.Context, params *PostApiValidationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiValidation Validate a candidate configuration against live host state
 	//
@@ -2918,7 +3217,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-	PostApiValidation(ctx context.Context, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiValidation(ctx context.Context, params *PostApiValidationParams, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiVersion Current Veil version
 	//
@@ -2930,14 +3229,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-	PostApiVersionUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiVersionUpdateWithBody(ctx context.Context, params *PostApiVersionUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiVersionUpdate Trigger a staged self-update to the latest release
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-	PostApiVersionUpdate(ctx context.Context, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiVersionUpdate(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiWarp Read WARP state with secrets redacted
 	//
@@ -2949,14 +3248,14 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-	PutApiWarpWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiWarpWithBody(ctx context.Context, params *PutApiWarpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiWarp Update WARP state
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-	PutApiWarp(ctx context.Context, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutApiWarp(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetHealthz Liveness/readiness probe
 	//
@@ -3001,8 +3300,8 @@ type ClientInterface interface {
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiAdminRotateKeyRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, params *PostApiAdminRotateKeyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAdminRotateKeyRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3022,8 +3321,8 @@ func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, contentType 
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-func (c *Client) PostApiAdminRotateKey(ctx context.Context, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiAdminRotateKeyRequest(c.Server, body)
+func (c *Client) PostApiAdminRotateKey(ctx context.Context, params *PostApiAdminRotateKeyParams, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAdminRotateKeyRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3039,8 +3338,8 @@ func (c *Client) PostApiAdminRotateKey(ctx context.Context, body PostApiAdminRot
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/apply (the `PostApiApply` operationId).
-func (c *Client) PostApiApplyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiApplyWithBody(ctx context.Context, params *PostApiApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3056,8 +3355,8 @@ func (c *Client) PostApiApplyWithBody(ctx context.Context, contentType string, b
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/apply (the `PostApiApply` operationId).
-func (c *Client) PostApiApply(ctx context.Context, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyRequest(c.Server, body)
+func (c *Client) PostApiApply(ctx context.Context, params *PostApiApplyParams, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3116,8 +3415,8 @@ func (c *Client) GetApiApplyJobsId(ctx context.Context, id string, reqEditors ..
 // PostApiApplyJobsIdRetry Create a NEW apply job for the same desired revision
 //
 // Corresponds with POST /api/apply/jobs/{id}/retry (the `PostApiApplyJobsIdRetry` operationId).
-func (c *Client) PostApiApplyJobsIdRetry(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyJobsIdRetryRequest(c.Server, id)
+func (c *Client) PostApiApplyJobsIdRetry(ctx context.Context, id string, params *PostApiApplyJobsIdRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyJobsIdRetryRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3131,8 +3430,8 @@ func (c *Client) PostApiApplyJobsIdRetry(ctx context.Context, id string, reqEdit
 // PostApiApplyPlan Preview the apply plan without writing live files
 //
 // Corresponds with POST /api/apply/plan (the `PostApiApplyPlan` operationId).
-func (c *Client) PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyPlanRequest(c.Server)
+func (c *Client) PostApiApplyPlan(ctx context.Context, params *PostApiApplyPlanParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyPlanRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3146,8 +3445,8 @@ func (c *Client) PostApiApplyPlan(ctx context.Context, reqEditors ...RequestEdit
 // PostApiApplyReconcile Apply current desired revision if ahead of applied (idempotent)
 //
 // Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
-func (c *Client) PostApiApplyReconcile(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyReconcileRequest(c.Server)
+func (c *Client) PostApiApplyReconcile(ctx context.Context, params *PostApiApplyReconcileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyReconcileRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3165,8 +3464,8 @@ func (c *Client) PostApiApplyReconcile(ctx context.Context, reqEditors ...Reques
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-func (c *Client) PostApiApplyRollbackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyRollbackRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiApplyRollbackWithBody(ctx context.Context, params *PostApiApplyRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRollbackRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3184,8 +3483,8 @@ func (c *Client) PostApiApplyRollbackWithBody(ctx context.Context, contentType s
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-func (c *Client) PostApiApplyRollback(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiApplyRollbackRequest(c.Server, body)
+func (c *Client) PostApiApplyRollback(ctx context.Context, params *PostApiApplyRollbackParams, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiApplyRollbackRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3241,8 +3540,8 @@ func (c *Client) GetApiAudit(ctx context.Context, params *GetApiAuditParams, req
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-func (c *Client) PostApiAuthLocaleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiAuthLocaleRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiAuthLocaleWithBody(ctx context.Context, params *PostApiAuthLocaleParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAuthLocaleRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3264,8 +3563,8 @@ func (c *Client) PostApiAuthLocaleWithBody(ctx context.Context, contentType stri
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-func (c *Client) PostApiAuthLocale(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiAuthLocaleRequest(c.Server, body)
+func (c *Client) PostApiAuthLocale(ctx context.Context, params *PostApiAuthLocaleParams, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiAuthLocaleRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3332,8 +3631,8 @@ func (c *Client) PostApiAuthLogout(ctx context.Context, reqEditors ...RequestEdi
 // Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-func (c *Client) DeleteApiAuthSessionsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiAuthSessionsRequestWithBody(c.Server, contentType, body)
+func (c *Client) DeleteApiAuthSessionsWithBody(ctx context.Context, params *DeleteApiAuthSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiAuthSessionsRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3351,8 +3650,8 @@ func (c *Client) DeleteApiAuthSessionsWithBody(ctx context.Context, contentType 
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-func (c *Client) DeleteApiAuthSessions(ctx context.Context, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiAuthSessionsRequest(c.Server, body)
+func (c *Client) DeleteApiAuthSessions(ctx context.Context, params *DeleteApiAuthSessionsParams, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiAuthSessionsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3438,8 +3737,8 @@ func (c *Client) GetApiBackups(ctx context.Context, reqEditors ...RequestEditorF
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-func (c *Client) PostApiBackupsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiBackupsWithBody(ctx context.Context, params *PostApiBackupsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3459,8 +3758,8 @@ func (c *Client) PostApiBackupsWithBody(ctx context.Context, contentType string,
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-func (c *Client) PostApiBackups(ctx context.Context, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsRequest(c.Server, body)
+func (c *Client) PostApiBackups(ctx context.Context, params *PostApiBackupsParams, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3478,8 +3777,8 @@ func (c *Client) PostApiBackups(ctx context.Context, body PostApiBackupsJSONRequ
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-func (c *Client) PostApiBackupsPruneWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsPruneRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiBackupsPruneWithBody(ctx context.Context, params *PostApiBackupsPruneParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsPruneRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3497,8 +3796,8 @@ func (c *Client) PostApiBackupsPruneWithBody(ctx context.Context, contentType st
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-func (c *Client) PostApiBackupsPrune(ctx context.Context, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsPruneRequest(c.Server, body)
+func (c *Client) PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsPruneRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3535,8 +3834,8 @@ func (c *Client) GetApiBackupsNameDownload(ctx context.Context, name BackupName,
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-func (c *Client) PostApiBackupsNameRestoreWithBody(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsNameRestoreRequestWithBody(c.Server, name, contentType, body)
+func (c *Client) PostApiBackupsNameRestoreWithBody(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsNameRestoreRequestWithBody(c.Server, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3556,8 +3855,8 @@ func (c *Client) PostApiBackupsNameRestoreWithBody(ctx context.Context, name Bac
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-func (c *Client) PostApiBackupsNameRestore(ctx context.Context, name BackupName, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsNameRestoreRequest(c.Server, name, body)
+func (c *Client) PostApiBackupsNameRestore(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsNameRestoreRequest(c.Server, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3573,8 +3872,8 @@ func (c *Client) PostApiBackupsNameRestore(ctx context.Context, name BackupName,
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-func (c *Client) PostApiBackupsNameVerifyWithBody(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsNameVerifyRequestWithBody(c.Server, name, contentType, body)
+func (c *Client) PostApiBackupsNameVerifyWithBody(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsNameVerifyRequestWithBody(c.Server, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3590,8 +3889,8 @@ func (c *Client) PostApiBackupsNameVerifyWithBody(ctx context.Context, name Back
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-func (c *Client) PostApiBackupsNameVerify(ctx context.Context, name BackupName, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiBackupsNameVerifyRequest(c.Server, name, body)
+func (c *Client) PostApiBackupsNameVerify(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsNameVerifyRequest(c.Server, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3624,8 +3923,8 @@ func (c *Client) GetApiClientLinks(ctx context.Context, reqEditors ...RequestEdi
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-func (c *Client) PostApiClientLinksQrWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiClientLinksQrRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiClientLinksQrWithBody(ctx context.Context, params *PostApiClientLinksQrParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiClientLinksQrRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3643,8 +3942,8 @@ func (c *Client) PostApiClientLinksQrWithBody(ctx context.Context, contentType s
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-func (c *Client) PostApiClientLinksQr(ctx context.Context, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiClientLinksQrRequest(c.Server, body)
+func (c *Client) PostApiClientLinksQr(ctx context.Context, params *PostApiClientLinksQrParams, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiClientLinksQrRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3735,8 +4034,8 @@ func (c *Client) GetApiInbounds(ctx context.Context, reqEditors ...RequestEditor
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-func (c *Client) PostApiInboundsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiInboundsRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiInboundsWithBody(ctx context.Context, params *PostApiInboundsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiInboundsRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3752,8 +4051,8 @@ func (c *Client) PostApiInboundsWithBody(ctx context.Context, contentType string
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-func (c *Client) PostApiInbounds(ctx context.Context, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiInboundsRequest(c.Server, body)
+func (c *Client) PostApiInbounds(ctx context.Context, params *PostApiInboundsParams, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiInboundsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3767,8 +4066,8 @@ func (c *Client) PostApiInbounds(ctx context.Context, body PostApiInboundsJSONRe
 // DeleteApiInboundsName Delete an inbound
 //
 // Corresponds with DELETE /api/inbounds/{name} (the `DeleteApiInboundsName` operationId).
-func (c *Client) DeleteApiInboundsName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiInboundsNameRequest(c.Server, name)
+func (c *Client) DeleteApiInboundsName(ctx context.Context, name Name, params *DeleteApiInboundsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiInboundsNameRequest(c.Server, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3799,8 +4098,8 @@ func (c *Client) GetApiInboundsName(ctx context.Context, name Name, reqEditors .
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-func (c *Client) PutApiInboundsNameWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiInboundsNameRequestWithBody(c.Server, name, contentType, body)
+func (c *Client) PutApiInboundsNameWithBody(ctx context.Context, name Name, params *PutApiInboundsNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiInboundsNameRequestWithBody(c.Server, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3816,8 +4115,8 @@ func (c *Client) PutApiInboundsNameWithBody(ctx context.Context, name Name, cont
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-func (c *Client) PutApiInboundsName(ctx context.Context, name Name, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiInboundsNameRequest(c.Server, name, body)
+func (c *Client) PutApiInboundsName(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiInboundsNameRequest(c.Server, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3878,8 +4177,8 @@ func (c *Client) GetApiProcesses(ctx context.Context, reqEditors ...RequestEdito
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-func (c *Client) PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProfilesRuRecommendedPreviewRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProfilesRuRecommendedPreviewRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3895,8 +4194,8 @@ func (c *Client) PostApiProfilesRuRecommendedPreviewWithBody(ctx context.Context
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-func (c *Client) PostApiProfilesRuRecommendedPreview(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProfilesRuRecommendedPreviewRequest(c.Server, body)
+func (c *Client) PostApiProfilesRuRecommendedPreview(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProfilesRuRecommendedPreviewRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3940,8 +4239,8 @@ func (c *Client) GetApiRoutingPresets(ctx context.Context, reqEditors ...Request
 // PostApiRoutingPresetsName Apply a routing preset
 //
 // Corresponds with POST /api/routing/presets/{name} (the `PostApiRoutingPresetsName` operationId).
-func (c *Client) PostApiRoutingPresetsName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiRoutingPresetsNameRequest(c.Server, name)
+func (c *Client) PostApiRoutingPresetsName(ctx context.Context, name Name, params *PostApiRoutingPresetsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiRoutingPresetsNameRequest(c.Server, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3972,8 +4271,8 @@ func (c *Client) GetApiRoutingRules(ctx context.Context, reqEditors ...RequestEd
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-func (c *Client) PostApiRoutingRulesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiRoutingRulesRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiRoutingRulesWithBody(ctx context.Context, params *PostApiRoutingRulesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiRoutingRulesRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3989,8 +4288,8 @@ func (c *Client) PostApiRoutingRulesWithBody(ctx context.Context, contentType st
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-func (c *Client) PostApiRoutingRules(ctx context.Context, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiRoutingRulesRequest(c.Server, body)
+func (c *Client) PostApiRoutingRules(ctx context.Context, params *PostApiRoutingRulesParams, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiRoutingRulesRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4004,8 +4303,8 @@ func (c *Client) PostApiRoutingRules(ctx context.Context, body PostApiRoutingRul
 // DeleteApiRoutingRulesName Delete a routing rule
 //
 // Corresponds with DELETE /api/routing/rules/{name} (the `DeleteApiRoutingRulesName` operationId).
-func (c *Client) DeleteApiRoutingRulesName(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiRoutingRulesNameRequest(c.Server, name)
+func (c *Client) DeleteApiRoutingRulesName(ctx context.Context, name Name, params *DeleteApiRoutingRulesNameParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiRoutingRulesNameRequest(c.Server, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4036,8 +4335,8 @@ func (c *Client) GetApiRoutingRulesName(ctx context.Context, name Name, reqEdito
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-func (c *Client) PutApiRoutingRulesNameWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiRoutingRulesNameRequestWithBody(c.Server, name, contentType, body)
+func (c *Client) PutApiRoutingRulesNameWithBody(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiRoutingRulesNameRequestWithBody(c.Server, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4053,8 +4352,8 @@ func (c *Client) PutApiRoutingRulesNameWithBody(ctx context.Context, name Name, 
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-func (c *Client) PutApiRoutingRulesName(ctx context.Context, name Name, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiRoutingRulesNameRequest(c.Server, name, body)
+func (c *Client) PutApiRoutingRulesName(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiRoutingRulesNameRequest(c.Server, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4085,8 +4384,8 @@ func (c *Client) GetApiRuntimeObservation(ctx context.Context, reqEditors ...Req
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-func (c *Client) PostApiServicesNameRestartWithBody(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiServicesNameRestartRequestWithBody(c.Server, name, contentType, body)
+func (c *Client) PostApiServicesNameRestartWithBody(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiServicesNameRestartRequestWithBody(c.Server, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4102,8 +4401,8 @@ func (c *Client) PostApiServicesNameRestartWithBody(ctx context.Context, name Na
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-func (c *Client) PostApiServicesNameRestart(ctx context.Context, name Name, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiServicesNameRestartRequest(c.Server, name, body)
+func (c *Client) PostApiServicesNameRestart(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiServicesNameRestartRequest(c.Server, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4134,8 +4433,8 @@ func (c *Client) GetApiSettings(ctx context.Context, reqEditors ...RequestEditor
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-func (c *Client) PutApiSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiSettingsRequestWithBody(c.Server, contentType, body)
+func (c *Client) PutApiSettingsWithBody(ctx context.Context, params *PutApiSettingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiSettingsRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4151,8 +4450,8 @@ func (c *Client) PutApiSettingsWithBody(ctx context.Context, contentType string,
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-func (c *Client) PutApiSettings(ctx context.Context, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiSettingsRequest(c.Server, body)
+func (c *Client) PutApiSettings(ctx context.Context, params *PutApiSettingsParams, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiSettingsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4170,8 +4469,8 @@ func (c *Client) PutApiSettings(ctx context.Context, body PutApiSettingsJSONRequ
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-func (c *Client) PostApiSetupCompleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiSetupCompleteRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiSetupCompleteWithBody(ctx context.Context, params *PostApiSetupCompleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiSetupCompleteRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4189,8 +4488,8 @@ func (c *Client) PostApiSetupCompleteWithBody(ctx context.Context, contentType s
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-func (c *Client) PostApiSetupComplete(ctx context.Context, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiSetupCompleteRequest(c.Server, body)
+func (c *Client) PostApiSetupComplete(ctx context.Context, params *PostApiSetupCompleteParams, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiSetupCompleteRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4268,8 +4567,8 @@ func (c *Client) GetApiTls(ctx context.Context, reqEditors ...RequestEditorFn) (
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-func (c *Client) PostApiToolsDnsLookupWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsDnsLookupRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiToolsDnsLookupWithBody(ctx context.Context, params *PostApiToolsDnsLookupParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsDnsLookupRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4285,8 +4584,8 @@ func (c *Client) PostApiToolsDnsLookupWithBody(ctx context.Context, contentType 
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-func (c *Client) PostApiToolsDnsLookup(ctx context.Context, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsDnsLookupRequest(c.Server, body)
+func (c *Client) PostApiToolsDnsLookup(ctx context.Context, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsDnsLookupRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4302,8 +4601,8 @@ func (c *Client) PostApiToolsDnsLookup(ctx context.Context, body PostApiToolsDns
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-func (c *Client) PostApiToolsPingWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsPingRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiToolsPingWithBody(ctx context.Context, params *PostApiToolsPingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsPingRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4319,8 +4618,8 @@ func (c *Client) PostApiToolsPingWithBody(ctx context.Context, contentType strin
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-func (c *Client) PostApiToolsPing(ctx context.Context, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsPingRequest(c.Server, body)
+func (c *Client) PostApiToolsPing(ctx context.Context, params *PostApiToolsPingParams, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsPingRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4336,8 +4635,8 @@ func (c *Client) PostApiToolsPing(ctx context.Context, body PostApiToolsPingJSON
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-func (c *Client) PostApiToolsSpeedtestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsSpeedtestRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiToolsSpeedtestWithBody(ctx context.Context, params *PostApiToolsSpeedtestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsSpeedtestRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4353,8 +4652,8 @@ func (c *Client) PostApiToolsSpeedtestWithBody(ctx context.Context, contentType 
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-func (c *Client) PostApiToolsSpeedtest(ctx context.Context, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiToolsSpeedtestRequest(c.Server, body)
+func (c *Client) PostApiToolsSpeedtest(ctx context.Context, params *PostApiToolsSpeedtestParams, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiToolsSpeedtestRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4387,8 +4686,8 @@ func (c *Client) GetApiUsers(ctx context.Context, reqEditors ...RequestEditorFn)
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/users (the `PostApiUsers` operationId).
-func (c *Client) PostApiUsersWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiUsersRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiUsersWithBody(ctx context.Context, params *PostApiUsersParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiUsersRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4406,8 +4705,8 @@ func (c *Client) PostApiUsersWithBody(ctx context.Context, contentType string, b
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/users (the `PostApiUsers` operationId).
-func (c *Client) PostApiUsers(ctx context.Context, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiUsersRequest(c.Server, body)
+func (c *Client) PostApiUsers(ctx context.Context, params *PostApiUsersParams, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiUsersRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4421,8 +4720,8 @@ func (c *Client) PostApiUsers(ctx context.Context, body PostApiUsersJSONRequestB
 // DeleteApiUsersUsername Delete a Panel user
 //
 // Corresponds with DELETE /api/users/{username} (the `DeleteApiUsersUsername` operationId).
-func (c *Client) DeleteApiUsersUsername(ctx context.Context, username Username, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiUsersUsernameRequest(c.Server, username)
+func (c *Client) DeleteApiUsersUsername(ctx context.Context, username Username, params *DeleteApiUsersUsernameParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiUsersUsernameRequest(c.Server, username, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4438,8 +4737,8 @@ func (c *Client) DeleteApiUsersUsername(ctx context.Context, username Username, 
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-func (c *Client) PutApiUsersUsernameWithBody(ctx context.Context, username Username, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiUsersUsernameRequestWithBody(c.Server, username, contentType, body)
+func (c *Client) PutApiUsersUsernameWithBody(ctx context.Context, username Username, params *PutApiUsersUsernameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiUsersUsernameRequestWithBody(c.Server, username, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4455,8 +4754,8 @@ func (c *Client) PutApiUsersUsernameWithBody(ctx context.Context, username Usern
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-func (c *Client) PutApiUsersUsername(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiUsersUsernameRequest(c.Server, username, body)
+func (c *Client) PutApiUsersUsername(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiUsersUsernameRequest(c.Server, username, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4487,8 +4786,8 @@ func (c *Client) GetApiV1Clients(ctx context.Context, reqEditors ...RequestEdito
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-func (c *Client) PostApiV1ClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiV1ClientsWithBody(ctx context.Context, params *PostApiV1ClientsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4504,8 +4803,8 @@ func (c *Client) PostApiV1ClientsWithBody(ctx context.Context, contentType strin
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-func (c *Client) PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsRequest(c.Server, body)
+func (c *Client) PostApiV1Clients(ctx context.Context, params *PostApiV1ClientsParams, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4521,8 +4820,8 @@ func (c *Client) PostApiV1Clients(ctx context.Context, body PostApiV1ClientsJSON
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-func (c *Client) PostApiV1ClientsBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsBulkRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiV1ClientsBulkWithBody(ctx context.Context, params *PostApiV1ClientsBulkParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsBulkRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4538,8 +4837,8 @@ func (c *Client) PostApiV1ClientsBulkWithBody(ctx context.Context, contentType s
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-func (c *Client) PostApiV1ClientsBulk(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsBulkRequest(c.Server, body)
+func (c *Client) PostApiV1ClientsBulk(ctx context.Context, params *PostApiV1ClientsBulkParams, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsBulkRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4553,8 +4852,8 @@ func (c *Client) PostApiV1ClientsBulk(ctx context.Context, body PostApiV1Clients
 // PostApiV1ClientsMigrateLegacy Convert legacy inbound-embedded profiles to normalized clients (idempotent)
 //
 // Corresponds with POST /api/v1/clients/migrate-legacy (the `PostApiV1ClientsMigrateLegacy` operationId).
-func (c *Client) PostApiV1ClientsMigrateLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsMigrateLegacyRequest(c.Server)
+func (c *Client) PostApiV1ClientsMigrateLegacy(ctx context.Context, params *PostApiV1ClientsMigrateLegacyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsMigrateLegacyRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4568,8 +4867,8 @@ func (c *Client) PostApiV1ClientsMigrateLegacy(ctx context.Context, reqEditors .
 // DeleteApiV1ClientsId Delete a client
 //
 // Corresponds with DELETE /api/v1/clients/{id} (the `DeleteApiV1ClientsId` operationId).
-func (c *Client) DeleteApiV1ClientsId(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiV1ClientsIdRequest(c.Server, id)
+func (c *Client) DeleteApiV1ClientsId(ctx context.Context, id ClientId, params *DeleteApiV1ClientsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4600,8 +4899,8 @@ func (c *Client) GetApiV1ClientsId(ctx context.Context, id ClientId, reqEditors 
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdRequestWithBody(c.Server, id, contentType, body)
+func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4617,8 +4916,8 @@ func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, c
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, body)
+func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4649,8 +4948,8 @@ func (c *Client) GetApiV1ClientsIdBindings(ctx context.Context, id ClientId, req
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-func (c *Client) PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdBindingsRequestWithBody(c.Server, id, contentType, body)
+func (c *Client) PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdBindingsRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4666,8 +4965,8 @@ func (c *Client) PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id Clie
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdBindingsRequest(c.Server, id, body)
+func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdBindingsRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4681,8 +4980,8 @@ func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, bo
 // DeleteApiV1ClientsIdBindingsBindingId Remove a binding
 //
 // Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
-func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId)
+func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4698,8 +4997,8 @@ func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id C
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-func (c *Client) PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(c.Server, id, bindingId, contentType, body)
+func (c *Client) PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(c.Server, id, bindingId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4715,8 +5014,8 @@ func (c *Client) PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx context.Contex
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-func (c *Client) PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId, body)
+func (c *Client) PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4732,8 +5031,8 @@ func (c *Client) PatchApiV1ClientsIdBindingsBindingId(ctx context.Context, id Cl
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-func (c *Client) PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(c.Server, id, bindingId, contentType, body)
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(c.Server, id, bindingId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4749,8 +5048,8 @@ func (c *Client) PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx context.Cont
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-func (c *Client) PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequest(c.Server, id, bindingId, body)
+func (c *Client) PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRequest(c.Server, id, bindingId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4766,8 +5065,8 @@ func (c *Client) PostApiV1ClientsIdCredentialsBindingId(ctx context.Context, id 
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(c.Server, id, bindingId, contentType, body)
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(c.Server, id, bindingId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4783,8 +5082,8 @@ func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx contex
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(c.Server, id, bindingId, body)
+func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(c.Server, id, bindingId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4815,8 +5114,8 @@ func (c *Client) GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEd
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-func (c *Client) PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdTokensRequestWithBody(c.Server, id, contentType, body)
+func (c *Client) PostApiV1ClientsIdTokensWithBody(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4832,8 +5131,8 @@ func (c *Client) PostApiV1ClientsIdTokensWithBody(ctx context.Context, id Client
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-func (c *Client) PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdTokensRequest(c.Server, id, body)
+func (c *Client) PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4847,8 +5146,8 @@ func (c *Client) PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, body
 // DeleteApiV1ClientsIdTokensTokenId Revoke a subscription token
 //
 // Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
-func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteApiV1ClientsIdTokensTokenIdRequest(c.Server, id, tokenId)
+func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClientsIdTokensTokenIdRequest(c.Server, id, tokenId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4864,8 +5163,8 @@ func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id Clien
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *Client) PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(c.Server, id, tokenId, contentType, body)
+func (c *Client) PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(c.Server, id, tokenId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4881,8 +5180,8 @@ func (c *Client) PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx context.Conte
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId, body)
+func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClientsIdTokensTokenIdRotateRequest(c.Server, id, tokenId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5001,8 +5300,8 @@ func (c *Client) GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, para
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-func (c *Client) PostApiValidationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiValidationRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiValidationWithBody(ctx context.Context, params *PostApiValidationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiValidationRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5023,8 +5322,8 @@ func (c *Client) PostApiValidationWithBody(ctx context.Context, contentType stri
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-func (c *Client) PostApiValidation(ctx context.Context, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiValidationRequest(c.Server, body)
+func (c *Client) PostApiValidation(ctx context.Context, params *PostApiValidationParams, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiValidationRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5055,8 +5354,8 @@ func (c *Client) GetApiVersion(ctx context.Context, reqEditors ...RequestEditorF
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-func (c *Client) PostApiVersionUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiVersionUpdateRequestWithBody(c.Server, contentType, body)
+func (c *Client) PostApiVersionUpdateWithBody(ctx context.Context, params *PostApiVersionUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiVersionUpdateRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5072,8 +5371,8 @@ func (c *Client) PostApiVersionUpdateWithBody(ctx context.Context, contentType s
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-func (c *Client) PostApiVersionUpdate(ctx context.Context, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiVersionUpdateRequest(c.Server, body)
+func (c *Client) PostApiVersionUpdate(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiVersionUpdateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5104,8 +5403,8 @@ func (c *Client) GetApiWarp(ctx context.Context, reqEditors ...RequestEditorFn) 
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-func (c *Client) PutApiWarpWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiWarpRequestWithBody(c.Server, contentType, body)
+func (c *Client) PutApiWarpWithBody(ctx context.Context, params *PutApiWarpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiWarpRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5121,8 +5420,8 @@ func (c *Client) PutApiWarpWithBody(ctx context.Context, contentType string, bod
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-func (c *Client) PutApiWarp(ctx context.Context, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutApiWarpRequest(c.Server, body)
+func (c *Client) PutApiWarp(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiWarpRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5207,18 +5506,18 @@ func (c *Client) HeadSToken(ctx context.Context, token string, params *HeadSToke
 }
 
 // NewPostApiAdminRotateKeyRequest calls the generic PostApiAdminRotateKey builder with application/json body
-func NewPostApiAdminRotateKeyRequest(server string, body PostApiAdminRotateKeyJSONRequestBody) (*http.Request, error) {
+func NewPostApiAdminRotateKeyRequest(server string, params *PostApiAdminRotateKeyParams, body PostApiAdminRotateKeyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiAdminRotateKeyRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiAdminRotateKeyRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiAdminRotateKeyRequestWithBody constructs an http.Request for the PostApiAdminRotateKey method, with any body, and a specified content type
-func NewPostApiAdminRotateKeyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiAdminRotateKeyRequestWithBody(server string, params *PostApiAdminRotateKeyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5243,22 +5542,37 @@ func NewPostApiAdminRotateKeyRequestWithBody(server string, contentType string, 
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiApplyRequest calls the generic PostApiApply builder with application/json body
-func NewPostApiApplyRequest(server string, body PostApiApplyJSONRequestBody) (*http.Request, error) {
+func NewPostApiApplyRequest(server string, params *PostApiApplyParams, body PostApiApplyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiApplyRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiApplyRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiApplyRequestWithBody constructs an http.Request for the PostApiApply method, with any body, and a specified content type
-func NewPostApiApplyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiApplyRequestWithBody(server string, params *PostApiApplyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5282,6 +5596,21 @@ func NewPostApiApplyRequestWithBody(server string, contentType string, body io.R
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -5375,7 +5704,7 @@ func NewGetApiApplyJobsIdRequest(server string, id string) (*http.Request, error
 }
 
 // NewPostApiApplyJobsIdRetryRequest constructs an http.Request for the PostApiApplyJobsIdRetry method
-func NewPostApiApplyJobsIdRetryRequest(server string, id string) (*http.Request, error) {
+func NewPostApiApplyJobsIdRetryRequest(server string, id string, params *PostApiApplyJobsIdRetryParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5405,11 +5734,26 @@ func NewPostApiApplyJobsIdRetryRequest(server string, id string) (*http.Request,
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiApplyPlanRequest constructs an http.Request for the PostApiApplyPlan method
-func NewPostApiApplyPlanRequest(server string) (*http.Request, error) {
+func NewPostApiApplyPlanRequest(server string, params *PostApiApplyPlanParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5432,11 +5776,26 @@ func NewPostApiApplyPlanRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiApplyReconcileRequest constructs an http.Request for the PostApiApplyReconcile method
-func NewPostApiApplyReconcileRequest(server string) (*http.Request, error) {
+func NewPostApiApplyReconcileRequest(server string, params *PostApiApplyReconcileParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5459,22 +5818,37 @@ func NewPostApiApplyReconcileRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiApplyRollbackRequest calls the generic PostApiApplyRollback builder with application/json body
-func NewPostApiApplyRollbackRequest(server string, body PostApiApplyRollbackJSONRequestBody) (*http.Request, error) {
+func NewPostApiApplyRollbackRequest(server string, params *PostApiApplyRollbackParams, body PostApiApplyRollbackJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiApplyRollbackRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiApplyRollbackRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiApplyRollbackRequestWithBody constructs an http.Request for the PostApiApplyRollback method, with any body, and a specified content type
-func NewPostApiApplyRollbackRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiApplyRollbackRequestWithBody(server string, params *PostApiApplyRollbackParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5498,6 +5872,21 @@ func NewPostApiApplyRollbackRequestWithBody(server string, contentType string, b
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -5596,18 +5985,18 @@ func NewGetApiAuditRequest(server string, params *GetApiAuditParams) (*http.Requ
 }
 
 // NewPostApiAuthLocaleRequest calls the generic PostApiAuthLocale builder with application/json body
-func NewPostApiAuthLocaleRequest(server string, body PostApiAuthLocaleJSONRequestBody) (*http.Request, error) {
+func NewPostApiAuthLocaleRequest(server string, params *PostApiAuthLocaleParams, body PostApiAuthLocaleJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiAuthLocaleRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiAuthLocaleRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiAuthLocaleRequestWithBody constructs an http.Request for the PostApiAuthLocale method, with any body, and a specified content type
-func NewPostApiAuthLocaleRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiAuthLocaleRequestWithBody(server string, params *PostApiAuthLocaleParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5631,6 +6020,21 @@ func NewPostApiAuthLocaleRequestWithBody(server string, contentType string, body
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -5703,18 +6107,18 @@ func NewPostApiAuthLogoutRequest(server string) (*http.Request, error) {
 }
 
 // NewDeleteApiAuthSessionsRequest calls the generic DeleteApiAuthSessions builder with application/json body
-func NewDeleteApiAuthSessionsRequest(server string, body DeleteApiAuthSessionsJSONRequestBody) (*http.Request, error) {
+func NewDeleteApiAuthSessionsRequest(server string, params *DeleteApiAuthSessionsParams, body DeleteApiAuthSessionsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewDeleteApiAuthSessionsRequestWithBody(server, "application/json", bodyReader)
+	return NewDeleteApiAuthSessionsRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewDeleteApiAuthSessionsRequestWithBody constructs an http.Request for the DeleteApiAuthSessions method, with any body, and a specified content type
-func NewDeleteApiAuthSessionsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewDeleteApiAuthSessionsRequestWithBody(server string, params *DeleteApiAuthSessionsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5738,6 +6142,21 @@ func NewDeleteApiAuthSessionsRequestWithBody(server string, contentType string, 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -5858,18 +6277,18 @@ func NewGetApiBackupsRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiBackupsRequest calls the generic PostApiBackups builder with application/json body
-func NewPostApiBackupsRequest(server string, body PostApiBackupsJSONRequestBody) (*http.Request, error) {
+func NewPostApiBackupsRequest(server string, params *PostApiBackupsParams, body PostApiBackupsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiBackupsRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiBackupsRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiBackupsRequestWithBody constructs an http.Request for the PostApiBackups method, with any body, and a specified content type
-func NewPostApiBackupsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiBackupsRequestWithBody(server string, params *PostApiBackupsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5894,22 +6313,37 @@ func NewPostApiBackupsRequestWithBody(server string, contentType string, body io
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiBackupsPruneRequest calls the generic PostApiBackupsPrune builder with application/json body
-func NewPostApiBackupsPruneRequest(server string, body PostApiBackupsPruneJSONRequestBody) (*http.Request, error) {
+func NewPostApiBackupsPruneRequest(server string, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiBackupsPruneRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiBackupsPruneRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiBackupsPruneRequestWithBody constructs an http.Request for the PostApiBackupsPrune method, with any body, and a specified content type
-func NewPostApiBackupsPruneRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiBackupsPruneRequestWithBody(server string, params *PostApiBackupsPruneParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5933,6 +6367,21 @@ func NewPostApiBackupsPruneRequestWithBody(server string, contentType string, bo
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -5972,18 +6421,18 @@ func NewGetApiBackupsNameDownloadRequest(server string, name BackupName) (*http.
 }
 
 // NewPostApiBackupsNameRestoreRequest calls the generic PostApiBackupsNameRestore builder with application/json body
-func NewPostApiBackupsNameRestoreRequest(server string, name BackupName, body PostApiBackupsNameRestoreJSONRequestBody) (*http.Request, error) {
+func NewPostApiBackupsNameRestoreRequest(server string, name BackupName, params *PostApiBackupsNameRestoreParams, body PostApiBackupsNameRestoreJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiBackupsNameRestoreRequestWithBody(server, name, "application/json", bodyReader)
+	return NewPostApiBackupsNameRestoreRequestWithBody(server, name, params, "application/json", bodyReader)
 }
 
 // NewPostApiBackupsNameRestoreRequestWithBody constructs an http.Request for the PostApiBackupsNameRestore method, with any body, and a specified content type
-func NewPostApiBackupsNameRestoreRequestWithBody(server string, name BackupName, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiBackupsNameRestoreRequestWithBody(server string, name BackupName, params *PostApiBackupsNameRestoreParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6015,22 +6464,37 @@ func NewPostApiBackupsNameRestoreRequestWithBody(server string, name BackupName,
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiBackupsNameVerifyRequest calls the generic PostApiBackupsNameVerify builder with application/json body
-func NewPostApiBackupsNameVerifyRequest(server string, name BackupName, body PostApiBackupsNameVerifyJSONRequestBody) (*http.Request, error) {
+func NewPostApiBackupsNameVerifyRequest(server string, name BackupName, params *PostApiBackupsNameVerifyParams, body PostApiBackupsNameVerifyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiBackupsNameVerifyRequestWithBody(server, name, "application/json", bodyReader)
+	return NewPostApiBackupsNameVerifyRequestWithBody(server, name, params, "application/json", bodyReader)
 }
 
 // NewPostApiBackupsNameVerifyRequestWithBody constructs an http.Request for the PostApiBackupsNameVerify method, with any body, and a specified content type
-func NewPostApiBackupsNameVerifyRequestWithBody(server string, name BackupName, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiBackupsNameVerifyRequestWithBody(server string, name BackupName, params *PostApiBackupsNameVerifyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6061,6 +6525,21 @@ func NewPostApiBackupsNameVerifyRequestWithBody(server string, name BackupName, 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6093,18 +6572,18 @@ func NewGetApiClientLinksRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiClientLinksQrRequest calls the generic PostApiClientLinksQr builder with application/json body
-func NewPostApiClientLinksQrRequest(server string, body PostApiClientLinksQrJSONRequestBody) (*http.Request, error) {
+func NewPostApiClientLinksQrRequest(server string, params *PostApiClientLinksQrParams, body PostApiClientLinksQrJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiClientLinksQrRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiClientLinksQrRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiClientLinksQrRequestWithBody constructs an http.Request for the PostApiClientLinksQr method, with any body, and a specified content type
-func NewPostApiClientLinksQrRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiClientLinksQrRequestWithBody(server string, params *PostApiClientLinksQrParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -6128,6 +6607,21 @@ func NewPostApiClientLinksQrRequestWithBody(server string, contentType string, b
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6295,18 +6789,18 @@ func NewGetApiInboundsRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiInboundsRequest calls the generic PostApiInbounds builder with application/json body
-func NewPostApiInboundsRequest(server string, body PostApiInboundsJSONRequestBody) (*http.Request, error) {
+func NewPostApiInboundsRequest(server string, params *PostApiInboundsParams, body PostApiInboundsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiInboundsRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiInboundsRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiInboundsRequestWithBody constructs an http.Request for the PostApiInbounds method, with any body, and a specified content type
-func NewPostApiInboundsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiInboundsRequestWithBody(server string, params *PostApiInboundsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -6331,11 +6825,26 @@ func NewPostApiInboundsRequestWithBody(server string, contentType string, body i
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiInboundsNameRequest constructs an http.Request for the DeleteApiInboundsName method
-func NewDeleteApiInboundsNameRequest(server string, name Name) (*http.Request, error) {
+func NewDeleteApiInboundsNameRequest(server string, name Name, params *DeleteApiInboundsNameParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6363,6 +6872,21 @@ func NewDeleteApiInboundsNameRequest(server string, name Name) (*http.Request, e
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -6403,18 +6927,18 @@ func NewGetApiInboundsNameRequest(server string, name Name) (*http.Request, erro
 }
 
 // NewPutApiInboundsNameRequest calls the generic PutApiInboundsName builder with application/json body
-func NewPutApiInboundsNameRequest(server string, name Name, body PutApiInboundsNameJSONRequestBody) (*http.Request, error) {
+func NewPutApiInboundsNameRequest(server string, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiInboundsNameRequestWithBody(server, name, "application/json", bodyReader)
+	return NewPutApiInboundsNameRequestWithBody(server, name, params, "application/json", bodyReader)
 }
 
 // NewPutApiInboundsNameRequestWithBody constructs an http.Request for the PutApiInboundsName method, with any body, and a specified content type
-func NewPutApiInboundsNameRequestWithBody(server string, name Name, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutApiInboundsNameRequestWithBody(server string, name Name, params *PutApiInboundsNameParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6445,6 +6969,21 @@ func NewPutApiInboundsNameRequestWithBody(server string, name Name, contentType 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6570,18 +7109,18 @@ func NewGetApiProcessesRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiProfilesRuRecommendedPreviewRequest calls the generic PostApiProfilesRuRecommendedPreview builder with application/json body
-func NewPostApiProfilesRuRecommendedPreviewRequest(server string, body PostApiProfilesRuRecommendedPreviewJSONRequestBody) (*http.Request, error) {
+func NewPostApiProfilesRuRecommendedPreviewRequest(server string, params *PostApiProfilesRuRecommendedPreviewParams, body PostApiProfilesRuRecommendedPreviewJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiProfilesRuRecommendedPreviewRequestWithBody constructs an http.Request for the PostApiProfilesRuRecommendedPreview method, with any body, and a specified content type
-func NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server string, params *PostApiProfilesRuRecommendedPreviewParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -6605,6 +7144,21 @@ func NewPostApiProfilesRuRecommendedPreviewRequestWithBody(server string, conten
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6664,7 +7218,7 @@ func NewGetApiRoutingPresetsRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiRoutingPresetsNameRequest constructs an http.Request for the PostApiRoutingPresetsName method
-func NewPostApiRoutingPresetsNameRequest(server string, name Name) (*http.Request, error) {
+func NewPostApiRoutingPresetsNameRequest(server string, name Name, params *PostApiRoutingPresetsNameParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6692,6 +7246,21 @@ func NewPostApiRoutingPresetsNameRequest(server string, name Name) (*http.Reques
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -6725,18 +7294,18 @@ func NewGetApiRoutingRulesRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiRoutingRulesRequest calls the generic PostApiRoutingRules builder with application/json body
-func NewPostApiRoutingRulesRequest(server string, body PostApiRoutingRulesJSONRequestBody) (*http.Request, error) {
+func NewPostApiRoutingRulesRequest(server string, params *PostApiRoutingRulesParams, body PostApiRoutingRulesJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiRoutingRulesRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiRoutingRulesRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiRoutingRulesRequestWithBody constructs an http.Request for the PostApiRoutingRules method, with any body, and a specified content type
-func NewPostApiRoutingRulesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiRoutingRulesRequestWithBody(server string, params *PostApiRoutingRulesParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -6761,11 +7330,26 @@ func NewPostApiRoutingRulesRequestWithBody(server string, contentType string, bo
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiRoutingRulesNameRequest constructs an http.Request for the DeleteApiRoutingRulesName method
-func NewDeleteApiRoutingRulesNameRequest(server string, name Name) (*http.Request, error) {
+func NewDeleteApiRoutingRulesNameRequest(server string, name Name, params *DeleteApiRoutingRulesNameParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6793,6 +7377,21 @@ func NewDeleteApiRoutingRulesNameRequest(server string, name Name) (*http.Reques
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -6833,18 +7432,18 @@ func NewGetApiRoutingRulesNameRequest(server string, name Name) (*http.Request, 
 }
 
 // NewPutApiRoutingRulesNameRequest calls the generic PutApiRoutingRulesName builder with application/json body
-func NewPutApiRoutingRulesNameRequest(server string, name Name, body PutApiRoutingRulesNameJSONRequestBody) (*http.Request, error) {
+func NewPutApiRoutingRulesNameRequest(server string, name Name, params *PutApiRoutingRulesNameParams, body PutApiRoutingRulesNameJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiRoutingRulesNameRequestWithBody(server, name, "application/json", bodyReader)
+	return NewPutApiRoutingRulesNameRequestWithBody(server, name, params, "application/json", bodyReader)
 }
 
 // NewPutApiRoutingRulesNameRequestWithBody constructs an http.Request for the PutApiRoutingRulesName method, with any body, and a specified content type
-func NewPutApiRoutingRulesNameRequestWithBody(server string, name Name, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutApiRoutingRulesNameRequestWithBody(server string, name Name, params *PutApiRoutingRulesNameParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6875,6 +7474,21 @@ func NewPutApiRoutingRulesNameRequestWithBody(server string, name Name, contentT
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6907,18 +7521,18 @@ func NewGetApiRuntimeObservationRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiServicesNameRestartRequest calls the generic PostApiServicesNameRestart builder with application/json body
-func NewPostApiServicesNameRestartRequest(server string, name Name, body PostApiServicesNameRestartJSONRequestBody) (*http.Request, error) {
+func NewPostApiServicesNameRestartRequest(server string, name Name, params *PostApiServicesNameRestartParams, body PostApiServicesNameRestartJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiServicesNameRestartRequestWithBody(server, name, "application/json", bodyReader)
+	return NewPostApiServicesNameRestartRequestWithBody(server, name, params, "application/json", bodyReader)
 }
 
 // NewPostApiServicesNameRestartRequestWithBody constructs an http.Request for the PostApiServicesNameRestart method, with any body, and a specified content type
-func NewPostApiServicesNameRestartRequestWithBody(server string, name Name, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiServicesNameRestartRequestWithBody(server string, name Name, params *PostApiServicesNameRestartParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6949,6 +7563,21 @@ func NewPostApiServicesNameRestartRequestWithBody(server string, name Name, cont
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -6981,18 +7610,18 @@ func NewGetApiSettingsRequest(server string) (*http.Request, error) {
 }
 
 // NewPutApiSettingsRequest calls the generic PutApiSettings builder with application/json body
-func NewPutApiSettingsRequest(server string, body PutApiSettingsJSONRequestBody) (*http.Request, error) {
+func NewPutApiSettingsRequest(server string, params *PutApiSettingsParams, body PutApiSettingsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiSettingsRequestWithBody(server, "application/json", bodyReader)
+	return NewPutApiSettingsRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPutApiSettingsRequestWithBody constructs an http.Request for the PutApiSettings method, with any body, and a specified content type
-func NewPutApiSettingsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutApiSettingsRequestWithBody(server string, params *PutApiSettingsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7017,22 +7646,37 @@ func NewPutApiSettingsRequestWithBody(server string, contentType string, body io
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiSetupCompleteRequest calls the generic PostApiSetupComplete builder with application/json body
-func NewPostApiSetupCompleteRequest(server string, body PostApiSetupCompleteJSONRequestBody) (*http.Request, error) {
+func NewPostApiSetupCompleteRequest(server string, params *PostApiSetupCompleteParams, body PostApiSetupCompleteJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiSetupCompleteRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiSetupCompleteRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiSetupCompleteRequestWithBody constructs an http.Request for the PostApiSetupComplete method, with any body, and a specified content type
-func NewPostApiSetupCompleteRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiSetupCompleteRequestWithBody(server string, params *PostApiSetupCompleteParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7056,6 +7700,21 @@ func NewPostApiSetupCompleteRequestWithBody(server string, contentType string, b
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -7169,18 +7828,18 @@ func NewGetApiTlsRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiToolsDnsLookupRequest calls the generic PostApiToolsDnsLookup builder with application/json body
-func NewPostApiToolsDnsLookupRequest(server string, body PostApiToolsDnsLookupJSONRequestBody) (*http.Request, error) {
+func NewPostApiToolsDnsLookupRequest(server string, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiToolsDnsLookupRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiToolsDnsLookupRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiToolsDnsLookupRequestWithBody constructs an http.Request for the PostApiToolsDnsLookup method, with any body, and a specified content type
-func NewPostApiToolsDnsLookupRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiToolsDnsLookupRequestWithBody(server string, params *PostApiToolsDnsLookupParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7205,22 +7864,37 @@ func NewPostApiToolsDnsLookupRequestWithBody(server string, contentType string, 
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiToolsPingRequest calls the generic PostApiToolsPing builder with application/json body
-func NewPostApiToolsPingRequest(server string, body PostApiToolsPingJSONRequestBody) (*http.Request, error) {
+func NewPostApiToolsPingRequest(server string, params *PostApiToolsPingParams, body PostApiToolsPingJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiToolsPingRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiToolsPingRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiToolsPingRequestWithBody constructs an http.Request for the PostApiToolsPing method, with any body, and a specified content type
-func NewPostApiToolsPingRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiToolsPingRequestWithBody(server string, params *PostApiToolsPingParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7245,22 +7919,37 @@ func NewPostApiToolsPingRequestWithBody(server string, contentType string, body 
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiToolsSpeedtestRequest calls the generic PostApiToolsSpeedtest builder with application/json body
-func NewPostApiToolsSpeedtestRequest(server string, body PostApiToolsSpeedtestJSONRequestBody) (*http.Request, error) {
+func NewPostApiToolsSpeedtestRequest(server string, params *PostApiToolsSpeedtestParams, body PostApiToolsSpeedtestJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiToolsSpeedtestRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiToolsSpeedtestRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiToolsSpeedtestRequestWithBody constructs an http.Request for the PostApiToolsSpeedtest method, with any body, and a specified content type
-func NewPostApiToolsSpeedtestRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiToolsSpeedtestRequestWithBody(server string, params *PostApiToolsSpeedtestParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7284,6 +7973,21 @@ func NewPostApiToolsSpeedtestRequestWithBody(server string, contentType string, 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -7316,18 +8020,18 @@ func NewGetApiUsersRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiUsersRequest calls the generic PostApiUsers builder with application/json body
-func NewPostApiUsersRequest(server string, body PostApiUsersJSONRequestBody) (*http.Request, error) {
+func NewPostApiUsersRequest(server string, params *PostApiUsersParams, body PostApiUsersJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiUsersRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiUsersRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiUsersRequestWithBody constructs an http.Request for the PostApiUsers method, with any body, and a specified content type
-func NewPostApiUsersRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiUsersRequestWithBody(server string, params *PostApiUsersParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7352,11 +8056,26 @@ func NewPostApiUsersRequestWithBody(server string, contentType string, body io.R
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiUsersUsernameRequest constructs an http.Request for the DeleteApiUsersUsername method
-func NewDeleteApiUsersUsernameRequest(server string, username Username) (*http.Request, error) {
+func NewDeleteApiUsersUsernameRequest(server string, username Username, params *DeleteApiUsersUsernameParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7386,22 +8105,37 @@ func NewDeleteApiUsersUsernameRequest(server string, username Username) (*http.R
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPutApiUsersUsernameRequest calls the generic PutApiUsersUsername builder with application/json body
-func NewPutApiUsersUsernameRequest(server string, username Username, body PutApiUsersUsernameJSONRequestBody) (*http.Request, error) {
+func NewPutApiUsersUsernameRequest(server string, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiUsersUsernameRequestWithBody(server, username, "application/json", bodyReader)
+	return NewPutApiUsersUsernameRequestWithBody(server, username, params, "application/json", bodyReader)
 }
 
 // NewPutApiUsersUsernameRequestWithBody constructs an http.Request for the PutApiUsersUsername method, with any body, and a specified content type
-func NewPutApiUsersUsernameRequestWithBody(server string, username Username, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutApiUsersUsernameRequestWithBody(server string, username Username, params *PutApiUsersUsernameParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7432,6 +8166,21 @@ func NewPutApiUsersUsernameRequestWithBody(server string, username Username, con
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -7464,18 +8213,18 @@ func NewGetApiV1ClientsRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiV1ClientsRequest calls the generic PostApiV1Clients builder with application/json body
-func NewPostApiV1ClientsRequest(server string, body PostApiV1ClientsJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsRequest(server string, params *PostApiV1ClientsParams, body PostApiV1ClientsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiV1ClientsRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsRequestWithBody constructs an http.Request for the PostApiV1Clients method, with any body, and a specified content type
-func NewPostApiV1ClientsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsRequestWithBody(server string, params *PostApiV1ClientsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7500,22 +8249,37 @@ func NewPostApiV1ClientsRequestWithBody(server string, contentType string, body 
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiV1ClientsBulkRequest calls the generic PostApiV1ClientsBulk builder with application/json body
-func NewPostApiV1ClientsBulkRequest(server string, body PostApiV1ClientsBulkJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsBulkRequest(server string, params *PostApiV1ClientsBulkParams, body PostApiV1ClientsBulkJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsBulkRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiV1ClientsBulkRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsBulkRequestWithBody constructs an http.Request for the PostApiV1ClientsBulk method, with any body, and a specified content type
-func NewPostApiV1ClientsBulkRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsBulkRequestWithBody(server string, params *PostApiV1ClientsBulkParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7540,11 +8304,26 @@ func NewPostApiV1ClientsBulkRequestWithBody(server string, contentType string, b
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiV1ClientsMigrateLegacyRequest constructs an http.Request for the PostApiV1ClientsMigrateLegacy method
-func NewPostApiV1ClientsMigrateLegacyRequest(server string) (*http.Request, error) {
+func NewPostApiV1ClientsMigrateLegacyRequest(server string, params *PostApiV1ClientsMigrateLegacyParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -7567,11 +8346,26 @@ func NewPostApiV1ClientsMigrateLegacyRequest(server string) (*http.Request, erro
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiV1ClientsIdRequest constructs an http.Request for the DeleteApiV1ClientsId method
-func NewDeleteApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, error) {
+func NewDeleteApiV1ClientsIdRequest(server string, id ClientId, params *DeleteApiV1ClientsIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7599,6 +8393,21 @@ func NewDeleteApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, 
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -7639,18 +8448,18 @@ func NewGetApiV1ClientsIdRequest(server string, id ClientId) (*http.Request, err
 }
 
 // NewPatchApiV1ClientsIdRequest calls the generic PatchApiV1ClientsId builder with application/json body
-func NewPatchApiV1ClientsIdRequest(server string, id ClientId, body PatchApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
+func NewPatchApiV1ClientsIdRequest(server string, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPatchApiV1ClientsIdRequestWithBody(server, id, "application/json", bodyReader)
+	return NewPatchApiV1ClientsIdRequestWithBody(server, id, params, "application/json", bodyReader)
 }
 
 // NewPatchApiV1ClientsIdRequestWithBody constructs an http.Request for the PatchApiV1ClientsId method, with any body, and a specified content type
-func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, params *PatchApiV1ClientsIdParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7681,6 +8490,21 @@ func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, contentTy
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -7720,18 +8544,18 @@ func NewGetApiV1ClientsIdBindingsRequest(server string, id ClientId) (*http.Requ
 }
 
 // NewPostApiV1ClientsIdBindingsRequest calls the generic PostApiV1ClientsIdBindings builder with application/json body
-func NewPostApiV1ClientsIdBindingsRequest(server string, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsIdBindingsRequest(server string, id ClientId, params *PostApiV1ClientsIdBindingsParams, body PostApiV1ClientsIdBindingsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsIdBindingsRequestWithBody(server, id, "application/json", bodyReader)
+	return NewPostApiV1ClientsIdBindingsRequestWithBody(server, id, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsIdBindingsRequestWithBody constructs an http.Request for the PostApiV1ClientsIdBindings method, with any body, and a specified content type
-func NewPostApiV1ClientsIdBindingsRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsIdBindingsRequestWithBody(server string, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7763,11 +8587,26 @@ func NewPostApiV1ClientsIdBindingsRequestWithBody(server string, id ClientId, co
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiV1ClientsIdBindingsBindingIdRequest constructs an http.Request for the DeleteApiV1ClientsIdBindingsBindingId method
-func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string) (*http.Request, error) {
+func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7804,22 +8643,37 @@ func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId,
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPatchApiV1ClientsIdBindingsBindingIdRequest calls the generic PatchApiV1ClientsIdBindingsBindingId builder with application/json body
-func NewPatchApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody) (*http.Request, error) {
+func NewPatchApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+	return NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server, id, bindingId, params, "application/json", bodyReader)
 }
 
 // NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody constructs an http.Request for the PatchApiV1ClientsIdBindingsBindingId method, with any body, and a specified content type
-func NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server string, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7858,22 +8712,37 @@ func NewPatchApiV1ClientsIdBindingsBindingIdRequestWithBody(server string, id Cl
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiV1ClientsIdCredentialsBindingIdRequest calls the generic PostApiV1ClientsIdCredentialsBindingId builder with application/json body
-func NewPostApiV1ClientsIdCredentialsBindingIdRequest(server string, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsIdCredentialsBindingIdRequest(server string, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+	return NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server, id, bindingId, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody constructs an http.Request for the PostApiV1ClientsIdCredentialsBindingId method, with any body, and a specified content type
-func NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server string, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7912,22 +8781,37 @@ func NewPostApiV1ClientsIdCredentialsBindingIdRequestWithBody(server string, id 
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest calls the generic PostApiV1ClientsIdCredentialsBindingIdRotate builder with application/json body
-func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(server string, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequest(server string, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server, id, bindingId, "application/json", bodyReader)
+	return NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server, id, bindingId, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody constructs an http.Request for the PostApiV1ClientsIdCredentialsBindingIdRotate method, with any body, and a specified content type
-func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server string, id ClientId, bindingId string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server string, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -7965,6 +8849,21 @@ func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server strin
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -8004,18 +8903,18 @@ func NewGetApiV1ClientsIdTokensRequest(server string, id ClientId) (*http.Reques
 }
 
 // NewPostApiV1ClientsIdTokensRequest calls the generic PostApiV1ClientsIdTokens builder with application/json body
-func NewPostApiV1ClientsIdTokensRequest(server string, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsIdTokensRequest(server string, id ClientId, params *PostApiV1ClientsIdTokensParams, body PostApiV1ClientsIdTokensJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsIdTokensRequestWithBody(server, id, "application/json", bodyReader)
+	return NewPostApiV1ClientsIdTokensRequestWithBody(server, id, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsIdTokensRequestWithBody constructs an http.Request for the PostApiV1ClientsIdTokens method, with any body, and a specified content type
-func NewPostApiV1ClientsIdTokensRequestWithBody(server string, id ClientId, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsIdTokensRequestWithBody(server string, id ClientId, params *PostApiV1ClientsIdTokensParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8047,11 +8946,26 @@ func NewPostApiV1ClientsIdTokensRequestWithBody(server string, id ClientId, cont
 
 	req.Header.Add("Content-Type", contentType)
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewDeleteApiV1ClientsIdTokensTokenIdRequest constructs an http.Request for the DeleteApiV1ClientsIdTokensTokenId method
-func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tokenId string) (*http.Request, error) {
+func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8088,22 +9002,37 @@ func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tok
 		return nil, err
 	}
 
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
 	return req, nil
 }
 
 // NewPostApiV1ClientsIdTokensTokenIdRotateRequest calls the generic PostApiV1ClientsIdTokensTokenIdRotate builder with application/json body
-func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody) (*http.Request, error) {
+func NewPostApiV1ClientsIdTokensTokenIdRotateRequest(server string, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server, id, tokenId, "application/json", bodyReader)
+	return NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server, id, tokenId, params, "application/json", bodyReader)
 }
 
 // NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody constructs an http.Request for the PostApiV1ClientsIdTokensTokenIdRotate method, with any body, and a specified content type
-func NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server string, id ClientId, tokenId string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server string, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8141,6 +9070,21 @@ func NewPostApiV1ClientsIdTokensTokenIdRotateRequestWithBody(server string, id C
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -8412,18 +9356,18 @@ func NewGetApiV1TrafficIdHistoryRequest(server string, id ClientId, params *GetA
 }
 
 // NewPostApiValidationRequest calls the generic PostApiValidation builder with application/json body
-func NewPostApiValidationRequest(server string, body PostApiValidationJSONRequestBody) (*http.Request, error) {
+func NewPostApiValidationRequest(server string, params *PostApiValidationParams, body PostApiValidationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiValidationRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiValidationRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiValidationRequestWithBody constructs an http.Request for the PostApiValidation method, with any body, and a specified content type
-func NewPostApiValidationRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiValidationRequestWithBody(server string, params *PostApiValidationParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -8447,6 +9391,21 @@ func NewPostApiValidationRequestWithBody(server string, contentType string, body
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -8479,18 +9438,18 @@ func NewGetApiVersionRequest(server string) (*http.Request, error) {
 }
 
 // NewPostApiVersionUpdateRequest calls the generic PostApiVersionUpdate builder with application/json body
-func NewPostApiVersionUpdateRequest(server string, body PostApiVersionUpdateJSONRequestBody) (*http.Request, error) {
+func NewPostApiVersionUpdateRequest(server string, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiVersionUpdateRequestWithBody(server, "application/json", bodyReader)
+	return NewPostApiVersionUpdateRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPostApiVersionUpdateRequestWithBody constructs an http.Request for the PostApiVersionUpdate method, with any body, and a specified content type
-func NewPostApiVersionUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiVersionUpdateRequestWithBody(server string, params *PostApiVersionUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -8514,6 +9473,21 @@ func NewPostApiVersionUpdateRequestWithBody(server string, contentType string, b
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -8546,18 +9520,18 @@ func NewGetApiWarpRequest(server string) (*http.Request, error) {
 }
 
 // NewPutApiWarpRequest calls the generic PutApiWarp builder with application/json body
-func NewPutApiWarpRequest(server string, body PutApiWarpJSONRequestBody) (*http.Request, error) {
+func NewPutApiWarpRequest(server string, params *PutApiWarpParams, body PutApiWarpJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutApiWarpRequestWithBody(server, "application/json", bodyReader)
+	return NewPutApiWarpRequestWithBody(server, params, "application/json", bodyReader)
 }
 
 // NewPutApiWarpRequestWithBody constructs an http.Request for the PutApiWarp method, with any body, and a specified content type
-func NewPutApiWarpRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutApiWarpRequestWithBody(server string, params *PutApiWarpParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -8581,6 +9555,21 @@ func NewPutApiWarpRequestWithBody(server string, contentType string, body io.Rea
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -8814,7 +9803,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-	PostApiAdminRotateKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error)
+	PostApiAdminRotateKeyWithBodyWithResponse(ctx context.Context, params *PostApiAdminRotateKeyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error)
 
 	// PostApiAdminRotateKeyWithResponse Rotate the state-encryption key
 	//
@@ -8825,21 +9814,21 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-	PostApiAdminRotateKeyWithResponse(ctx context.Context, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error)
+	PostApiAdminRotateKeyWithResponse(ctx context.Context, params *PostApiAdminRotateKeyParams, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error)
 
 	// PostApiApplyWithBodyWithResponse Stage and optionally promote current management state
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply (the `PostApiApply` operationId).
-	PostApiApplyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error)
+	PostApiApplyWithBodyWithResponse(ctx context.Context, params *PostApiApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error)
 
 	// PostApiApplyWithResponse Stage and optionally promote current management state
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply (the `PostApiApply` operationId).
-	PostApiApplyWithResponse(ctx context.Context, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error)
+	PostApiApplyWithResponse(ctx context.Context, params *PostApiApplyParams, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error)
 
 	// GetApiApplyHistoryWithResponse Apply workflow history
 	//
@@ -8867,21 +9856,21 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply/jobs/{id}/retry (the `PostApiApplyJobsIdRetry` operationId).
-	PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error)
+	PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, params *PostApiApplyJobsIdRetryParams, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error)
 
 	// PostApiApplyPlanWithResponse Preview the apply plan without writing live files
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply/plan (the `PostApiApplyPlan` operationId).
-	PostApiApplyPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error)
+	PostApiApplyPlanWithResponse(ctx context.Context, params *PostApiApplyPlanParams, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error)
 
 	// PostApiApplyReconcileWithResponse Apply current desired revision if ahead of applied (idempotent)
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
-	PostApiApplyReconcileWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error)
+	PostApiApplyReconcileWithResponse(ctx context.Context, params *PostApiApplyReconcileParams, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error)
 
 	// PostApiApplyRollbackWithBodyWithResponse Create a new desired revision from an older immutable snapshot
 	//
@@ -8890,7 +9879,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-	PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
+	PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, params *PostApiApplyRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
 
 	// PostApiApplyRollbackWithResponse Create a new desired revision from an older immutable snapshot
 	//
@@ -8899,7 +9888,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-	PostApiApplyRollbackWithResponse(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
+	PostApiApplyRollbackWithResponse(ctx context.Context, params *PostApiApplyRollbackParams, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error)
 
 	// GetApiApplyStateWithResponse Desired/applied revisions and derived system state
 	//
@@ -8930,7 +9919,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-	PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
+	PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, params *PostApiAuthLocaleParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
 
 	// PostApiAuthLocaleWithResponse Update the current browser user's locale
 	//
@@ -8943,7 +9932,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-	PostApiAuthLocaleWithResponse(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
+	PostApiAuthLocaleWithResponse(ctx context.Context, params *PostApiAuthLocaleParams, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error)
 
 	// PostApiAuthLoginWithBodyWithResponse Create a browser session
 	//
@@ -8973,7 +9962,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-	DeleteApiAuthSessionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error)
+	DeleteApiAuthSessionsWithBodyWithResponse(ctx context.Context, params *DeleteApiAuthSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error)
 
 	// DeleteApiAuthSessionsWithResponse Revoke an active browser session
 	//
@@ -8982,7 +9971,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-	DeleteApiAuthSessionsWithResponse(ctx context.Context, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error)
+	DeleteApiAuthSessionsWithResponse(ctx context.Context, params *DeleteApiAuthSessionsParams, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error)
 
 	// GetApiAuthSessionsWithResponse List active browser sessions
 	//
@@ -9027,7 +10016,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-	PostApiBackupsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error)
+	PostApiBackupsWithBodyWithResponse(ctx context.Context, params *PostApiBackupsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error)
 
 	// PostApiBackupsWithResponse Create and verify an encrypted archive
 	//
@@ -9038,7 +10027,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-	PostApiBackupsWithResponse(ctx context.Context, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error)
+	PostApiBackupsWithResponse(ctx context.Context, params *PostApiBackupsParams, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error)
 
 	// PostApiBackupsPruneWithBodyWithResponse Apply managed archive retention
 	//
@@ -9047,7 +10036,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-	PostApiBackupsPruneWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
+	PostApiBackupsPruneWithBodyWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
 
 	// PostApiBackupsPruneWithResponse Apply managed archive retention
 	//
@@ -9056,7 +10045,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-	PostApiBackupsPruneWithResponse(ctx context.Context, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
+	PostApiBackupsPruneWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
 
 	// GetApiBackupsNameDownloadWithResponse Download an encrypted archive
 	//
@@ -9076,7 +10065,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-	PostApiBackupsNameRestoreWithBodyWithResponse(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error)
+	PostApiBackupsNameRestoreWithBodyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error)
 
 	// PostApiBackupsNameRestoreWithResponse Queue a verified state and key restore
 	//
@@ -9087,21 +10076,21 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-	PostApiBackupsNameRestoreWithResponse(ctx context.Context, name BackupName, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error)
+	PostApiBackupsNameRestoreWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error)
 
 	// PostApiBackupsNameVerifyWithBodyWithResponse Decrypt and verify an archive without writing state
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-	PostApiBackupsNameVerifyWithBodyWithResponse(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error)
+	PostApiBackupsNameVerifyWithBodyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error)
 
 	// PostApiBackupsNameVerifyWithResponse Decrypt and verify an archive without writing state
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-	PostApiBackupsNameVerifyWithResponse(ctx context.Context, name BackupName, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error)
+	PostApiBackupsNameVerifyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error)
 
 	// GetApiClientLinksWithResponse Client links derived from enabled inbounds and profiles
 	//
@@ -9117,7 +10106,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-	PostApiClientLinksQrWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error)
+	PostApiClientLinksQrWithBodyWithResponse(ctx context.Context, params *PostApiClientLinksQrParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error)
 
 	// PostApiClientLinksQrWithResponse Render a client URI as a local QR PNG
 	//
@@ -9126,7 +10115,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-	PostApiClientLinksQrWithResponse(ctx context.Context, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error)
+	PostApiClientLinksQrWithResponse(ctx context.Context, params *PostApiClientLinksQrParams, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error)
 
 	// GetApiClientLinksSubscriptionWithResponse Subscription-format client links
 	//
@@ -9168,21 +10157,21 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-	PostApiInboundsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error)
+	PostApiInboundsWithBodyWithResponse(ctx context.Context, params *PostApiInboundsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error)
 
 	// PostApiInboundsWithResponse Create an inbound
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-	PostApiInboundsWithResponse(ctx context.Context, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error)
+	PostApiInboundsWithResponse(ctx context.Context, params *PostApiInboundsParams, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error)
 
 	// DeleteApiInboundsNameWithResponse Delete an inbound
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/inbounds/{name} (the `DeleteApiInboundsName` operationId).
-	DeleteApiInboundsNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*DeleteApiInboundsNameResponse, error)
+	DeleteApiInboundsNameWithResponse(ctx context.Context, name Name, params *DeleteApiInboundsNameParams, reqEditors ...RequestEditorFn) (*DeleteApiInboundsNameResponse, error)
 
 	// GetApiInboundsNameWithResponse Read one inbound
 	//
@@ -9196,14 +10185,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-	PutApiInboundsNameWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error)
+	PutApiInboundsNameWithBodyWithResponse(ctx context.Context, name Name, params *PutApiInboundsNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error)
 
 	// PutApiInboundsNameWithResponse Update an inbound
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-	PutApiInboundsNameWithResponse(ctx context.Context, name Name, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error)
+	PutApiInboundsNameWithResponse(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error)
 
 	// GetApiLogsWithResponse Bounded journald reads for managed units
 	//
@@ -9231,14 +10220,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-	PostApiProfilesRuRecommendedPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error)
+	PostApiProfilesRuRecommendedPreviewWithBodyWithResponse(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error)
 
 	// PostApiProfilesRuRecommendedPreviewWithResponse Preview the ru-recommended install profile
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-	PostApiProfilesRuRecommendedPreviewWithResponse(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error)
+	PostApiProfilesRuRecommendedPreviewWithResponse(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error)
 
 	// GetApiProtocolsWithResponse List supported protocols and their UI/runtime metadata
 	//
@@ -9259,7 +10248,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/routing/presets/{name} (the `PostApiRoutingPresetsName` operationId).
-	PostApiRoutingPresetsNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*PostApiRoutingPresetsNameResponse, error)
+	PostApiRoutingPresetsNameWithResponse(ctx context.Context, name Name, params *PostApiRoutingPresetsNameParams, reqEditors ...RequestEditorFn) (*PostApiRoutingPresetsNameResponse, error)
 
 	// GetApiRoutingRulesWithResponse List routing rules
 	//
@@ -9273,21 +10262,21 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-	PostApiRoutingRulesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error)
+	PostApiRoutingRulesWithBodyWithResponse(ctx context.Context, params *PostApiRoutingRulesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error)
 
 	// PostApiRoutingRulesWithResponse Create a routing rule
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-	PostApiRoutingRulesWithResponse(ctx context.Context, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error)
+	PostApiRoutingRulesWithResponse(ctx context.Context, params *PostApiRoutingRulesParams, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error)
 
 	// DeleteApiRoutingRulesNameWithResponse Delete a routing rule
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/routing/rules/{name} (the `DeleteApiRoutingRulesName` operationId).
-	DeleteApiRoutingRulesNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*DeleteApiRoutingRulesNameResponse, error)
+	DeleteApiRoutingRulesNameWithResponse(ctx context.Context, name Name, params *DeleteApiRoutingRulesNameParams, reqEditors ...RequestEditorFn) (*DeleteApiRoutingRulesNameResponse, error)
 
 	// GetApiRoutingRulesNameWithResponse Read a routing rule
 	//
@@ -9301,14 +10290,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-	PutApiRoutingRulesNameWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error)
+	PutApiRoutingRulesNameWithBodyWithResponse(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error)
 
 	// PutApiRoutingRulesNameWithResponse Update a routing rule
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-	PutApiRoutingRulesNameWithResponse(ctx context.Context, name Name, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error)
+	PutApiRoutingRulesNameWithResponse(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error)
 
 	// GetApiRuntimeObservationWithResponse Combined runtime observation
 	//
@@ -9322,14 +10311,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-	PostApiServicesNameRestartWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error)
+	PostApiServicesNameRestartWithBodyWithResponse(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error)
 
 	// PostApiServicesNameRestartWithResponse Restart a managed systemd unit
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-	PostApiServicesNameRestartWithResponse(ctx context.Context, name Name, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error)
+	PostApiServicesNameRestartWithResponse(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error)
 
 	// GetApiSettingsWithResponse Read Panel settings with secrets redacted
 	//
@@ -9343,14 +10332,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-	PutApiSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error)
+	PutApiSettingsWithBodyWithResponse(ctx context.Context, params *PutApiSettingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error)
 
 	// PutApiSettingsWithResponse Update Panel settings
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-	PutApiSettingsWithResponse(ctx context.Context, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error)
+	PutApiSettingsWithResponse(ctx context.Context, params *PutApiSettingsParams, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error)
 
 	// PostApiSetupCompleteWithBodyWithResponse Create the initial administrator
 	//
@@ -9359,7 +10348,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-	PostApiSetupCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error)
+	PostApiSetupCompleteWithBodyWithResponse(ctx context.Context, params *PostApiSetupCompleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error)
 
 	// PostApiSetupCompleteWithResponse Create the initial administrator
 	//
@@ -9368,7 +10357,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-	PostApiSetupCompleteWithResponse(ctx context.Context, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error)
+	PostApiSetupCompleteWithResponse(ctx context.Context, params *PostApiSetupCompleteParams, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error)
 
 	// GetApiSetupStatusWithResponse Inspect first-run setup state
 	//
@@ -9405,42 +10394,42 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-	PostApiToolsDnsLookupWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error)
+	PostApiToolsDnsLookupWithBodyWithResponse(ctx context.Context, params *PostApiToolsDnsLookupParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error)
 
 	// PostApiToolsDnsLookupWithResponse DNS lookup diagnostic
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-	PostApiToolsDnsLookupWithResponse(ctx context.Context, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error)
+	PostApiToolsDnsLookupWithResponse(ctx context.Context, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error)
 
 	// PostApiToolsPingWithBodyWithResponse Ping diagnostic
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-	PostApiToolsPingWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error)
+	PostApiToolsPingWithBodyWithResponse(ctx context.Context, params *PostApiToolsPingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error)
 
 	// PostApiToolsPingWithResponse Ping diagnostic
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-	PostApiToolsPingWithResponse(ctx context.Context, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error)
+	PostApiToolsPingWithResponse(ctx context.Context, params *PostApiToolsPingParams, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error)
 
 	// PostApiToolsSpeedtestWithBodyWithResponse Speedtest diagnostic
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-	PostApiToolsSpeedtestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error)
+	PostApiToolsSpeedtestWithBodyWithResponse(ctx context.Context, params *PostApiToolsSpeedtestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error)
 
 	// PostApiToolsSpeedtestWithResponse Speedtest diagnostic
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-	PostApiToolsSpeedtestWithResponse(ctx context.Context, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error)
+	PostApiToolsSpeedtestWithResponse(ctx context.Context, params *PostApiToolsSpeedtestParams, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error)
 
 	// GetApiUsersWithResponse List registered Panel users
 	//
@@ -9456,7 +10445,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/users (the `PostApiUsers` operationId).
-	PostApiUsersWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error)
+	PostApiUsersWithBodyWithResponse(ctx context.Context, params *PostApiUsersParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error)
 
 	// PostApiUsersWithResponse Create a Panel user
 	//
@@ -9465,28 +10454,28 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/users (the `PostApiUsers` operationId).
-	PostApiUsersWithResponse(ctx context.Context, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error)
+	PostApiUsersWithResponse(ctx context.Context, params *PostApiUsersParams, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error)
 
 	// DeleteApiUsersUsernameWithResponse Delete a Panel user
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/users/{username} (the `DeleteApiUsersUsername` operationId).
-	DeleteApiUsersUsernameWithResponse(ctx context.Context, username Username, reqEditors ...RequestEditorFn) (*DeleteApiUsersUsernameResponse, error)
+	DeleteApiUsersUsernameWithResponse(ctx context.Context, username Username, params *DeleteApiUsersUsernameParams, reqEditors ...RequestEditorFn) (*DeleteApiUsersUsernameResponse, error)
 
 	// PutApiUsersUsernameWithBodyWithResponse Update a Panel user
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-	PutApiUsersUsernameWithBodyWithResponse(ctx context.Context, username Username, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
+	PutApiUsersUsernameWithBodyWithResponse(ctx context.Context, username Username, params *PutApiUsersUsernameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
 
 	// PutApiUsersUsernameWithResponse Update a Panel user
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-	PutApiUsersUsernameWithResponse(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
+	PutApiUsersUsernameWithResponse(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
 
 	// GetApiV1ClientsWithResponse List clients with effective status
 	//
@@ -9500,42 +10489,42 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-	PostApiV1ClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
+	PostApiV1ClientsWithBodyWithResponse(ctx context.Context, params *PostApiV1ClientsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
 
 	// PostApiV1ClientsWithResponse Create a client
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-	PostApiV1ClientsWithResponse(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
+	PostApiV1ClientsWithResponse(ctx context.Context, params *PostApiV1ClientsParams, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error)
 
 	// PostApiV1ClientsBulkWithBodyWithResponse Bulk action across clients; per-client results
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-	PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
+	PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, params *PostApiV1ClientsBulkParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
 
 	// PostApiV1ClientsBulkWithResponse Bulk action across clients; per-client results
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-	PostApiV1ClientsBulkWithResponse(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
+	PostApiV1ClientsBulkWithResponse(ctx context.Context, params *PostApiV1ClientsBulkParams, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error)
 
 	// PostApiV1ClientsMigrateLegacyWithResponse Convert legacy inbound-embedded profiles to normalized clients (idempotent)
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/migrate-legacy (the `PostApiV1ClientsMigrateLegacy` operationId).
-	PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error)
+	PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, params *PostApiV1ClientsMigrateLegacyParams, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error)
 
 	// DeleteApiV1ClientsIdWithResponse Delete a client
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/v1/clients/{id} (the `DeleteApiV1ClientsId` operationId).
-	DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error)
+	DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, params *DeleteApiV1ClientsIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error)
 
 	// GetApiV1ClientsIdWithResponse Get a client with bindings and effective status
 	//
@@ -9549,14 +10538,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-	PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+	PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
 	// PatchApiV1ClientsIdWithResponse Patch explicitly supplied client fields without clearing omitted durable fields
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
+	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
 	// GetApiV1ClientsIdBindingsWithResponse List client bindings
 	//
@@ -9570,63 +10559,63 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-	PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
+	PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
 
 	// PostApiV1ClientsIdBindingsWithResponse Add a binding (optional credential)
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-	PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
+	PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
 
 	// DeleteApiV1ClientsIdBindingsBindingIdWithResponse Remove a binding
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
-	DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error)
+	DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error)
 
 	// PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse Update a binding (toggle enabled, optimistic locking)
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-	PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
+	PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
 
 	// PatchApiV1ClientsIdBindingsBindingIdWithResponse Update a binding (toggle enabled, optimistic locking)
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-	PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
+	PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse Set a binding credential
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
+	PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdWithResponse Set a binding credential
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
+	PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse Rotate a binding credential
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
 
 	// PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse Rotate a binding credential
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-	PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
+	PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
 
 	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
 	//
@@ -9640,35 +10629,35 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-	PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
+	PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
 
 	// PostApiV1ClientsIdTokensWithResponse Issue a subscription token; plaintext returned once
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-	PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
+	PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error)
 
 	// DeleteApiV1ClientsIdTokensTokenIdWithResponse Revoke a subscription token
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
-	DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error)
+	DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse Rotate a subscription token; new plaintext returned once
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
+	PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotateWithResponse Rotate a subscription token; new plaintext returned once
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
+	PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error)
 
 	// GetApiV1EventsWithResponse Unified Server-Sent Events stream (A10)
 	//
@@ -9729,7 +10718,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-	PostApiValidationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error)
+	PostApiValidationWithBodyWithResponse(ctx context.Context, params *PostApiValidationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error)
 
 	// PostApiValidationWithResponse Validate a candidate configuration against live host state
 	//
@@ -9741,7 +10730,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-	PostApiValidationWithResponse(ctx context.Context, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error)
+	PostApiValidationWithResponse(ctx context.Context, params *PostApiValidationParams, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error)
 
 	// GetApiVersionWithResponse Current Veil version
 	//
@@ -9755,14 +10744,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-	PostApiVersionUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error)
+	PostApiVersionUpdateWithBodyWithResponse(ctx context.Context, params *PostApiVersionUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error)
 
 	// PostApiVersionUpdateWithResponse Trigger a staged self-update to the latest release
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-	PostApiVersionUpdateWithResponse(ctx context.Context, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error)
+	PostApiVersionUpdateWithResponse(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error)
 
 	// GetApiWarpWithResponse Read WARP state with secrets redacted
 	//
@@ -9776,14 +10765,14 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-	PutApiWarpWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error)
+	PutApiWarpWithBodyWithResponse(ctx context.Context, params *PutApiWarpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error)
 
 	// PutApiWarpWithResponse Update WARP state
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-	PutApiWarpWithResponse(ctx context.Context, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error)
+	PutApiWarpWithResponse(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error)
 
 	// GetHealthzWithResponse Liveness/readiness probe
 	//
@@ -9837,6 +10826,12 @@ type PostApiAdminRotateKeyResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *KeyRotationResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *PrivilegedFailure
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -9846,6 +10841,21 @@ type PostApiAdminRotateKeyResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiAdminRotateKeyResponse) GetJSON200() *KeyRotationResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiAdminRotateKeyResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiAdminRotateKeyResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiAdminRotateKeyResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -9887,11 +10897,18 @@ type PostApiApplyResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ApplyResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiApplyResponse) GetJSON200() *ApplyResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiApplyResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -10162,6 +11179,13 @@ func (r PostApiApplyReconcileResponse) ContentType() string {
 type PostApiApplyRollbackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiApplyRollbackResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -10237,6 +11261,12 @@ type GetApiAuditResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *AuditListResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiAuditResponse401Headers
 }
@@ -10244,6 +11274,21 @@ type GetApiAuditResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiAuditResponse) GetJSON200() *AuditListResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiAuditResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiAuditResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiAuditResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -10290,6 +11335,14 @@ type PostApiAuthLocaleResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *LocaleResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 	// Headers200 the parsed response headers for an HTTP 200 response
 	Headers200 *PostApiAuthLocaleResponse200Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -10299,6 +11352,26 @@ type PostApiAuthLocaleResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiAuthLocaleResponse) GetJSON200() *LocaleResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiAuthLocaleResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiAuthLocaleResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiAuthLocaleResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiAuthLocaleResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -10345,6 +11418,10 @@ type PostApiAuthLoginResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *LoginResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers200 the parsed response headers for an HTTP 200 response
 	Headers200 *PostApiAuthLoginResponse200Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -10354,6 +11431,16 @@ type PostApiAuthLoginResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiAuthLoginResponse) GetJSON200() *LoginResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiAuthLoginResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiAuthLoginResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -10436,6 +11523,14 @@ type DeleteApiAuthSessionsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *SuccessResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *DeleteApiAuthSessionsResponse401Headers
 }
@@ -10443,6 +11538,26 @@ type DeleteApiAuthSessionsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r DeleteApiAuthSessionsResponse) GetJSON200() *SuccessResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteApiAuthSessionsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiAuthSessionsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiAuthSessionsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiAuthSessionsResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -10484,6 +11599,10 @@ type GetApiAuthSessionsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]SessionInfo
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiAuthSessionsResponse401Headers
 }
@@ -10491,6 +11610,16 @@ type GetApiAuthSessionsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiAuthSessionsResponse) GetJSON200() *[]SessionInfo {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiAuthSessionsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiAuthSessionsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -10573,6 +11702,14 @@ type GetApiBackupRestoreJobsIdResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *BackupRestoreJob
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiBackupRestoreJobsIdResponse401Headers
 }
@@ -10580,6 +11717,26 @@ type GetApiBackupRestoreJobsIdResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiBackupRestoreJobsIdResponse) GetJSON200() *BackupRestoreJob {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiBackupRestoreJobsIdResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiBackupRestoreJobsIdResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiBackupRestoreJobsIdResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiBackupRestoreJobsIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -10621,6 +11778,10 @@ type GetApiBackupsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]BackupArchive
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiBackupsResponse401Headers
 }
@@ -10628,6 +11789,16 @@ type GetApiBackupsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiBackupsResponse) GetJSON200() *[]BackupArchive {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiBackupsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiBackupsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -10669,6 +11840,14 @@ type PostApiBackupsResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *BackupCreateResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiBackupsResponse401Headers
 }
@@ -10676,6 +11855,26 @@ type PostApiBackupsResponse struct {
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiBackupsResponse) GetJSON201() *BackupCreateResponse {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiBackupsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiBackupsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiBackupsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiBackupsResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -10717,6 +11916,12 @@ type PostApiBackupsPruneResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *BackupPruneResult
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiBackupsPruneResponse401Headers
 }
@@ -10724,6 +11929,21 @@ type PostApiBackupsPruneResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiBackupsPruneResponse) GetJSON200() *BackupPruneResult {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiBackupsPruneResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiBackupsPruneResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiBackupsPruneResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -10768,10 +11988,31 @@ type GetApiBackupsNameDownloadResponse401Headers struct {
 type GetApiBackupsNameDownloadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 	// Headers200 the parsed response headers for an HTTP 200 response
 	Headers200 *GetApiBackupsNameDownloadResponse200Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiBackupsNameDownloadResponse401Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiBackupsNameDownloadResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiBackupsNameDownloadResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiBackupsNameDownloadResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -10813,6 +12054,18 @@ type PostApiBackupsNameRestoreResponse struct {
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
 	JSON202 *BackupRestoreJob
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorEnvelope
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiBackupsNameRestoreResponse401Headers
 }
@@ -10820,6 +12073,36 @@ type PostApiBackupsNameRestoreResponse struct {
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
 func (r PostApiBackupsNameRestoreResponse) GetJSON202() *BackupRestoreJob {
 	return r.JSON202
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON422() *ErrorEnvelope {
+	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiBackupsNameRestoreResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -10861,6 +12144,16 @@ type PostApiBackupsNameVerifyResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *BackupVerificationReport
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorEnvelope
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiBackupsNameVerifyResponse401Headers
 }
@@ -10868,6 +12161,31 @@ type PostApiBackupsNameVerifyResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiBackupsNameVerifyResponse) GetJSON200() *BackupVerificationReport {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiBackupsNameVerifyResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiBackupsNameVerifyResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiBackupsNameVerifyResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r PostApiBackupsNameVerifyResponse) GetJSON422() *ErrorEnvelope {
+	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiBackupsNameVerifyResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -10948,8 +12266,29 @@ type PostApiClientLinksQrResponse401Headers struct {
 type PostApiClientLinksQrResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *ErrorEnvelope
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiClientLinksQrResponse401Headers
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiClientLinksQrResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiClientLinksQrResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PostApiClientLinksQrResponse) GetJSON413() *ErrorEnvelope {
+	return r.JSON413
 }
 
 // GetBody returns the raw response body bytes
@@ -11148,6 +12487,8 @@ type GetApiInboundsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]Inbound
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiInboundsResponse401Headers
 }
@@ -11155,6 +12496,11 @@ type GetApiInboundsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiInboundsResponse) GetJSON200() *[]Inbound {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiInboundsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -11191,11 +12537,25 @@ type PostApiInboundsResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *Inbound
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiInboundsResponse) GetJSON201() *Inbound {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiInboundsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiInboundsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -11230,6 +12590,20 @@ func (r PostApiInboundsResponse) ContentType() string {
 type DeleteApiInboundsNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiInboundsNameResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiInboundsNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11266,11 +12640,18 @@ type GetApiInboundsNameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *Inbound
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiInboundsNameResponse) GetJSON200() *Inbound {
 	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiInboundsNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11307,11 +12688,32 @@ type PutApiInboundsNameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *Inbound
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PutApiInboundsNameResponse) GetJSON200() *Inbound {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiInboundsNameResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutApiInboundsNameResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PutApiInboundsNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11348,11 +12750,18 @@ type GetApiLogsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *LogResult
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiLogsResponse) GetJSON200() *LogResult {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiLogsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -11471,11 +12880,18 @@ type PostApiProfilesRuRecommendedPreviewResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *RURecommendedPreviewResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiProfilesRuRecommendedPreviewResponse) GetJSON200() *RURecommendedPreviewResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiProfilesRuRecommendedPreviewResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -11517,6 +12933,10 @@ type GetApiProtocolsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]ProtocolInfo
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiProtocolsResponse401Headers
 }
@@ -11524,6 +12944,16 @@ type GetApiProtocolsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiProtocolsResponse) GetJSON200() *[]ProtocolInfo {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiProtocolsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiProtocolsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -11601,11 +13031,18 @@ type PostApiRoutingPresetsNameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *RoutingPresetResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiRoutingPresetsNameResponse) GetJSON200() *RoutingPresetResponse {
 	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiRoutingPresetsNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11683,11 +13120,18 @@ type PostApiRoutingRulesResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *RoutingRule
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiRoutingRulesResponse) GetJSON201() *RoutingRule {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiRoutingRulesResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -11722,6 +13166,13 @@ func (r PostApiRoutingRulesResponse) ContentType() string {
 type DeleteApiRoutingRulesNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiRoutingRulesNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11758,11 +13209,18 @@ type GetApiRoutingRulesNameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *RoutingRule
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiRoutingRulesNameResponse) GetJSON200() *RoutingRule {
 	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiRoutingRulesNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11799,11 +13257,25 @@ type PutApiRoutingRulesNameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *RoutingRule
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PutApiRoutingRulesNameResponse) GetJSON200() *RoutingRule {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiRoutingRulesNameResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PutApiRoutingRulesNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -11881,6 +13353,8 @@ type PostApiServicesNameRestartResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ServiceActionResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServiceActionResponse
 }
@@ -11888,6 +13362,11 @@ type PostApiServicesNameRestartResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiServicesNameRestartResponse) GetJSON200() *ServiceActionResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiServicesNameRestartResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -11934,6 +13413,8 @@ type GetApiSettingsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *Settings
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiSettingsResponse401Headers
 }
@@ -11941,6 +13422,11 @@ type GetApiSettingsResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiSettingsResponse) GetJSON200() *Settings {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiSettingsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -11977,11 +13463,25 @@ type PutApiSettingsResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *Settings
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PutApiSettingsResponse) GetJSON200() *Settings {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiSettingsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutApiSettingsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -12018,11 +13518,32 @@ type PostApiSetupCompleteResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *SetupCompleteResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorEnvelope
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiSetupCompleteResponse) GetJSON201() *SetupCompleteResponse {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiSetupCompleteResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiSetupCompleteResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PostApiSetupCompleteResponse) GetJSON409() *ErrorEnvelope {
+	return r.JSON409
 }
 
 // GetBody returns the raw response body bytes
@@ -12105,6 +13626,8 @@ type GetApiStatusResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *StatusResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiStatusResponse401Headers
 }
@@ -12112,6 +13635,11 @@ type GetApiStatusResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiStatusResponse) GetJSON200() *StatusResponse {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiStatusResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -12230,11 +13758,18 @@ type PostApiToolsDnsLookupResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *DNSLookupResult
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiToolsDnsLookupResponse) GetJSON200() *DNSLookupResult {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiToolsDnsLookupResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -12271,11 +13806,18 @@ type PostApiToolsPingResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *PingResult
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiToolsPingResponse) GetJSON200() *PingResult {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiToolsPingResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -12312,11 +13854,25 @@ type PostApiToolsSpeedtestResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *SpeedtestResult
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiToolsSpeedtestResponse) GetJSON200() *SpeedtestResult {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiToolsSpeedtestResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiToolsSpeedtestResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -12399,6 +13955,12 @@ type PostApiUsersResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *UserResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiUsersResponse401Headers
 }
@@ -12406,6 +13968,21 @@ type PostApiUsersResponse struct {
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiUsersResponse) GetJSON201() *UserResponse {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiUsersResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiUsersResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiUsersResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -12440,6 +14017,27 @@ func (r PostApiUsersResponse) ContentType() string {
 type DeleteApiUsersUsernameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteApiUsersUsernameResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiUsersUsernameResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiUsersUsernameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -12476,11 +14074,32 @@ type PutApiUsersUsernameResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *UserResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PutApiUsersUsernameResponse) GetJSON200() *UserResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiUsersUsernameResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutApiUsersUsernameResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PutApiUsersUsernameResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -12558,11 +14177,18 @@ type PostApiV1ClientsResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *ClientCreateResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r PostApiV1ClientsResponse) GetJSON201() *ClientCreateResponse {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1ClientsResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -13367,6 +14993,12 @@ type PostApiValidationResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ValidationResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiValidationResponse401Headers
 }
@@ -13374,6 +15006,21 @@ type PostApiValidationResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiValidationResponse) GetJSON200() *ValidationResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiValidationResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiValidationResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiValidationResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -13415,6 +15062,8 @@ type GetApiVersionResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *VersionResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetApiVersionResponse401Headers
 }
@@ -13422,6 +15071,11 @@ type GetApiVersionResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetApiVersionResponse) GetJSON200() *VersionResponse {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiVersionResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -13458,8 +15112,14 @@ type PostApiVersionUpdateResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *UpdateResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *PrivilegedFailure
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *ErrorEnvelope
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -13467,9 +15127,24 @@ func (r PostApiVersionUpdateResponse) GetJSON200() *UpdateResponse {
 	return r.JSON200
 }
 
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiVersionUpdateResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
 func (r PostApiVersionUpdateResponse) GetJSON500() *PrivilegedFailure {
 	return r.JSON500
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r PostApiVersionUpdateResponse) GetJSON502() *ErrorEnvelope {
+	return r.JSON502
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiVersionUpdateResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -13547,11 +15222,18 @@ type PutApiWarpResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *WarpConfig
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PutApiWarpResponse) GetJSON200() *WarpConfig {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiWarpResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -13593,6 +15275,8 @@ type GetHealthzResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *HealthResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *HealthResponse
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -13602,6 +15286,11 @@ type GetHealthzResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetHealthzResponse) GetJSON200() *HealthResponse {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetHealthzResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -13646,8 +15335,15 @@ type GetMetricsResponse401Headers struct {
 type GetMetricsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *GetMetricsResponse401Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetMetricsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
 }
 
 // GetBody returns the raw response body bytes
@@ -13756,8 +15452,8 @@ func (r HeadSTokenResponse) ContentType() string {
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-func (c *ClientWithResponses) PostApiAdminRotateKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error) {
-	rsp, err := c.PostApiAdminRotateKeyWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiAdminRotateKeyWithBodyWithResponse(ctx context.Context, params *PostApiAdminRotateKeyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error) {
+	rsp, err := c.PostApiAdminRotateKeyWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13773,8 +15469,8 @@ func (c *ClientWithResponses) PostApiAdminRotateKeyWithBodyWithResponse(ctx cont
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/admin/rotate-key (the `PostApiAdminRotateKey` operationId).
-func (c *ClientWithResponses) PostApiAdminRotateKeyWithResponse(ctx context.Context, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error) {
-	rsp, err := c.PostApiAdminRotateKey(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiAdminRotateKeyWithResponse(ctx context.Context, params *PostApiAdminRotateKeyParams, body PostApiAdminRotateKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAdminRotateKeyResponse, error) {
+	rsp, err := c.PostApiAdminRotateKey(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13786,8 +15482,8 @@ func (c *ClientWithResponses) PostApiAdminRotateKeyWithResponse(ctx context.Cont
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply (the `PostApiApply` operationId).
-func (c *ClientWithResponses) PostApiApplyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error) {
-	rsp, err := c.PostApiApplyWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyWithBodyWithResponse(ctx context.Context, params *PostApiApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error) {
+	rsp, err := c.PostApiApplyWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13799,8 +15495,8 @@ func (c *ClientWithResponses) PostApiApplyWithBodyWithResponse(ctx context.Conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply (the `PostApiApply` operationId).
-func (c *ClientWithResponses) PostApiApplyWithResponse(ctx context.Context, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error) {
-	rsp, err := c.PostApiApply(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyWithResponse(ctx context.Context, params *PostApiApplyParams, body PostApiApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyResponse, error) {
+	rsp, err := c.PostApiApply(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13851,8 +15547,8 @@ func (c *ClientWithResponses) GetApiApplyJobsIdWithResponse(ctx context.Context,
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply/jobs/{id}/retry (the `PostApiApplyJobsIdRetry` operationId).
-func (c *ClientWithResponses) PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error) {
-	rsp, err := c.PostApiApplyJobsIdRetry(ctx, id, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyJobsIdRetryWithResponse(ctx context.Context, id string, params *PostApiApplyJobsIdRetryParams, reqEditors ...RequestEditorFn) (*PostApiApplyJobsIdRetryResponse, error) {
+	rsp, err := c.PostApiApplyJobsIdRetry(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13864,8 +15560,8 @@ func (c *ClientWithResponses) PostApiApplyJobsIdRetryWithResponse(ctx context.Co
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply/plan (the `PostApiApplyPlan` operationId).
-func (c *ClientWithResponses) PostApiApplyPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error) {
-	rsp, err := c.PostApiApplyPlan(ctx, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyPlanWithResponse(ctx context.Context, params *PostApiApplyPlanParams, reqEditors ...RequestEditorFn) (*PostApiApplyPlanResponse, error) {
+	rsp, err := c.PostApiApplyPlan(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13877,8 +15573,8 @@ func (c *ClientWithResponses) PostApiApplyPlanWithResponse(ctx context.Context, 
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply/reconcile (the `PostApiApplyReconcile` operationId).
-func (c *ClientWithResponses) PostApiApplyReconcileWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error) {
-	rsp, err := c.PostApiApplyReconcile(ctx, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyReconcileWithResponse(ctx context.Context, params *PostApiApplyReconcileParams, reqEditors ...RequestEditorFn) (*PostApiApplyReconcileResponse, error) {
+	rsp, err := c.PostApiApplyReconcile(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13892,8 +15588,8 @@ func (c *ClientWithResponses) PostApiApplyReconcileWithResponse(ctx context.Cont
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-func (c *ClientWithResponses) PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
-	rsp, err := c.PostApiApplyRollbackWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyRollbackWithBodyWithResponse(ctx context.Context, params *PostApiApplyRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
+	rsp, err := c.PostApiApplyRollbackWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13907,8 +15603,8 @@ func (c *ClientWithResponses) PostApiApplyRollbackWithBodyWithResponse(ctx conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/apply/rollback (the `PostApiApplyRollback` operationId).
-func (c *ClientWithResponses) PostApiApplyRollbackWithResponse(ctx context.Context, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
-	rsp, err := c.PostApiApplyRollback(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiApplyRollbackWithResponse(ctx context.Context, params *PostApiApplyRollbackParams, body PostApiApplyRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiApplyRollbackResponse, error) {
+	rsp, err := c.PostApiApplyRollback(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13956,8 +15652,8 @@ func (c *ClientWithResponses) GetApiAuditWithResponse(ctx context.Context, param
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-func (c *ClientWithResponses) PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
-	rsp, err := c.PostApiAuthLocaleWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiAuthLocaleWithBodyWithResponse(ctx context.Context, params *PostApiAuthLocaleParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
+	rsp, err := c.PostApiAuthLocaleWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13975,8 +15671,8 @@ func (c *ClientWithResponses) PostApiAuthLocaleWithBodyWithResponse(ctx context.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/auth/locale (the `PostApiAuthLocale` operationId).
-func (c *ClientWithResponses) PostApiAuthLocaleWithResponse(ctx context.Context, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
-	rsp, err := c.PostApiAuthLocale(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiAuthLocaleWithResponse(ctx context.Context, params *PostApiAuthLocaleParams, body PostApiAuthLocaleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiAuthLocaleResponse, error) {
+	rsp, err := c.PostApiAuthLocale(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14029,8 +15725,8 @@ func (c *ClientWithResponses) PostApiAuthLogoutWithResponse(ctx context.Context,
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-func (c *ClientWithResponses) DeleteApiAuthSessionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error) {
-	rsp, err := c.DeleteApiAuthSessionsWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) DeleteApiAuthSessionsWithBodyWithResponse(ctx context.Context, params *DeleteApiAuthSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error) {
+	rsp, err := c.DeleteApiAuthSessionsWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14044,8 +15740,8 @@ func (c *ClientWithResponses) DeleteApiAuthSessionsWithBodyWithResponse(ctx cont
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/auth/sessions (the `DeleteApiAuthSessions` operationId).
-func (c *ClientWithResponses) DeleteApiAuthSessionsWithResponse(ctx context.Context, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error) {
-	rsp, err := c.DeleteApiAuthSessions(ctx, body, reqEditors...)
+func (c *ClientWithResponses) DeleteApiAuthSessionsWithResponse(ctx context.Context, params *DeleteApiAuthSessionsParams, body DeleteApiAuthSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiAuthSessionsResponse, error) {
+	rsp, err := c.DeleteApiAuthSessions(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14119,8 +15815,8 @@ func (c *ClientWithResponses) GetApiBackupsWithResponse(ctx context.Context, req
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-func (c *ClientWithResponses) PostApiBackupsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error) {
-	rsp, err := c.PostApiBackupsWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsWithBodyWithResponse(ctx context.Context, params *PostApiBackupsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error) {
+	rsp, err := c.PostApiBackupsWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14136,8 +15832,8 @@ func (c *ClientWithResponses) PostApiBackupsWithBodyWithResponse(ctx context.Con
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups (the `PostApiBackups` operationId).
-func (c *ClientWithResponses) PostApiBackupsWithResponse(ctx context.Context, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error) {
-	rsp, err := c.PostApiBackups(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsWithResponse(ctx context.Context, params *PostApiBackupsParams, body PostApiBackupsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsResponse, error) {
+	rsp, err := c.PostApiBackups(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14151,8 +15847,8 @@ func (c *ClientWithResponses) PostApiBackupsWithResponse(ctx context.Context, bo
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-func (c *ClientWithResponses) PostApiBackupsPruneWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error) {
-	rsp, err := c.PostApiBackupsPruneWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsPruneWithBodyWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error) {
+	rsp, err := c.PostApiBackupsPruneWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14166,8 +15862,8 @@ func (c *ClientWithResponses) PostApiBackupsPruneWithBodyWithResponse(ctx contex
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
-func (c *ClientWithResponses) PostApiBackupsPruneWithResponse(ctx context.Context, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error) {
-	rsp, err := c.PostApiBackupsPrune(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsPruneWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error) {
+	rsp, err := c.PostApiBackupsPrune(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14198,8 +15894,8 @@ func (c *ClientWithResponses) GetApiBackupsNameDownloadWithResponse(ctx context.
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-func (c *ClientWithResponses) PostApiBackupsNameRestoreWithBodyWithResponse(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error) {
-	rsp, err := c.PostApiBackupsNameRestoreWithBody(ctx, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsNameRestoreWithBodyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error) {
+	rsp, err := c.PostApiBackupsNameRestoreWithBody(ctx, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14215,8 +15911,8 @@ func (c *ClientWithResponses) PostApiBackupsNameRestoreWithBodyWithResponse(ctx 
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/{name}/restore (the `PostApiBackupsNameRestore` operationId).
-func (c *ClientWithResponses) PostApiBackupsNameRestoreWithResponse(ctx context.Context, name BackupName, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error) {
-	rsp, err := c.PostApiBackupsNameRestore(ctx, name, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsNameRestoreWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameRestoreParams, body PostApiBackupsNameRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameRestoreResponse, error) {
+	rsp, err := c.PostApiBackupsNameRestore(ctx, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14228,8 +15924,8 @@ func (c *ClientWithResponses) PostApiBackupsNameRestoreWithResponse(ctx context.
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-func (c *ClientWithResponses) PostApiBackupsNameVerifyWithBodyWithResponse(ctx context.Context, name BackupName, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error) {
-	rsp, err := c.PostApiBackupsNameVerifyWithBody(ctx, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsNameVerifyWithBodyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error) {
+	rsp, err := c.PostApiBackupsNameVerifyWithBody(ctx, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14241,8 +15937,8 @@ func (c *ClientWithResponses) PostApiBackupsNameVerifyWithBodyWithResponse(ctx c
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/backups/{name}/verify (the `PostApiBackupsNameVerify` operationId).
-func (c *ClientWithResponses) PostApiBackupsNameVerifyWithResponse(ctx context.Context, name BackupName, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error) {
-	rsp, err := c.PostApiBackupsNameVerify(ctx, name, body, reqEditors...)
+func (c *ClientWithResponses) PostApiBackupsNameVerifyWithResponse(ctx context.Context, name BackupName, params *PostApiBackupsNameVerifyParams, body PostApiBackupsNameVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsNameVerifyResponse, error) {
+	rsp, err := c.PostApiBackupsNameVerify(ctx, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14269,8 +15965,8 @@ func (c *ClientWithResponses) GetApiClientLinksWithResponse(ctx context.Context,
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-func (c *ClientWithResponses) PostApiClientLinksQrWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error) {
-	rsp, err := c.PostApiClientLinksQrWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiClientLinksQrWithBodyWithResponse(ctx context.Context, params *PostApiClientLinksQrParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error) {
+	rsp, err := c.PostApiClientLinksQrWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14284,8 +15980,8 @@ func (c *ClientWithResponses) PostApiClientLinksQrWithBodyWithResponse(ctx conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/client-links/qr (the `PostApiClientLinksQr` operationId).
-func (c *ClientWithResponses) PostApiClientLinksQrWithResponse(ctx context.Context, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error) {
-	rsp, err := c.PostApiClientLinksQr(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiClientLinksQrWithResponse(ctx context.Context, params *PostApiClientLinksQrParams, body PostApiClientLinksQrJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiClientLinksQrResponse, error) {
+	rsp, err := c.PostApiClientLinksQr(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14362,8 +16058,8 @@ func (c *ClientWithResponses) GetApiInboundsWithResponse(ctx context.Context, re
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-func (c *ClientWithResponses) PostApiInboundsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error) {
-	rsp, err := c.PostApiInboundsWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiInboundsWithBodyWithResponse(ctx context.Context, params *PostApiInboundsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error) {
+	rsp, err := c.PostApiInboundsWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14375,8 +16071,8 @@ func (c *ClientWithResponses) PostApiInboundsWithBodyWithResponse(ctx context.Co
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/inbounds (the `PostApiInbounds` operationId).
-func (c *ClientWithResponses) PostApiInboundsWithResponse(ctx context.Context, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error) {
-	rsp, err := c.PostApiInbounds(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiInboundsWithResponse(ctx context.Context, params *PostApiInboundsParams, body PostApiInboundsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiInboundsResponse, error) {
+	rsp, err := c.PostApiInbounds(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14388,8 +16084,8 @@ func (c *ClientWithResponses) PostApiInboundsWithResponse(ctx context.Context, b
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/inbounds/{name} (the `DeleteApiInboundsName` operationId).
-func (c *ClientWithResponses) DeleteApiInboundsNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*DeleteApiInboundsNameResponse, error) {
-	rsp, err := c.DeleteApiInboundsName(ctx, name, reqEditors...)
+func (c *ClientWithResponses) DeleteApiInboundsNameWithResponse(ctx context.Context, name Name, params *DeleteApiInboundsNameParams, reqEditors ...RequestEditorFn) (*DeleteApiInboundsNameResponse, error) {
+	rsp, err := c.DeleteApiInboundsName(ctx, name, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14414,8 +16110,8 @@ func (c *ClientWithResponses) GetApiInboundsNameWithResponse(ctx context.Context
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-func (c *ClientWithResponses) PutApiInboundsNameWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error) {
-	rsp, err := c.PutApiInboundsNameWithBody(ctx, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutApiInboundsNameWithBodyWithResponse(ctx context.Context, name Name, params *PutApiInboundsNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error) {
+	rsp, err := c.PutApiInboundsNameWithBody(ctx, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14427,8 +16123,8 @@ func (c *ClientWithResponses) PutApiInboundsNameWithBodyWithResponse(ctx context
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
-func (c *ClientWithResponses) PutApiInboundsNameWithResponse(ctx context.Context, name Name, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error) {
-	rsp, err := c.PutApiInboundsName(ctx, name, body, reqEditors...)
+func (c *ClientWithResponses) PutApiInboundsNameWithResponse(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error) {
+	rsp, err := c.PutApiInboundsName(ctx, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14479,8 +16175,8 @@ func (c *ClientWithResponses) GetApiProcessesWithResponse(ctx context.Context, r
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error) {
-	rsp, err := c.PostApiProfilesRuRecommendedPreviewWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithBodyWithResponse(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error) {
+	rsp, err := c.PostApiProfilesRuRecommendedPreviewWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14492,8 +16188,8 @@ func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithBodyWithRes
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/profiles/ru-recommended/preview (the `PostApiProfilesRuRecommendedPreview` operationId).
-func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithResponse(ctx context.Context, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error) {
-	rsp, err := c.PostApiProfilesRuRecommendedPreview(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiProfilesRuRecommendedPreviewWithResponse(ctx context.Context, params *PostApiProfilesRuRecommendedPreviewParams, body PostApiProfilesRuRecommendedPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProfilesRuRecommendedPreviewResponse, error) {
+	rsp, err := c.PostApiProfilesRuRecommendedPreview(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14531,8 +16227,8 @@ func (c *ClientWithResponses) GetApiRoutingPresetsWithResponse(ctx context.Conte
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/routing/presets/{name} (the `PostApiRoutingPresetsName` operationId).
-func (c *ClientWithResponses) PostApiRoutingPresetsNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*PostApiRoutingPresetsNameResponse, error) {
-	rsp, err := c.PostApiRoutingPresetsName(ctx, name, reqEditors...)
+func (c *ClientWithResponses) PostApiRoutingPresetsNameWithResponse(ctx context.Context, name Name, params *PostApiRoutingPresetsNameParams, reqEditors ...RequestEditorFn) (*PostApiRoutingPresetsNameResponse, error) {
+	rsp, err := c.PostApiRoutingPresetsName(ctx, name, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14557,8 +16253,8 @@ func (c *ClientWithResponses) GetApiRoutingRulesWithResponse(ctx context.Context
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-func (c *ClientWithResponses) PostApiRoutingRulesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error) {
-	rsp, err := c.PostApiRoutingRulesWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiRoutingRulesWithBodyWithResponse(ctx context.Context, params *PostApiRoutingRulesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error) {
+	rsp, err := c.PostApiRoutingRulesWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14570,8 +16266,8 @@ func (c *ClientWithResponses) PostApiRoutingRulesWithBodyWithResponse(ctx contex
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/routing/rules (the `PostApiRoutingRules` operationId).
-func (c *ClientWithResponses) PostApiRoutingRulesWithResponse(ctx context.Context, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error) {
-	rsp, err := c.PostApiRoutingRules(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiRoutingRulesWithResponse(ctx context.Context, params *PostApiRoutingRulesParams, body PostApiRoutingRulesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiRoutingRulesResponse, error) {
+	rsp, err := c.PostApiRoutingRules(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14583,8 +16279,8 @@ func (c *ClientWithResponses) PostApiRoutingRulesWithResponse(ctx context.Contex
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/routing/rules/{name} (the `DeleteApiRoutingRulesName` operationId).
-func (c *ClientWithResponses) DeleteApiRoutingRulesNameWithResponse(ctx context.Context, name Name, reqEditors ...RequestEditorFn) (*DeleteApiRoutingRulesNameResponse, error) {
-	rsp, err := c.DeleteApiRoutingRulesName(ctx, name, reqEditors...)
+func (c *ClientWithResponses) DeleteApiRoutingRulesNameWithResponse(ctx context.Context, name Name, params *DeleteApiRoutingRulesNameParams, reqEditors ...RequestEditorFn) (*DeleteApiRoutingRulesNameResponse, error) {
+	rsp, err := c.DeleteApiRoutingRulesName(ctx, name, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14609,8 +16305,8 @@ func (c *ClientWithResponses) GetApiRoutingRulesNameWithResponse(ctx context.Con
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-func (c *ClientWithResponses) PutApiRoutingRulesNameWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error) {
-	rsp, err := c.PutApiRoutingRulesNameWithBody(ctx, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutApiRoutingRulesNameWithBodyWithResponse(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error) {
+	rsp, err := c.PutApiRoutingRulesNameWithBody(ctx, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14622,8 +16318,8 @@ func (c *ClientWithResponses) PutApiRoutingRulesNameWithBodyWithResponse(ctx con
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/routing/rules/{name} (the `PutApiRoutingRulesName` operationId).
-func (c *ClientWithResponses) PutApiRoutingRulesNameWithResponse(ctx context.Context, name Name, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error) {
-	rsp, err := c.PutApiRoutingRulesName(ctx, name, body, reqEditors...)
+func (c *ClientWithResponses) PutApiRoutingRulesNameWithResponse(ctx context.Context, name Name, params *PutApiRoutingRulesNameParams, body PutApiRoutingRulesNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiRoutingRulesNameResponse, error) {
+	rsp, err := c.PutApiRoutingRulesName(ctx, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14648,8 +16344,8 @@ func (c *ClientWithResponses) GetApiRuntimeObservationWithResponse(ctx context.C
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-func (c *ClientWithResponses) PostApiServicesNameRestartWithBodyWithResponse(ctx context.Context, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error) {
-	rsp, err := c.PostApiServicesNameRestartWithBody(ctx, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiServicesNameRestartWithBodyWithResponse(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error) {
+	rsp, err := c.PostApiServicesNameRestartWithBody(ctx, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14661,8 +16357,8 @@ func (c *ClientWithResponses) PostApiServicesNameRestartWithBodyWithResponse(ctx
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/services/{name}/restart (the `PostApiServicesNameRestart` operationId).
-func (c *ClientWithResponses) PostApiServicesNameRestartWithResponse(ctx context.Context, name Name, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error) {
-	rsp, err := c.PostApiServicesNameRestart(ctx, name, body, reqEditors...)
+func (c *ClientWithResponses) PostApiServicesNameRestartWithResponse(ctx context.Context, name Name, params *PostApiServicesNameRestartParams, body PostApiServicesNameRestartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiServicesNameRestartResponse, error) {
+	rsp, err := c.PostApiServicesNameRestart(ctx, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14687,8 +16383,8 @@ func (c *ClientWithResponses) GetApiSettingsWithResponse(ctx context.Context, re
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-func (c *ClientWithResponses) PutApiSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error) {
-	rsp, err := c.PutApiSettingsWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutApiSettingsWithBodyWithResponse(ctx context.Context, params *PutApiSettingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error) {
+	rsp, err := c.PutApiSettingsWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14700,8 +16396,8 @@ func (c *ClientWithResponses) PutApiSettingsWithBodyWithResponse(ctx context.Con
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/settings (the `PutApiSettings` operationId).
-func (c *ClientWithResponses) PutApiSettingsWithResponse(ctx context.Context, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error) {
-	rsp, err := c.PutApiSettings(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PutApiSettingsWithResponse(ctx context.Context, params *PutApiSettingsParams, body PutApiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiSettingsResponse, error) {
+	rsp, err := c.PutApiSettings(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14715,8 +16411,8 @@ func (c *ClientWithResponses) PutApiSettingsWithResponse(ctx context.Context, bo
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-func (c *ClientWithResponses) PostApiSetupCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error) {
-	rsp, err := c.PostApiSetupCompleteWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiSetupCompleteWithBodyWithResponse(ctx context.Context, params *PostApiSetupCompleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error) {
+	rsp, err := c.PostApiSetupCompleteWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14730,8 +16426,8 @@ func (c *ClientWithResponses) PostApiSetupCompleteWithBodyWithResponse(ctx conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/setup/complete (the `PostApiSetupComplete` operationId).
-func (c *ClientWithResponses) PostApiSetupCompleteWithResponse(ctx context.Context, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error) {
-	rsp, err := c.PostApiSetupComplete(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiSetupCompleteWithResponse(ctx context.Context, params *PostApiSetupCompleteParams, body PostApiSetupCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiSetupCompleteResponse, error) {
+	rsp, err := c.PostApiSetupComplete(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14797,8 +16493,8 @@ func (c *ClientWithResponses) GetApiTlsWithResponse(ctx context.Context, reqEdit
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-func (c *ClientWithResponses) PostApiToolsDnsLookupWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error) {
-	rsp, err := c.PostApiToolsDnsLookupWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsDnsLookupWithBodyWithResponse(ctx context.Context, params *PostApiToolsDnsLookupParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error) {
+	rsp, err := c.PostApiToolsDnsLookupWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14810,8 +16506,8 @@ func (c *ClientWithResponses) PostApiToolsDnsLookupWithBodyWithResponse(ctx cont
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/dns-lookup (the `PostApiToolsDnsLookup` operationId).
-func (c *ClientWithResponses) PostApiToolsDnsLookupWithResponse(ctx context.Context, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error) {
-	rsp, err := c.PostApiToolsDnsLookup(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsDnsLookupWithResponse(ctx context.Context, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsDnsLookupResponse, error) {
+	rsp, err := c.PostApiToolsDnsLookup(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14823,8 +16519,8 @@ func (c *ClientWithResponses) PostApiToolsDnsLookupWithResponse(ctx context.Cont
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-func (c *ClientWithResponses) PostApiToolsPingWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error) {
-	rsp, err := c.PostApiToolsPingWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsPingWithBodyWithResponse(ctx context.Context, params *PostApiToolsPingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error) {
+	rsp, err := c.PostApiToolsPingWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14836,8 +16532,8 @@ func (c *ClientWithResponses) PostApiToolsPingWithBodyWithResponse(ctx context.C
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/ping (the `PostApiToolsPing` operationId).
-func (c *ClientWithResponses) PostApiToolsPingWithResponse(ctx context.Context, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error) {
-	rsp, err := c.PostApiToolsPing(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsPingWithResponse(ctx context.Context, params *PostApiToolsPingParams, body PostApiToolsPingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsPingResponse, error) {
+	rsp, err := c.PostApiToolsPing(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14849,8 +16545,8 @@ func (c *ClientWithResponses) PostApiToolsPingWithResponse(ctx context.Context, 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-func (c *ClientWithResponses) PostApiToolsSpeedtestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error) {
-	rsp, err := c.PostApiToolsSpeedtestWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsSpeedtestWithBodyWithResponse(ctx context.Context, params *PostApiToolsSpeedtestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error) {
+	rsp, err := c.PostApiToolsSpeedtestWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14862,8 +16558,8 @@ func (c *ClientWithResponses) PostApiToolsSpeedtestWithBodyWithResponse(ctx cont
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/tools/speedtest (the `PostApiToolsSpeedtest` operationId).
-func (c *ClientWithResponses) PostApiToolsSpeedtestWithResponse(ctx context.Context, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error) {
-	rsp, err := c.PostApiToolsSpeedtest(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiToolsSpeedtestWithResponse(ctx context.Context, params *PostApiToolsSpeedtestParams, body PostApiToolsSpeedtestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiToolsSpeedtestResponse, error) {
+	rsp, err := c.PostApiToolsSpeedtest(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14890,8 +16586,8 @@ func (c *ClientWithResponses) GetApiUsersWithResponse(ctx context.Context, reqEd
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/users (the `PostApiUsers` operationId).
-func (c *ClientWithResponses) PostApiUsersWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error) {
-	rsp, err := c.PostApiUsersWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiUsersWithBodyWithResponse(ctx context.Context, params *PostApiUsersParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error) {
+	rsp, err := c.PostApiUsersWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14905,8 +16601,8 @@ func (c *ClientWithResponses) PostApiUsersWithBodyWithResponse(ctx context.Conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/users (the `PostApiUsers` operationId).
-func (c *ClientWithResponses) PostApiUsersWithResponse(ctx context.Context, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error) {
-	rsp, err := c.PostApiUsers(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiUsersWithResponse(ctx context.Context, params *PostApiUsersParams, body PostApiUsersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiUsersResponse, error) {
+	rsp, err := c.PostApiUsers(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14918,8 +16614,8 @@ func (c *ClientWithResponses) PostApiUsersWithResponse(ctx context.Context, body
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/users/{username} (the `DeleteApiUsersUsername` operationId).
-func (c *ClientWithResponses) DeleteApiUsersUsernameWithResponse(ctx context.Context, username Username, reqEditors ...RequestEditorFn) (*DeleteApiUsersUsernameResponse, error) {
-	rsp, err := c.DeleteApiUsersUsername(ctx, username, reqEditors...)
+func (c *ClientWithResponses) DeleteApiUsersUsernameWithResponse(ctx context.Context, username Username, params *DeleteApiUsersUsernameParams, reqEditors ...RequestEditorFn) (*DeleteApiUsersUsernameResponse, error) {
+	rsp, err := c.DeleteApiUsersUsername(ctx, username, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14931,8 +16627,8 @@ func (c *ClientWithResponses) DeleteApiUsersUsernameWithResponse(ctx context.Con
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-func (c *ClientWithResponses) PutApiUsersUsernameWithBodyWithResponse(ctx context.Context, username Username, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error) {
-	rsp, err := c.PutApiUsersUsernameWithBody(ctx, username, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutApiUsersUsernameWithBodyWithResponse(ctx context.Context, username Username, params *PutApiUsersUsernameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error) {
+	rsp, err := c.PutApiUsersUsernameWithBody(ctx, username, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14944,8 +16640,8 @@ func (c *ClientWithResponses) PutApiUsersUsernameWithBodyWithResponse(ctx contex
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
-func (c *ClientWithResponses) PutApiUsersUsernameWithResponse(ctx context.Context, username Username, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error) {
-	rsp, err := c.PutApiUsersUsername(ctx, username, body, reqEditors...)
+func (c *ClientWithResponses) PutApiUsersUsernameWithResponse(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error) {
+	rsp, err := c.PutApiUsersUsername(ctx, username, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14970,8 +16666,8 @@ func (c *ClientWithResponses) GetApiV1ClientsWithResponse(ctx context.Context, r
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
-	rsp, err := c.PostApiV1ClientsWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsWithBodyWithResponse(ctx context.Context, params *PostApiV1ClientsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
+	rsp, err := c.PostApiV1ClientsWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14983,8 +16679,8 @@ func (c *ClientWithResponses) PostApiV1ClientsWithBodyWithResponse(ctx context.C
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients (the `PostApiV1Clients` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsWithResponse(ctx context.Context, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
-	rsp, err := c.PostApiV1Clients(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsWithResponse(ctx context.Context, params *PostApiV1ClientsParams, body PostApiV1ClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsResponse, error) {
+	rsp, err := c.PostApiV1Clients(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -14996,8 +16692,8 @@ func (c *ClientWithResponses) PostApiV1ClientsWithResponse(ctx context.Context, 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
-	rsp, err := c.PostApiV1ClientsBulkWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsBulkWithBodyWithResponse(ctx context.Context, params *PostApiV1ClientsBulkParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
+	rsp, err := c.PostApiV1ClientsBulkWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15009,8 +16705,8 @@ func (c *ClientWithResponses) PostApiV1ClientsBulkWithBodyWithResponse(ctx conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/bulk (the `PostApiV1ClientsBulk` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsBulkWithResponse(ctx context.Context, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
-	rsp, err := c.PostApiV1ClientsBulk(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsBulkWithResponse(ctx context.Context, params *PostApiV1ClientsBulkParams, body PostApiV1ClientsBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsBulkResponse, error) {
+	rsp, err := c.PostApiV1ClientsBulk(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15022,8 +16718,8 @@ func (c *ClientWithResponses) PostApiV1ClientsBulkWithResponse(ctx context.Conte
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/migrate-legacy (the `PostApiV1ClientsMigrateLegacy` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error) {
-	rsp, err := c.PostApiV1ClientsMigrateLegacy(ctx, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsMigrateLegacyWithResponse(ctx context.Context, params *PostApiV1ClientsMigrateLegacyParams, reqEditors ...RequestEditorFn) (*PostApiV1ClientsMigrateLegacyResponse, error) {
+	rsp, err := c.PostApiV1ClientsMigrateLegacy(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15035,8 +16731,8 @@ func (c *ClientWithResponses) PostApiV1ClientsMigrateLegacyWithResponse(ctx cont
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/v1/clients/{id} (the `DeleteApiV1ClientsId` operationId).
-func (c *ClientWithResponses) DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error) {
-	rsp, err := c.DeleteApiV1ClientsId(ctx, id, reqEditors...)
+func (c *ClientWithResponses) DeleteApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, params *DeleteApiV1ClientsIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsId(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15061,8 +16757,8 @@ func (c *ClientWithResponses) GetApiV1ClientsIdWithResponse(ctx context.Context,
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsIdWithBody(ctx, id, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15074,8 +16770,8 @@ func (c *ClientWithResponses) PatchApiV1ClientsIdWithBodyWithResponse(ctx contex
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
-func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsId(ctx, id, body, reqEditors...)
+func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsId(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15100,8 +16796,8 @@ func (c *ClientWithResponses) GetApiV1ClientsIdBindingsWithResponse(ctx context.
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdBindingsWithBody(ctx, id, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdBindingsWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15113,8 +16809,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdBindings(ctx, id, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, body PostApiV1ClientsIdBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdBindings(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15126,8 +16822,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithResponse(ctx context
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
-func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error) {
-	rsp, err := c.DeleteApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, reqEditors...)
+func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15139,8 +16835,8 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdBindingsBindingIdWithBody(ctx, id, bindingId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15152,8 +16848,8 @@ func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithBodyWithRe
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /api/v1/clients/{id}/bindings/{bindingId} (the `PatchApiV1ClientsIdBindingsBindingId` operationId).
-func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
-	rsp, err := c.PatchApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, body, reqEditors...)
+func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.PatchApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15165,8 +16861,8 @@ func (c *ClientWithResponses) PatchApiV1ClientsIdBindingsBindingIdWithResponse(c
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdWithBody(ctx, id, bindingId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15178,8 +16874,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithBodyWith
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId} (the `PostApiV1ClientsIdCredentialsBindingId` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdCredentialsBindingId(ctx, id, bindingId, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdParams, body PostApiV1ClientsIdCredentialsBindingIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingId(ctx, id, bindingId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15191,8 +16887,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdWithResponse
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx, id, bindingId, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotateWithBody(ctx, id, bindingId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15204,8 +16900,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithBo
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotate(ctx, id, bindingId, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdCredentialsBindingIdRotate(ctx, id, bindingId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15230,8 +16926,8 @@ func (c *ClientWithResponses) GetApiV1ClientsIdTokensWithResponse(ctx context.Co
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdTokensWithBody(ctx, id, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithBodyWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15243,8 +16939,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithBodyWithResponse(ctx c
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens (the `PostApiV1ClientsIdTokens` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdTokens(ctx, id, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdTokensParams, body PostApiV1ClientsIdTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokens(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15256,8 +16952,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdTokensWithResponse(ctx context.C
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
-func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error) {
-	rsp, err := c.DeleteApiV1ClientsIdTokensTokenId(ctx, id, tokenId, reqEditors...)
+func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error) {
+	rsp, err := c.DeleteApiV1ClientsIdTokensTokenId(ctx, id, tokenId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15269,8 +16965,8 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx, id, tokenId, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotateWithBody(ctx, id, tokenId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15282,8 +16978,8 @@ func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithR
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/clients/{id}/tokens/{tokenId}/rotate (the `PostApiV1ClientsIdTokensTokenIdRotate` operationId).
-func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
-	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotate(ctx, id, tokenId, body, reqEditors...)
+func (c *ClientWithResponses) PostApiV1ClientsIdTokensTokenIdRotateWithResponse(ctx context.Context, id ClientId, tokenId string, params *PostApiV1ClientsIdTokensTokenIdRotateParams, body PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdTokensTokenIdRotateResponse, error) {
+	rsp, err := c.PostApiV1ClientsIdTokensTokenIdRotate(ctx, id, tokenId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15386,8 +17082,8 @@ func (c *ClientWithResponses) GetApiV1TrafficIdHistoryWithResponse(ctx context.C
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-func (c *ClientWithResponses) PostApiValidationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error) {
-	rsp, err := c.PostApiValidationWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiValidationWithBodyWithResponse(ctx context.Context, params *PostApiValidationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error) {
+	rsp, err := c.PostApiValidationWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15404,8 +17100,8 @@ func (c *ClientWithResponses) PostApiValidationWithBodyWithResponse(ctx context.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/validation (the `PostApiValidation` operationId).
-func (c *ClientWithResponses) PostApiValidationWithResponse(ctx context.Context, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error) {
-	rsp, err := c.PostApiValidation(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiValidationWithResponse(ctx context.Context, params *PostApiValidationParams, body PostApiValidationJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiValidationResponse, error) {
+	rsp, err := c.PostApiValidation(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15430,8 +17126,8 @@ func (c *ClientWithResponses) GetApiVersionWithResponse(ctx context.Context, req
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-func (c *ClientWithResponses) PostApiVersionUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error) {
-	rsp, err := c.PostApiVersionUpdateWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiVersionUpdateWithBodyWithResponse(ctx context.Context, params *PostApiVersionUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error) {
+	rsp, err := c.PostApiVersionUpdateWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15443,8 +17139,8 @@ func (c *ClientWithResponses) PostApiVersionUpdateWithBodyWithResponse(ctx conte
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
-func (c *ClientWithResponses) PostApiVersionUpdateWithResponse(ctx context.Context, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error) {
-	rsp, err := c.PostApiVersionUpdate(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PostApiVersionUpdateWithResponse(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error) {
+	rsp, err := c.PostApiVersionUpdate(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15469,8 +17165,8 @@ func (c *ClientWithResponses) GetApiWarpWithResponse(ctx context.Context, reqEdi
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-func (c *ClientWithResponses) PutApiWarpWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error) {
-	rsp, err := c.PutApiWarpWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutApiWarpWithBodyWithResponse(ctx context.Context, params *PutApiWarpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error) {
+	rsp, err := c.PutApiWarpWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15482,8 +17178,8 @@ func (c *ClientWithResponses) PutApiWarpWithBodyWithResponse(ctx context.Context
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
-func (c *ClientWithResponses) PutApiWarpWithResponse(ctx context.Context, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error) {
-	rsp, err := c.PutApiWarp(ctx, body, reqEditors...)
+func (c *ClientWithResponses) PutApiWarpWithResponse(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error) {
+	rsp, err := c.PutApiWarp(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15576,6 +17272,27 @@ func ParsePostApiAdminRotateKeyResponse(rsp *http.Response) (*PostApiAdminRotate
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest PrivilegedFailure
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15621,6 +17338,13 @@ func ParsePostApiApplyResponse(rsp *http.Response) (*PostApiApplyResponse, error
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 
@@ -15775,6 +17499,25 @@ func ParsePostApiApplyRollbackResponse(rsp *http.Response) (*PostApiApplyRollbac
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case rsp.StatusCode == 200:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
+	case rsp.StatusCode == 409:
+		break // No content-type
+
+	}
+
 	return response, nil
 }
 
@@ -15815,6 +17558,27 @@ func ParseGetApiAuditResponse(rsp *http.Response) (*GetApiAuditResponse, error) 
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	switch {
@@ -15853,6 +17617,34 @@ func ParsePostApiAuthLocaleResponse(rsp *http.Response) (*PostApiAuthLocaleRespo
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -15902,6 +17694,20 @@ func ParsePostApiAuthLoginResponse(rsp *http.Response) (*PostApiAuthLoginRespons
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	}
 
@@ -15978,6 +17784,34 @@ func ParseDeleteApiAuthSessionsResponse(rsp *http.Response) (*DeleteApiAuthSessi
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	switch {
@@ -16016,6 +17850,20 @@ func ParseGetApiAuthSessionsResponse(rsp *http.Response) (*GetApiAuthSessionsRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -16082,6 +17930,34 @@ func ParseGetApiBackupRestoreJobsIdResponse(rsp *http.Response) (*GetApiBackupRe
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	switch {
@@ -16120,6 +17996,20 @@ func ParseGetApiBackupsResponse(rsp *http.Response) (*GetApiBackupsResponse, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -16160,6 +18050,34 @@ func ParsePostApiBackupsResponse(rsp *http.Response) (*PostApiBackupsResponse, e
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	switch {
@@ -16199,6 +18117,27 @@ func ParsePostApiBackupsPruneResponse(rsp *http.Response) (*PostApiBackupsPruneR
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	switch {
@@ -16228,6 +18167,30 @@ func ParseGetApiBackupsNameDownloadResponse(rsp *http.Response) (*GetApiBackupsN
 	response := &GetApiBackupsNameDownloadResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	switch {
@@ -16277,6 +18240,48 @@ func ParsePostApiBackupsNameRestoreResponse(rsp *http.Response) (*PostApiBackups
 		}
 		response.JSON202 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	switch {
@@ -16315,6 +18320,41 @@ func ParsePostApiBackupsNameVerifyResponse(rsp *http.Response) (*PostApiBackupsN
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -16371,6 +18411,30 @@ func ParsePostApiClientLinksQrResponse(rsp *http.Response) (*PostApiClientLinksQ
 	response := &PostApiClientLinksQrResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
 	}
 
 	switch {
@@ -16504,6 +18568,13 @@ func ParseGetApiInboundsResponse(rsp *http.Response) (*GetApiInboundsResponse, e
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
 	}
 
 	switch {
@@ -16543,6 +18614,20 @@ func ParsePostApiInboundsResponse(rsp *http.Response) (*PostApiInboundsResponse,
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	return response, nil
@@ -16559,6 +18644,26 @@ func ParseDeleteApiInboundsNameResponse(rsp *http.Response) (*DeleteApiInboundsN
 	response := &DeleteApiInboundsNameResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -16584,6 +18689,13 @@ func ParseGetApiInboundsNameResponse(rsp *http.Response) (*GetApiInboundsNameRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -16611,6 +18723,27 @@ func ParsePutApiInboundsNameResponse(rsp *http.Response) (*PutApiInboundsNameRes
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -16636,6 +18769,13 @@ func ParseGetApiLogsResponse(rsp *http.Response) (*GetApiLogsResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 
@@ -16715,6 +18855,13 @@ func ParsePostApiProfilesRuRecommendedPreviewResponse(rsp *http.Response) (*Post
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -16740,6 +18887,20 @@ func ParseGetApiProtocolsResponse(rsp *http.Response) (*GetApiProtocolsResponse,
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -16806,6 +18967,13 @@ func ParsePostApiRoutingPresetsNameResponse(rsp *http.Response) (*PostApiRouting
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -16858,6 +19026,13 @@ func ParsePostApiRoutingRulesResponse(rsp *http.Response) (*PostApiRoutingRulesR
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -16874,6 +19049,19 @@ func ParseDeleteApiRoutingRulesNameResponse(rsp *http.Response) (*DeleteApiRouti
 	response := &DeleteApiRoutingRulesNameResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -16900,6 +19088,13 @@ func ParseGetApiRoutingRulesNameResponse(rsp *http.Response) (*GetApiRoutingRule
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -16925,6 +19120,20 @@ func ParsePutApiRoutingRulesNameResponse(rsp *http.Response) (*PutApiRoutingRule
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -16978,6 +19187,13 @@ func ParsePostApiServicesNameRestartResponse(rsp *http.Response) (*PostApiServic
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServiceActionResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17010,6 +19226,13 @@ func ParseGetApiSettingsResponse(rsp *http.Response) (*GetApiSettingsResponse, e
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	}
 
@@ -17050,6 +19273,20 @@ func ParsePutApiSettingsResponse(rsp *http.Response) (*PutApiSettingsResponse, e
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	return response, nil
@@ -17075,6 +19312,27 @@ func ParsePostApiSetupCompleteResponse(rsp *http.Response) (*PostApiSetupComplet
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -17127,6 +19385,13 @@ func ParseGetApiStatusResponse(rsp *http.Response) (*GetApiStatusResponse, error
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	}
 
@@ -17219,6 +19484,13 @@ func ParsePostApiToolsDnsLookupResponse(rsp *http.Response) (*PostApiToolsDnsLoo
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -17245,6 +19517,13 @@ func ParsePostApiToolsPingResponse(rsp *http.Response) (*PostApiToolsPingRespons
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -17270,6 +19549,20 @@ func ParsePostApiToolsSpeedtestResponse(rsp *http.Response) (*PostApiToolsSpeedt
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -17323,6 +19616,27 @@ func ParsePostApiUsersResponse(rsp *http.Response) (*PostApiUsersResponse, error
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	switch {
@@ -17354,6 +19668,33 @@ func ParseDeleteApiUsersUsernameResponse(rsp *http.Response) (*DeleteApiUsersUse
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -17377,6 +19718,27 @@ func ParsePutApiUsersUsernameResponse(rsp *http.Response) (*PutApiUsersUsernameR
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -17429,6 +19791,13 @@ func ParsePostApiV1ClientsResponse(rsp *http.Response) (*PostApiV1ClientsRespons
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 
@@ -17871,6 +20240,27 @@ func ParsePostApiValidationResponse(rsp *http.Response) (*PostApiValidationRespo
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	switch {
@@ -17909,6 +20299,13 @@ func ParseGetApiVersionResponse(rsp *http.Response) (*GetApiVersionResponse, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	}
 
@@ -17949,12 +20346,33 @@ func ParsePostApiVersionUpdateResponse(rsp *http.Response) (*PostApiVersionUpdat
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest PrivilegedFailure
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -18008,6 +20426,13 @@ func ParsePutApiWarpResponse(rsp *http.Response) (*PutApiWarpResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -18033,6 +20458,13 @@ func ParseGetHealthzResponse(rsp *http.Response) (*GetHealthzResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest HealthResponse
@@ -18070,6 +20502,16 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	response := &GetMetricsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
 	}
 
 	switch {

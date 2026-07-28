@@ -62,7 +62,7 @@ import type {
 import type {
   BadRequestResponse,
   EmptyObject,
-  ErrorText,
+  ErrorEnvelope,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
@@ -227,7 +227,7 @@ export type postApiVersionUpdateResponse500 = {
 }
 
 export type postApiVersionUpdateResponse502 = {
-  data: ErrorText
+  data: ErrorEnvelope
   status: 502
 }
 
@@ -271,7 +271,7 @@ export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: 
 
 
 
-export const getPostApiVersionUpdateMutationOptions = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse,
+export const getPostApiVersionUpdateMutationOptions = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext> => {
 
@@ -300,12 +300,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiVersionUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiVersionUpdate>>>
     export type PostApiVersionUpdateMutationBody = EmptyObject | undefined
-    export type PostApiVersionUpdateMutationError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse
+    export type PostApiVersionUpdateMutationError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
 
     /**
  * @summary Trigger a staged self-update to the latest release
  */
-export const usePostApiVersionUpdate = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorText | ServiceUnavailableResponse,
+export const usePostApiVersionUpdate = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiVersionUpdate>>,

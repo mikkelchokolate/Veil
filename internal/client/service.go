@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Service orchestrates client use-cases: CRUD, bindings, credentials, bulk
@@ -94,6 +97,17 @@ const MaxQuotaBytes int64 = 1<<53 - 1
 func validate(c Client) error {
 	if c.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrValidation)
+	}
+	if !utf8.ValidString(c.Name) || strings.TrimSpace(c.Name) != c.Name {
+		return fmt.Errorf("%w: name must be valid Unicode without surrounding whitespace", ErrValidation)
+	}
+	if utf8.RuneCountInString(c.Name) > 128 {
+		return fmt.Errorf("%w: name must be at most 128 characters", ErrValidation)
+	}
+	for _, char := range c.Name {
+		if unicode.Is(unicode.C, char) {
+			return fmt.Errorf("%w: name must not contain control or format characters", ErrValidation)
+		}
 	}
 	if c.QuotaBytes != nil {
 		if *c.QuotaBytes < 0 {
