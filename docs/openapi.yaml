@@ -2372,9 +2372,8 @@ paths:
               type: object
               properties:
                 expiresAt:
-                  type: integer
+                  type: [integer, "null"]
                   format: int64
-                  nullable: true
                   description: Replacement expiry. A future value is required when rotating an expired token.
       responses:
         "200":
@@ -2687,6 +2686,7 @@ components:
                 error:
                   code: validation_failed
                   message: configuration failed live validation
+                  requestId: example-request-id
                 issues:
                   - code: port_in_use
                     severity: error
@@ -2707,6 +2707,7 @@ components:
                 error:
                   code: operation_failed
                   message: privileged helper is unavailable
+                  requestId: example-request-id
   schemas:
     EmptyObject:
       type: object

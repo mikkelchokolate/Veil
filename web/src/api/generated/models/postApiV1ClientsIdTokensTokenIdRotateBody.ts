@@ -42,6 +42,9 @@
  */
 
 export type PostApiV1ClientsIdTokensTokenIdRotateBody = {
-  /** Replacement expiry. A future value is required when rotating an expired token. */
+  /**
+     * Replacement expiry. A future value is required when rotating an expired token.
+     * @nullable
+     */
   expiresAt?: number | null;
 };

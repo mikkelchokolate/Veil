@@ -2142,7 +2142,7 @@ type DeleteApiV1ClientsIdTokensTokenIdParams struct {
 // PostApiV1ClientsIdTokensTokenIdRotateJSONBody defines parameters for PostApiV1ClientsIdTokensTokenIdRotate.
 type PostApiV1ClientsIdTokensTokenIdRotateJSONBody struct {
 	// ExpiresAt Replacement expiry. A future value is required when rotating an expired token.
-	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+	ExpiresAt nullable.Nullable[int64] `json:"expiresAt,omitempty"`
 }
 
 // PostApiV1ClientsIdTokensTokenIdRotateParams defines parameters for PostApiV1ClientsIdTokensTokenIdRotate.
