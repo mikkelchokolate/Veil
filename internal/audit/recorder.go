@@ -39,17 +39,25 @@ type Record struct {
 }
 
 type RecorderOptions struct {
-	MaxBytes int64
-	Backups  int
-	Now      func() time.Time
+	MaxBytes           int64
+	Backups            int
+	Now                func() time.Time
+	SpoolPath          string
+	QueueCapacity      int
+	BackpressurePolicy string
+	MaxSpoolBytes      int64
 }
 
 type Recorder struct {
-	mu       sync.Mutex
-	path     string
-	maxBytes int64
-	backups  int
-	now      func() time.Time
+	mu                 sync.Mutex
+	path               string
+	maxBytes           int64
+	backups            int
+	now                func() time.Time
+	spoolPath          string
+	queueCapacity      int
+	backpressurePolicy string
+	maxSpoolBytes      int64
 }
 
 func NewRecorder(path string, options RecorderOptions) *Recorder {
@@ -68,12 +76,25 @@ func NewRecorder(path string, options RecorderOptions) *Recorder {
 	if now == nil {
 		now = time.Now
 	}
-	return &Recorder{
-		path:     path,
-		maxBytes: maxBytes,
-		backups:  backups,
-		now:      now,
+	maxSpoolBytes := options.MaxSpoolBytes
+	if maxSpoolBytes <= 0 {
+		maxSpoolBytes = 1 << 20
 	}
+	queueCapacity := options.QueueCapacity
+	if queueCapacity <= 0 {
+		queueCapacity = 128
+	}
+	policy := options.BackpressurePolicy
+	if policy == "" && options.SpoolPath != "" {
+		policy = "spool_critical"
+	}
+	recorder := &Recorder{
+		path: path, maxBytes: maxBytes, backups: backups, now: now,
+		spoolPath: options.SpoolPath, queueCapacity: queueCapacity,
+		backpressurePolicy: policy, maxSpoolBytes: maxSpoolBytes,
+	}
+	_ = recorder.replaySpool()
+	return recorder
 }
 
 func (r *Recorder) Append(record Record) error {
@@ -94,6 +115,20 @@ func (r *Recorder) Append(record Record) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.appendPrimaryLocked(body); err != nil {
+		if r.spoolPath != "" && r.backpressurePolicy == "spool_critical" && criticalAuditAction(record.Action) {
+			if spoolErr := r.appendSpoolLocked(body); spoolErr == nil {
+				return nil
+			} else {
+				return errors.Join(err, spoolErr)
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *Recorder) appendPrimaryLocked(body []byte) error {
 	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
 		return err
 	}
@@ -121,6 +156,80 @@ func (r *Recorder) Append(record Record) error {
 		return syncDirectory(filepath.Dir(r.path))
 	}
 	return nil
+}
+
+func (r *Recorder) appendSpoolLocked(body []byte) error {
+	if int64(len(body)) > r.maxSpoolBytes {
+		return errors.New("critical audit record exceeds spool limit")
+	}
+	if err := os.MkdirAll(filepath.Dir(r.spoolPath), 0o700); err != nil {
+		return err
+	}
+	if info, err := os.Stat(r.spoolPath); err == nil && info.Size()+int64(len(body)) > r.maxSpoolBytes {
+		return errors.New("critical audit spool is full")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	file, err := os.OpenFile(r.spoolPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := fileSync(file); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(r.spoolPath))
+}
+
+func (r *Recorder) replaySpool() error {
+	if r == nil || r.spoolPath == "" || r.path == "" {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	body, err := os.ReadFile(r.spoolPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if int64(len(body)) > r.maxSpoolBytes {
+		return errors.New("critical audit spool exceeds configured limit")
+	}
+	for _, line := range bytes.Split(body, []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var record Record
+		if err := json.Unmarshal(line, &record); err != nil {
+			return fmt.Errorf("decode critical audit spool: %w", err)
+		}
+		encoded := append(append([]byte(nil), line...), '\n')
+		if err := r.appendPrimaryLocked(encoded); err != nil {
+			return err
+		}
+	}
+	if err := os.Remove(r.spoolPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return syncDirectory(filepath.Dir(r.spoolPath))
+}
+
+func criticalAuditAction(action string) bool {
+	for _, prefix := range []string{"backup.restore", "update.", "auth.role", "auth.setup", "key.rotate"} {
+		if strings.HasPrefix(action, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {

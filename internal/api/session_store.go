@@ -79,6 +79,8 @@ type sessionJournalRecord struct {
 	Session   *storedSession `json:"session,omitempty"`
 }
 
+const maxActiveSessions = 1024
+
 type SessionRegistry struct {
 	mu              sync.Mutex
 	path            string
@@ -105,6 +107,11 @@ func NewSessionRegistry(path string) (*SessionRegistry, error) {
 	if err := registry.load(); err != nil {
 		return nil, err
 	}
+	if evicted := registry.enforceSessionBoundLocked(); len(evicted) > 0 {
+		if err := registry.saveLocked(); err != nil {
+			return nil, err
+		}
+	}
 	return registry, nil
 }
 
@@ -114,6 +121,30 @@ func mustNewSessionRegistry(path string) *SessionRegistry {
 		panic(err)
 	}
 	return registry
+}
+
+type evictedSession struct {
+	hash   string
+	record storedSession
+	csrf   string
+}
+
+func (r *SessionRegistry) enforceSessionBoundLocked() []evictedSession {
+	var evicted []evictedSession
+	for len(r.sessions) > maxActiveSessions {
+		oldestHash := ""
+		var oldest storedSession
+		for tokenHash, session := range r.sessions {
+			if oldestHash == "" || session.CreatedAt.Before(oldest.CreatedAt) ||
+				(session.CreatedAt.Equal(oldest.CreatedAt) && tokenHash < oldestHash) {
+				oldestHash, oldest = tokenHash, session
+			}
+		}
+		evicted = append(evicted, evictedSession{hash: oldestHash, record: oldest, csrf: r.rawCSRF[oldestHash]})
+		delete(r.sessions, oldestHash)
+		delete(r.rawCSRF, oldestHash)
+	}
+	return evicted
 }
 
 func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
@@ -145,10 +176,23 @@ func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
 	defer r.mu.Unlock()
 	r.sessions[record.TokenHash] = record
 	r.rawCSRF[record.TokenHash] = csrf
-	if err := r.persistUpsertLocked(record); err != nil {
+	evicted := r.enforceSessionBoundLocked()
+	var persistErr error
+	if len(evicted) > 0 {
+		persistErr = r.saveLocked()
+	} else {
+		persistErr = r.persistUpsertLocked(record)
+	}
+	if persistErr != nil {
 		delete(r.sessions, record.TokenHash)
 		delete(r.rawCSRF, record.TokenHash)
-		return Session{}, err
+		for _, previous := range evicted {
+			r.sessions[previous.hash] = previous.record
+			if previous.csrf != "" {
+				r.rawCSRF[previous.hash] = previous.csrf
+			}
+		}
+		return Session{}, persistErr
 	}
 	return publicSession(record, token, csrf), nil
 }

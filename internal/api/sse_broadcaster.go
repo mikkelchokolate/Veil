@@ -12,7 +12,10 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
-const maxSSEConnectionsPerIdentity = 32
+const (
+	maxSSEConnectionsPerIdentity = 32
+	maxSSEConnectionsGlobal      = 1024
+)
 
 type sseSnapshot struct {
 	apply   []byte
@@ -26,17 +29,19 @@ type sseBroadcaster struct {
 	counts  map[string]int
 	latest  sseSnapshot
 	stop    chan struct{}
+	done    chan struct{}
 	once    sync.Once
 	initial sync.Once
 }
 
 func newSSEBroadcaster(state *managementState) *sseBroadcaster {
-	hub := &sseBroadcaster{state: state, subs: make(map[chan sseSnapshot]string), counts: make(map[string]int), stop: make(chan struct{})}
+	hub := &sseBroadcaster{state: state, subs: make(map[chan sseSnapshot]string), counts: make(map[string]int), stop: make(chan struct{}), done: make(chan struct{})}
 	go hub.run()
 	return hub
 }
 
 func (h *sseBroadcaster) run() {
+	defer close(h.done)
 	h.initial.Do(h.refresh)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -125,6 +130,9 @@ func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
 func (h *sseBroadcaster) subscribe(identity string) (<-chan sseSnapshot, func(), error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if len(h.subs) >= maxSSEConnectionsGlobal {
+		return nil, nil, errors.New("global SSE connection limit exceeded")
+	}
 	if h.counts[identity] >= maxSSEConnectionsPerIdentity {
 		return nil, nil, errors.New("SSE connection limit exceeded")
 	}
@@ -149,7 +157,17 @@ func (h *sseBroadcaster) subscribe(identity string) (<-chan sseSnapshot, func(),
 }
 
 func (h *sseBroadcaster) Close() {
-	h.once.Do(func() { close(h.stop) })
+	h.once.Do(func() {
+		close(h.stop)
+		<-h.done
+		h.mu.Lock()
+		for subscriber := range h.subs {
+			delete(h.subs, subscriber)
+			close(subscriber)
+		}
+		h.counts = make(map[string]int)
+		h.mu.Unlock()
+	})
 }
 
 func (s *managementState) sharedSSEBroadcaster() *sseBroadcaster {

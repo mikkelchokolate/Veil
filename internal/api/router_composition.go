@@ -48,6 +48,13 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	state.idempotency = newIdempotencyStore(state.db)
 	gated := clientRequestGateMiddleware(state, mux)
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if info.RequirePrivilegedHelper {
+			switch r.URL.Path {
+			case "/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation":
+				writeError(w, "diagnostic requires bounded root-helper support", http.StatusServiceUnavailable)
+				return
+			}
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			state.mu.Lock()
 			restoring := state.clientSubsystemStopping
@@ -69,7 +76,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,
 		ProtectHealthz:    info.PublicListen,
-		ProtectMetrics:    info.MetricsAuthRequired,
+		ProtectMetrics:    info.MetricsAuthRequired || info.PublicListen,
 		AllowDevAnonymous: !info.PublicListen,
 		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
