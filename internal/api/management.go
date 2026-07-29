@@ -132,18 +132,6 @@ func (s *managementState) renderManagementConfigsLocked() (map[string]string, er
 	}).Render()
 }
 
-func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
-	inbounds, _ := s.inboundsWithRuntimeCredentialsLocked()
-	return NewManagementConfigRenderer(ManagementConfigInput{
-		ApplyRoot: s.applyRoot,
-		LiveRoot:  s.liveRoot,
-		Settings:  s.settings,
-		Inbounds:  inbounds,
-		Rules:     s.rules,
-		Warp:      s.warp,
-	})
-}
-
 // inboundsWithRuntimeCredentialsLocked returns the configured inbounds with
 // per-client credentials resolved from the normalized Client+Binding+Credential
 // store attached as runtime-only data, so the rendered live config includes

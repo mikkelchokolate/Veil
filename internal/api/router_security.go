@@ -170,10 +170,6 @@ func isMutatingRequest(r *http.Request) bool {
 	}
 }
 
-func isSelfServiceMutation(r *http.Request) bool {
-	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
-}
-
 func isReadOnlyDiagnosticRequest(r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		return false

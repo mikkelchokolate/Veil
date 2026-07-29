@@ -125,11 +125,6 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(metrics *observability.MetricsCollector, trustedProxyCIDRs []string, next http.Handler) http.Handler {
-	handler, _ := newRateLimitMiddleware(metrics, trustedProxyCIDRs, next)
-	return handler
-}
-
 func newRateLimitMiddleware(metrics *observability.MetricsCollector, trustedProxyCIDRs []string, next http.Handler) (http.Handler, *observability.RateLimiter) {
 	resolver, err := clientaddr.New(trustedProxyCIDRs)
 	if err != nil {
