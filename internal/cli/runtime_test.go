@@ -155,7 +155,7 @@ func TestRuntimeInstallCommandHelpUsesRuntimeDescriptions(t *testing.T) {
 		"hysteria is downloaded from its upstream GitHub release",
 		"mita is downloaded from its upstream GitHub release",
 		"olcrtc is built from source",
-		"sing-box is downloaded from its upstream GitHub release",
+		"sing-box is downloaded from its pinned upstream GitHub release",
 	} {
 		if !strings.Contains(long, want) {
 			t.Fatalf("runtime install help missing description %q:\n%s", want, long)

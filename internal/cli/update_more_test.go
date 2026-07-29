@@ -15,6 +15,7 @@ import (
 	"time"
 
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 )
 
 // mockUpdateTransport routes HTTP requests to a handler without binding a real port.
@@ -50,6 +51,9 @@ func (h *mockUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"assets": []map[string]string{
 				{"name": assetName, "browser_download_url": "https://api.github.com/assets/" + assetName},
 				{"name": "checksums.txt", "browser_download_url": "https://api.github.com/assets/checksums.txt"},
+				{"name": "checksums.txt.bundle", "browser_download_url": "https://api.github.com/assets/checksums.txt.bundle"},
+				{"name": "veil.provenance.json", "browser_download_url": "https://api.github.com/assets/veil.provenance.json"},
+				{"name": "veil.provenance.json.bundle", "browser_download_url": "https://api.github.com/assets/veil.provenance.json.bundle"},
 			},
 		}
 		_ = json.NewEncoder(w).Encode(rel)
@@ -138,6 +142,9 @@ func TestDownloadAssetReturnsErrorOnNonOK(t *testing.T) {
 func TestUpdateCommandDryRunFetchesReleaseAndVerifiesAsset(t *testing.T) {
 	assetBody := []byte("fake archive for command")
 	hash := sha256.Sum256(assetBody)
+	oldVerifier := updateReleaseEvidenceVerifier
+	updateReleaseEvidenceVerifier = func(releaseverify.Evidence) error { return nil }
+	t.Cleanup(func() { updateReleaseEvidenceVerifier = oldVerifier })
 	mockUpdateClient(t, &mockUpdateHandler{
 		assetBody: assetBody,
 		checksums: fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), updateflow.AssetName()),

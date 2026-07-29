@@ -8,6 +8,7 @@ import (
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/spf13/cobra"
 )
@@ -19,6 +20,7 @@ const (
 )
 
 var updateHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var updateReleaseEvidenceVerifier = releaseverify.Verify
 
 func newUpdateCommand(version string) *cobra.Command {
 	var yes bool
@@ -41,7 +43,7 @@ Use --restart to restart the veil service and perform a health check after updat
 Use --staged for a safer staged rollout: restart + health check with automatic
 rollback to the previous binary if the health check fails.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return updateflow.RunWorkflow(updateflow.WorkflowOptions{CurrentVersion: version, Yes: yes, DryRun: dryRun, Force: force, Restart: restart, Staged: staged, Listen: listen, AuthToken: authToken}, cmd.OutOrStdout(), updateflow.WorkflowDependencies{FetchRelease: fetchLatestRelease, DownloadAsset: downloadAsset, RestartUpdated: func(currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
+			return updateflow.RunWorkflow(updateflow.WorkflowOptions{CurrentVersion: version, Yes: yes, DryRun: dryRun, Force: force, Restart: restart, Staged: staged, Listen: listen, AuthToken: authToken}, cmd.OutOrStdout(), updateflow.WorkflowDependencies{FetchRelease: fetchLatestRelease, DownloadAsset: downloadAsset, VerifyReleaseEvidence: updateReleaseEvidenceVerifier, RestartUpdated: func(currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
 				return restartUpdatedVeil(cmd, currentPath, backupPath, opts)
 			}})
 		},

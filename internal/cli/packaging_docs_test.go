@@ -330,9 +330,9 @@ func TestPrivilegeBoundaryDocumentation(t *testing.T) {
 			"`/run/veil/helper.sock`",
 		},
 		"../../docs/operations.md": {
-			"`PrivilegedErrorEnvelope`",
+			"`ErrorEnvelope`",
 			"`veil-helper.socket`",
-			"`text/plain`",
+			"application/json",
 		},
 		"../../docs/known-limitations.md": {
 			"bare-metal privileged helper",
