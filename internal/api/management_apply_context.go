@@ -85,12 +85,16 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	snapshot, err := s.snapshotLocked()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	return WriteApplyStage(ApplyStageInput{
 		Context:       ctx.operationContext(),
 		ApplyRoot:     s.applyRoot,
 		Cipher:        s.cipher,
 		Plan:          plan,
-		Snapshot:      s.snapshotLocked(),
+		Snapshot:      snapshot,
 		Rendered:      rendered,
 		RoutingSource: s.routingSource,
 		Validate:      stagedConfigValidator,

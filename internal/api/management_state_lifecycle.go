@@ -263,7 +263,7 @@ func (l ManagementStateLifecycle) loadCoherentStateLocked() error {
 	})
 }
 
-func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
+func (l ManagementStateLifecycle) SnapshotLocked() (managementSnapshot, error) {
 	input := managementstate.SnapshotInput{
 		Setup:         l.state.setup,
 		Settings:      l.state.settings,
@@ -280,26 +280,30 @@ func (l ManagementStateLifecycle) SnapshotLocked() managementSnapshot {
 	if l.state.clientRepo != nil {
 		clients, err := l.state.clientRepo.AllClients()
 		if err != nil {
-			log.Printf("snapshot: read clients: %v", err)
+			return managementSnapshot{}, fmt.Errorf("snapshot: read clients: %w", err)
 		}
 		bindings, err := l.state.clientRepo.AllBindings()
 		if err != nil {
-			log.Printf("snapshot: read bindings: %v", err)
+			return managementSnapshot{}, fmt.Errorf("snapshot: read bindings: %w", err)
 		}
 		creds, err := l.state.clientRepo.AllActiveCredentials()
 		if err != nil {
-			log.Printf("snapshot: read credentials: %v", err)
+			return managementSnapshot{}, fmt.Errorf("snapshot: read credentials: %w", err)
 		}
 		input.Clients, input.Bindings, input.Credentials = clientSnapshotRows(clients, bindings, creds)
 	}
-	return managementstate.BuildSnapshot(input)
+	return managementstate.BuildSnapshot(input), nil
 }
 
 func (l ManagementStateLifecycle) SaveLocked() error {
 	return managementstate.WithSnapshotBarrier(l.state.statePath, func() error {
 		store := managementstate.NewStore(l.state.statePath, l.state.cipher)
+		snapshot, err := l.SnapshotLocked()
+		if err != nil {
+			return err
+		}
 		if l.state.statePath == "" {
-			if err := store.Save(l.SnapshotLocked()); err != nil {
+			if err := store.Save(snapshot); err != nil {
 				return err
 			}
 			_, err := l.state.bumpDesiredRevisionLocked()
@@ -309,13 +313,13 @@ func (l ManagementStateLifecycle) SaveLocked() error {
 			if l.state.requireApplyTracking {
 				return errors.New("apply subsystem unavailable for persistent management-state mutation")
 			}
-			return store.Save(l.SnapshotLocked())
+			return store.Save(snapshot)
 		}
 		revisions, err := l.state.applyRevisions.Get()
 		if err != nil {
 			return fmt.Errorf("read desired revision before state mutation: %w", err)
 		}
-		encoded, err := store.Marshal(l.SnapshotLocked())
+		encoded, err := store.Marshal(snapshot)
 		if err != nil {
 			return err
 		}

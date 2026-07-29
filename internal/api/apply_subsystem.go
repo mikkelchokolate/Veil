@@ -307,7 +307,10 @@ func (s *managementState) bumpDesiredRevisionLocked(stateDigests ...string) (uin
 	// committed state this revision records.
 	var payload []byte
 	if s.applySnapshots != nil {
-		snap := s.snapshotLocked()
+		snap, snapshotBuildErr := s.snapshotLocked()
+		if snapshotBuildErr != nil {
+			return 0, fmt.Errorf("apply subsystem: build revision snapshot: %w", snapshotBuildErr)
+		}
 		if err := s.encryptSnapshot(&snap); err != nil {
 			return 0, fmt.Errorf("apply subsystem: encrypt revision snapshot: %w", err)
 		}
@@ -469,7 +472,10 @@ func (s *managementState) pinStateToRevisionLocked(revision uint64) (func(), err
 		return nil, fmt.Errorf("apply: decrypt revision %d snapshot: %w", revision, err)
 	}
 	// Capture live state so we can restore it after the pinned render.
-	prev := s.snapshotLocked()
+	prev, err := s.snapshotLocked()
+	if err != nil {
+		return nil, fmt.Errorf("apply: capture mutable state before pinned render: %w", err)
+	}
 	applyRenderSnapshot(s, snap)
 	return func() { applyRenderSnapshot(s, prev) }, nil
 }

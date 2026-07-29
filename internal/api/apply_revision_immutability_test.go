@@ -40,7 +40,7 @@ func TestPinnedRevisionRendersSnapshotCredentials(t *testing.T) {
 	}
 
 	// Snapshot revision N (simulating bumpDesiredRevisionLocked).
-	snapN := s.snapshotLocked()
+	snapN := mustStateSnapshot(t, s)
 	if len(snapN.Clients) != 1 || len(snapN.Bindings) != 1 || len(snapN.Credentials) != 1 {
 		t.Fatalf("snapshot N missing client state: clients=%d bindings=%d creds=%d",
 			len(snapN.Clients), len(snapN.Bindings), len(snapN.Credentials))
@@ -52,7 +52,7 @@ func TestPinnedRevisionRendersSnapshotCredentials(t *testing.T) {
 	}
 
 	// Snapshot revision N+1.
-	snapN1 := s.snapshotLocked()
+	snapN1 := mustStateSnapshot(t, s)
 	if len(snapN1.Credentials) != 1 {
 		t.Fatalf("snapshot N+1 missing credentials: %d", len(snapN1.Credentials))
 	}
@@ -138,7 +138,7 @@ func TestSnapshotIncludesNormalizedClientState(t *testing.T) {
 		t.Fatalf("cred: %v", err)
 	}
 
-	snap := s.snapshotLocked()
+	snap := mustStateSnapshot(t, s)
 
 	if len(snap.Clients) != 1 {
 		t.Fatalf("snapshot missing clients: %d", len(snap.Clients))
@@ -195,7 +195,7 @@ func TestPinnedSnapshotDoesNotFallBackToMutableState(t *testing.T) {
 	svc.SetCredential(b.ID, "password", "original-pass")
 
 	// Snapshot and pin.
-	snap := s.snapshotLocked()
+	snap := mustStateSnapshot(t, s)
 	applyRenderSnapshot(s, snap)
 
 	// MUTATE live state AFTER pinning: delete the client entirely.

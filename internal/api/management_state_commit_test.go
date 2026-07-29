@@ -135,7 +135,7 @@ func TestStartupRollsBackInterruptedStatePublicationBeforeSQLiteCommit(t *testin
 		t.Fatalf("read previous revision: %v", err)
 	}
 
-	intendedSnapshot := NewManagementStateLifecycle(state).SnapshotLocked()
+	intendedSnapshot := mustStateSnapshot(t, state)
 	intendedSnapshot.Settings.Domain = "interrupted.example.com"
 	intended, err := managementstate.NewStore(statePath, state.cipher).Marshal(intendedSnapshot)
 	if err != nil {
@@ -214,7 +214,7 @@ func TestStartupRejectsStateFileThatDoesNotMatchDesiredRevision(t *testing.T) {
 		t.Fatalf("create committed revision status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	unrecorded := NewManagementStateLifecycle(state).SnapshotLocked()
+	unrecorded := mustStateSnapshot(t, state)
 	unrecorded.Settings.Domain = "unrecorded.example.com"
 	encoded, err := managementstate.NewStore(state.statePath, state.cipher).Marshal(unrecorded)
 	if err != nil {
@@ -316,7 +316,7 @@ func TestStartupFinalizesCommitInterruptedAfterSQLiteCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	intended := NewManagementStateLifecycle(state).SnapshotLocked()
+	intended := mustStateSnapshot(t, state)
 	intended.Settings.Domain = "committed-before-crash.example.com"
 	store := managementstate.NewStore(statePath, state.cipher)
 	encoded, err := store.Marshal(intended)

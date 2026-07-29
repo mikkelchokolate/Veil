@@ -223,7 +223,7 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 	return out, nil
 }
 
-func (s *managementState) snapshotLocked() managementSnapshot {
+func (s *managementState) snapshotLocked() (managementSnapshot, error) {
 	return NewManagementStateLifecycle(s).SnapshotLocked()
 }
 
