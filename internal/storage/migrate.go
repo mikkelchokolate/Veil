@@ -285,6 +285,24 @@ WHEN NOT EXISTS (SELECT 1 FROM clients WHERE id=NEW.client_id)
 BEGIN SELECT RAISE(ABORT, 'invalid traffic counter ownership'); END;
 `,
 	},
+	{
+		version: 10,
+		name:    "apply_fencing_and_publication_receipts",
+		sql: `
+ALTER TABLE apply_lease ADD COLUMN generation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE apply_jobs ADD COLUMN lease_generation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE apply_jobs ADD COLUMN owner_process TEXT NOT NULL DEFAULT '';
+CREATE TABLE runtime_publications (
+  job_id TEXT PRIMARY KEY REFERENCES apply_jobs(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL,
+  generation INTEGER NOT NULL CHECK (generation > 0),
+  snapshot_sha256 TEXT NOT NULL,
+  operations_json TEXT NOT NULL DEFAULT '[]',
+  published_at INTEGER NOT NULL
+);
+CREATE INDEX idx_runtime_publications_revision ON runtime_publications(revision);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
@@ -316,6 +334,10 @@ func Migrate(db *sql.DB) error {
 			return fmt.Errorf("storage: invalid ordered migration history at version %d", version)
 		}
 		current = version
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("storage: iterate migration history: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return err

@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -82,6 +84,7 @@ type Executor struct {
 	Update             func(context.Context, ResolvedUpdate) (UpdateResult, error)
 	RestartPanel       func(context.Context) error
 	SyncCaddyCert      func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
+	CaddyLoad          func(context.Context, CaddyLoadRequest) error
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
@@ -102,6 +105,8 @@ type ProductionConfig struct {
 	RotateKeyWorkflow          func(context.Context) error
 	RecoverKeyRotationWorkflow func(context.Context) error
 	ReleaseVerifier            func(releaseverify.Evidence) error
+	CaddyAdminURL              string
+	HTTPClient                 *http.Client
 	Now                        func() time.Time
 }
 
@@ -152,6 +157,12 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			}
 			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
 		}
+	}
+	if config.CaddyAdminURL == "" {
+		config.CaddyAdminURL = "http://127.0.0.1:2019/load"
+	}
+	if config.HTTPClient == nil {
+		config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
 	return Executor{
 		Promote: func(_ context.Context, request ResolvedPromotion) (PromoteResult, error) {
@@ -251,6 +262,24 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		},
 		SyncCaddyCert: func(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
 			return runSyncCaddyCert(ctx, request, config)
+		},
+		CaddyLoad: func(ctx context.Context, request CaddyLoadRequest) error {
+			httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, config.CaddyAdminURL, bytes.NewReader(request.Config))
+			if err != nil {
+				return err
+			}
+			httpRequest.Header.Set("Content-Type", "application/json")
+			response, err := config.HTTPClient.Do(httpRequest)
+			if err != nil {
+				return err
+			}
+			defer response.Body.Close()
+			if response.StatusCode < 200 || response.StatusCode >= 300 {
+				body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+				return fmt.Errorf("Caddy load status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+			}
+			_, err = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+			return err
 		},
 	}
 }

@@ -15,3 +15,7 @@ type Client interface {
 	RestartPanel(context.Context) error
 	SyncCaddyCert(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
 }
+
+type CaddyLoader interface {
+	CaddyLoad(context.Context, CaddyLoadRequest) error
+}

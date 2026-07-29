@@ -58,6 +58,8 @@ type Job struct {
 	ErrorCode       string            `json:"errorCode,omitempty"`
 	ErrorMessage    string            `json:"errorMessage,omitempty"`
 	Operations      []OperationResult `json:"operations,omitempty"`
+	OwnerProcess    string            `json:"ownerProcess,omitempty"`
+	LeaseGeneration uint64            `json:"leaseGeneration,omitempty"`
 }
 
 // Terminal reports whether the job has finished (successfully or not).

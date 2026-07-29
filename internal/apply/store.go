@@ -104,9 +104,9 @@ func (s *JobStore) Create(j Job) error {
 		ops = []byte("[]")
 	}
 	result, err := s.db.Exec(`INSERT INTO apply_jobs
-  (id, desired_revision, base_revision, status, trigger, actor_id, created_at, operations)
-  VALUES(?,?,?,?,?,?,?,?)`,
-		j.ID, j.DesiredRevision, j.BaseRevision, j.Status, j.Trigger, j.ActorID, j.CreatedAt, string(ops))
+  (id, desired_revision, base_revision, status, trigger, actor_id, created_at, operations, owner_process, lease_generation)
+  VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		j.ID, j.DesiredRevision, j.BaseRevision, j.Status, j.Trigger, j.ActorID, j.CreatedAt, string(ops), j.OwnerProcess, j.LeaseGeneration)
 	if err != nil {
 		return fmt.Errorf("apply: create job: %w", err)
 	}
@@ -115,7 +115,7 @@ func (s *JobStore) Create(j Job) error {
 
 func (s *JobStore) Get(id string) (Job, error) {
 	row := s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
-	  created_at, started_at, finished_at, error_code, error_message, operations
+	  created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
 	  FROM apply_jobs WHERE id=?`, id)
 	return scanJob(row)
 }
@@ -125,7 +125,7 @@ func (s *JobStore) List(limit int) ([]Job, error) {
 		limit = 50
 	}
 	rows, err := s.db.Query(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
-	  created_at, started_at, finished_at, error_code, error_message, operations
+	  created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
 	  FROM apply_jobs ORDER BY created_at DESC, rowid DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("apply: list jobs: %w", err)
@@ -186,8 +186,10 @@ func (s *JobStore) SetOperations(id string, ops []OperationResult) error {
 func (s *JobStore) MarkApplyingInterrupted(message string) error {
 	now := nowUnix()
 	_, err := s.db.Exec(`UPDATE apply_jobs SET status=?, finished_at=?,
-  error_code='INTERRUPTED', error_message=? WHERE status=?`,
-		StatusFailed, now, message, StatusApplying)
+  error_code='INTERRUPTED', error_message=?
+  WHERE status IN (?,?,?,?,?)`,
+		StatusFailed, now, message,
+		StatusPending, StatusPlanning, StatusValidating, StatusApplying, StatusHealthCheck)
 	if err != nil {
 		return fmt.Errorf("apply: mark stale jobs interrupted: %w", err)
 	}
@@ -208,7 +210,7 @@ func requireOneJobRow(result sql.Result, operation, id string) error {
 // LatestForRevision returns the most recent job for a desired revision.
 func (s *JobStore) LatestForRevision(rev uint64) (Job, bool, error) {
 	row := s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
-	  created_at, started_at, finished_at, error_code, error_message, operations
+	  created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
 	  FROM apply_jobs WHERE desired_revision=? ORDER BY created_at DESC, rowid DESC LIMIT 1`, rev)
 	j, err := scanJob(row)
 	if err == sql.ErrNoRows {
@@ -227,7 +229,8 @@ func scanJob(row jobScanner) (Job, error) {
 	var started, finished sql.NullInt64
 	var ops string
 	err := row.Scan(&j.ID, &j.DesiredRevision, &j.BaseRevision, &j.Status, &j.Trigger,
-		&j.ActorID, &j.CreatedAt, &started, &finished, &j.ErrorCode, &j.ErrorMessage, &ops)
+		&j.ActorID, &j.CreatedAt, &started, &finished, &j.ErrorCode, &j.ErrorMessage, &ops,
+		&j.OwnerProcess, &j.LeaseGeneration)
 	if err != nil {
 		return Job{}, err
 	}

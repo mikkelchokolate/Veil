@@ -19,6 +19,8 @@ func DefaultPolicy() Policy {
 		BackupPassphrasePath: "/etc/veil/backup.passphrase",
 		BackupRoot:           "/var/lib/veil/backups",
 		UpdateRoot:           "/var/lib/veil/updates",
+		FencePath:           "/var/lib/veil/transactions/runtime-fence.json",
+		RequireFence:        true,
 		ManagedUnits:         defaultManagedUnits(),
 		ManagedUnitPrefixes:  defaultManagedUnitPrefixes(),
 		Artifacts: map[string]ArtifactPath{

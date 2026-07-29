@@ -150,6 +150,15 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 		return struct{}{}, nil
 	case OperationSyncCaddyCert:
 		return s.client.SyncCaddyCert(ctx, *request.SyncCaddyCert)
+	case OperationCaddyLoad:
+		loader, ok := s.client.(CaddyLoader)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "Caddy loader is unavailable")
+		}
+		if err := loader.CaddyLoad(ctx, *request.CaddyLoad); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}

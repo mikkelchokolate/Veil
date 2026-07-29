@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -37,6 +39,14 @@ var firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
 type ManagementApplyContext struct {
 	state *managementState
 	ctx   context.Context
+}
+
+func (ctx ManagementApplyContext) fenceToken() privileged.FenceToken {
+	fence, ok := veilapply.FenceFromContext(ctx.operationContext())
+	if !ok {
+		return privileged.FenceToken{}
+	}
+	return privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation}
 }
 
 func NewManagementApplyContext(state *managementState) ManagementApplyContext {
@@ -148,7 +158,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
 	}
 	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
-		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs,
+		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -228,7 +238,13 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 			}
 			configBytes, err := os.ReadFile(caddyLivePath)
 			if err == nil {
-				err = caddyAdminLoader(configBytes)
+				if loader, ok := ctx.state.privileged.(privileged.CaddyLoader); ok {
+					err = loader.CaddyLoad(ctx.operationContext(), privileged.CaddyLoadRequest{Config: configBytes, Fence: ctx.fenceToken()})
+				} else if ctx.state.privilegedLocal {
+					err = caddyAdminLoader(configBytes)
+				} else {
+					err = errors.New("privileged Caddy loader is unavailable")
+				}
 			}
 			if err == nil {
 				adminResult.Success = true
@@ -325,7 +341,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 		return nil, nil
 	}
 	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
-		RestoreBackupID: records[0].BackupID,
+		RestoreBackupID: records[0].BackupID, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
 		return nil, []ServiceActionResult{{
@@ -481,6 +497,7 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	syncResult, err := ctx.state.privileged.SyncCaddyCert(ctx.operationContext(), privileged.SyncCaddyCertRequest{
 		Domain: domain,
 		OutDir: "/etc/veil/certs",
+		Fence:  ctx.fenceToken(),
 	})
 	if err != nil {
 		result.Error = err.Error()
@@ -516,7 +533,7 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 		for i, r := range rules {
 			reqRules[i] = privileged.FirewallRule{Command: r.Command, Args: r.Args}
 		}
-		if _, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules}); err != nil {
+		if _, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules, Fence: ctx.fenceToken()}); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
@@ -543,7 +560,7 @@ func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action
 		return result
 	}
 	if err := ctx.state.privileged.ServiceAction(ctx.operationContext(), privileged.ServiceActionRequest{
-		Unit: unit, Action: action,
+		Unit: unit, Action: action, Fence: ctx.fenceToken(),
 	}); err != nil {
 		result.Error = err.Error()
 		return result

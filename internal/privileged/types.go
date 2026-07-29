@@ -28,6 +28,7 @@ const (
 	OperationStageUpdate        Operation = "stage_update"
 	OperationRestartPanel       Operation = "restart_panel"
 	OperationSyncCaddyCert      Operation = "sync_caddy_cert"
+	OperationCaddyLoad          Operation = "caddy_load"
 )
 
 func (o Operation) Valid() bool {
@@ -47,7 +48,8 @@ func (o Operation) Valid() bool {
 		OperationFirewallApply,
 		OperationStageUpdate,
 		OperationRestartPanel,
-		OperationSyncCaddyCert:
+		OperationSyncCaddyCert,
+		OperationCaddyLoad:
 		return true
 	default:
 		return false
@@ -76,10 +78,16 @@ const (
 	BackupActionRestore BackupAction = "restore"
 )
 
+type FenceToken struct {
+	Owner      string `json:"owner"`
+	Generation uint64 `json:"generation"`
+}
+
 type PromoteRequest struct {
-	ArtifactIDs       []string `json:"artifactIds,omitempty"`
-	RemoveArtifactIDs []string `json:"removeArtifactIds,omitempty"`
-	RestoreBackupID   string   `json:"restoreBackupId,omitempty"`
+	ArtifactIDs       []string   `json:"artifactIds,omitempty"`
+	RemoveArtifactIDs []string   `json:"removeArtifactIds,omitempty"`
+	RestoreBackupID   string     `json:"restoreBackupId,omitempty"`
+	Fence             FenceToken `json:"fence"`
 }
 
 type PromoteResult struct {
@@ -92,6 +100,7 @@ type PromoteResult struct {
 type ServiceActionRequest struct {
 	Unit   string        `json:"unit"`
 	Action ServiceAction `json:"action"`
+	Fence  FenceToken    `json:"fence"`
 }
 
 type ServiceStatusRequest struct {
@@ -130,6 +139,7 @@ type BackupRequest struct {
 	AllowVersionMismatch bool         `json:"allowVersionMismatch,omitempty"`
 	Offset               int64        `json:"offset,omitempty"`
 	Limit                int64        `json:"limit,omitempty"`
+	Fence                FenceToken   `json:"fence"`
 }
 
 type BackupArchive struct {
@@ -168,6 +178,7 @@ type FirewallRule struct {
 type FirewallRequest struct {
 	RuleIDs []string       `json:"ruleIds,omitempty"`
 	Rules   []FirewallRule `json:"rules,omitempty"`
+	Fence   FenceToken     `json:"fence"`
 }
 
 type FirewallResult struct {
@@ -189,8 +200,14 @@ type UpdateResult struct {
 type RestartPanelRequest struct{}
 
 type SyncCaddyCertRequest struct {
-	Domain string `json:"domain"`
-	OutDir string `json:"outDir"`
+	Domain string     `json:"domain"`
+	OutDir string     `json:"outDir"`
+	Fence  FenceToken `json:"fence"`
+}
+
+type CaddyLoadRequest struct {
+	Config []byte     `json:"config"`
+	Fence  FenceToken `json:"fence"`
 }
 
 type SyncCaddyCertResult struct {
@@ -214,6 +231,7 @@ type RequestEnvelope struct {
 	Update             *UpdateRequest             `json:"update,omitempty"`
 	RestartPanel       *RestartPanelRequest       `json:"restartPanel,omitempty"`
 	SyncCaddyCert      *SyncCaddyCertRequest      `json:"syncCaddyCert,omitempty"`
+	CaddyLoad          *CaddyLoadRequest          `json:"caddyLoad,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -246,6 +264,7 @@ func (r RequestEnvelope) Validate() error {
 		r.Update != nil,
 		r.RestartPanel != nil,
 		r.SyncCaddyCert != nil,
+		r.CaddyLoad != nil,
 	}
 	count := 0
 	for _, present := range payloads {
@@ -286,6 +305,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.RestartPanel != nil
 	case OperationSyncCaddyCert:
 		return r.SyncCaddyCert != nil
+	case OperationCaddyLoad:
+		return r.CaddyLoad != nil
 	default:
 		return false
 	}

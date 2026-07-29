@@ -56,6 +56,8 @@ type Policy struct {
 	// known set. Static per-protocol artifacts and update artifacts are not
 	// constrained by this set. A nil or empty map means no extra restriction.
 	AllowedArtifactNames map[string]struct{}
+	FencePath            string
+	RequireFence         bool
 }
 
 type ResolvedArtifact struct {

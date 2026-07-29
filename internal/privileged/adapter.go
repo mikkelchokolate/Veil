@@ -5,15 +5,19 @@ import "context"
 type LocalAdapter struct {
 	policy   Policy
 	executor Executor
+	fence    *fenceGuard
 }
 
 func NewLocalAdapter(policy Policy, executor Executor) *LocalAdapter {
-	return &LocalAdapter{policy: policy, executor: executor}
+	return &LocalAdapter{policy: policy, executor: executor, fence: newFenceGuard(policy.FencePath, policy.RequireFence)}
 }
 
 func (a *LocalAdapter) Promote(ctx context.Context, request PromoteRequest) (PromoteResult, error) {
 	resolved, err := a.policy.ResolvePromotion(request)
 	if err != nil {
+		return PromoteResult{}, err
+	}
+	if err := a.fence.Accept(request.Fence); err != nil {
 		return PromoteResult{}, err
 	}
 	if a.executor.Promote == nil {
@@ -25,6 +29,9 @@ func (a *LocalAdapter) Promote(ctx context.Context, request PromoteRequest) (Pro
 
 func (a *LocalAdapter) ServiceAction(ctx context.Context, request ServiceActionRequest) error {
 	if err := a.policy.ValidateServiceAction(request); err != nil {
+		return err
+	}
+	if err := a.fence.Accept(request.Fence); err != nil {
 		return err
 	}
 	if a.executor.ServiceAction == nil {
@@ -64,6 +71,11 @@ func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (Backu
 	if err != nil {
 		return BackupResult{}, err
 	}
+	if request.Action == BackupActionRestore {
+		if err := a.fence.Accept(request.Fence); err != nil {
+			return BackupResult{}, err
+		}
+	}
 	if a.executor.Backup == nil {
 		return BackupResult{}, newError(ErrorOperationFailed, "backup executor is unavailable")
 	}
@@ -93,6 +105,9 @@ func (a *LocalAdapter) FirewallApply(ctx context.Context, request FirewallReques
 	if err != nil {
 		return FirewallResult{}, err
 	}
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return FirewallResult{}, err
+	}
 	if a.executor.Firewall == nil {
 		return FirewallResult{}, newError(ErrorOperationFailed, "firewall executor is unavailable")
 	}
@@ -120,11 +135,27 @@ func (a *LocalAdapter) RestartPanel(ctx context.Context) error {
 }
 
 func (a *LocalAdapter) SyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return SyncCaddyCertResult{}, err
+	}
 	if a.executor.SyncCaddyCert == nil {
 		return SyncCaddyCertResult{}, newError(ErrorOperationFailed, "sync caddy cert executor is unavailable")
 	}
 	result, err := a.executor.SyncCaddyCert(ctx, request)
 	return result, wrapOperationError(err)
+}
+
+func (a *LocalAdapter) CaddyLoad(ctx context.Context, request CaddyLoadRequest) error {
+	if len(request.Config) == 0 || len(request.Config) > 4<<20 {
+		return newError(ErrorInvalidRequest, "Caddy config must be 1-4194304 bytes")
+	}
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return err
+	}
+	if a.executor.CaddyLoad == nil {
+		return newError(ErrorOperationFailed, "Caddy load executor is unavailable")
+	}
+	return wrapOperationError(a.executor.CaddyLoad(ctx, request))
 }
 
 var _ Client = (*LocalAdapter)(nil)

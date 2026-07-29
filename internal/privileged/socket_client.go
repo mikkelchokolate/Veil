@@ -86,6 +86,10 @@ func (c *SocketClient) SyncCaddyCert(ctx context.Context, request SyncCaddyCertR
 	return result, err
 }
 
+func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) error {
+	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
+}
+
 func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result any) error {
 	request.Version = ProtocolVersion
 	request.RequestID = newRequestID()
