@@ -1,6 +1,11 @@
 package client
 
-import "testing"
+import (
+	"bytes"
+	"log"
+	"strings"
+	"testing"
+)
 
 type fakeProvider struct {
 	key      string
@@ -42,15 +47,82 @@ func TestCollectorAttributesSamplesToClients(t *testing.T) {
 	}
 }
 
-func TestCollectorSurvivesBrokenProvider(t *testing.T) {
+func TestCollectorContinuesPastBrokenProviderReportsAndRateLimitsFailure(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
-	ts := NewTrafficStore(db)
-	broken := &brokenProvider{key: "bad"}
-	col := NewCollector(ts, 0, nil)
-	col.Register(broken)
-	if err := col.CollectOnce(); err != nil {
-		t.Fatalf("broken provider must not fail collection: %v", err)
+	repo := NewRepository(db)
+	store := NewTrafficStore(db)
+	row, err := repo.Create(Client{Name: "healthy-after-broken", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: row.ID, InboundID: "healthy", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthy := &fakeProvider{key: "healthy", readings: map[string]ProviderReading{
+		binding.ID: {BindingID: binding.ID, UploadBytes: 100, DownloadBytes: 100},
+	}}
+	collector := NewCollector(store, 0, nil)
+	collector.Register(&brokenProvider{key: "bad"})
+	collector.Register(healthy)
+
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	})
+
+	for i := 0; i < 3; i++ {
+		if err := collector.CollectOnce(); err == nil || !strings.Contains(err.Error(), "bad") {
+			t.Errorf("collection %d error = %v, want aggregate provider error", i+1, err)
+		}
+		healthy.readings[binding.ID] = ProviderReading{
+			BindingID: binding.ID, UploadBytes: int64(200 + 100*i), DownloadBytes: int64(200 + 100*i),
+		}
+	}
+	up, down, err := store.TotalsForClient(row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up == 0 || down == 0 {
+		t.Errorf("healthy provider was blocked by broken provider: totals=%d/%d", up, down)
+	}
+	if got := strings.Count(logs.String(), "event=traffic_provider_failure"); got != 1 {
+		t.Errorf("rate-limited structured provider logs = %d, want 1; logs=%q", got, logs.String())
+	}
+}
+
+func TestCollectorReportsTrafficStoreWriteFailure(t *testing.T) {
+	db := openTestDB(t)
+	repo := NewRepository(db)
+	store := NewTrafficStore(db)
+	row, err := repo.Create(Client{Name: "store-failure", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: row.ID, InboundID: "store", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &fakeProvider{key: "store-provider", readings: map[string]ProviderReading{
+		binding.ID: {BindingID: binding.ID, UploadBytes: 100, DownloadBytes: 100},
+	}}
+	collector := NewCollector(store, 0, nil)
+	collector.Register(provider)
+	if err := collector.CollectOnce(); err != nil {
+		t.Fatalf("establish baseline: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	provider.readings[binding.ID] = ProviderReading{BindingID: binding.ID, UploadBytes: 200, DownloadBytes: 200}
+	if err := collector.CollectOnce(); err == nil || !strings.Contains(strings.ToLower(err.Error()), "record") {
+		t.Fatalf("store write error = %v, want reported RecordSample failure", err)
 	}
 }
 

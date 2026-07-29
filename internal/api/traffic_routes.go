@@ -98,25 +98,30 @@ func (s *managementState) handleV1TrafficSummary(w http.ResponseWriter, r *http.
 	// Telemetry state: honest about whether any runtime is feeding counters.
 	state := "unsupported"
 	providerCount := 0
+	var providers []client.ProviderHealth
 	if s.trafficCollector != nil {
 		providerCount = s.trafficCollector.ProviderCount()
+		providers = s.trafficCollector.ProviderHealth()
 		if providerCount > 0 {
-			state = "collecting"
+			state = "healthy"
+			for _, provider := range providers {
+				if provider.State == "degraded" {
+					state = "degraded"
+					break
+				}
+			}
 		}
 	}
 	resp := map[string]any{
 		"state":         state,
 		"providerCount": providerCount,
+		"providers":     providers,
 	}
 	if s.trafficStore != nil {
-		var up, down int64
-		clients, _, err := s.clientService.List(client.ListFilter{PageSize: 1000})
-		if err == nil {
-			for _, c := range clients {
-				u, d, _ := s.trafficStore.TotalsForClient(c.ID)
-				up += u
-				down += d
-			}
+		up, down, err := s.trafficStore.AggregateTotals()
+		if err != nil {
+			writeError(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		resp["uploadBytes"] = up
 		resp["downloadBytes"] = down

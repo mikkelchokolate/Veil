@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -121,6 +122,8 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		Transports:           meta.Transports,
 		PerClientCredentials: perClient,
 		RequiresCaddy:        meta.RequiresCaddy,
+		TrafficAccounting:    meta.Protocol == "hysteria2",
+		QuotaEnforcement:     meta.Protocol == "hysteria2",
 	}
 }
 
@@ -190,7 +193,14 @@ func initClientSubsystem(s *managementState) {
 				log.Printf("traffic: reconcile client %s depleted=%v reset=%v: %v", mutation.ClientID, mutation.Depleted, mutation.ResetPeriod, err)
 				return err
 			}
-			s.autoApplyResultLocked(nil, "system")
+			outcome := s.autoApplyResultLocked(nil, "system")
+			if !outcome.success {
+				message := "quota runtime apply failed"
+				if outcome.job != nil && outcome.job.ErrorMessage != "" {
+					message = outcome.job.ErrorMessage
+				}
+				return errors.New(message)
+			}
 			return nil
 		})
 		startReconciler = true
@@ -225,37 +235,27 @@ func (s *managementState) buildTrafficProvidersLocked() []client.TrafficProvider
 	if s.trafficCollector == nil || s.clientRepo == nil {
 		return nil
 	}
-	// Build client username -> bindingID map for attribution.
-	bindings := make(map[string]string)
-	clients, err := s.clientRepo.AllClients()
-	if err != nil {
-		log.Printf("traffic: list clients for provider bindings: %v", err)
-		return nil
-	}
 	allBindings, err := s.clientRepo.AllBindings()
 	if err != nil {
 		log.Printf("traffic: list bindings for provider: %v", err)
 		return nil
 	}
-	clientNameByID := make(map[string]string, len(clients))
-	for _, c := range clients {
-		clientNameByID[c.ID] = c.Name
-	}
-	for _, b := range allBindings {
-		if name, ok := clientNameByID[b.ClientID]; ok {
-			bindings[name] = b.ID
-		}
-	}
 	providers := []client.TrafficProvider{}
-	// Register hysteria2 provider if any hysteria2 inbound exists.
-	for _, in := range s.inbounds {
-		if in.Protocol != "hysteria2" || !in.Enabled {
+	for _, inbound := range s.inbounds {
+		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
-		statsPath := hysteria2.StatsFilePath(s.liveRoot, in.Name)
-		provider := hysteria2.NewStatsProvider("hysteria2:"+in.Name, statsPath, bindings)
+		bindings := make(map[string]string)
+		for _, binding := range allBindings {
+			if binding.InboundID == inbound.Name && binding.Enabled && binding.RuntimeIdentity != "" {
+				bindings[binding.RuntimeIdentity] = binding.ID
+			}
+		}
+		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
+		secret := hysteria2.TrafficStatsSecret(s.settings, inbound)
+		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)
 		providers = append(providers, provider)
-		log.Printf("traffic: registered hysteria2 provider for inbound %s (stats: %s)", in.Name, statsPath)
+		log.Printf("traffic: registered authenticated hysteria2 provider for inbound %s", inbound.Name)
 	}
 	return providers
 }

@@ -1,98 +1,114 @@
 package hysteria2
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
-// StatsProvider implements client.TrafficProvider for hysteria2 by reading
-// per-user traffic counters from the hysteria2 runtime's stats endpoint or
-// stats file. Hysteria2 exposes traffic stats via its HTTP API when configured
-// with a stats listener; this provider reads from a stats file written by the
-// runtime (or a sidecar collector).
+const maxTrafficStatsResponseBytes int64 = 1 << 20
+
 type StatsProvider struct {
-	key       string
-	statsPath string
-	bindings  map[string]string // clientID -> bindingID (for attribution)
-	mu        sync.RWMutex
+	key        string
+	endpoint   string
+	secret     string
+	bindings   map[string]string
+	httpClient *http.Client
 }
 
-// NewStatsProvider creates a hysteria2 traffic provider reading from statsPath.
-// bindings maps client usernames to binding IDs for attribution.
-func NewStatsProvider(key, statsPath string, bindings map[string]string) *StatsProvider {
+func NewStatsProvider(key, endpoint string, bindings map[string]string) *StatsProvider {
+	if parsed, err := url.Parse(endpoint); err == nil && (parsed.Path == "" || parsed.Path == "/") {
+		parsed.Path = "/traffic"
+		endpoint = parsed.String()
+	}
+	copyBindings := make(map[string]string, len(bindings))
+	for runtimeIdentity, bindingID := range bindings {
+		copyBindings[runtimeIdentity] = bindingID
+	}
 	return &StatsProvider{
-		key:       key,
-		statsPath: statsPath,
-		bindings:  bindings,
+		key:        key,
+		endpoint:   endpoint,
+		bindings:   copyBindings,
+		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
-// Key returns the provider key for monotonic runtime state.
+func NewAuthenticatedStatsProvider(key, endpoint, secret string, bindings map[string]string) *StatsProvider {
+	provider := NewStatsProvider(key, endpoint, bindings)
+	provider.secret = secret
+	return provider
+}
+
 func (p *StatsProvider) Key() string { return p.key }
 
-// Read returns absolute upload/download counters per binding ID.
+type trafficStats struct {
+	Tx uint64 `json:"tx"`
+	Rx uint64 `json:"rx"`
+}
+
 func (p *StatsProvider) Read() (map[string]client.ProviderReading, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	data, err := os.ReadFile(p.statsPath)
+	if p == nil || strings.TrimSpace(p.endpoint) == "" {
+		return nil, errors.New("hysteria2 traffic endpoint is not configured")
+	}
+	parsed, err := url.Parse(p.endpoint)
+	if err != nil || parsed.Scheme != "http" || parsed.Hostname() == "" || parsed.User != nil {
+		return nil, errors.New("hysteria2 traffic endpoint must be an absolute HTTP URL")
+	}
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, p.endpoint, nil)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// No stats yet — return empty (not an error).
-			return map[string]client.ProviderReading{}, nil
-		}
-		return nil, fmt.Errorf("hysteria2 stats: read %s: %w", p.statsPath, err)
+		return nil, err
 	}
-
-	// Stats file format: JSON array of {user, upload_bytes, download_bytes}.
-	var entries []struct {
-		User          string `json:"user"`
-		UploadBytes   int64  `json:"upload_bytes"`
-		DownloadBytes int64  `json:"download_bytes"`
+	request.Header.Set("Authorization", p.secret)
+	httpClient := p.httpClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 5 * time.Second}
 	}
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("hysteria2 stats: parse %s: %w", p.statsPath, err)
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("hysteria2 traffic request: %w", err)
 	}
-
-	out := make(map[string]client.ProviderReading, len(entries))
-	for _, e := range entries {
-		bindingID, ok := p.bindings[e.User]
-		if !ok {
-			// Unknown user — skip (may be a non-client user or stale entry).
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxTrafficStatsResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read hysteria2 traffic response: %w", err)
+	}
+	if int64(len(body)) > maxTrafficStatsResponseBytes {
+		return nil, fmt.Errorf("hysteria2 traffic response is too large")
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hysteria2 traffic status %d", response.StatusCode)
+	}
+	var payload map[string]trafficStats
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode hysteria2 traffic response: %w", err)
+	}
+	out := make(map[string]client.ProviderReading, len(payload))
+	for runtimeIdentity, counters := range payload {
+		bindingID, ok := p.bindings[runtimeIdentity]
+		if !ok || bindingID == "" {
 			continue
 		}
 		out[bindingID] = client.ProviderReading{
 			BindingID:     bindingID,
-			UploadBytes:   e.UploadBytes,
-			DownloadBytes: e.DownloadBytes,
+			UploadBytes:   clampUint64(counters.Tx),
+			DownloadBytes: clampUint64(counters.Rx),
 		}
 	}
 	return out, nil
 }
 
-// UpdateBindings refreshes the client->binding mapping (called when clients
-// are created/updated).
-func (p *StatsProvider) UpdateBindings(bindings map[string]string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.bindings = bindings
-}
-
-// StatsFilePath returns the conventional stats file path for a hysteria2
-// inbound under the given runtime root.
-func StatsFilePath(runtimeRoot, inboundName string) string {
-	// Sanitize inbound name for filesystem.
-	safe := strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
-			return r
-		}
-		return '_'
-	}, inboundName)
-	return filepath.Join(runtimeRoot, "hysteria2", safe, "stats.json")
+func clampUint64(value uint64) int64 {
+	const maxInt64 = uint64(^uint64(0) >> 1)
+	if value > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(value)
 }

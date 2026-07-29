@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,24 +54,102 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 		writeNotFound(w) // unknown/disabled/revoked/expired -> indistinguishable 404
 		return
 	}
-	cl, err := s.clientService.Get(tok.ClientID)
+	cl, links, applied, desired, err := s.appliedSubscription(tok.ClientID)
 	if err != nil {
-		writeNotFound(w)
+		if errors.Is(err, client.ErrNotFound) {
+			writeNotFound(w)
+		} else {
+			writeError(w, "applied subscription unavailable", http.StatusServiceUnavailable)
+		}
 		return
 	}
-	// A disabled, expired, or quota-depleted client gets an empty subscription
-	// (the client app shows zero nodes) rather than an error, so revoking
-	// access via the client record propagates cleanly.
-	links := []model.ClientLink{}
-	if cl.Status == client.StatusActive {
-		renderer := s.subRenderer.WithSettings(clientaccess.Settings{Domain: s.settings.Domain})
-		links, err = renderer.LinksForClient(cl.Client, s.resolveInboundSnapshot)
-		if err != nil {
-			writeError(w, "subscription render failed", http.StatusInternalServerError)
-			return
+	configurationState := "applied"
+	if desired != applied {
+		configurationState = "stale"
+	}
+	w.Header().Set("X-Veil-Configuration-State", configurationState)
+	w.Header().Set("X-Veil-Applied-Revision", strconv.FormatUint(applied, 10))
+	w.Header().Set("X-Veil-Desired-Revision", strconv.FormatUint(desired, 10))
+	s.writeSubscription(w, r, cl, links)
+}
+
+func (s *managementState) appliedSubscription(clientID string) (client.View, []model.ClientLink, uint64, uint64, error) {
+	if s.applyRevisions == nil || s.applySnapshots == nil {
+		return client.View{}, nil, 0, 0, errors.New("applied snapshot store unavailable")
+	}
+	revisions, err := s.applyRevisions.Get()
+	if err != nil {
+		return client.View{}, nil, 0, 0, err
+	}
+	if revisions.Applied == 0 {
+		return client.View{}, nil, 0, revisions.Desired, errors.New("no applied revision")
+	}
+	payload, err := s.applySnapshots.Load(revisions.Applied)
+	if err != nil {
+		return client.View{}, nil, 0, revisions.Desired, err
+	}
+	var snapshot managementSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		return client.View{}, nil, 0, revisions.Desired, fmt.Errorf("decode applied subscription snapshot: %w", err)
+	}
+	if err := s.decryptSnapshot(&snapshot); err != nil {
+		return client.View{}, nil, 0, revisions.Desired, err
+	}
+	var row *model.ClientSnapshot
+	for i := range snapshot.Clients {
+		if snapshot.Clients[i].ID == clientID {
+			row = &snapshot.Clients[i]
+			break
 		}
 	}
-	s.writeSubscription(w, r, cl, links)
+	if row == nil {
+		return client.View{}, nil, revisions.Applied, revisions.Desired, client.ErrNotFound
+	}
+	current := client.Client{ID: row.ID, Name: row.Name, Email: row.Email, Enabled: row.Enabled, GroupID: row.GroupID,
+		QuotaBytes: row.QuotaBytes, QuotaResetPolicy: row.QuotaResetPolicy, QuotaResetAt: row.QuotaResetAt,
+		ExpiresAt: row.ExpiresAt, DeviceLimit: row.DeviceLimit, Notes: row.Notes, Depleted: row.Depleted,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Version: row.Version}
+	bindings := make([]client.Binding, 0)
+	inboundIDs := make([]string, 0)
+	for _, binding := range snapshot.Bindings {
+		if binding.ClientID != clientID {
+			continue
+		}
+		bindings = append(bindings, client.Binding{ID: binding.ID, ClientID: binding.ClientID, InboundID: binding.InboundID,
+			RuntimeIdentity: binding.RuntimeIdentity, Enabled: binding.Enabled, ProtocolSettings: binding.ProtocolSettings,
+			CreatedAt: binding.CreatedAt, UpdatedAt: binding.UpdatedAt, Version: binding.Version})
+		inboundIDs = append(inboundIDs, binding.InboundID)
+	}
+	plaintext := make(map[string]string, len(snapshot.Credentials))
+	for _, credential := range snapshot.Credentials {
+		if credential.Kind != "password" {
+			continue
+		}
+		value, err := s.clientCreds.RevealEncrypted(credential.EncryptedValue)
+		if err != nil {
+			return client.View{}, nil, revisions.Applied, revisions.Desired, err
+		}
+		plaintext[credential.BindingID] = value
+	}
+	inbounds := make(map[string]client.InboundSnapshot, len(snapshot.Inbounds))
+	for _, inbound := range snapshot.Inbounds {
+		inbounds[inbound.Name] = client.InboundSnapshot{Name: inbound.Name, Protocol: inbound.Protocol,
+			Transport: inbound.Transport, Port: inbound.Port, Enabled: inbound.Enabled,
+			Password: inbound.Password, ProtocolFields: inbound.ProtocolFields}
+	}
+	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Now(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
+	links := []model.ClientLink{}
+	if view.Status == client.StatusActive {
+		renderer := s.subRenderer.WithSettings(clientaccess.Settings{Domain: snapshot.Settings.Domain})
+		links, err = renderer.LinksForSnapshot(current, bindings, plaintext, func(inboundID string) (client.InboundSnapshot, bool) {
+			value, ok := inbounds[inboundID]
+			return value, ok
+		})
+		if err != nil {
+			return client.View{}, nil, revisions.Applied, revisions.Desired, err
+		}
+	}
+	return view, links, revisions.Applied, revisions.Desired, nil
 }
 
 // writeSubscription renders links into the requested subscription format with

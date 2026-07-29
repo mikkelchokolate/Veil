@@ -157,6 +157,16 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	return nil
 }
 
+// AggregateTotals returns usage across every traffic counter without loading
+// clients or issuing per-client queries.
+func (s *TrafficStore) AggregateTotals() (upload, download int64, err error) {
+	row := s.db.QueryRow(`SELECT COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0) FROM traffic_counters`)
+	if err := row.Scan(&upload, &download); err != nil {
+		return 0, 0, fmt.Errorf("client: aggregate traffic totals: %w", err)
+	}
+	return upload, download, nil
+}
+
 // TotalsForClient returns current quota-period upload/download usage.
 func (s *TrafficStore) TotalsForClient(clientID string) (upload, download int64, err error) {
 	row := s.db.QueryRow(`SELECT COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0)

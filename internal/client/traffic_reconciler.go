@@ -1,6 +1,8 @@
 package client
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -52,27 +54,134 @@ func newReconciler(repo *Repository, traffic *TrafficStore, interval time.Durati
 	}
 }
 
-// ReconcileOnce applies at most one atomic mutation per affected client.
+// ReconcileOnce evaluates every client with bounded pagination and continues
+// after individual failures, returning one aggregate error.
 func (r *Reconciler) ReconcileOnce() (changed int, err error) {
-	clients, _, err := r.repo.List(ListFilter{PageSize: 10000})
-	if err != nil {
-		return 0, err
-	}
 	now := r.now().UTC()
-	for _, current := range clients {
-		mutation, needed, err := r.plan(current, now)
-		if err != nil {
-			return changed, err
+	var reconcileErrors []error
+	type plannedMutation struct {
+		clientID string
+		mutation QuotaMutation
+	}
+	for page := 1; ; page++ {
+		clients, total, listErr := r.repo.List(ListFilter{Page: page, PageSize: 100})
+		if listErr != nil {
+			return changed, errors.Join(append(reconcileErrors, listErr)...)
 		}
-		if !needed {
+		if len(clients) == 0 {
+			break
+		}
+		planned := make([]plannedMutation, 0, len(clients))
+		for _, current := range clients {
+			mutation, needed, planErr := r.plan(current, now)
+			if planErr != nil {
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, planErr))
+				continue
+			}
+			pending, pendingErr := r.enforcementPending(current.ID)
+			if pendingErr != nil {
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s enforcement state: %w", current.ID, pendingErr))
+				continue
+			}
+			if !needed && pending {
+				mutation = QuotaMutation{ClientID: current.ID, Depleted: current.Depleted}
+				needed = true
+			}
+			if needed {
+				planned = append(planned, plannedMutation{clientID: current.ID, mutation: mutation})
+			}
+		}
+		pendingUpdates := make([]enforcementUpdate, 0, len(planned))
+		for _, item := range planned {
+			pendingUpdates = append(pendingUpdates, enforcementUpdate{clientID: item.clientID, state: "pending"})
+		}
+		if markErr := r.markEnforcementBatch(pendingUpdates, now.Unix()); markErr != nil {
+			reconcileErrors = append(reconcileErrors, fmt.Errorf("reserve quota enforcement page %d: %w", page, markErr))
+			if page*100 >= total {
+				break
+			}
 			continue
 		}
-		if err := r.applyMutation(mutation); err != nil {
-			return changed, err
+		terminalUpdates := make([]enforcementUpdate, 0, len(planned))
+		for _, item := range planned {
+			if applyErr := r.applyMutation(item.mutation); applyErr != nil {
+				terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "failed", cause: applyErr})
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", item.clientID, applyErr))
+				continue
+			}
+			terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "enforced"})
+			changed++
 		}
-		changed++
+		if markErr := r.markEnforcementBatch(terminalUpdates, now.Unix()); markErr != nil {
+			reconcileErrors = append(reconcileErrors, fmt.Errorf("finalize quota enforcement page %d: %w", page, markErr))
+		}
+		if page*100 >= total {
+			break
+		}
 	}
-	return changed, nil
+	return changed, errors.Join(reconcileErrors...)
+}
+
+func (r *Reconciler) enforcementPending(clientID string) (bool, error) {
+	if r == nil || r.repo == nil || r.repo.db == nil {
+		return false, nil
+	}
+	var state string
+	err := r.repo.db.QueryRow(`SELECT state FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return state == "pending" || state == "failed", nil
+}
+
+type enforcementUpdate struct {
+	clientID string
+	state    string
+	cause    error
+}
+
+func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64) error {
+	if len(updates) == 0 || r == nil || r.repo == nil || r.repo.db == nil {
+		return nil
+	}
+	tx, err := r.repo.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statement, err := tx.Prepare(`INSERT INTO quota_enforcement
+  (client_id,state,next_retry_at,last_error,attempts,updated_at)
+  VALUES(?,?,?,?,1,?)
+  ON CONFLICT(client_id) DO UPDATE SET
+    state=excluded.state,
+    next_retry_at=excluded.next_retry_at,
+    last_error=excluded.last_error,
+    attempts=quota_enforcement.attempts+1,
+    updated_at=excluded.updated_at`)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	for _, update := range updates {
+		message := ""
+		if update.cause != nil {
+			message = update.cause.Error()
+		}
+		nextRetry := int64(0)
+		if update.state != "enforced" {
+			nextRetry = now
+		}
+		if _, err := statement.Exec(update.clientID, update.state, nextRetry, message, now); err != nil {
+			return err
+		}
+	}
+	if err := statement.Close(); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *Reconciler) plan(current Client, now time.Time) (QuotaMutation, bool, error) {

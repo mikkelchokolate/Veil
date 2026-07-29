@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/observability"
@@ -29,7 +30,12 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	mux := http.NewServeMux()
 	state := newManagementState(info)
 	metrics := observability.NewMetricsCollector()
-	mux.HandleFunc("/metrics", metrics.ServeHTTP)
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.ServeHTTP(w, r)
+		if r.Method == http.MethodGet && state.trafficCollector != nil {
+			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
+		}
+	})
 	RuntimeRoutes{}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)

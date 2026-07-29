@@ -82,6 +82,8 @@ type BindingCapability struct {
 	Transports           []string `json:"transports"`
 	PerClientCredentials bool     `json:"perClientCredentials"`
 	RequiresCaddy        bool     `json:"requiresCaddy"`
+	TrafficAccounting    bool     `json:"trafficAccounting"`
+	QuotaEnforcement     bool     `json:"quotaEnforcement"`
 }
 
 // ErrValidation marks a 400-class client-side validation failure.
@@ -116,6 +118,8 @@ func validate(c Client) error {
 		if *c.QuotaBytes > MaxQuotaBytes {
 			return fmt.Errorf("%w: quotaBytes must be <= %d (Number.MAX_SAFE_INTEGER)", ErrValidation, MaxQuotaBytes)
 		}
+	} else if c.QuotaResetAt != nil || (c.QuotaResetPolicy != "" && c.QuotaResetPolicy != ResetNever) || c.Depleted {
+		return fmt.Errorf("%w: quota reset/depletion state requires quotaBytes", ErrValidation)
 	}
 	switch c.QuotaResetPolicy {
 	case "", ResetNever, ResetDaily, ResetWeekly, ResetMonthly:
@@ -144,6 +148,7 @@ type BindingInput struct {
 	InboundID       string
 	RuntimeIdentity string
 	Credential      string
+	Enabled         *bool
 }
 
 // CreateWithBindings atomically creates a client plus its bindings and
@@ -215,7 +220,11 @@ func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []Bindin
 	}
 	issued := []IssuedCredential{}
 	for _, b := range bindings {
-		bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Enabled: true})
+		enabled := true
+		if b.Enabled != nil {
+			enabled = *b.Enabled
+		}
+		bind, err := tx.CreateBinding(Binding{ClientID: created.ID, InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Enabled: enabled})
 		if err != nil {
 			return "", nil, err
 		}
@@ -266,10 +275,14 @@ func (s *Service) AddBindingTx(tx *Tx, clientID, inboundID string) (Binding, err
 }
 
 func (s *Service) AddBindingWithIdentityTx(tx *Tx, clientID, inboundID, runtimeIdentity string) (Binding, error) {
+	return s.AddBindingWithIdentityEnabledTx(tx, clientID, inboundID, runtimeIdentity, true)
+}
+
+func (s *Service) AddBindingWithIdentityEnabledTx(tx *Tx, clientID, inboundID, runtimeIdentity string, enabled bool) (Binding, error) {
 	if inboundID == "" {
 		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
 	}
-	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, RuntimeIdentity: runtimeIdentity, Enabled: true})
+	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, RuntimeIdentity: runtimeIdentity, Enabled: enabled})
 }
 
 // RemoveBindingTx is the transactional variant of RemoveBinding.

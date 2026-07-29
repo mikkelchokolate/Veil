@@ -1,37 +1,48 @@
 package client
 
 import (
+	"errors"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
-// TrafficProvider reads absolute byte counters from a live runtime (e.g. a
-// hysteria2 / naiveproxy process) keyed by binding. Implementations are
-// protocol-specific; the collector is protocol-agnostic.
+// TrafficProvider reads absolute byte counters from a live runtime keyed by binding.
 type TrafficProvider interface {
-	// Key identifies this provider instance (used for monotonic runtime state).
 	Key() string
-	// Read returns absolute (monotonic) upload/download counters per binding ID.
 	Read() (map[string]ProviderReading, error)
 }
 
-// ProviderReading is one binding's absolute counters from a provider.
 type ProviderReading struct {
 	BindingID     string
 	UploadBytes   int64
 	DownloadBytes int64
 }
 
-// Collector polls registered providers on an interval, recording monotonic
-// samples into the store and reporting quota/expiry state changes via a
-// callback. It is safe for concurrent use.
+type ProviderHealth struct {
+	Key                         string `json:"key"`
+	State                       string `json:"state"`
+	LastSuccessfulObservationAt int64  `json:"lastSuccessfulObservationAt,omitempty"`
+	LastError                   string `json:"lastError,omitempty"`
+	ErrorsTotal                 uint64 `json:"errorsTotal"`
+}
+
+type providerHealthState struct {
+	ProviderHealth
+	lastLogAt int64
+}
+
 type Collector struct {
 	store     *TrafficStore
 	providers []TrafficProvider
 	interval  time.Duration
-	onExhaust func(clientID string) // called when a client crosses its quota
+	onExhaust func(clientID string)
 
 	mu      sync.Mutex
+	health  map[string]providerHealthState
 	running bool
 	stop    chan struct{}
 	done    chan struct{}
@@ -41,61 +52,130 @@ func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(cl
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
-	return &Collector{store: store, interval: interval, onExhaust: onExhaust}
+	return &Collector{store: store, interval: interval, onExhaust: onExhaust, health: make(map[string]providerHealthState)}
 }
 
-// Register adds a provider. Thread-safe; typically called at startup.
-func (c *Collector) Register(p TrafficProvider) {
+func (c *Collector) Register(provider TrafficProvider) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.providers = append(c.providers, p)
+	c.providers = append(c.providers, provider)
+	c.ensureProviderHealthLocked(provider.Key())
 }
 
-// ResetProviders replaces the registered provider set. Used when clients,
-// bindings, credentials, or inbounds change so provider attribution stays
-// accurate without a restart.
 func (c *Collector) ResetProviders(providers []TrafficProvider) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.providers = append([]TrafficProvider(nil), providers...)
+	current := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		current[provider.Key()] = struct{}{}
+		c.ensureProviderHealthLocked(provider.Key())
+	}
+	for key := range c.health {
+		if _, ok := current[key]; !ok {
+			delete(c.health, key)
+		}
+	}
 }
 
-// CollectOnce reads all providers and records samples. Exposed for tests and
-// for an immediate manual reconcile.
+func (c *Collector) ensureProviderHealthLocked(key string) {
+	if _, ok := c.health[key]; !ok {
+		c.health[key] = providerHealthState{ProviderHealth: ProviderHealth{Key: key, State: "unknown"}}
+	}
+}
+
 func (c *Collector) CollectOnce() error {
 	c.mu.Lock()
 	providers := append([]TrafficProvider(nil), c.providers...)
 	c.mu.Unlock()
 	now := time.Now().Unix()
-	for _, p := range providers {
-		readings, err := p.Read()
+	var collectionErrors []error
+	for _, provider := range providers {
+		readings, err := provider.Read()
+		if err == nil {
+			for _, reading := range readings {
+				if c.store == nil {
+					err = errors.New("traffic store is unavailable")
+					break
+				}
+				if recordErr := c.store.RecordSample(Sample{
+					BindingID: reading.BindingID, UploadBytes: reading.UploadBytes, DownloadBytes: reading.DownloadBytes,
+					AtUnix: now, Monotonic: true, ProviderKey: provider.Key() + ":" + reading.BindingID,
+				}); recordErr != nil {
+					err = fmt.Errorf("record provider %s binding %s sample: %w", provider.Key(), reading.BindingID, recordErr)
+					break
+				}
+			}
+		}
 		if err != nil {
-			continue // a broken provider must not stall others
+			wrapped := fmt.Errorf("traffic provider %s: %w", provider.Key(), err)
+			collectionErrors = append(collectionErrors, wrapped)
+			c.recordFailure(provider.Key(), wrapped, now)
+			continue
 		}
-		for _, rd := range readings {
-			_ = c.store.RecordSample(Sample{
-				BindingID:     rd.BindingID,
-				UploadBytes:   rd.UploadBytes,
-				DownloadBytes: rd.DownloadBytes,
-				AtUnix:        now,
-				Monotonic:     true,
-				ProviderKey:   p.Key() + ":" + rd.BindingID,
-			})
-		}
+		c.recordSuccess(provider.Key(), now)
 	}
-	return nil
+	return errors.Join(collectionErrors...)
 }
 
-// ProviderCount reports how many traffic providers are registered. Zero means
-// no runtime is feeding counters and the telemetry state must be reported as
-// "no providers" rather than fake zeros.
+func (c *Collector) recordSuccess(key string, now int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureProviderHealthLocked(key)
+	state := c.health[key]
+	state.State = "healthy"
+	state.LastSuccessfulObservationAt = now
+	state.LastError = ""
+	c.health[key] = state
+}
+
+func (c *Collector) recordFailure(key string, err error, now int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureProviderHealthLocked(key)
+	state := c.health[key]
+	state.State = "degraded"
+	state.LastError = err.Error()
+	state.ErrorsTotal++
+	if state.lastLogAt == 0 || now-state.lastLogAt >= 60 {
+		log.Printf("event=traffic_provider_failure provider=%q error=%q", key, err.Error())
+		state.lastLogAt = now
+	}
+	c.health[key] = state
+}
+
+func (c *Collector) ProviderHealth() []ProviderHealth {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]ProviderHealth, 0, len(c.health))
+	for _, state := range c.health {
+		out = append(out, state.ProviderHealth)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+func (c *Collector) PrometheusMetrics() string {
+	var builder strings.Builder
+	for _, status := range c.ProviderHealth() {
+		key := strings.NewReplacer("\\", "\\\\", "\"", "\\\"", "\n", "\\n").Replace(status.Key)
+		up := 0
+		if status.State == "healthy" {
+			up = 1
+		}
+		fmt.Fprintf(&builder, "veil_traffic_provider_up{provider=\"%s\"} %d\n", key, up)
+		fmt.Fprintf(&builder, "veil_traffic_provider_errors_total{provider=\"%s\"} %d\n", key, status.ErrorsTotal)
+		fmt.Fprintf(&builder, "veil_traffic_provider_last_success_unixtime{provider=\"%s\"} %d\n", key, status.LastSuccessfulObservationAt)
+	}
+	return builder.String()
+}
+
 func (c *Collector) ProviderCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.providers)
 }
 
-// Start begins periodic collection until Stop. Non-blocking.
 func (c *Collector) Start() {
 	c.mu.Lock()
 	if c.running {
@@ -110,20 +190,19 @@ func (c *Collector) Start() {
 	c.mu.Unlock()
 	go func() {
 		defer close(done)
-		t := time.NewTicker(c.interval)
-		defer t.Stop()
+		ticker := time.NewTicker(c.interval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-stop:
 				return
-			case <-t.C:
+			case <-ticker.C:
 				_ = c.CollectOnce()
 			}
 		}
 	}()
 }
 
-// Stop halts periodic collection.
 func (c *Collector) Stop() {
 	c.mu.Lock()
 	if !c.running {
@@ -148,7 +227,6 @@ func (c *Collector) Stop() {
 	c.mu.Unlock()
 }
 
-// Running reports whether the periodic collection loop is active.
 func (c *Collector) Running() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

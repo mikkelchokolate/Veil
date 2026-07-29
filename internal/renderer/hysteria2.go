@@ -24,8 +24,10 @@ type Hysteria2Config struct {
 	// (bare IP, no domain, ports 80/443 taken) without ACME — the client
 	// connects with insecure/SNI. This is what makes "enter a domain and it
 	// just works" hold for Hysteria2.
-	CertPath string
-	KeyPath  string
+	CertPath           string
+	KeyPath            string
+	TrafficStatsListen string
+	TrafficStatsSecret string
 }
 
 type hysteria2YAML struct {
@@ -53,6 +55,10 @@ type hysteria2YAML struct {
 			Addr string `yaml:"addr"`
 		} `yaml:"socks5"`
 	} `yaml:"outbounds,omitempty"`
+	TrafficStats *struct {
+		Listen string `yaml:"listen"`
+		Secret string `yaml:"secret"`
+	} `yaml:"trafficStats,omitempty"`
 }
 
 func RenderHysteria2(cfg Hysteria2Config) (string, error) {
@@ -109,6 +115,16 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 		ob.Type = "socks5"
 		ob.Socks5.Addr = cfg.Upstream
 		doc.Outbounds = append(doc.Outbounds, ob)
+	}
+
+	if cfg.TrafficStatsListen != "" || cfg.TrafficStatsSecret != "" {
+		if cfg.TrafficStatsListen == "" || cfg.TrafficStatsSecret == "" {
+			return "", errors.New("traffic stats listen and secret must be configured together")
+		}
+		doc.TrafficStats = &struct {
+			Listen string `yaml:"listen"`
+			Secret string `yaml:"secret"`
+		}{Listen: cfg.TrafficStatsListen, Secret: cfg.TrafficStatsSecret}
 	}
 
 	var out bytes.Buffer

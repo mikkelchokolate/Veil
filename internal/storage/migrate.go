@@ -303,6 +303,23 @@ CREATE TABLE runtime_publications (
 CREATE INDEX idx_runtime_publications_revision ON runtime_publications(revision);
 `,
 	},
+	{
+		version: 11,
+		name:    "durable_quota_enforcement",
+		sql: `
+CREATE TABLE IF NOT EXISTS quota_enforcement (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK(state IN ('pending','failed','enforced')),
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quota_enforcement_retry
+  ON quota_enforcement(state, next_retry_at, client_id);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

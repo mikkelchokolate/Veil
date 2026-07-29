@@ -22,6 +22,19 @@ func NewCredentialStore(db *sql.DB, cipher *secrets.Cipher) *CredentialStore {
 	return &CredentialStore{db: db, cipher: cipher}
 }
 
+// RevealEncrypted decrypts immutable credential bytes without consulting the
+// mutable credential table.
+func (s *CredentialStore) RevealEncrypted(encrypted []byte) (string, error) {
+	if s == nil || s.cipher == nil {
+		return "", fmt.Errorf("client: credential cipher unavailable")
+	}
+	plaintext, err := s.cipher.Decrypt(string(encrypted))
+	if err != nil {
+		return "", fmt.Errorf("client: decrypt credential snapshot: %w", err)
+	}
+	return plaintext, nil
+}
+
 // Set encrypts and stores a credential for a binding, creating credential
 // version 1 (or the next version if one already exists for that kind).
 func (s *CredentialStore) Set(bindingID, kind, plaintext string) (Credential, error) {

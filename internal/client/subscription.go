@@ -54,6 +54,23 @@ func (r *SubscriptionRenderer) LinksForClient(c Client, resolve func(inboundID s
 	if err != nil {
 		return nil, fmt.Errorf("client: subscription bindings: %w", err)
 	}
+	plaintext := make(map[string]string, len(bindings))
+	for _, binding := range bindings {
+		cred, err := r.creds.ActiveForBinding(binding.ID, "password")
+		if err != nil {
+			continue
+		}
+		value, err := r.creds.Reveal(cred.ID)
+		if err == nil {
+			plaintext[binding.ID] = value
+		}
+	}
+	return r.LinksForSnapshot(c, bindings, plaintext, resolve)
+}
+
+// LinksForSnapshot renders exclusively from immutable binding and credential
+// material supplied by the caller.
+func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, plaintext map[string]string, resolve func(inboundID string) (InboundSnapshot, bool)) ([]model.ClientLink, error) {
 	registry := clientaccess.NewClientAccessProtocolRegistry()
 	var out []model.ClientLink
 	for _, b := range bindings {
@@ -64,20 +81,16 @@ func (r *SubscriptionRenderer) LinksForClient(c Client, resolve func(inboundID s
 		if !ok || !snap.Enabled {
 			continue
 		}
-		cred, err := r.creds.ActiveForBinding(b.ID, "password")
-		if err != nil {
-			continue // no credential for this binding -> skip silently
-		}
-		plaintext, err := r.creds.Reveal(cred.ID)
-		if err != nil {
+		password, ok := plaintext[b.ID]
+		if !ok {
 			continue
 		}
-		inbound := snapshotToInbound(snap)
-		cc := clientaccess.ClientCredential{
-			Name:     c.Name,
-			Username: c.Name,
-			Password: plaintext,
+		identity := b.RuntimeIdentity
+		if identity == "" {
+			return nil, fmt.Errorf("client: binding %s has no runtime identity", b.ID)
 		}
+		inbound := snapshotToInbound(snap)
+		cc := clientaccess.ClientCredential{Name: c.Name, Username: identity, Password: password}
 		links := registry.BuildLinks(r.settings, inbound, []clientaccess.ClientCredential{cc})
 		out = append(out, links...)
 	}

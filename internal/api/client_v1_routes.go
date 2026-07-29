@@ -259,6 +259,13 @@ func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1Bulk
 			return false, false, client.ErrValidation
 		}
 		c.QuotaBytes = req.QuotaBytes
+		bindings, err := tx.BindingsForClient(id)
+		if err != nil {
+			return false, false, err
+		}
+		if err := s.validateQuotaBindingsLocked(c.QuotaBytes, bindings); err != nil {
+			return false, false, err
+		}
 	case "extend", "extend_expiry":
 		if req.Days == nil || *req.Days <= 0 {
 			return false, false, client.ErrValidation
@@ -275,6 +282,9 @@ func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1Bulk
 	case "attach_inbound":
 		if req.InboundID == "" {
 			return false, false, client.ErrValidation
+		}
+		if err := s.validateQuotaBindingsLocked(c.QuotaBytes, []client.Binding{{InboundID: req.InboundID, Enabled: true}}); err != nil {
+			return false, false, err
 		}
 		if _, err := s.clientService.AddBindingTx(tx, id, req.InboundID); err != nil {
 			return false, false, err
@@ -393,6 +403,9 @@ func (s *managementState) handleV1ListClients(w http.ResponseWriter, r *http.Req
 		QuotaState: q.Get("quotaState"),
 		Sort:       q.Get("sort"),
 	}
+	if f.PageSize > 100 {
+		f.PageSize = 100
+	}
 	if v := q.Get("expiresBefore"); v != "" {
 		if ts, err := strconv.ParseInt(v, 10, 64); err == nil {
 			f.ExpiresBefore = &ts
@@ -409,6 +422,27 @@ func (s *managementState) handleV1ListClients(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, map[string]any{"items": items, "total": total, "page": f.Page, "pageSize": f.PageSize})
+}
+
+func (s *managementState) quotaSupportedForInboundLocked(inboundID string) bool {
+	for _, inbound := range s.inbounds {
+		if inbound.Name == inboundID {
+			return inbound.Enabled && inbound.Protocol == "hysteria2"
+		}
+	}
+	return false
+}
+
+func (s *managementState) validateQuotaBindingsLocked(quota *int64, bindings []client.Binding) error {
+	if quota == nil {
+		return nil
+	}
+	for _, binding := range bindings {
+		if binding.Enabled && !s.quotaSupportedForInboundLocked(binding.InboundID) {
+			return fmt.Errorf("%w: quota enforcement is unsupported for inbound %s", client.ErrValidation, binding.InboundID)
+		}
+	}
+	return nil
 }
 
 func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Request) {
@@ -446,7 +480,7 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 			writeError(w, "binding inbound does not exist", http.StatusBadRequest)
 			return
 		}
-		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Credential: b.Credential})
+		bindings = append(bindings, client.BindingInput{InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Credential: b.Credential, Enabled: b.Enabled})
 	}
 	var createdID string
 	var issued []client.IssuedCredential
@@ -455,6 +489,17 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 			if !s.bindingInboundExistsLocked(binding.InboundID) {
 				return fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
 			}
+		}
+		prospective := make([]client.Binding, 0, len(bindings))
+		for _, binding := range bindings {
+			enabled := true
+			if binding.Enabled != nil {
+				enabled = *binding.Enabled
+			}
+			prospective = append(prospective, client.Binding{InboundID: binding.InboundID, Enabled: enabled})
+		}
+		if err := s.validateQuotaBindingsLocked(c.QuotaBytes, prospective); err != nil {
+			return err
 		}
 		id, iss, err := s.clientService.CreateWithBindingsIssuedTx(tx, c, bindings)
 		if err != nil {
@@ -577,6 +622,13 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 		}
 	}
 	updated, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+		bindings, err := tx.BindingsForClient(id)
+		if err != nil {
+			return err
+		}
+		if err := s.validateQuotaBindingsLocked(c.QuotaBytes, bindings); err != nil {
+			return err
+		}
 		return s.clientService.UpdateTx(tx, c, req.Version)
 	})
 	if err != nil {
@@ -684,7 +736,18 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 				if !s.bindingInboundExistsLocked(req.InboundID) {
 					return fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
 				}
-				nb, err := s.clientService.AddBindingWithIdentityTx(tx, clientID, req.InboundID, req.RuntimeIdentity)
+				existingClient, err := tx.Get(clientID)
+				if err != nil {
+					return err
+				}
+				enabled := true
+				if req.Enabled != nil {
+					enabled = *req.Enabled
+				}
+				if err := s.validateQuotaBindingsLocked(existingClient.QuotaBytes, []client.Binding{{InboundID: req.InboundID, Enabled: enabled}}); err != nil {
+					return err
+				}
+				nb, err := s.clientService.AddBindingWithIdentityEnabledTx(tx, clientID, req.InboundID, req.RuntimeIdentity, enabled)
 				if err != nil {
 					return err
 				}
@@ -726,6 +789,19 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 		}
 		var b client.Binding
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			currentBinding, err := tx.GetBinding(bindingID)
+			if err != nil {
+				return err
+			}
+			if *req.Enabled {
+				existingClient, err := tx.Get(currentBinding.ClientID)
+				if err != nil {
+					return err
+				}
+				if err := s.validateQuotaBindingsLocked(existingClient.QuotaBytes, []client.Binding{{InboundID: currentBinding.InboundID, Enabled: true}}); err != nil {
+					return err
+				}
+			}
 			ub, err := s.clientService.SetBindingEnabledTx(tx, bindingID, *req.Enabled, req.Version)
 			if err != nil {
 				return err
