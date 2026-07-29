@@ -5,11 +5,15 @@ import (
 	"testing"
 	"time"
 
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
 func TestQuotaRolloverCommitsPeriodStateSnapshotAndExactlyOneApplyJob(t *testing.T) {
 	state := newClientLifecycleTestState(t)
+	state.applyRunner = veilapply.NewRunner(state.applyRevisions, state.applyJobs, veilapply.ExecutorFunc(func(uint64) (veilapply.Result, error) {
+		return veilapply.Result{Success: true}, nil
+	}))
 	quota := int64(100)
 	expired := time.Now().UTC().Add(-40 * 24 * time.Hour).Unix()
 	created, err := state.clientService.Create(client.Client{
