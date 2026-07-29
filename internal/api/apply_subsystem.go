@@ -87,6 +87,11 @@ func initApplySubsystem(s *managementState) {
 		return
 	}
 	s.db = db
+	if s.idempotency != nil {
+		s.idempotency.mu.Lock()
+		s.idempotency.db = db
+		s.idempotency.mu.Unlock()
+	}
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
 	s.applySnapshots = apply.NewSnapshotStore(s.db)

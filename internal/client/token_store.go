@@ -47,12 +47,27 @@ func (s *TokenStore) Issue(clientID, label string, expiresAt *int64) (IssuedToke
 		ExpiresAt: expiresAt,
 		CreatedAt: nowUnix(),
 	}
-	_, err = s.db.Exec(`INSERT INTO subscription_tokens
+	raw, err := s.db.Begin()
+	if err != nil {
+		return IssuedToken{}, err
+	}
+	defer raw.Rollback() //nolint:errcheck
+	var parent string
+	if err := raw.QueryRow(`SELECT id FROM clients WHERE id=?`, clientID).Scan(&parent); err != nil {
+		if err == sql.ErrNoRows {
+			return IssuedToken{}, ErrNotFound
+		}
+		return IssuedToken{}, err
+	}
+	_, err = raw.Exec(`INSERT INTO subscription_tokens
 	  (id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, created_by)
 	  VALUES(?,?,?,?,?,?,?,?)`,
 		t.ID, t.ClientID, []byte(t.TokenHash), t.Prefix, boolToInt(t.Enabled), t.ExpiresAt, t.CreatedAt, t.Label)
 	if err != nil {
 		return IssuedToken{}, fmt.Errorf("client: issue token: %w", err)
+	}
+	if err := raw.Commit(); err != nil {
+		return IssuedToken{}, err
 	}
 	return IssuedToken{Token: t, Plaintext: plaintext}, nil
 }
@@ -65,28 +80,20 @@ func (s *TokenStore) LookupByPlaintext(plaintext string) (*SubscriptionToken, er
 		return nil, nil
 	}
 	h := hashToken(plaintext)
-	row := s.db.QueryRow(`SELECT id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, last_used_at, revoked_at, created_by
-	  FROM subscription_tokens WHERE token_hash=? AND revoked_at IS NULL AND enabled=1`, []byte(h))
-	t, err := scanToken(row, true)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if t.ExpiresAt != nil && nowUnix() >= *t.ExpiresAt {
-		return nil, nil // expired
-	}
 	now := nowUnix()
-	result, err := s.db.Exec(`UPDATE subscription_tokens SET last_used_at=? WHERE id=?`, now, t.ID)
+	row := s.db.QueryRow(`UPDATE subscription_tokens SET last_used_at=?
+  WHERE token_hash=? AND revoked_at IS NULL AND enabled=1
+    AND (expires_at IS NULL OR expires_at>?)
+  RETURNING id, client_id, token_hash, token_prefix, enabled, expires_at,
+    created_at, last_used_at, revoked_at, created_by`, now, []byte(h), now)
+	token, err := scanToken(row, true)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("client: update token last_used_at: %w", err)
+		return nil, fmt.Errorf("client: lookup and mark token used: %w", err)
 	}
-	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
-		return nil, fmt.Errorf("client: update token last_used_at: expected one row")
-	}
-	t.LastUsedAt = &now
-	return &t, nil
+	return &token, nil
 }
 
 // Revoke invalidates a token by ID.

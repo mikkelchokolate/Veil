@@ -320,6 +320,31 @@ CREATE INDEX IF NOT EXISTS idx_quota_enforcement_retry
   ON quota_enforcement(state, next_retry_at, client_id);
 `,
 	},
+	{
+		version: 12,
+		name:    "durable_idempotency",
+		sql: `
+CREATE TABLE IF NOT EXISTS idempotency_records (
+  scope TEXT PRIMARY KEY,
+  actor_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('reserved','completed')),
+  owner_process TEXT NOT NULL,
+  reserved_until INTEGER NOT NULL,
+  response_status INTEGER,
+  response_headers BLOB,
+  response_body BLOB,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_idempotency_actor_endpoint_key
+  ON idempotency_records(actor_id, endpoint, idempotency_key);
+CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

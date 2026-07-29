@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"io"
 	"net/http"
@@ -36,10 +37,17 @@ type idempotencyStore struct {
 	entries map[string]*idempotencyEntry
 	now     func() time.Time
 	closed  bool
+	db      *sql.DB
+	owner   string
 }
 
-func newIdempotencyStore() *idempotencyStore {
-	return &idempotencyStore{entries: make(map[string]*idempotencyEntry), now: time.Now}
+func newIdempotencyStore(databases ...*sql.DB) *idempotencyStore {
+	store := &idempotencyStore{entries: make(map[string]*idempotencyEntry), now: time.Now}
+	if len(databases) > 0 {
+		store.db = databases[0]
+	}
+	store.owner = idempotencyOwnerID()
+	return store
 }
 
 func (s *idempotencyStore) Close() error {
@@ -77,6 +85,10 @@ func (s *idempotencyStore) Middleware(next http.Handler) http.Handler {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		fingerprint := idempotencyFingerprint(r, body)
 		scope := idempotencyScope(r, key)
+		if s.db != nil {
+			s.serveDurable(w, r, next, key, scope, fingerprint)
+			return
+		}
 		entry, owner, conflict, unavailable := s.acquire(scope, fingerprint)
 		if conflict {
 			writeError(w, "Idempotency-Key was already used with a different request", http.StatusConflict)

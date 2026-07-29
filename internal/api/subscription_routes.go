@@ -233,7 +233,11 @@ func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Re
 		}
 		issued, err := s.tokenStore.Issue(clientID, req.Label, req.ExpiresAt)
 		if err != nil {
-			writeError(w, err.Error(), http.StatusInternalServerError)
+			if errors.Is(err, client.ErrNotFound) {
+				writeNotFound(w)
+			} else {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		issued.URL = s.subscriptionURLFor(issued.Plaintext)

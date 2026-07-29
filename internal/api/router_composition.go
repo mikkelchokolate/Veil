@@ -45,7 +45,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	ProfilePreviewRoutes{}.Register(mux)
 	LogRoutes{State: state}.Register(mux)
 
-	state.idempotency = newIdempotencyStore()
+	state.idempotency = newIdempotencyStore(state.db)
 	gated := clientRequestGateMiddleware(state, mux)
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {

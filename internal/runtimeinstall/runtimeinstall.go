@@ -828,13 +828,18 @@ func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, latestFa
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return nil, closeErr
+		}
 		if latestFallbackRepo != "" && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
 			return fetchLatestReleaseWeb(ctx, client, latestFallbackRepo)
 		}
 		return nil, fmt.Errorf("GitHub API %s: %s", endpoint, resp.Status)
 	}
+	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, err
