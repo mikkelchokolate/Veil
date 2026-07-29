@@ -115,9 +115,11 @@ func TestJobStoreListOrdersNewestFirst(t *testing.T) {
 	js := NewJobStore(db)
 	rs := NewRevisionStore(db)
 	d, _ := rs.BumpDesired()
-	for _, id := range []string{"a", "b", "c"} {
-		_ = js.Create(Job{ID: id, DesiredRevision: d, Status: StatusPending, Trigger: "mutation", CreatedAt: time.Now().Unix()})
-		time.Sleep(2 * time.Millisecond)
+	createdAt := time.Now().Unix()
+	for _, id := range []string{"z-old", "m-middle", "a-new"} {
+		if err := js.Create(Job{ID: id, DesiredRevision: d, Status: StatusPending, Trigger: "mutation", CreatedAt: createdAt}); err != nil {
+			t.Fatalf("create %s: %v", id, err)
+		}
 	}
 	jobs, err := js.List(10)
 	if err != nil {
@@ -126,8 +128,15 @@ func TestJobStoreListOrdersNewestFirst(t *testing.T) {
 	if len(jobs) != 3 {
 		t.Fatalf("expected 3 jobs, got %d", len(jobs))
 	}
-	if jobs[0].ID != "c" {
-		t.Fatalf("expected newest first, got %s", jobs[0].ID)
+	if jobs[0].ID != "a-new" {
+		t.Fatalf("expected newest insertion first, got %s", jobs[0].ID)
+	}
+	latest, ok, err := js.LatestForRevision(d)
+	if err != nil {
+		t.Fatalf("latest for revision: %v", err)
+	}
+	if !ok || latest.ID != "a-new" {
+		t.Fatalf("expected newest insertion for revision, got ok=%v job=%+v", ok, latest)
 	}
 }
 

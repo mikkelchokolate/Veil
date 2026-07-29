@@ -126,7 +126,7 @@ func (s *JobStore) List(limit int) ([]Job, error) {
 	}
 	rows, err := s.db.Query(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
 	  created_at, started_at, finished_at, error_code, error_message, operations
-	  FROM apply_jobs ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
+	  FROM apply_jobs ORDER BY created_at DESC, rowid DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("apply: list jobs: %w", err)
 	}
@@ -209,7 +209,7 @@ func requireOneJobRow(result sql.Result, operation, id string) error {
 func (s *JobStore) LatestForRevision(rev uint64) (Job, bool, error) {
 	row := s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
 	  created_at, started_at, finished_at, error_code, error_message, operations
-	  FROM apply_jobs WHERE desired_revision=? ORDER BY created_at DESC, id DESC LIMIT 1`, rev)
+	  FROM apply_jobs WHERE desired_revision=? ORDER BY created_at DESC, rowid DESC LIMIT 1`, rev)
 	j, err := scanJob(row)
 	if err == sql.ErrNoRows {
 		return Job{}, false, nil
