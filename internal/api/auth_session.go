@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"net/http"
@@ -20,10 +19,18 @@ import (
 
 var errUserNotFound = errors.New("user not found")
 
+const maxFallbackPasswordBytes = 4096
+
 func constantTimePasswordEqual(supplied, expected string) bool {
-	suppliedDigest := sha256.Sum256([]byte(supplied))
-	expectedDigest := sha256.Sum256([]byte(expected))
-	return subtle.ConstantTimeCompare(suppliedDigest[:], expectedDigest[:]) == 1
+	if len(supplied) > maxFallbackPasswordBytes || len(expected) > maxFallbackPasswordBytes {
+		return false
+	}
+	var suppliedPadded, expectedPadded [maxFallbackPasswordBytes]byte
+	copy(suppliedPadded[:], supplied)
+	copy(expectedPadded[:], expected)
+	contentsEqual := subtle.ConstantTimeCompare(suppliedPadded[:], expectedPadded[:])
+	lengthsEqual := subtle.ConstantTimeEq(int32(len(supplied)), int32(len(expected)))
+	return contentsEqual&lengthsEqual == 1
 }
 
 func (s *managementState) sessionRegistry() *SessionRegistry {
