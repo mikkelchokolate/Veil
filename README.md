@@ -9,8 +9,13 @@ Veil is a management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru. It inst
 One command, answer a few questions, done:
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
+
+`install.sh` runs without root. It downloads and verifies the pinned verifier,
+`install-privileged.sh`, the Veil archive, signed checksums, and signed
+provenance. Only after every privileged payload passes verification does it
+invoke `sudo` itself.
 
 The installer asks for the Panel exposure mode (`local`, `direct`, or `caddy`)
 and whether to choose a random high Panel port or use a port you enter. Veil
@@ -36,7 +41,7 @@ The HTTPS Panel URL path is randomly generated — only you know it. Direct/loca
 Panel-only local access:
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- \
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh -s -- \
   --panel-access local \
   --yes
 ```
@@ -44,7 +49,7 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 Panel HTTPS access through Caddy on a domain, without exposing the Panel port:
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- \
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh -s -- \
   --panel-access caddy \
   --domain vpn.example.com \
   --email admin@example.com \

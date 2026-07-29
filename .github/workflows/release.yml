@@ -80,9 +80,10 @@ jobs:
       - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s
       - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s
       - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s
-      - run: bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
+      - run: sh -n scripts/install.sh
+      - run: bash -n scripts/install-privileged.sh scripts/uninstall.sh scripts/package-smoke.sh
       - run: sh -n packaging/scripts/*.sh
-      - run: bash scripts/install.sh --help >/dev/null
+      - run: bash scripts/install-privileged.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
       - run: git diff --check
 
@@ -231,7 +232,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: veil-installer
-          path: scripts/install.sh
+          path: |
+            scripts/install.sh
+            scripts/install-privileged.sh
           if-no-files-found: error
 
   docker-publish:
@@ -301,7 +304,7 @@ jobs:
           set -euo pipefail
           cd dist
           sha256sum ./veil_linux_amd64.tar.gz ./veil_linux_arm64.tar.gz \
-            ./*.deb ./*.rpm ./*.apk ./install.sh > checksums.txt
+            ./*.deb ./*.rpm ./*.apk ./install.sh ./install-privileged.sh > checksums.txt
           cat checksums.txt
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
@@ -322,7 +325,7 @@ jobs:
       - name: Sign checksums and SBOM (keyless)
         run: |
           set -euo pipefail
-          for f in dist/checksums.txt dist/veil.sbom.spdx.json dist/veil.provenance.json; do
+          for f in dist/checksums.txt dist/veil.sbom.spdx.json dist/veil.provenance.json dist/install-privileged.sh; do
             cosign sign-blob --yes \
               --bundle "${f}.bundle" \
               "${f}"
@@ -334,6 +337,8 @@ jobs:
             dist/checksums.txt
             dist/veil.sbom.spdx.json
             dist/veil.provenance.json
+            dist/install.sh
+            dist/install-privileged.sh
             dist/veil_linux_*.tar.gz
             dist/*.deb
             dist/*.rpm

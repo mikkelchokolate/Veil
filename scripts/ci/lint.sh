@@ -33,8 +33,9 @@ ci_run govulncheck govulncheck ./...
 ci_run shellcheck shellcheck scripts/*.sh scripts/ci/*.sh packaging/scripts/*.sh
 
 ci_step "install/uninstall script validation"
-bash -n scripts/install.sh scripts/uninstall.sh
-bash scripts/install.sh --help >/dev/null
+sh -n scripts/install.sh
+bash -n scripts/install-privileged.sh scripts/uninstall.sh
+bash scripts/install-privileged.sh --help >/dev/null
 bash scripts/uninstall.sh --help >/dev/null
 
 ci_log "lint job passed"

@@ -7,7 +7,7 @@ import (
 )
 
 func TestCurlInstallScriptDefaultsToPanelOnlyAndSupportsPanelAccess(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

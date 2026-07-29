@@ -13,8 +13,12 @@ This guide describes how to install and configure Veil on your server, including
 The easiest way to install Veil is using the official quick-start script. This script automatically detects your OS architecture (amd64/arm64), downloads the latest binary, verifies its checksum, and sets up the panel.
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
+
+The piped `install.sh` is an unprivileged bootstrap. It verifies the pinned
+verifier, `install-privileged.sh`, the Veil archive, signed checksums, and signed
+provenance before invoking `sudo` itself.
 
 Interactive installs ask for the Panel exposure mode (`local`, `direct`, or
 `caddy`) and whether Veil should choose a random high Panel port or use a port
@@ -25,7 +29,7 @@ you enter manually. Choose `local` + random port for the safest default.
 You can customize the installer's behavior using options passed to the bash command:
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- [options]
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh -s -- [options]
 ```
 
 | Option | Default | Description |

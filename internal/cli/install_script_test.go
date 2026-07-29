@@ -18,14 +18,14 @@ func checkBash(t *testing.T) {
 }
 
 func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
-		`REPO="${VEIL_REPO:-mikkelchokolate/Veil}"`,
-		"releases/latest/download",
+		`OFFICIAL_REPO="mikkelchokolate/Veil"`,
+		`REPO="${OFFICIAL_REPO}"`,
 		"checksums.txt",
 		"sha256sum -c",
 		"tar -xzf",
@@ -40,7 +40,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 
 func TestCurlInstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
 	checkBash(t)
-	cmd := exec.Command("bash", "../../scripts/install.sh", "--domain")
+	cmd := exec.Command("bash", "../../scripts/install-privileged.sh", "--domain")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected install.sh --domain to fail")
@@ -65,7 +65,7 @@ func TestCurlUninstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testin
 }
 
 func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,22 +80,22 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	}
 }
 
-func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
+func TestCurlInstallScriptNeverPipesIntoSudo(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	if !strings.Contains(script, "| sudo bash") {
-		t.Fatalf("install.sh usage should show sudo for systemd install:\n%s", script)
+	if strings.Contains(script, "| sudo sh") || strings.Contains(script, "| sudo bash") {
+		t.Fatalf("unprivileged bootstrap must never pipe remote bytes into sudo:\n%s", script)
 	}
-	if strings.Contains(script, "| bash\n") || strings.Contains(script, "| bash -s --") {
-		t.Fatalf("install.sh usage should not show non-root bash install examples:\n%s", script)
+	if !strings.Contains(script, "sudo env") {
+		t.Fatalf("verified bootstrap must perform its own final sudo handoff:\n%s", script)
 	}
 }
 
 func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 }
 
 func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 }
 
 func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,19 +138,20 @@ func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T)
 }
 
 func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	marker := "done\n\nRUN_BIN=\"${INSTALL_DIR}/veil\"\n\nrequire_cmd curl"
-	if !strings.Contains(script, marker) {
-		t.Fatalf("install.sh should resolve RUN_BIN after parsing --install-dir before idempotency path:\n%s", script)
+	verifyAt := strings.LastIndex(script, "verify_installer_bytes")
+	runAt := strings.Index(script, `RUN_BIN="${INSTALL_DIR}/veil"`)
+	if verifyAt < 0 || runAt < 0 || runAt < verifyAt {
+		t.Fatalf("privileged installer should resolve RUN_BIN after option parsing and self-verification:\n%s", script)
 	}
 }
 
 func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +164,7 @@ func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T)
 }
 
 func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +183,7 @@ func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 }
 
 func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +272,9 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"staticcheck",
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
-		"bash -n scripts/install.sh scripts/uninstall.sh",
-		"bash scripts/install.sh --help >/dev/null",
+		"sh -n scripts/install.sh",
+		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
+		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
 		"git diff --check",
 		"needs: [quality, release, docker-publish]",
@@ -329,8 +331,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"staticcheck",
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
-		"bash -n scripts/install.sh scripts/uninstall.sh",
-		"bash scripts/install.sh --help >/dev/null",
+		"sh -n scripts/install.sh",
+		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
+		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
 	} {
 		if !strings.Contains(lintScript, want) {
@@ -368,7 +371,7 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 }
 
 func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +394,7 @@ func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
 }
 
 func TestCurlInstallScriptForceReinstalls(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +410,7 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 }
 
 func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +432,7 @@ func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
 }
 
 func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -67,9 +67,10 @@ awk -v cov="${total_coverage}" -v min="${CI_COVERAGE_THRESHOLD}" \
   'BEGIN { if (cov+0 < min+0) { print "Error: coverage " cov "% is below threshold (" min "%)"; exit 1 } }'
 
 ci_step "shell hygiene"
-bash -n scripts/install.sh scripts/uninstall.sh scripts/package-smoke.sh
+sh -n scripts/install.sh
+bash -n scripts/install-privileged.sh scripts/uninstall.sh scripts/package-smoke.sh
 sh -n packaging/scripts/*.sh
-bash scripts/install.sh --help >/dev/null
+bash scripts/install-privileged.sh --help >/dev/null
 bash scripts/uninstall.sh --help >/dev/null
 git diff --check
 
