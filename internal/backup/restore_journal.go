@@ -40,6 +40,30 @@ type restoreJournalFile struct {
 	Phase          string `json:"phase"`
 }
 
+type restoreJournalDisk struct {
+	Version          int                      `json:"version"`
+	TransactionID    string                   `json:"transactionId"`
+	Phase            string                   `json:"phase"`
+	PreviousRevision uint64                   `json:"previousRevision"`
+	IntendedRevision uint64                   `json:"intendedRevision"`
+	WALCleanupPhase  string                   `json:"walShmCleanupPhase"`
+	Files            []restoreJournalDiskFile `json:"files"`
+}
+
+type restoreJournalDiskFile struct {
+	Name           string `json:"name"`
+	TargetID       string `json:"targetId"`
+	StagedName     string `json:"stagedName"`
+	SafetyName     string `json:"safetyName"`
+	HadPrevious    bool   `json:"hadPrevious"`
+	PreviousDigest string `json:"previousDigest,omitempty"`
+	IntendedDigest string `json:"intendedDigest"`
+	Mode           uint32 `json:"mode"`
+	UID            int    `json:"uid"`
+	GID            int    `json:"gid"`
+	Phase          string `json:"phase"`
+}
+
 // RecoverInterruptedRestore is safe to call before opening state.key or veil.db.
 // A surviving journal means the helper never durably completed the restore, so
 // recovery deterministically restores the exact checkpointed old triple.
@@ -56,21 +80,19 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	if err != nil {
 		return err
 	}
-	var journal restoreTransactionJournal
-	if err := json.Unmarshal(body, &journal); err != nil {
-		return fmt.Errorf("decode restore transaction journal: %w", err)
-	}
-	if journal.Version != 1 || journal.TransactionID == "" || len(journal.Files) < 2 {
-		return errors.New("invalid restore transaction journal")
-	}
 	expected := map[string]string{"state.json": filepath.Clean(statePath), "state.key": filepath.Clean(keyPath)}
 	if databasePath != "" {
 		expected["veil.db"] = filepath.Clean(databasePath)
 	}
-	for _, file := range journal.Files {
-		if target, ok := expected[file.Name]; !ok || filepath.Clean(file.TargetPath) != target {
-			return fmt.Errorf("restore journal target mismatch for %s", file.Name)
-		}
+	journal, err := decodeRestoreJournal(body, expected)
+	if err != nil {
+		return err
+	}
+	if journal.Version != 2 || journal.TransactionID == "" || len(journal.Files) < 2 {
+		return errors.New("invalid restore transaction journal")
+	}
+	if err := validateRestoreJournalMembers(journal.Files); err != nil {
+		return err
 	}
 	return rollbackRestoreJournal(root, &journal)
 }
@@ -80,7 +102,7 @@ func prepareRestoreJournal(statePath string, staged []*stagedRestoreFile, names 
 		return restoreTransactionJournal{}, errors.New("restore journal member mismatch")
 	}
 	journal := restoreTransactionJournal{
-		Version: 1, TransactionID: uuid.NewString(), Phase: "prepared",
+		Version: 2, TransactionID: uuid.NewString(), Phase: "prepared",
 		PreviousRevision: previousRevision, IntendedRevision: intendedRevision,
 		WALCleanupPhase: "pending", Files: make([]restoreJournalFile, 0, len(staged)),
 	}
@@ -252,11 +274,85 @@ func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) err
 }
 
 func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
-	body, err := json.Marshal(journal)
+	disk := restoreJournalDisk{
+		Version: journal.Version, TransactionID: journal.TransactionID, Phase: journal.Phase,
+		PreviousRevision: journal.PreviousRevision, IntendedRevision: journal.IntendedRevision,
+		WALCleanupPhase: journal.WALCleanupPhase, Files: make([]restoreJournalDiskFile, 0, len(journal.Files)),
+	}
+	for _, file := range journal.Files {
+		if filepath.Dir(file.StagedPath) != filepath.Dir(file.TargetPath) || filepath.Dir(file.SafetyPath) != filepath.Dir(file.TargetPath) {
+			return fmt.Errorf("restore journal member %s is outside target directory", file.Name)
+		}
+		disk.Files = append(disk.Files, restoreJournalDiskFile{
+			Name: file.Name, TargetID: file.Name, StagedName: filepath.Base(file.StagedPath), SafetyName: filepath.Base(file.SafetyPath),
+			HadPrevious: file.HadPrevious, PreviousDigest: file.PreviousDigest, IntendedDigest: file.IntendedDigest,
+			Mode: file.Mode, UID: file.UID, GID: file.GID, Phase: file.Phase,
+		})
+	}
+	body, err := json.Marshal(disk)
 	if err != nil {
 		return err
 	}
 	return atomicfile.Write(filepath.Join(root, restoreTransactionJournalName), body, 0o600, 0o700)
+}
+
+func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTransactionJournal, error) {
+	var disk restoreJournalDisk
+	if err := json.Unmarshal(body, &disk); err != nil {
+		return restoreTransactionJournal{}, fmt.Errorf("decode restore transaction journal: %w", err)
+	}
+	if disk.Version != 2 {
+		return restoreTransactionJournal{}, errors.New("unsafe legacy restore journal version")
+	}
+	journal := restoreTransactionJournal{
+		Version: disk.Version, TransactionID: disk.TransactionID, Phase: disk.Phase,
+		PreviousRevision: disk.PreviousRevision, IntendedRevision: disk.IntendedRevision,
+		WALCleanupPhase: disk.WALCleanupPhase, Files: make([]restoreJournalFile, 0, len(disk.Files)),
+	}
+	for _, file := range disk.Files {
+		target, ok := expected[file.Name]
+		if !ok || file.TargetID != file.Name {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal target mismatch for %s", file.Name)
+		}
+		if !safeRestoreLeaf(file.StagedName) || !safeRestoreLeaf(file.SafetyName) || file.StagedName == file.SafetyName {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal has unsafe member names for %s", file.Name)
+		}
+		directory := filepath.Dir(target)
+		journal.Files = append(journal.Files, restoreJournalFile{
+			Name: file.Name, TargetPath: target, StagedPath: filepath.Join(directory, file.StagedName), SafetyPath: filepath.Join(directory, file.SafetyName),
+			HadPrevious: file.HadPrevious, PreviousDigest: file.PreviousDigest, IntendedDigest: file.IntendedDigest,
+			Mode: file.Mode, UID: file.UID, GID: file.GID, Phase: file.Phase,
+		})
+	}
+	return journal, nil
+}
+
+func safeRestoreLeaf(name string) bool {
+	return name != "" && name != "." && name != ".." && filepath.Base(name) == name
+}
+
+func validateRestoreJournalMembers(files []restoreJournalFile) error {
+	for _, file := range files {
+		if filepath.Dir(file.StagedPath) != filepath.Dir(file.TargetPath) || filepath.Dir(file.SafetyPath) != filepath.Dir(file.TargetPath) {
+			return fmt.Errorf("restore journal member %s escapes target directory", file.Name)
+		}
+		for _, path := range []string{file.TargetPath, file.StagedPath, file.SafetyPath} {
+			info, err := os.Lstat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("restore journal member is not a regular file: %s", path)
+			}
+			if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink != 1 {
+				return fmt.Errorf("restore journal member has unsafe hard links: %s", path)
+			}
+		}
+	}
+	return nil
 }
 
 func removeRestoreJournal(root string) error {

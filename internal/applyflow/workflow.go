@@ -24,6 +24,12 @@ type State interface {
 	AppendApplyHistoryLocked(string, bool, model.ApplyResponse) error
 }
 
+type FirewallTransactionState interface {
+	PrepareFirewallLocked() (string, error)
+	CommitFirewallLocked(string) error
+	RollbackFirewallLocked(string) error
+}
+
 type HealthChecker func([]model.ServiceActionResult) []model.ServiceHealthResult
 
 type Workflow struct {
@@ -67,14 +73,33 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		response.LiveFiles = liveFiles
 		response.BackupFiles = backupFiles
 		if req.ApplyServices {
-			serviceActions := s.ReloadPromotedServicesLocked(liveFiles)
-			response.ServiceActions = serviceActions
-			if err := NewServiceActionSuccessPolicy().RequireSuccessful(serviceActions); err != nil {
+			firewallState, hasFirewallTransaction := s.(FirewallTransactionState)
+			firewallTransactionID := ""
+			if hasFirewallTransaction {
+				firewallTransactionID, err = firewallState.PrepareFirewallLocked()
+				if err != nil {
+					rollbackFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
+					response.RolledBack = len(rollbackFiles) > 0
+					response.RollbackFiles = rollbackFiles
+					response.RollbackActions = rollbackActions
+					_ = s.AppendApplyHistoryLocked("rollback", false, response)
+					return response, http.StatusInternalServerError, err
+				}
+			}
+			rollbackRuntime := func() {
+				if hasFirewallTransaction && firewallTransactionID != "" {
+					_ = firewallState.RollbackFirewallLocked(firewallTransactionID)
+				}
 				rollbackFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
 				response.RolledBack = len(rollbackFiles) > 0
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
 				_ = s.AppendApplyHistoryLocked("rollback", false, response)
+			}
+			serviceActions := s.ReloadPromotedServicesLocked(liveFiles)
+			response.ServiceActions = serviceActions
+			if err := NewServiceActionSuccessPolicy().RequireSuccessful(serviceActions); err != nil {
+				rollbackRuntime()
 				return response, http.StatusBadRequest, nil
 			}
 			healthChecks := []model.ServiceHealthResult{}
@@ -83,12 +108,14 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 			}
 			response.HealthChecks = healthChecks
 			if err := NewServiceHealthPolicy().RequireHealthy(healthChecks); err != nil {
-				rollbackFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
-				response.RolledBack = len(rollbackFiles) > 0
-				response.RollbackFiles = rollbackFiles
-				response.RollbackActions = rollbackActions
-				_ = s.AppendApplyHistoryLocked("rollback", false, response)
+				rollbackRuntime()
 				return response, http.StatusBadRequest, nil
+			}
+			if hasFirewallTransaction && firewallTransactionID != "" {
+				if err := firewallState.CommitFirewallLocked(firewallTransactionID); err != nil {
+					rollbackRuntime()
+					return response, http.StatusInternalServerError, err
+				}
 			}
 			response.ServicesApplied = len(serviceActions) > 0
 		}

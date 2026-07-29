@@ -47,7 +47,20 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 
 	state.idempotency = newIdempotencyStore()
 	gated := clientRequestGateMiddleware(state, mux)
-	var handler http.Handler = state.idempotency.Middleware(gated)
+	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			state.mu.Lock()
+			restoring := state.clientSubsystemStopping
+			state.mu.Unlock()
+			if restoring {
+				w.Header().Set("Retry-After", "5")
+				writeError(w, "management mutation is locked while restore is in progress", http.StatusLocked)
+				return
+			}
+		}
+		gated.ServeHTTP(w, r)
+	})
+	var handler http.Handler = state.idempotency.Middleware(restoreGuarded)
 	if basePath != "/" {
 		handler = stripBasePathMiddleware(basePath, handler)
 	}

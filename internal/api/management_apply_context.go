@@ -328,11 +328,6 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 	}
 	ctx.state.orphanedUnits = nil
 
-	// Synchronize the complete firewall rule set for the panel and enabled
-	// inbounds. A failure is a failed service action: applyflow restores the
-	// promoted configs and runtime services instead of reporting success.
-	results = append(results, ctx.syncFirewall()...)
-
 	return results
 }
 
@@ -509,6 +504,60 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	}
 	result.Success = true
 	return result
+}
+
+func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
+	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
+		return "", nil
+	}
+	if ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		results := ctx.syncFirewall()
+		for _, result := range results {
+			if !result.Success {
+				return "", errors.New(result.Error)
+			}
+		}
+		return "", nil
+	}
+	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
+	rules := firewall.UFWRulesFromResponses(responses)
+	if len(rules) == 0 {
+		return "", nil
+	}
+	reqRules := make([]privileged.FirewallRule, len(rules))
+	for index, rule := range rules {
+		reqRules[index] = privileged.FirewallRule{Command: rule.Command, Args: rule.Args}
+	}
+	result, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Rules: reqRules, Action: privileged.FirewallActionPrepare, Fence: ctx.fenceToken(),
+	})
+	if err != nil {
+		return "", err
+	}
+	if !result.Prepared || result.TransactionID == "" {
+		return "", errors.New("privileged helper did not prepare firewall transaction")
+	}
+	return result.TransactionID, nil
+}
+
+func (ctx ManagementApplyContext) CommitFirewallLocked(transactionID string) error {
+	if transactionID == "" || ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		return nil
+	}
+	_, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Action: privileged.FirewallActionCommit, TransactionID: transactionID, Fence: ctx.fenceToken(),
+	})
+	return err
+}
+
+func (ctx ManagementApplyContext) RollbackFirewallLocked(transactionID string) error {
+	if transactionID == "" || ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		return nil
+	}
+	_, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Action: privileged.FirewallActionRollback, TransactionID: transactionID, Fence: ctx.fenceToken(),
+	})
+	return err
 }
 
 func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {

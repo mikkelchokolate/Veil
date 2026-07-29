@@ -3,12 +3,17 @@ package api
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -25,6 +30,10 @@ type BackupRestoreJob struct {
 	ID                 string    `json:"id"`
 	Archive            string    `json:"archive"`
 	Status             string    `json:"status"`
+	Outcome            string    `json:"outcome"`
+	Phase              string    `json:"phase"`
+	Restored           bool      `json:"restored"`
+	HTTPStatus         int       `json:"httpStatus"`
 	CreatedAt          time.Time `json:"createdAt"`
 	StartedAt          time.Time `json:"startedAt,omitempty"`
 	FinishedAt         time.Time `json:"finishedAt,omitempty"`
@@ -255,6 +264,9 @@ func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http
 		ID:                id,
 		Archive:           archiveName,
 		Status:            "queued",
+		Outcome:           "pending",
+		Phase:             "queued",
+		HTTPStatus:        http.StatusAccepted,
 		CreatedAt:         now,
 		ownerSessionToken: ownerSessionToken,
 	}
@@ -297,6 +309,24 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		return
 	}
 	s.mu.Lock()
+	var restoreLease veilapply.Lease
+	if s.db != nil {
+		owner := fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString())
+		lease, acquired, leaseErr := veilapply.NewLeaseStore(s.db).Acquire(owner, "backup-restore", time.Now().UTC(), 2*time.Hour)
+		if leaseErr != nil || !acquired {
+			s.mu.Unlock()
+			message := "restore fencing lease is busy"
+			if leaseErr != nil {
+				message = leaseErr.Error()
+			}
+			_ = s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
+				job.Status, job.Outcome, job.Phase, job.HTTPStatus = "failed", "not_restored", "fence_acquire_failed", http.StatusLocked
+				job.Error, job.FinishedAt = message, time.Now().UTC()
+			})
+			return
+		}
+		restoreLease = lease
+	}
 	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)
 	s.mu.Unlock()
@@ -307,6 +337,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 
 	s.mu.Lock()
 	closeErr := closeClientDatabase(s)
+	s.mu.Unlock()
 	var result privileged.BackupResult
 	var err error
 	if closeErr != nil {
@@ -314,21 +345,27 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	} else {
 		result, err = s.backupOperation(s.lifecycleContext(), privileged.BackupRequest{
 			Action: privileged.BackupActionRestore, ArchiveName: name,
+			Fence: privileged.FenceToken{Owner: restoreLease.Owner, Generation: restoreLease.Generation},
 		})
 	}
 	// Reopen on both success and failure. The helper rolls all staged files back
 	// on failure, so this reconnects either the restored DB or the original DB.
+	s.mu.Lock()
 	s.clientSubsystemStopping = false
 	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
+	var fenceReleaseErr error
+	if restoreLease.Generation > 0 && s.db != nil {
+		fenceReleaseErr = restoreLeaseFloorAndRelease(s.db, restoreLease)
+	}
 	s.mu.Unlock()
-	if err == nil {
-		err = reopenErr
-	} else if reopenErr != nil {
-		err = fmt.Errorf("%v; reopen database: %w", err, reopenErr)
+	helperErr := err
+	finalizationErr := fenceReleaseErr
+	if helperErr == nil && result.Restored && reopenErr == nil {
+		_, sessionErr := s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
+		finalizationErr = errors.Join(finalizationErr, sessionErr)
 	}
-	if err == nil {
-		_, err = s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
-	}
+	status, outcome, phase, restored, responseStatus := classifyRestoreOutcome(result, helperErr, reopenErr, finalizationErr)
+	combinedErr := errors.Join(helperErr, reopenErr, finalizationErr)
 	_ = s.appendBackupRestoreAudit(audit.Record{
 		Actor:     actor,
 		Role:      role,
@@ -336,11 +373,11 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		Target:    name,
 		IP:        ip,
 		UserAgent: userAgent,
-		Success:   err == nil,
-		Error:     errorString(err),
+		Success:   status == "succeeded",
+		Error:     errorString(combinedErr),
 	})
 	finished := time.Now().UTC()
-	if err == nil {
+	if status == "succeeded" {
 		s.scheduleBackupRestoreOwnerSessionRevocation(id, ownerSessionToken)
 	}
 	persistJobErr := s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
@@ -348,16 +385,68 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		job.SafetyStatePath = result.SafetyStatePath
 		job.SafetyKeyPath = result.SafetyKeyPath
 		job.SafetyDatabasePath = result.SafetyDatabasePath
-		if err != nil {
-			job.Status = "failed"
-			job.Error = "restore operation failed"
-			return
+		job.Status = status
+		job.Outcome = outcome
+		job.Phase = phase
+		job.Restored = restored
+		job.HTTPStatus = responseStatus
+		if combinedErr != nil || status != "succeeded" {
+			job.Error = errorString(combinedErr)
+			if job.Error == "" {
+				job.Error = "restore operation did not complete cleanly"
+			}
+		} else {
+			job.Error = ""
 		}
-		job.Status = "succeeded"
 	})
 	if persistJobErr != nil {
 		_ = s.appendBackupRestoreAudit(audit.Record{Actor: actor, Role: role, Action: "backup.restore.job_persist", Target: id, Success: false, Error: "persist restore job state"})
 	}
+}
+
+func restoreLeaseFloorAndRelease(db *sql.DB, lease veilapply.Lease) error {
+	if db == nil || lease.Generation == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Unix()
+	_, err := db.Exec(`INSERT INTO apply_lease
+  (id, owner_process, current_operation, heartbeat_at, lease_expires_at, generation)
+  VALUES(1, '', '', ?, 0, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    owner_process='', current_operation='', heartbeat_at=excluded.heartbeat_at, lease_expires_at=0,
+    generation=MAX(apply_lease.generation, excluded.generation)`, now, lease.Generation)
+	return err
+}
+
+func classifyRestoreOutcome(result privileged.BackupResult, helperErr, revalidationErr, finalizationErr error) (status, outcome, phase string, restored bool, httpStatus int) {
+	if result.Outcome == "pending_key_publication" || result.Phase == "key_publication_pending" {
+		return "pending", "pending_key_publication", "key_publication_pending", false, http.StatusAccepted
+	}
+	if result.Restored {
+		if helperErr != nil {
+			phase = result.Phase
+			if phase == "" || phase == "committed" {
+				phase = "finalization_failed"
+			}
+			return "degraded", "restored", phase, true, http.StatusInternalServerError
+		}
+		if revalidationErr != nil {
+			return "degraded", "restored", "revalidation_failed", true, http.StatusInternalServerError
+		}
+		if finalizationErr != nil {
+			return "degraded", "restored", "finalization_failed", true, http.StatusInternalServerError
+		}
+		return "succeeded", "restored", "completed", true, http.StatusOK
+	}
+	phase = result.Phase
+	if phase == "" {
+		phase = "restore_failed"
+	}
+	outcome = result.Outcome
+	if outcome == "" {
+		outcome = "not_restored"
+	}
+	return "failed", outcome, phase, false, http.StatusInternalServerError
 }
 
 func (s *managementState) appendBackupRestoreAudit(record audit.Record) error {
@@ -392,7 +481,11 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 		writeError(w, "forbidden: restore owner or admin role required", http.StatusForbidden)
 		return
 	}
-	writeJSON(w, job)
+	responseStatus := job.HTTPStatus
+	if responseStatus == 0 {
+		responseStatus = http.StatusOK
+	}
+	writeJSONStatus(w, responseStatus, job)
 	if job.Status == "succeeded" && job.ownerSessionToken != "" {
 		s.revokeBackupRestoreOwnerSession(id, job.ownerSessionToken)
 	}

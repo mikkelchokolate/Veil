@@ -155,6 +155,8 @@ type BackupResult struct {
 	Verification       *BackupVerificationReport `json:"verification,omitempty"`
 	Verified           bool                      `json:"verified,omitempty"`
 	Restored           bool                      `json:"restored,omitempty"`
+	Phase              string                    `json:"phase,omitempty"`
+	Outcome            string                    `json:"outcome,omitempty"`
 	Pruned             []string                  `json:"pruned,omitempty"`
 	Kept               []string                  `json:"kept,omitempty"`
 	SafetyStatePath    string                    `json:"safetyStatePath,omitempty"`
@@ -175,14 +177,27 @@ type FirewallRule struct {
 	Args    []string `json:"args"`
 }
 
+type FirewallAction string
+
+const (
+	FirewallActionApply    FirewallAction = "apply"
+	FirewallActionPrepare  FirewallAction = "prepare"
+	FirewallActionCommit   FirewallAction = "commit"
+	FirewallActionRollback FirewallAction = "rollback"
+)
+
 type FirewallRequest struct {
-	RuleIDs []string       `json:"ruleIds,omitempty"`
-	Rules   []FirewallRule `json:"rules,omitempty"`
-	Fence   FenceToken     `json:"fence"`
+	RuleIDs       []string       `json:"ruleIds,omitempty"`
+	Rules         []FirewallRule `json:"rules,omitempty"`
+	Action        FirewallAction `json:"action,omitempty"`
+	TransactionID string         `json:"transactionId,omitempty"`
+	Fence         FenceToken     `json:"fence"`
 }
 
 type FirewallResult struct {
 	AppliedRuleIDs []string `json:"appliedRuleIds,omitempty"`
+	TransactionID  string   `json:"transactionId,omitempty"`
+	Prepared       bool     `json:"prepared,omitempty"`
 }
 
 type UpdateRequest struct {

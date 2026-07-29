@@ -60,6 +60,27 @@ func (a applyWorkflowStateAdapter) RollbackPromotedConfigsLocked(records []apply
 	return a.state.rollbackPromotedConfigs(records, liveFiles)
 }
 
+func (a applyWorkflowStateAdapter) PrepareFirewallLocked() (string, error) {
+	if state, ok := a.state.(interface{ PrepareFirewallLocked() (string, error) }); ok {
+		return state.PrepareFirewallLocked()
+	}
+	return "", nil
+}
+
+func (a applyWorkflowStateAdapter) CommitFirewallLocked(transactionID string) error {
+	if state, ok := a.state.(interface{ CommitFirewallLocked(string) error }); ok {
+		return state.CommitFirewallLocked(transactionID)
+	}
+	return nil
+}
+
+func (a applyWorkflowStateAdapter) RollbackFirewallLocked(transactionID string) error {
+	if state, ok := a.state.(interface{ RollbackFirewallLocked(string) error }); ok {
+		return state.RollbackFirewallLocked(transactionID)
+	}
+	return nil
+}
+
 func (a applyWorkflowStateAdapter) AppendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
 	return a.state.appendApplyHistoryLocked(stage, success, response)
 }

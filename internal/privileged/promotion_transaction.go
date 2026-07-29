@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
@@ -33,19 +35,29 @@ type preparedPromotionOperation struct {
 }
 
 func executePromotionTransaction(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact) (PromoteResult, error) {
-	if len(writes) == 0 && len(removes) == 0 {
-		if backupRoot != "" {
-			if err := recoverPromotionTransaction(backupRoot); err != nil {
-				return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
-			}
-		}
+	if len(writes) == 0 && len(removes) == 0 && backupRoot == "" {
 		return PromoteResult{}, nil
 	}
 	if backupRoot == "" {
 		return PromoteResult{}, errors.New("promotion backup root is required")
 	}
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		return PromoteResult{}, fmt.Errorf("create promotion backup root: %w", err)
+	}
+	lockFile, err := os.OpenFile(filepath.Join(backupRoot, ".promotion.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return PromoteResult{}, fmt.Errorf("open promotion lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX); err != nil {
+		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
+	}
+	defer unix.Flock(int(lockFile.Fd()), unix.LOCK_UN) //nolint:errcheck
 	if err := recoverPromotionTransaction(backupRoot); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	}
+	if len(writes) == 0 && len(removes) == 0 {
+		return PromoteResult{}, nil
 	}
 
 	if now == nil {

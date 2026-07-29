@@ -158,6 +158,13 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
 		}
 	}
+	baseRecovery := config.RecoverKeyRotationWorkflow
+	config.RecoverKeyRotationWorkflow = func(ctx context.Context) error {
+		if err := recoverFirewallTransaction(ctx, config); err != nil {
+			return fmt.Errorf("recover interrupted firewall transaction: %w", err)
+		}
+		return baseRecovery(ctx)
+	}
 	if config.CaddyAdminURL == "" {
 		config.CaddyAdminURL = "http://127.0.0.1:2019/load"
 	}
@@ -234,7 +241,10 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		},
 		RecoverKeyRotation: config.RecoverKeyRotationWorkflow,
 		Firewall: func(ctx context.Context, request ResolvedFirewall) (FirewallResult, error) {
-			resolved := ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: append([]FirewallRule(nil), request.Rules...)}
+			resolved := ResolvedFirewall{
+				RuleIDs: append([]string(nil), request.RuleIDs...), Rules: append([]FirewallRule(nil), request.Rules...),
+				Action: request.Action, TransactionID: request.TransactionID,
+			}
 			if len(resolved.RuleIDs) > 0 && len(resolved.Rules) == 0 {
 				for _, id := range resolved.RuleIDs {
 					command, ok := config.FirewallCommands[id]
@@ -253,7 +263,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 					resolved.RuleIDs = append(resolved.RuleIDs, id)
 				}
 			}
-			return runFirewallRules(ctx, config.RunCommand, resolved)
+			return runFirewallTransaction(ctx, config, resolved)
 		},
 		Update: config.UpdateWorkflow,
 		RestartPanel: func(ctx context.Context) error {
@@ -783,10 +793,16 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		if err != nil {
 			return BackupResult{}, err
 		}
+		phase, outcome := "completed", "restored"
+		if request.CheckOnly {
+			phase, outcome = "check_completed", "verified"
+		}
 		return BackupResult{
 			ArchiveName:        request.ArchiveName,
 			Verified:           true,
 			Restored:           !request.CheckOnly,
+			Phase:              phase,
+			Outcome:            outcome,
 			Verification:       privilegedBackupVerification(restored.Verification),
 			SafetyStatePath:    restored.SafetyStatePath,
 			SafetyKeyPath:      restored.SafetyKeyPath,

@@ -100,8 +100,10 @@ type ResolvedBackup struct {
 }
 
 type ResolvedFirewall struct {
-	RuleIDs []string
-	Rules   []FirewallRule
+	RuleIDs       []string
+	Rules         []FirewallRule
+	Action        FirewallAction
+	TransactionID string
 }
 
 type ResolvedUpdate struct {
@@ -359,13 +361,26 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 var ufwAllowRulePattern = regexp.MustCompile(`^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])/(tcp|udp)$`)
 
 func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, error) {
+	action := request.Action
+	if action == "" {
+		action = FirewallActionApply
+	}
+	if action == FirewallActionCommit || action == FirewallActionRollback {
+		if request.TransactionID == "" || strings.ContainsAny(request.TransactionID, "/\\") {
+			return ResolvedFirewall{}, newError(ErrorInvalidRequest, "valid firewall transactionId is required")
+		}
+		return ResolvedFirewall{Action: action, TransactionID: request.TransactionID}, nil
+	}
+	if action != FirewallActionApply && action != FirewallActionPrepare {
+		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "invalid firewall action")
+	}
 	if len(request.Rules) > 0 {
 		for _, rule := range request.Rules {
 			if err := validateUFWRule(rule); err != nil {
 				return ResolvedFirewall{}, newError(ErrorInvalidRequest, err.Error())
 			}
 		}
-		return ResolvedFirewall{Rules: request.Rules}, nil
+		return ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: request.Rules, Action: action}, nil
 	}
 	if len(request.RuleIDs) == 0 {
 		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "at least one firewall rule is required")
@@ -377,7 +392,7 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 		}
 		rules = append(rules, id)
 	}
-	return ResolvedFirewall{RuleIDs: rules}, nil
+	return ResolvedFirewall{RuleIDs: rules, Action: action}, nil
 }
 
 func isUFWCommentClause(args []string, idx int) bool {
