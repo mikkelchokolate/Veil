@@ -1,114 +1,153 @@
 openapi: 3.1.0
 info:
   title: Veil Panel API
-  version: "0.6.3"
-  description: |
-    HTTP management API exposed by the Veil Panel (`veil serve`).
+  version: 0.6.3
+  description: 'HTTP management API exposed by the Veil Panel (`veil serve`).
+
 
     ## Authentication model
+
     Veil is fail-closed for public Panel exposure. A non-loopback `--listen`
+
     address requires native TLS, API token authentication (`--auth-token` or
+
     `VEIL_API_TOKEN`), user/session authentication, and authenticated metrics.
+
     Caddy exposure requires user/session authentication and authenticated
+
     metrics even though the Veil listener remains on loopback.
 
+
     An unconfigured local loopback listener exposes only the first-run setup
+
     flow needed to create the initial administrator. Setup is unavailable
+
     through direct or Caddy exposure.
 
+
     `/api/*` routes accept either `X-Veil-Token`, `Authorization: Bearer`, or
+
     a `veil_session` cookie created by `/api/auth/login`. Mutating requests
+
     made with a cookie session must also send `X-CSRF-Token`, and only `admin`
+
     sessions may mutate management state. The sole viewer mutation exception
-    is `POST /api/auth/locale`, which updates only the authenticated user's own
+
+    is `POST /api/auth/locale`, which updates only the authenticated user''s own
+
     language preference and rejects static API-token callers.
 
+
     Browser sessions survive Panel restarts. Only hashes of the session cookie
+
     and CSRF token are persisted. Sessions expire after 30 minutes idle or 24
-    hours absolute and are revoked when a user's password, role, or existence
+
+    hours absolute and are revoked when a user''s password, role, or existence
+
     changes.
 
+
     `/healthz`, `/metrics`, and the Panel UI are not treated as proof of
+
     authorization. On public listeners `/healthz` is authenticated, `/metrics`
+
     follows the separate metrics policy (`--metrics-access` /
+
     `VEIL_METRICS_ACCESS`), and the Panel UI renders only the login surface
+
     until a valid session exists.
 
+
     Validation and ordinary HTTP failures use a `text/plain` response body.
+
     Failures returned by the privileged helper use the structured
+
     `PrivilegedErrorEnvelope` JSON schema so operators and generated clients
+
     can distinguish policy, availability, validation, and execution failures.
+
+    '
   license:
     name: GPL-3.0-or-later
     url: https://www.gnu.org/licenses/gpl-3.0.html
 servers:
-  - url: /
+- url: /
 security:
-  - veilToken: []
-  - bearerAuth: []
-  - sessionCookie: []
+- veilToken: []
+- bearerAuth: []
+- sessionCookie: []
 tags:
-  - name: status
-  - name: setup
-  - name: auth
-  - name: audit
-  - name: admin
-  - name: backups
-  - name: settings
-  - name: inbounds
-  - name: routing
-  - name: warp
-  - name: client-links
-  - name: validation
-  - name: apply
-  - name: runtime
-  - name: diagnostics
-  - name: services
-  - name: version
+- name: status
+- name: setup
+- name: auth
+- name: audit
+- name: admin
+- name: backups
+- name: settings
+- name: inbounds
+- name: routing
+- name: warp
+- name: client-links
+- name: validation
+- name: apply
+- name: runtime
+- name: diagnostics
+- name: services
+- name: version
 paths:
   /healthz:
     get:
       x-veil-role: public
-      tags: [status]
+      tags:
+      - status
       summary: Liveness/readiness probe
       description: Authenticated on public Panel listeners; public on loopback-only development listeners.
       responses:
-        "200":
+        '200':
           description: Panel is serving and state is accessible.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
+                $ref: '#/components/schemas/HealthResponse'
               examples:
                 ok:
                   value:
                     status: ok
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "503":
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
           description: State path is configured but inaccessible.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
+                $ref: '#/components/schemas/HealthResponse'
               examples:
                 unhealthy:
                   value:
                     status: unhealthy
-                    error: "stat /var/lib/veil/state.json: no such file or directory"
+                    error: 'stat /var/lib/veil/state.json: no such file or directory'
+      security: []
+      x-roles:
+      - public
   /metrics:
     get:
       x-veil-role: public
-      tags: [status]
+      tags:
+      - status
       summary: Prometheus metrics exposition
-      description: |
-        Exposure is controlled independently with `--metrics-access` /
+      description: 'Exposure is controlled independently with `--metrics-access` /
+
         `VEIL_METRICS_ACCESS`.
+
         `auto` authenticates metrics on public listeners and whenever auth is
+
         configured; `authenticated` always requires auth; `public` is accepted
+
         only for loopback listeners.
+
+        '
       responses:
-        "200":
+        '200':
           description: Prometheus text exposition format.
           content:
             text/plain:
@@ -116,38 +155,52 @@ paths:
                 type: string
               examples:
                 sample:
-                  value: |
-                    # HELP veil_uptime_seconds Veil process uptime in seconds.
+                  value: '# HELP veil_uptime_seconds Veil process uptime in seconds.
+
                     # TYPE veil_uptime_seconds gauge
+
                     veil_uptime_seconds 12
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+
+                    '
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/setup/status:
     get:
       x-veil-role: public
-      tags: [setup]
+      tags:
+      - setup
       summary: Inspect first-run setup state
       description: Available without authentication only on a local loopback listener.
       security: []
       responses:
-        "200":
+        '200':
           description: Current setup state.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SetupStatusResponse"
+                $ref: '#/components/schemas/SetupStatusResponse'
               examples:
                 required:
                   value:
                     required: true
                     allowed: true
                     panelAccess: local
+      x-roles:
+      - public
   /api/setup/complete:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: public
-      tags: [setup]
+      tags:
+      - setup
       summary: Create the initial administrator
       description: Single-use operation available only on an unconfigured local loopback listener.
       security: []
@@ -156,7 +209,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetupCompleteRequest"
+              $ref: '#/components/schemas/SetupCompleteRequest'
             examples:
               initial-admin:
                 value:
@@ -165,12 +218,12 @@ paths:
                   backupAcknowledged: true
                   locale: ru
       responses:
-        "201":
+        '201':
           description: Initial administrator created and setup marked complete.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SetupCompleteResponse"
+                $ref: '#/components/schemas/SetupCompleteResponse'
               examples:
                 complete:
                   value:
@@ -178,20 +231,25 @@ paths:
                     username: admin
                     role: admin
                     locale: ru
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "409":
-          description: Setup was already completed or a user already exists.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - public
   /api/auth/login:
     post:
       x-veil-role: public
-      tags: [auth]
+      tags:
+      - auth
       summary: Create a browser session
       security: []
       requestBody:
@@ -199,14 +257,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LoginRequest"
+              $ref: '#/components/schemas/LoginRequest'
             examples:
               admin:
                 value:
                   username: admin
-                  password: "correct horse battery staple"
+                  password: correct horse battery staple
       responses:
-        "200":
+        '200':
           description: Login succeeded and a `veil_session` cookie was set.
           headers:
             Set-Cookie:
@@ -216,7 +274,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginResponse"
+                $ref: '#/components/schemas/LoginResponse'
               examples:
                 admin:
                   value:
@@ -225,40 +283,62 @@ paths:
                     role: admin
                     locale: ru
                     csrfToken: 0123456789abcdef0123456789abcdef
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - public
   /api/auth/logout:
     post:
       x-veil-role: public
-      tags: [auth]
+      tags:
+      - auth
       summary: Delete the browser session cookie
       security: []
       responses:
-        "200":
+        '200':
           description: Logout response.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: '#/components/schemas/SuccessResponse'
               examples:
                 ok:
                   value:
                     success: true
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/auth/status:
     get:
       x-veil-role: public
-      tags: [auth]
+      tags:
+      - auth
       summary: Inspect the current browser session
       security: []
       responses:
-        "200":
+        '200':
           description: Current session status.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthStatusResponse"
+                $ref: '#/components/schemas/AuthStatusResponse'
               examples:
                 authenticated:
                   value:
@@ -270,34 +350,42 @@ paths:
                 anonymous:
                   value:
                     authenticated: false
+      x-roles:
+      - public
   /api/auth/locale:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: self-service
-      tags: [auth]
+      tags:
+      - auth
       summary: Update the current browser user's locale
-      description: |
-        Self-service exception available to both `admin` and `viewer` browser
+      description: 'Self-service exception available to both `admin` and `viewer` browser
+
         sessions. Requires the `veil_session` cookie and `X-CSRF-Token`,
-        updates only that session's username, and sets a one-year
+
+        updates only that session''s username, and sets a one-year
+
         `veil_locale` preference cookie. Static API tokens cannot call this
+
         endpoint.
+
+        '
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LocaleUpdateRequest"
+              $ref: '#/components/schemas/LocaleUpdateRequest'
             examples:
               russian:
                 value:
                   locale: ru
       responses:
-        "200":
+        '200':
           description: Locale persisted for the current user.
           headers:
             Set-Cookie:
@@ -307,243 +395,301 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocaleResponse"
+                $ref: '#/components/schemas/LocaleResponse'
               examples:
                 russian:
                   value:
                     locale: ru
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/auth/sessions:
     get:
       x-veil-role: admin-metadata
-      tags: [auth]
+      tags:
+      - auth
       summary: List active browser sessions
       description: Requires an admin token or admin session.
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
       responses:
-        "200":
+        '200':
           description: Active sessions with stable revocation IDs. The current session is sorted first.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/SessionInfo"
+                  $ref: '#/components/schemas/SessionInfo'
               examples:
                 sessions:
                   value:
-                    - id: 0123456789abcdef
-                      username: admin
-                      role: admin
-                      createdAt: "2026-06-05T12:00:00Z"
-                      lastSeenAt: "2026-06-05T12:10:00Z"
-                      idleExpiresAt: "2026-06-05T12:40:00Z"
-                      expiresAt: "2026-06-06T12:00:00Z"
-                      userAgent: Mozilla/5.0
-                      remoteAddr: 192.0.2.10
-                      current: true
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                  - id: 0123456789abcdef
+                    username: admin
+                    role: admin
+                    createdAt: '2026-06-05T12:00:00Z'
+                    lastSeenAt: '2026-06-05T12:10:00Z'
+                    idleExpiresAt: '2026-06-05T12:40:00Z'
+                    expiresAt: '2026-06-06T12:00:00Z'
+                    userAgent: Mozilla/5.0
+                    remoteAddr: 192.0.2.10
+                    current: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-roles:
+      - admin
+      - viewer
     delete:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [auth]
+      tags:
+      - auth
       summary: Revoke an active browser session
       description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SessionDeleteRequest"
+              $ref: '#/components/schemas/SessionDeleteRequest'
             examples:
               revoke:
                 value:
                   id: 0123456789abcdef
       responses:
-        "200":
+        '200':
           description: Session was revoked.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: '#/components/schemas/SuccessResponse'
               examples:
                 ok:
                   value:
                     success: true
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/audit:
     get:
       x-veil-role: admin-metadata
-      tags: [audit]
+      tags:
+      - audit
       summary: List structured Panel audit history
-      description: |
-        Returns newest-first, redacted authentication and mutation events.
+      description: 'Returns newest-first, redacted authentication and mutation events.
+
         Requires an admin token or admin session. The raw session cookie, CSRF
+
         token, passwords, and authorization values are never returned.
+
+        '
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 100
-        - name: before
-          in: query
-          required: false
-          description: Return records strictly older than this RFC3339 timestamp.
-          schema:
-            type: string
-            format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+      - name: before
+        in: query
+        required: false
+        description: Return records strictly older than this RFC3339 timestamp.
+        schema:
+          type: string
+          format: date-time
       responses:
-        "200":
+        '200':
           description: Bounded audit history and an optional backward-pagination cursor.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuditListResponse"
+                $ref: '#/components/schemas/AuditListResponse'
               examples:
                 recent:
                   value:
                     items:
-                      - timestamp: "2026-06-05T12:10:00Z"
-                        actor: admin
-                        role: admin
-                        action: auth.session.revoke
-                        target: 0123456789abcdef
-                        ip: 192.0.2.10
-                        success: true
-                    nextBefore: "2026-06-05T12:10:00Z"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                    - timestamp: '2026-06-05T12:10:00Z'
+                      actor: admin
+                      role: admin
+                      action: auth.session.revoke
+                      target: 0123456789abcdef
+                      ip: 192.0.2.10
+                      success: true
+                    nextBefore: '2026-06-05T12:10:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-roles:
+      - admin
+      - viewer
   /api/admin/rotate-key:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [admin]
+      tags:
+      - admin
       summary: Rotate the state-encryption key
-      description: |
-        Re-encrypts management state with a newly generated root-managed key.
+      description: 'Re-encrypts management state with a newly generated root-managed key.
+
         Requires admin role and CSRF for cookie sessions. All browser sessions
+
         except the initiating session are revoked after a successful rotation.
+
+        '
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmptyObject"
+              $ref: '#/components/schemas/EmptyObject'
             examples:
               rotate:
                 value: {}
       responses:
-        "200":
+        '200':
           description: State was re-encrypted and other sessions were revoked.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KeyRotationResponse"
+                $ref: '#/components/schemas/KeyRotationResponse'
               examples:
                 rotated:
                   value:
                     success: true
                     revokedSessions: 3
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "500":
-          $ref: "#/components/responses/PrivilegedFailure"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/PrivilegedFailure'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/backups:
     get:
       x-veil-role: admin-metadata
-      tags: [backups]
+      tags:
+      - backups
       summary: List managed disaster-recovery archives
       description: Requires an admin token or admin session.
       responses:
-        "200":
+        '200':
           description: Archives in newest-first order.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/BackupArchive"
+                  $ref: '#/components/schemas/BackupArchive'
               examples:
                 managed:
                   value:
-                    - name: veil_backup_20260605_020000.tar.gz.enc
-                      path: /var/lib/veil/backups/veil_backup_20260605_020000.tar.gz.enc
-                      size: 4096
-                      createdAt: "2026-06-05T02:00:00Z"
-                      encrypted: true
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                  - name: veil_backup_20260605_020000.tar.gz.enc
+                    path: /var/lib/veil/backups/veil_backup_20260605_020000.tar.gz.enc
+                    size: 4096
+                    createdAt: '2026-06-05T02:00:00Z'
+                    encrypted: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [backups]
+      tags:
+      - backups
       summary: Create and verify an encrypted archive
-      description: |
-        Uses `/etc/veil/backup.passphrase` server-side. The passphrase is never
+      description: 'Uses `/etc/veil/backup.passphrase` server-side. The passphrase is never
+
         accepted from or returned to the browser. Requires admin and CSRF for a
+
         cookie session.
+
+        '
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BackupCreateRequest"
+              $ref: '#/components/schemas/BackupCreateRequest'
             examples:
               create-and-prune:
                 value:
@@ -552,39 +698,48 @@ paths:
                   weekly: 4
                   monthly: 12
       responses:
-        "201":
+        '201':
           description: Archive created, persisted, and verified.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BackupCreateResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+                $ref: '#/components/schemas/BackupCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+      x-roles:
+      - admin
   /api/backups/prune:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [backups]
+      tags:
+      - backups
       summary: Apply managed archive retention
       description: Requires admin and CSRF for a cookie session.
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BackupPruneRequest"
+              $ref: '#/components/schemas/BackupPruneRequest'
             examples:
               standard:
                 value:
@@ -592,28 +747,39 @@ paths:
                   weekly: 4
                   monthly: 12
       responses:
-        "200":
+        '200':
           description: Retention result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BackupPruneResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                $ref: '#/components/schemas/BackupPruneResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/backups/{name}/download:
     parameters:
-      - $ref: "#/components/parameters/BackupName"
+    - $ref: '#/components/parameters/BackupName'
     get:
       x-veil-role: admin-secret
-      tags: [backups]
+      tags:
+      - backups
       summary: Download an encrypted archive
       description: Requires an admin token or admin session.
       responses:
-        "200":
+        '200':
           description: Encrypted backup bytes.
           headers:
             Content-Disposition:
@@ -625,255 +791,321 @@ paths:
               schema:
                 type: string
                 format: binary
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/backups/{name}/verify:
     parameters:
-      - $ref: "#/components/parameters/BackupName"
+    - $ref: '#/components/parameters/BackupName'
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [backups]
+      tags:
+      - backups
       summary: Decrypt and verify an archive without writing state
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmptyObject"
+              $ref: '#/components/schemas/EmptyObject'
       responses:
-        "200":
+        '200':
           description: Verification and compatibility report.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BackupVerificationReport"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          description: Archive decryption, checksum, state/key, or schema validation failed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+                $ref: '#/components/schemas/BackupVerificationReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+      x-roles:
+      - admin
   /api/backups/{name}/restore:
     parameters:
-      - $ref: "#/components/parameters/BackupName"
+    - $ref: '#/components/parameters/BackupName'
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [backups]
+      tags:
+      - backups
       summary: Queue a verified state and key restore
-      description: |
-        Requires explicit confirmation, admin, and CSRF for a cookie session.
+      description: 'Requires explicit confirmation, admin, and CSRF for a cookie session.
+
         Successful restore preserves `.pre-restore-*` safety copies and revokes
+
         browser sessions after the initiating session reads the final job.
+
+        '
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BackupRestoreRequest"
+              $ref: '#/components/schemas/BackupRestoreRequest'
             examples:
               confirmed:
                 value:
                   confirm: true
       responses:
-        "202":
+        '202':
           description: Restore job accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BackupRestoreJob"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          description: Archive verification failed before the job was queued.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+                $ref: '#/components/schemas/BackupRestoreJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+      x-roles:
+      - admin
   /api/backup-restore-jobs/{id}:
     parameters:
-      - $ref: "#/components/parameters/RestoreJobID"
+    - $ref: '#/components/parameters/RestoreJobID'
     get:
       x-veil-role: self-service
-      tags: [backups]
+      tags:
+      - backups
       summary: Read queued restore progress
       description: Requires an admin session or the restore owner's one-time revalidated recovery session.
       responses:
-        "200":
+        '200':
           description: Current restore job state.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BackupRestoreJob"
+                $ref: '#/components/schemas/BackupRestoreJob'
               examples:
                 complete:
                   value:
                     id: 0123456789abcdef0123456789abcdef
                     archive: veil_backup_20260605_020000.tar.gz.enc
                     status: succeeded
-                    createdAt: "2026-06-05T02:10:00Z"
-                    startedAt: "2026-06-05T02:10:00Z"
-                    finishedAt: "2026-06-05T02:10:01Z"
+                    createdAt: '2026-06-05T02:10:00Z'
+                    startedAt: '2026-06-05T02:10:00Z'
+                    finishedAt: '2026-06-05T02:10:01Z'
                     safetyStatePath: /var/lib/veil/state.json.pre-restore-20260605T021000.000000000Z
                     safetyKeyPath: /etc/veil/state.key.pre-restore-20260605T021000.000000000Z
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/users:
     get:
       x-veil-role: admin-metadata
-      tags: [auth]
+      tags:
+      - auth
       summary: List registered Panel users
       responses:
-        "200":
+        '200':
           description: Registered users, roles, and locale preferences.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/UserResponse"
+                  $ref: '#/components/schemas/UserResponse'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [auth]
+      tags:
+      - auth
       summary: Create a Panel user
       description: Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserCreateRequest"
+              $ref: '#/components/schemas/UserCreateRequest'
             examples:
               viewer:
                 value:
                   username: operator
-                  password: "change-this-password"
+                  password: change-this-password
                   role: viewer
                   locale: en
       responses:
-        "201":
+        '201':
           description: User created.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/users/{username}:
     parameters:
-      - $ref: "#/components/parameters/Username"
+    - $ref: '#/components/parameters/Username'
     put:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [auth]
+      tags:
+      - auth
       summary: Update a Panel user
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserUpdateRequest"
+              $ref: '#/components/schemas/UserUpdateRequest'
       responses:
-        "200":
+        '200':
           description: User updated.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
     delete:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [auth]
+      tags:
+      - auth
       summary: Delete a Panel user
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       responses:
-        "204":
+        '204':
           description: User deleted.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/status:
     get:
       x-veil-role: viewer
-      tags: [status]
+      tags:
+      - status
       summary: Service status snapshot for managed systemd units
       responses:
-        "200":
+        '200':
           description: Status snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StatusResponse"
+                $ref: '#/components/schemas/StatusResponse'
               examples:
                 sample:
                   value:
@@ -882,53 +1114,69 @@ paths:
                     version: v1.2.3
                     mode: server
                     services:
-                      - name: veil
-                        managed: true
-                        unit: veil.service
-                        loadState: loaded
-                        activeState: active
-                        subState: running
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                    - name: veil
+                      managed: true
+                      unit: veil.service
+                      loadState: loaded
+                      activeState: active
+                      subState: running
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/version:
     get:
       x-veil-role: viewer
-      tags: [version]
+      tags:
+      - version
       summary: Current Veil version
       responses:
-        "200":
+        '200':
           description: Version info.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VersionResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/VersionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/version/update:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [version]
+      tags:
+      - version
       summary: Trigger a staged self-update to the latest release
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmptyObject"
+              $ref: '#/components/schemas/EmptyObject'
       responses:
-        "200":
+        '200':
           description: Release archive was staged, re-verified by the helper, installed, and a Panel restart was scheduled.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UpdateResponse"
+                $ref: '#/components/schemas/UpdateResponse'
               examples:
                 installed:
                   value:
@@ -937,30 +1185,39 @@ paths:
                     installed: true
                     version: v0.6.0
                     message: Update staged successfully. Restarting panel service...
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/PrivilegedFailure"
-        "502":
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/PrivilegedFailure'
+        '502':
           description: GitHub release metadata or assets could not be downloaded or verified.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+      x-roles:
+      - admin
   /api/settings:
     get:
       x-veil-role: viewer
-      tags: [settings]
+      tags:
+      - settings
       summary: Read Panel settings with secrets redacted
       responses:
-        "200":
+        '200':
           description: Current settings.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Settings"
+                $ref: '#/components/schemas/Settings'
               examples:
                 server:
                   value:
@@ -969,92 +1226,123 @@ paths:
                     mode: server
                     domain: vpn.example.com
                     email: admin@example.com
-                    naivePassword: "[REDACTED]"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                    naivePassword: '[REDACTED]'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     put:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [settings]
+      tags:
+      - settings
       summary: Update Panel settings
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Settings"
+              $ref: '#/components/schemas/Settings'
       responses:
-        "200":
+        '200':
           description: Updated settings.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Settings"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                $ref: '#/components/schemas/Settings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/protocols:
     get:
       x-veil-role: viewer
-      tags: [protocols]
+      tags:
+      - protocols
       summary: List supported protocols and their UI/runtime metadata
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
       responses:
-        "200":
+        '200':
           description: Protocol metadata list.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ProtocolInfo"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                  $ref: '#/components/schemas/ProtocolInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-roles:
+      - admin
+      - viewer
   /api/inbounds:
     get:
       x-veil-role: viewer
-      tags: [inbounds]
+      tags:
+      - inbounds
       summary: List inbounds
       responses:
-        "200":
+        '200':
           description: Inbound list.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Inbound"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                  $ref: '#/components/schemas/Inbound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [inbounds]
+      tags:
+      - inbounds
       summary: Create an inbound
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Inbound"
+              $ref: '#/components/schemas/Inbound'
             examples:
               hysteria2:
                 value:
@@ -1064,111 +1352,160 @@ paths:
                   port: 443
                   enabled: true
       responses:
-        "201":
+        '201':
           description: Created inbound.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Inbound"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                $ref: '#/components/schemas/Inbound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/inbounds/{name}:
     parameters:
-      - $ref: "#/components/parameters/Name"
+    - $ref: '#/components/parameters/Name'
     get:
       x-veil-role: viewer
-      tags: [inbounds]
+      tags:
+      - inbounds
       summary: Read one inbound
       responses:
-        "200":
+        '200':
           description: Inbound.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Inbound"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/Inbound'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     put:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [inbounds]
+      tags:
+      - inbounds
       summary: Update an inbound
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Inbound"
+              $ref: '#/components/schemas/Inbound'
       responses:
-        "200":
+        '200':
           description: Updated inbound.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Inbound"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/Inbound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
     delete:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [inbounds]
+      tags:
+      - inbounds
       summary: Delete an inbound
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       responses:
-        "200":
+        '200':
           description: Deletion applied; response carries the apply outcome (revision+job).
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/routing/rules:
     get:
       x-veil-role: viewer
-      tags: [routing]
+      tags:
+      - routing
       summary: List routing rules
       responses:
-        "200":
+        '200':
           description: Rule list.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/RoutingRule"
+                  $ref: '#/components/schemas/RoutingRule'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [routing]
+      tags:
+      - routing
       summary: Create a routing rule
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RoutingRule"
+              $ref: '#/components/schemas/RoutingRule'
             examples:
               private:
                 value:
@@ -1177,173 +1514,262 @@ paths:
                   outbound: direct
                   enabled: true
       responses:
-        "201":
+        '201':
           description: Created rule.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RoutingRule"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/RoutingRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/routing/rules/{name}:
     parameters:
-      - $ref: "#/components/parameters/Name"
+    - $ref: '#/components/parameters/Name'
     get:
       x-veil-role: viewer
-      tags: [routing]
+      tags:
+      - routing
       summary: Read a routing rule
       responses:
-        "200":
+        '200':
           description: Rule.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RoutingRule"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/RoutingRule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     put:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [routing]
+      tags:
+      - routing
       summary: Update a routing rule
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RoutingRule"
+              $ref: '#/components/schemas/RoutingRule'
       responses:
-        "200":
+        '200':
           description: Updated rule.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RoutingRule"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/RoutingRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
     delete:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [routing]
+      tags:
+      - routing
       summary: Delete a routing rule
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       responses:
-        "200":
+        '200':
           description: Deletion applied; response carries the apply outcome (revision+job).
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/routing/presets:
     get:
       x-veil-role: viewer
-      tags: [routing]
+      tags:
+      - routing
       summary: List routing presets and source material
       responses:
-        "200":
+        '200':
           description: Preset response.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RoutingPresetResponse"
+                $ref: '#/components/schemas/RoutingPresetResponse'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/routing/presets/{name}:
     parameters:
-      - $ref: "#/components/parameters/Name"
+    - $ref: '#/components/parameters/Name'
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [routing]
+      tags:
+      - routing
       summary: Apply a routing preset
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       responses:
-        "200":
+        '200':
           description: Applied preset result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RoutingPresetResponse"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/RoutingPresetResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/warp:
     get:
       x-veil-role: viewer
-      tags: [warp]
+      tags:
+      - warp
       summary: Read WARP state with secrets redacted
       responses:
-        "200":
+        '200':
           description: WARP state.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WarpConfig"
+                $ref: '#/components/schemas/WarpConfig'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
     put:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [warp]
+      tags:
+      - warp
       summary: Update WARP state
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WarpConfig"
+              $ref: '#/components/schemas/WarpConfig'
       responses:
-        "200":
+        '200':
           description: Updated WARP state.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WarpConfig"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/WarpConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/client-links:
     get:
       x-veil-role: admin-secret
-      tags: [client-links]
+      tags:
+      - client-links
       summary: Client links derived from enabled inbounds and profiles
       responses:
-        "200":
+        '200':
           description: Client links.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientLinksResponse"
+                $ref: '#/components/schemas/ClientLinksResponse'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/client-links/subscription:
     get:
       x-veil-role: admin-secret
-      tags: [client-links]
+      tags:
+      - client-links
       summary: Subscription-format client links
       parameters:
-        - name: format
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [base64, raw]
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - base64
+          - raw
       responses:
-        "200":
+        '200':
           description: Subscription payload.
           content:
             text/plain:
@@ -1353,171 +1779,227 @@ paths:
               schema:
                 type: string
                 contentEncoding: base64
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/client-links/qr:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-secret
-      tags: [client-links]
+      tags:
+      - client-links
       summary: Render a client URI as a local QR PNG
       description: Generates the QR image inside Veil so client URIs are not sent to a third-party QR service.
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClientLinkQRRequest"
+              $ref: '#/components/schemas/ClientLinkQRRequest'
             examples:
               hysteria2:
                 value:
                   uri: hysteria2://example-secret@example.com:443/?sni=example.com#veil
       responses:
-        "200":
+        '200':
           description: QR image for the submitted client URI.
           content:
             image/png:
               schema:
                 type: string
                 contentEncoding: base64
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "413":
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
           description: Submitted URI is too large for QR export.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/firewall:
     get:
       x-veil-role: viewer
-      tags: [status]
+      tags:
+      - status
       summary: Firewall rule plan and status
       responses:
-        "200":
+        '200':
           description: Firewall material.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/FirewallRule"
+                  $ref: '#/components/schemas/FirewallRule'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/apply/state:
     get:
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: Desired/applied revisions and derived system state
       security:
-        - sessionCookie: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
       responses:
-        "200":
+        '200':
           description: Revision and system state.
+      x-roles:
+      - admin
+      - viewer
   /api/apply/jobs:
     get:
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: List apply jobs (newest first)
       security:
-        - sessionCookie: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
       responses:
-        "200":
+        '200':
           description: List of apply jobs.
           content:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required:
+                - items
                 properties:
                   items:
                     type: array
                     items:
-                      $ref: "#/components/schemas/ApplyJob"
+                      $ref: '#/components/schemas/ApplyJob'
+      x-roles:
+      - admin
+      - viewer
   /api/apply/jobs/{id}:
     get:
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: Get one apply job
       security:
-        - sessionCookie: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Apply job.
-        "404":
+        '404':
           description: Not found.
+      x-roles:
+      - admin
+      - viewer
   /api/apply/jobs/{id}/retry:
     post:
       x-veil-role: admin-mutation
-      tags: [apply]
+      tags:
+      - apply
       summary: Create a NEW apply job for the same desired revision
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: '{"applyJob": ..., "revision": ...}'
-        "404":
+        '404':
           description: Not found.
-        "409":
-          description: Another apply is active.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/apply/reconcile:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [apply]
+      tags:
+      - apply
       summary: Apply current desired revision if ahead of applied (idempotent)
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       responses:
-        "200":
+        '200':
           description: '{"reconciled": ..., "applyJob": ..., "revision": ..., "state": ...}'
-        "409":
-          description: Another apply is active.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/apply/rollback:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [apply]
+      tags:
+      - apply
       summary: Create a new desired revision from an older immutable snapshot
-      description: >-
-        Intentional rollback. Never decrements desired or applied revisions;
-        creates a new immutable desired revision and audit record.
+      description: Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       requestBody:
         required: true
         content:
@@ -1525,7 +2007,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [selectedRevision, confirm]
+              required:
+              - selectedRevision
+              - confirm
               properties:
                 selectedRevision:
                   type: integer
@@ -1534,32 +2018,41 @@ paths:
                   type: boolean
                   const: true
       responses:
-        "200":
+        '200':
           description: New desired revision and its apply outcome.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
           description: Selected immutable revision not found.
-        "409":
-          description: Selection is not older or another apply owns the lease.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/apply:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [apply]
+      tags:
+      - apply
       summary: Stage and optionally promote current management state
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ApplyRequest"
+              $ref: '#/components/schemas/ApplyRequest'
             examples:
               stage-and-live:
                 value:
@@ -1567,37 +2060,52 @@ paths:
                   applyLive: true
                   applyServices: true
       responses:
-        "200":
+        '200':
           description: Apply workflow result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApplyResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/ApplyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/validation:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-metadata
-      tags: [validation]
+      tags:
+      - validation
       summary: Validate a candidate configuration against live host state
-      description: |
-        Performs the same candidate and live-host checks used authoritatively
+      description: 'Performs the same candidate and live-host checks used authoritatively
+
         before settings, Inbound, WARP, and apply mutations. The result may
+
         become stale if host state changes after this request; Veil validates
+
         again immediately before mutation.
+
+        '
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ValidationRequest"
+              $ref: '#/components/schemas/ValidationRequest'
             examples:
               candidate:
                 value:
@@ -1606,115 +2114,143 @@ paths:
                     panelAccess: local
                     mode: server
                   inbounds:
-                    - name: edge
-                      protocol: mieru
-                      transport: tcp
-                      port: 443
-                      enabled: true
-                      password: "[REDACTED]"
+                  - name: edge
+                    protocol: mieru
+                    transport: tcp
+                    port: 443
+                    enabled: true
+                    password: '[REDACTED]'
                   warp:
                     enabled: false
                     endpoint: engage.cloudflareclient.com:2408
       responses:
-        "200":
+        '200':
           description: Validation completed. Inspect `valid` and `issues`.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ValidationResponse"
+                $ref: '#/components/schemas/ValidationResponse'
               examples:
                 busy-port:
                   value:
                     valid: false
-                    checkedAt: "2026-06-05T12:00:00Z"
+                    checkedAt: '2026-06-05T12:00:00Z'
                     issues:
-                      - code: port_in_use
-                        severity: error
-                        field: port
-                        inboundId: edge
-                        message: TCP port 443 is already in use
-                        remediation: Stop the conflicting service or choose another port.
-                        source: live-host
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                    - code: port_in_use
+                      severity: error
+                      field: port
+                      inboundId: edge
+                      message: TCP port 443 is already in use
+                      remediation: Stop the conflicting service or choose another port.
+                      source: live-host
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/apply/plan:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: Preview the apply plan without writing live files
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       responses:
-        "200":
+        '200':
           description: Apply plan.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApplyPlanResponse"
+                $ref: '#/components/schemas/ApplyPlanResponse'
               examples:
                 restart-preview:
                   value:
                     valid: true
                     errors: []
                     configs:
-                      - /etc/veil/generated/mieru/server_config.json
+                    - /etc/veil/generated/mieru/server_config.json
                     actions:
-                      - validate management state
-                      - stage generated configs
-                      - restart veil-mieru.service
+                    - validate management state
+                    - stage generated configs
+                    - restart veil-mieru.service
                     runtimes:
-                      - veil-mieru.service
+                    - veil-mieru.service
                     issues: []
                     operations:
-                      - type: promote_file
-                        source: /etc/veil/generated/mieru/server_config.json
-                        destination: /etc/veil/live/mieru/server_config.json
-                        interruptionRisk: reload
-                        rollbackAvailable: true
-                        validationSource: render-and-live-host
-                      - type: restart_service
-                        unit: veil-mieru.service
-                        interruptionRisk: connection-drop
-                        rollbackAvailable: true
-                        validationSource: managed-unit-catalog
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
+                    - type: promote_file
+                      source: /etc/veil/generated/mieru/server_config.json
+                      destination: /etc/veil/live/mieru/server_config.json
+                      interruptionRisk: reload
+                      rollbackAvailable: true
+                      validationSource: render-and-live-host
+                    - type: restart_service
+                      unit: veil-mieru.service
+                      interruptionRisk: connection-drop
+                      rollbackAvailable: true
+                      validationSource: managed-unit-catalog
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/apply/history:
     get:
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: Apply workflow history
       responses:
-        "200":
+        '200':
           description: Apply history entries.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ApplyHistoryEntry"
+                  $ref: '#/components/schemas/ApplyHistoryEntry'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/profiles/ru-recommended/preview:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: viewer
-      tags: [apply]
+      tags:
+      - apply
       summary: Preview the ru-recommended install profile
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RURecommendedPreviewRequest"
+              $ref: '#/components/schemas/RURecommendedPreviewRequest'
             examples:
               caddy:
                 value:
@@ -1722,12 +2258,12 @@ paths:
                   email: admin@example.com
                   panelAccess: caddy
       responses:
-        "200":
+        '200':
           description: Profile preview.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RURecommendedPreviewResponse"
+                $ref: '#/components/schemas/RURecommendedPreviewResponse'
               examples:
                 caddy:
                   value:
@@ -1735,308 +2271,456 @@ paths:
                     email: admin@example.com
                     panelAccess: caddy
                     panelUrl: https://vpn.example.com/4f10dbe4/
-                    caddyfile: |
-                      vpn.example.com {
-                        reverse_proxy 127.0.0.1:2096
-                      }
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                    caddyfile: "vpn.example.com {\n  reverse_proxy 127.0.0.1:2096\n}\n"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
   /api/services/{name}/restart:
     parameters:
-      - $ref: "#/components/parameters/Name"
+    - $ref: '#/components/parameters/Name'
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [services]
+      tags:
+      - services
       summary: Restart a managed systemd unit
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ServiceActionRequest"
+              $ref: '#/components/schemas/ServiceActionRequest'
             examples:
               restart:
                 value:
                   confirm: true
       responses:
-        "200":
+        '200':
           description: Service action result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ServiceActionResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
+                $ref: '#/components/schemas/ServiceActionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
           description: Service action failed.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ServiceActionResponse"
+                $ref: '#/components/schemas/ServiceActionResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/system:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: System resource observation
       responses:
-        "200":
+        '200':
           description: System runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SystemStats"
+                $ref: '#/components/schemas/SystemStats'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/tls:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Panel TLS observation
       responses:
-        "200":
+        '200':
           description: TLS runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TLSCertInfo"
+                $ref: '#/components/schemas/TLSCertInfo'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/network:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Network counters observation
       responses:
-        "200":
+        '200':
           description: Network runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NetworkStats"
+                $ref: '#/components/schemas/NetworkStats'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/connections:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Listening ports / connections observation
       responses:
-        "200":
+        '200':
           description: Connections runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ConnectionsStats"
+                $ref: '#/components/schemas/ConnectionsStats'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/processes:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Managed processes observation
       responses:
-        "200":
+        '200':
           description: Processes runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessesStats"
+                $ref: '#/components/schemas/ProcessesStats'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/disk:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Disk usage observation
       responses:
-        "200":
+        '200':
           description: Disk runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DiskStats"
+                $ref: '#/components/schemas/DiskStats'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/runtime/observation:
     get:
       x-veil-role: viewer
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Combined runtime observation
       responses:
-        "200":
+        '200':
           description: Aggregated runtime snapshot.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RuntimeObservation"
+                $ref: '#/components/schemas/RuntimeObservation'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/logs:
     get:
       x-veil-role: admin-secret
-      tags: [runtime]
+      tags:
+      - runtime
       summary: Bounded journald reads for managed units
       parameters:
-        - name: unit
-          in: query
-          required: false
-          schema:
-            type: string
-            default: veil
-        - name: lines
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 50
+      - name: unit
+        in: query
+        required: false
+        schema:
+          type: string
+          default: veil
+      - name: lines
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
       responses:
-        "200":
+        '200':
           description: Log lines.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LogResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/LogResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/tools/dns-lookup:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: viewer
-      tags: [diagnostics]
+      tags:
+      - diagnostics
       summary: DNS lookup diagnostic
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DNSLookupRequest"
+              $ref: '#/components/schemas/DNSLookupRequest'
       responses:
-        "200":
+        '200':
           description: DNS lookup result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DNSLookupResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/DNSLookupResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/tools/ping:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: viewer
-      tags: [diagnostics]
+      tags:
+      - diagnostics
       summary: Ping diagnostic
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PingRequest"
+              $ref: '#/components/schemas/PingRequest'
       responses:
-        "200":
+        '200':
           description: Ping result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PingResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/PingResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/tools/speedtest:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: viewer
-      tags: [diagnostics]
+      tags:
+      - diagnostics
       summary: Speedtest diagnostic
       security:
-        - veilToken: []
-        - bearerAuth: []
-        - sessionCookie: []
-          csrfToken: []
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmptyObject"
+              $ref: '#/components/schemas/EmptyObject'
       responses:
-        "200":
+        '200':
           description: Speedtest result.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SpeedtestResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+                $ref: '#/components/schemas/SpeedtestResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+      x-roles:
+      - admin
   /api/v1/clients:
     get:
       x-veil-role: viewer
-      tags: [clients]
+      tags:
+      - clients
       summary: List clients with effective status
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       responses:
-        "200":
+        '200':
           description: Clients and their computed effective status.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientListResponse"
+                $ref: '#/components/schemas/ClientListResponse'
+      x-roles:
+      - admin
+      - viewer
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Create a client
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClientCreateRequest"
+              $ref: '#/components/schemas/ClientCreateRequest'
       responses:
-        "201":
+        '201':
           description: Created client with issued credentials and apply outcome.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientCreateResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: '#/components/schemas/ClientCreateResponse'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/Idempotency-Replayed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/bulk:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Bulk action across clients; per-client results
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [action, clientIds]
+              required:
+              - action
+              - clientIds
               properties:
                 action:
                   type: string
-                  enum: [enable, disable, delete, extend_expiry, set_quota, reset_traffic, attach_inbound, detach_inbound]
+                  enum:
+                  - enable
+                  - disable
+                  - delete
+                  - extend_expiry
+                  - set_quota
+                  - reset_traffic
+                  - attach_inbound
+                  - detach_inbound
                 clientIds:
                   type: array
                   items:
@@ -2047,40 +2731,53 @@ paths:
                   type: integer
                   format: int64
                   minimum: 0
-                  # Values above Number.MAX_SAFE_INTEGER cannot be represented
-                  # exactly by JSON consumers (the SPA); rejected end-to-end.
                   maximum: 9007199254740991
                 inboundId:
                   type: string
       responses:
-        "200":
+        '200':
           description: '{"action,total,succeeded,skipped,failed,results[],revision,applyJob,success}'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/bindings:
     get:
       x-veil-role: viewer
-      tags: [clients]
+      tags:
+      - clients
       summary: List client bindings
       security:
-        - sessionCookie: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/ClientId'
       responses:
-        "200":
+        '200':
           description: Bindings.
+      x-roles:
+      - admin
+      - viewer
     post:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Add a binding (optional credential)
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
       requestBody:
         required: true
         content:
@@ -2095,79 +2792,113 @@ paths:
                 enabled:
                   type: boolean
       responses:
-        "201":
+        '201':
           description: Created binding.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/bindings/{bindingId}:
     patch:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Update a binding (toggle enabled, optimistic locking)
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: bindingId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [enabled]
+              required:
+              - enabled
               properties:
                 enabled:
                   type: boolean
                 version:
                   type: integer
       responses:
-        "200":
+        '200':
           description: Updated binding with mutation envelope.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
     delete:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Remove a binding
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: bindingId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: '{"id": ...}'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/credentials/{bindingId}:
     post:
       x-veil-role: admin-secret
-      tags: [clients]
+      tags:
+      - clients
       summary: Set a binding credential
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: bindingId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -2180,26 +2911,37 @@ paths:
                 value:
                   type: string
       responses:
-        "201":
+        '201':
           description: Set credential.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/credentials/{bindingId}/rotate:
     post:
       x-veil-role: admin-secret
-      tags: [clients]
+      tags:
+      - clients
       summary: Rotate a binding credential
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: bindingId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -2213,103 +2955,158 @@ paths:
                   type: string
                   description: Optional; when empty the server generates a high-entropy secret returned once.
       responses:
-        "200":
+        '200':
           description: Rotated credential; server-generated rotate returns {credential,plaintext}.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/migrate-legacy:
     post:
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Convert legacy inbound-embedded profiles to normalized clients (idempotent)
       security:
-        - sessionCookie: []
-          csrfToken: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+        csrfToken: []
+      - bearerAuth: []
+      - veilToken: []
       responses:
-        "200":
+        '200':
           description: '{"migrated,inbounds[],revision,applyJob,success}'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}:
     get:
       x-veil-role: viewer
-      tags: [clients]
+      tags:
+      - clients
       summary: Get a client with bindings and effective status
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       parameters:
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/ClientId'
       responses:
-        "200":
+        '200':
           description: Client view.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientView"
-        "404":
+                $ref: '#/components/schemas/ClientView'
+        '404':
           description: Client not found.
+      x-roles:
+      - admin
+      - viewer
     patch:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Patch explicitly supplied client fields without clearing omitted durable fields
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClientPatchRequest"
+              $ref: '#/components/schemas/ClientPatchRequest'
       responses:
-        "200":
+        '200':
           description: Updated client.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientView"
-        "409":
-          description: Version conflict.
+                $ref: '#/components/schemas/ClientView'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/Idempotency-Replayed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
     delete:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Delete a client
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
       responses:
-        "200":
+        '200':
           description: 'Deleted (returns {"id": ...}).'
-        "404":
+        '404':
           description: Client not found.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/tokens:
     get:
       x-veil-role: admin-metadata
-      tags: [clients]
+      tags:
+      - clients
       summary: List a client's subscription tokens (redacted)
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       parameters:
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/ClientId'
       responses:
-        "200":
+        '200':
           description: Token metadata list (no plaintext).
+      x-roles:
+      - admin
+      - viewer
     post:
       x-veil-role: admin-secret
-      tags: [clients]
+      tags:
+      - clients
       summary: Issue a subscription token; plaintext returned once
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
       requestBody:
         required: true
         content:
@@ -2323,47 +3120,69 @@ paths:
                   type: integer
                   format: int64
       responses:
-        "201":
+        '201':
           description: New token. Plaintext is returned only in this response.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubscriptionTokenResponse"
+                $ref: '#/components/schemas/SubscriptionTokenResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/tokens/{tokenId}:
     delete:
       x-veil-role: admin-mutation
-      tags: [clients]
+      tags:
+      - clients
       summary: Revoke a subscription token
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: tokenId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Token revoked.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/tokens/{tokenId}/rotate:
     post:
       x-veil-role: admin-secret
-      tags: [clients]
+      tags:
+      - clients
       summary: Rotate a subscription token; new plaintext returned once
       security:
-        - sessionCookie: []
-          csrfToken: []
+      - sessionCookie: []
+        csrfToken: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/ClientId"
-        - name: tokenId
-          in: path
-          required: true
-          schema:
-            type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/ClientId'
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: false
         content:
@@ -2372,162 +3191,210 @@ paths:
               type: object
               properties:
                 expiresAt:
-                  type: [integer, "null"]
+                  type:
+                  - integer
+                  - 'null'
                   format: int64
                   description: Replacement expiry. A future value is required when rotating an expired token.
       responses:
-        "200":
+        '200':
           description: Rotated token. Plaintext is returned only in this response.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubscriptionTokenResponse"
+                $ref: '#/components/schemas/SubscriptionTokenResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/traffic/summary:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Aggregate traffic totals + honest telemetry provider state
       security:
-        - sessionCookie: []
-        - bearerAuth: []
-        - veilToken: []
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
       responses:
-        "200":
+        '200':
           description: '{"state,providerCount,uploadBytes,downloadBytes,usedBytes}'
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/top:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Top talkers ranked by cumulative usage
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       responses:
-        "200":
+        '200':
           description: Clients ranked by total bytes.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TrafficTopResponse"
+                $ref: '#/components/schemas/TrafficTopResponse'
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/{id}:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Per-client cumulative traffic totals
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       parameters:
-        - $ref: "#/components/parameters/ClientId"
+      - $ref: '#/components/parameters/ClientId'
       responses:
-        "200":
+        '200':
           description: Upload/download totals with quota and depleted flag.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TrafficTotals"
-        "404":
+                $ref: '#/components/schemas/TrafficTotals'
+        '404':
           description: Client not found.
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/{id}/history:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Per-client bucketed traffic samples over a window
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       parameters:
-        - $ref: "#/components/parameters/ClientId"
-        - name: from
-          in: query
-          schema:
-            type: integer
-            format: int64
-          description: Unix start of the window (default 24h ago).
-        - name: to
-          in: query
-          schema:
-            type: integer
-            format: int64
-          description: Unix end of the window (default now).
-        - name: bucket
-          in: query
-          schema:
-            type: integer
-          description: Bucket width in seconds. NOTE handler currently reads limit, not bucket.
-        - name: limit
-          in: query
-          schema:
-            type: integer
-          description: Max buckets returned (default 500).
+      - $ref: '#/components/parameters/ClientId'
+      - name: from
+        in: query
+        schema:
+          type: integer
+          format: int64
+        description: Unix start of the window (default 24h ago).
+      - name: to
+        in: query
+        schema:
+          type: integer
+          format: int64
+        description: Unix end of the window (default now).
+      - name: bucket
+        in: query
+        schema:
+          type: integer
+        description: Bucket width in seconds. NOTE handler currently reads limit, not bucket.
+      - name: limit
+        in: query
+        schema:
+          type: integer
+        description: Max buckets returned (default 500).
       responses:
-        "200":
+        '200':
           description: Time-ordered traffic buckets.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TrafficHistoryResponse"
+                $ref: '#/components/schemas/TrafficHistoryResponse'
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/stream:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Server-sent stream of live traffic snapshots
       description: Emits a JSON snapshot per client every ~5s as SSE data frames.
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       responses:
-        "200":
+        '200':
           description: text/event-stream of per-client snapshots.
           content:
             text/event-stream:
               schema:
                 type: string
+      x-roles:
+      - admin
+      - viewer
   /api/v1/events:
     get:
       x-veil-role: viewer
-      tags: [traffic]
+      tags:
+      - traffic
       summary: Unified Server-Sent Events stream (A10)
-      description: |
-        Streams all panel events as SSE. Event types:
-          - traffic: periodic traffic snapshot (every 5s)
-          - apply: apply job state changes
-        Filter by event type via ?types=traffic,apply (comma-separated).
+      description: "Streams all panel events as SSE. Event types:\n  - traffic: periodic traffic snapshot (every 5s)\n  - apply: apply job state\
+        \ changes\nFilter by event type via ?types=traffic,apply (comma-separated).\n"
       security:
-        - sessionCookie: []
+      - sessionCookie: []
       parameters:
-        - name: types
-          in: query
-          schema:
-            type: string
-            description: Comma-separated event types to stream (traffic, apply). Default all.
+      - name: types
+        in: query
+        schema:
+          type: string
+          description: Comma-separated event types to stream (traffic, apply). Default all.
       responses:
-        "200":
+        '200':
           description: text/event-stream of panel events.
           content:
             text/event-stream:
               schema:
                 type: string
+          headers:
+            Last-Event-ID:
+              $ref: '#/components/headers/Last-Event-ID'
+        '429':
+          description: Success.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+      x-roles:
+      - admin
+      - viewer
   /s/{token}:
     get:
       x-veil-role: public
-      tags: [subscription]
+      tags:
+      - subscription
       summary: Public subscription endpoint (token is the capability)
-      description: |
-        Unauthenticated; the token itself grants read access to the client's
+      description: 'Unauthenticated; the token itself grants read access to the client''s
+
         subscription. Unknown, disabled, revoked, or expired tokens all return
+
         an identical 404 to avoid oracle attacks. Supports ?format=base64 (default)
+
         or raw; HTML user agents receive a landing page.
+
+        '
       security: []
       parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: format
-          in: query
-          schema:
-            type: string
-            enum: [base64, raw]
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: format
+        in: query
+        schema:
+          type: string
+          enum:
+          - base64
+          - raw
       responses:
-        "200":
+        '200':
           description: Subscription body (base64 or raw newline-separated links); HTML landing for browsers.
           content:
             text/plain:
@@ -2536,29 +3403,57 @@ paths:
             text/html:
               schema:
                 type: string
-        "404":
+        '404':
           description: Token unknown, disabled, revoked, or expired.
+      x-roles:
+      - public
     head:
       x-veil-role: public
-      tags: [subscription]
+      tags:
+      - subscription
       summary: HEAD variant of the public subscription endpoint (headers only)
       security: []
       parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: format
-          in: query
-          schema:
-            type: string
-            enum: [base64, raw]
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: format
+        in: query
+        schema:
+          type: string
+          enum:
+          - base64
+          - raw
       responses:
-        "200":
+        '200':
           description: Headers only.
-        "404":
+        '404':
           description: Token unknown, disabled, revoked, or expired.
+      x-roles:
+      - public
+  /api/runtime/provenance:
+    get:
+      summary: Get verified installed runtime provenance
+      operationId: getRuntimeProvenance
+      x-roles:
+      - admin
+      - viewer
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      responses:
+        '200':
+          description: Bounded runtime installation manifest.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 components:
   securitySchemes:
     veilToken:
@@ -2586,7 +3481,7 @@ components:
         type: string
         minLength: 1
         maxLength: 128
-        pattern: '^[!-~]+$'
+        pattern: ^[!-~]+$
     Name:
       name: name
       in: path
@@ -2607,14 +3502,14 @@ components:
       required: true
       schema:
         type: string
-        pattern: '^veil_backup_[0-9]{8}_[0-9]{6}\.tar\.gz\.enc$'
+        pattern: ^veil_backup_[0-9]{8}_[0-9]{6}\.tar\.gz\.enc$
     RestoreJobID:
       name: id
       in: path
       required: true
       schema:
         type: string
-        pattern: '^[0-9a-f]{32}$'
+        pattern: ^[0-9a-f]{32}$
     ClientId:
       name: id
       in: path
@@ -2628,11 +3523,14 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             invalid:
               value:
-                error: {code: invalid_request, message: invalid JSON, requestId: example-request-id}
+                error:
+                  code: invalid_request
+                  message: invalid JSON
+                  requestId: example-request-id
     Unauthorized:
       description: Missing or invalid token/session.
       headers:
@@ -2643,43 +3541,57 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             missing:
               value:
-                error: {code: unauthorized, message: missing or invalid API token or session, requestId: example-request-id}
+                error:
+                  code: unauthorized
+                  message: missing or invalid API token or session
+                  requestId: example-request-id
     Forbidden:
       description: Authenticated principal is not allowed to perform the operation.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             csrf:
               value:
-                error: {code: forbidden, message: invalid or missing CSRF token, requestId: example-request-id}
+                error:
+                  code: forbidden
+                  message: invalid or missing CSRF token
+                  requestId: example-request-id
     NotFound:
       description: Resource not found.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             not-found:
               value:
-                error: {code: not_found, message: not found, requestId: example-request-id}
+                error:
+                  code: not_found
+                  message: not found
+                  requestId: example-request-id
     ServiceUnavailable:
-      description: Runtime dependency is unavailable.
+      description: A required helper, runtime, or dependency is unavailable.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: service_unavailable
+              message: A required helper, runtime, or dependency is unavailable.
+              requestId: req_example
     ValidationFailed:
       description: Candidate configuration failed authoritative validation and was not mutated.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ValidationFailure"
+            $ref: '#/components/schemas/ValidationFailure'
           examples:
             busy-port:
               value:
@@ -2688,19 +3600,19 @@ components:
                   message: configuration failed live validation
                   requestId: example-request-id
                 issues:
-                  - code: port_in_use
-                    severity: error
-                    field: port
-                    inboundId: edge
-                    message: TCP port 443 is already in use
-                    remediation: Stop the conflicting service or choose another port.
-                    source: live-host
+                - code: port_in_use
+                  severity: error
+                  field: port
+                  inboundId: edge
+                  message: TCP port 443 is already in use
+                  remediation: Stop the conflicting service or choose another port.
+                  source: live-host
     PrivilegedFailure:
       description: The allowlisted root helper rejected or could not complete the operation.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/PrivilegedErrorEnvelope"
+            $ref: '#/components/schemas/PrivilegedErrorEnvelope'
           examples:
             unavailable:
               value:
@@ -2708,20 +3620,46 @@ components:
                   code: operation_failed
                   message: privileged helper is unavailable
                   requestId: example-request-id
+    Conflict:
+      description: The resource version or idempotency payload conflicts with current state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: conflict
+              message: The resource version or idempotency payload conflicts with current state.
+              requestId: req_example
+    Locked:
+      description: A restore or other exclusive operation currently locks mutations.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: locked
+              message: A restore or other exclusive operation currently locks mutations.
+              requestId: req_example
   schemas:
     EmptyObject:
       type: object
       additionalProperties: false
     ErrorEnvelope:
       type: object
-      required: [error]
+      required:
+      - error
       additionalProperties: false
       properties:
         error:
-          $ref: "#/components/schemas/ErrorObject"
+          $ref: '#/components/schemas/ErrorObject'
     ErrorObject:
       type: object
-      required: [code, message, requestId]
+      required:
+      - code
+      - message
+      - requestId
       additionalProperties: false
       properties:
         code:
@@ -2733,29 +3671,36 @@ components:
           description: Server-generated request identifier.
     PrivilegedErrorEnvelope:
       type: object
-      required: [error]
+      required:
+      - error
       additionalProperties: false
       properties:
         error:
-          $ref: "#/components/schemas/ErrorObject"
+          $ref: '#/components/schemas/ErrorObject'
     HealthResponse:
       type: object
-      required: [status]
+      required:
+      - status
       properties:
         status:
           type: string
-          enum: [ok, unhealthy]
+          enum:
+          - ok
+          - unhealthy
         error:
           type: string
     SuccessResponse:
       type: object
-      required: [success]
+      required:
+      - success
       properties:
         success:
           type: boolean
     KeyRotationResponse:
       type: object
-      required: [success, revokedSessions]
+      required:
+      - success
+      - revokedSessions
       additionalProperties: false
       properties:
         success:
@@ -2766,7 +3711,10 @@ components:
           minimum: 0
     SetupStatusResponse:
       type: object
-      required: [required, allowed, panelAccess]
+      required:
+      - required
+      - allowed
+      - panelAccess
       properties:
         required:
           type: boolean
@@ -2774,17 +3722,24 @@ components:
           type: boolean
         panelAccess:
           type: string
-          enum: [local, direct, caddy, ""]
+          enum:
+          - local
+          - direct
+          - caddy
+          - ''
     SetupCompleteRequest:
       type: object
-      required: [username, password, backupAcknowledged]
+      required:
+      - username
+      - password
+      - backupAcknowledged
       additionalProperties: false
       properties:
         username:
           type: string
           minLength: 3
           maxLength: 64
-          pattern: '^[\p{L}\p{N}._-]+$'
+          pattern: ^[\p{L}\p{N}._-]+$
         password:
           type: string
           format: password
@@ -2793,10 +3748,14 @@ components:
           type: boolean
           const: true
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     SetupCompleteResponse:
       type: object
-      required: [completed, username, role, locale]
+      required:
+      - completed
+      - username
+      - role
+      - locale
       properties:
         completed:
           type: boolean
@@ -2804,12 +3763,14 @@ components:
         username:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     LoginRequest:
       type: object
-      required: [username, password]
+      required:
+      - username
+      - password
       additionalProperties: false
       properties:
         username:
@@ -2819,53 +3780,71 @@ components:
           format: password
     LoginResponse:
       type: object
-      required: [success, username, role, locale, csrfToken]
+      required:
+      - success
+      - username
+      - role
+      - locale
+      - csrfToken
       properties:
         success:
           type: boolean
         username:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
         csrfToken:
           type: string
     AuthStatusResponse:
       type: object
-      required: [authenticated]
+      required:
+      - authenticated
       properties:
         authenticated:
           type: boolean
         username:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
         csrfToken:
           type: string
     Locale:
       type: string
-      enum: [en, ru]
+      enum:
+      - en
+      - ru
       description: Persisted Panel display language.
     LocaleUpdateRequest:
       type: object
-      required: [locale]
+      required:
+      - locale
       additionalProperties: false
       properties:
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     LocaleResponse:
       type: object
-      required: [locale]
+      required:
+      - locale
       additionalProperties: false
       properties:
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     SessionInfo:
       type: object
-      required: [id, username, role, createdAt, lastSeenAt, idleExpiresAt, expiresAt, current]
+      required:
+      - id
+      - username
+      - role
+      - createdAt
+      - lastSeenAt
+      - idleExpiresAt
+      - expiresAt
+      - current
       properties:
         id:
           type: string
@@ -2875,7 +3854,7 @@ components:
         username:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         createdAt:
           type: string
           format: date-time
@@ -2897,7 +3876,8 @@ components:
           description: True when this entry matches the caller's `veil_session` cookie.
     SessionDeleteRequest:
       type: object
-      required: [id]
+      required:
+      - id
       additionalProperties: false
       properties:
         id:
@@ -2906,10 +3886,16 @@ components:
           maxLength: 16
     UserRole:
       type: string
-      enum: [admin, viewer]
+      enum:
+      - admin
+      - viewer
     AuditRecord:
       type: object
-      required: [timestamp, actor, action, success]
+      required:
+      - timestamp
+      - actor
+      - action
+      - success
       properties:
         timestamp:
           type: string
@@ -2937,18 +3923,24 @@ components:
           additionalProperties: true
     AuditListResponse:
       type: object
-      required: [items]
+      required:
+      - items
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/AuditRecord"
+            $ref: '#/components/schemas/AuditRecord'
         nextBefore:
           type: string
           format: date-time
     BackupArchive:
       type: object
-      required: [name, path, size, createdAt, encrypted]
+      required:
+      - name
+      - path
+      - size
+      - createdAt
+      - encrypted
       properties:
         name:
           type: string
@@ -3007,28 +3999,34 @@ components:
           default: 12
     BackupArchiveFile:
       type: object
-      required: [name, size, sha256]
+      required:
+      - name
+      - size
+      - sha256
       properties:
         name:
           type: string
-          enum: [state.json, state.key, veil.db]
+          enum:
+          - state.json
+          - state.key
+          - veil.db
         size:
           type: integer
           format: int64
           minimum: 0
         sha256:
           type: string
-          pattern: '^[0-9a-f]{64}$'
+          pattern: ^[0-9a-f]{64}$
     BackupVerificationReport:
       type: object
       required:
-        - formatVersion
-        - encryptionVersion
-        - encrypted
-        - legacy
-        - stateSchemaVersion
-        - desiredRevision
-        - files
+      - formatVersion
+      - encryptionVersion
+      - encrypted
+      - legacy
+      - stateSchemaVersion
+      - desiredRevision
+      - files
       properties:
         formatVersion:
           type: integer
@@ -3036,7 +4034,11 @@ components:
           description: Zero for legacy archives without a manifest.
         encryptionVersion:
           type: integer
-          enum: [0, 1, 2, 3]
+          enum:
+          - 0
+          - 1
+          - 2
+          - 3
           description: Zero for unencrypted archives.
         encrypted:
           type: boolean
@@ -3060,10 +4062,13 @@ components:
           minItems: 2
           maxItems: 3
           items:
-            $ref: "#/components/schemas/BackupArchiveFile"
+            $ref: '#/components/schemas/BackupArchiveFile'
     BackupPruneResult:
       type: object
-      required: [kept, deleted, dryRun]
+      required:
+      - kept
+      - deleted
+      - dryRun
       properties:
         kept:
           type: array
@@ -3077,17 +4082,20 @@ components:
           type: boolean
     BackupCreateResponse:
       type: object
-      required: [archive, verification]
+      required:
+      - archive
+      - verification
       properties:
         archive:
-          $ref: "#/components/schemas/BackupArchive"
+          $ref: '#/components/schemas/BackupArchive'
         verification:
-          $ref: "#/components/schemas/BackupVerificationReport"
+          $ref: '#/components/schemas/BackupVerificationReport'
         prune:
-          $ref: "#/components/schemas/BackupPruneResult"
+          $ref: '#/components/schemas/BackupPruneResult'
     BackupRestoreRequest:
       type: object
-      required: [confirm]
+      required:
+      - confirm
       additionalProperties: false
       properties:
         confirm:
@@ -3095,16 +4103,24 @@ components:
           const: true
     BackupRestoreJob:
       type: object
-      required: [id, archive, status, createdAt]
+      required:
+      - id
+      - archive
+      - status
+      - createdAt
       properties:
         id:
           type: string
-          pattern: '^[0-9a-f]{32}$'
+          pattern: ^[0-9a-f]{32}$
         archive:
           type: string
         status:
           type: string
-          enum: [queued, running, succeeded, failed]
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed
         createdAt:
           type: string
           format: date-time
@@ -3124,17 +4140,23 @@ components:
           type: string
     UserResponse:
       type: object
-      required: [username, role, locale]
+      required:
+      - username
+      - role
+      - locale
       properties:
         username:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     UserCreateRequest:
       type: object
-      required: [username, password, role]
+      required:
+      - username
+      - password
+      - role
       additionalProperties: false
       properties:
         username:
@@ -3143,37 +4165,47 @@ components:
           type: string
           format: password
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     UserUpdateRequest:
       type: object
-      required: [role]
+      required:
+      - role
       additionalProperties: false
       properties:
         password:
           type: string
           format: password
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         locale:
-          $ref: "#/components/schemas/Locale"
+          $ref: '#/components/schemas/Locale'
     Settings:
       type: object
-      required: [panelListen, mode]
+      required:
+      - panelListen
+      - mode
       properties:
         panelListen:
           type: string
-          examples: [127.0.0.1:2096]
+          examples:
+          - 127.0.0.1:2096
         panelAccess:
           type: string
-          enum: [local, direct, caddy, ""]
+          enum:
+          - local
+          - direct
+          - caddy
+          - ''
         webBasePath:
           type: string
-          examples: [/a1b2c3d4e5f6/]
+          examples:
+          - /a1b2c3d4e5f6/
         mode:
           type: string
-          examples: [server]
+          examples:
+          - server
         domain:
           type: string
         email:
@@ -3205,7 +4237,9 @@ components:
           description: When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
     ClientProfile:
       type: object
-      required: [name, enabled]
+      required:
+      - name
+      - enabled
       properties:
         name:
           type: string
@@ -3217,16 +4251,27 @@ components:
           type: boolean
     Inbound:
       type: object
-      required: [name, protocol, transport, port, enabled]
+      required:
+      - name
+      - protocol
+      - transport
+      - port
+      - enabled
       properties:
         name:
           type: string
         protocol:
           type: string
-          enum: [naiveproxy, hysteria2, olcrtc, mieru]
+          enum:
+          - naiveproxy
+          - hysteria2
+          - olcrtc
+          - mieru
         transport:
           type: string
-          enum: [tcp, udp]
+          enum:
+          - tcp
+          - udp
         port:
           type: integer
           minimum: 1
@@ -3238,7 +4283,7 @@ components:
         profiles:
           type: array
           items:
-            $ref: "#/components/schemas/ClientProfile"
+            $ref: '#/components/schemas/ClientProfile'
         naiveUsername:
           type: string
         naivePassword:
@@ -3261,7 +4306,10 @@ components:
           additionalProperties: true
     ProtocolInfo:
       type: object
-      required: [protocol, displayName, transports]
+      required:
+      - protocol
+      - displayName
+      - transports
       properties:
         protocol:
           type: string
@@ -3280,14 +4328,17 @@ components:
         inboundFieldSchema:
           type: array
           items:
-            $ref: "#/components/schemas/FieldSchema"
+            $ref: '#/components/schemas/FieldSchema'
         settingsFieldSchema:
           type: array
           items:
-            $ref: "#/components/schemas/FieldSchema"
+            $ref: '#/components/schemas/FieldSchema'
     FieldSchema:
       type: object
-      required: [key, label, type]
+      required:
+      - key
+      - label
+      - type
       properties:
         key:
           type: string
@@ -3307,10 +4358,12 @@ components:
         options:
           type: array
           items:
-            $ref: "#/components/schemas/FieldOption"
+            $ref: '#/components/schemas/FieldOption'
     FieldOption:
       type: object
-      required: [value, label]
+      required:
+      - value
+      - label
       properties:
         value:
           type: string
@@ -3322,7 +4375,11 @@ components:
           additionalProperties: true
     RoutingRule:
       type: object
-      required: [name, match, outbound, enabled]
+      required:
+      - name
+      - match
+      - outbound
+      - enabled
       properties:
         name:
           type: string
@@ -3330,12 +4387,17 @@ components:
           type: string
         outbound:
           type: string
-          examples: [direct, warp, block]
+          examples:
+          - direct
+          - warp
+          - block
         enabled:
           type: boolean
     RoutingSourceFile:
       type: object
-      required: [name, url]
+      required:
+      - name
+      - url
       properties:
         name:
           type: string
@@ -3353,40 +4415,48 @@ components:
         files:
           type: array
           items:
-            $ref: "#/components/schemas/RoutingSourceFile"
+            $ref: '#/components/schemas/RoutingSourceFile'
     RoutingPreset:
       type: object
-      required: [name, description, source, rules]
+      required:
+      - name
+      - description
+      - source
+      - rules
       properties:
         name:
           type: string
         description:
           type: string
         source:
-          $ref: "#/components/schemas/RoutingSource"
+          $ref: '#/components/schemas/RoutingSource'
         rules:
           type: array
           items:
-            $ref: "#/components/schemas/RoutingRule"
+            $ref: '#/components/schemas/RoutingRule'
     RoutingPresetResponse:
       type: object
-      required: [source, rules]
+      required:
+      - source
+      - rules
       properties:
         activePreset:
           type: string
         source:
-          $ref: "#/components/schemas/RoutingSource"
+          $ref: '#/components/schemas/RoutingSource'
         rules:
           type: array
           items:
-            $ref: "#/components/schemas/RoutingRule"
+            $ref: '#/components/schemas/RoutingRule'
         presets:
           type: array
           items:
-            $ref: "#/components/schemas/RoutingPreset"
+            $ref: '#/components/schemas/RoutingPreset'
     WarpConfig:
       type: object
-      required: [enabled, endpoint]
+      required:
+      - enabled
+      - endpoint
       properties:
         enabled:
           type: boolean
@@ -3394,7 +4464,8 @@ components:
           type: string
         endpoint:
           type: string
-          examples: [engage.cloudflareclient.com:2408]
+          examples:
+          - engage.cloudflareclient.com:2408
         privateKey:
           type: string
         localAddress:
@@ -3413,7 +4484,12 @@ components:
           type: integer
     ClientLink:
       type: object
-      required: [name, protocol, transport, port, uri]
+      required:
+      - name
+      - protocol
+      - transport
+      - port
+      - uri
       properties:
         name:
           type: string
@@ -3429,7 +4505,12 @@ components:
           type: string
     ClientArtifact:
       type: object
-      required: [name, protocol, kind, filename, content]
+      required:
+      - name
+      - protocol
+      - kind
+      - filename
+      - content
       properties:
         name:
           type: string
@@ -3444,18 +4525,18 @@ components:
     ClientLinksResponse:
       type: object
       required:
-        - schemaVersion
-        - domain
-        - subscriptionUrl
-        - base64SubscriptionUrl
-        - rawSubscriptionUrl
-        - defaultSubscriptionFormat
-        - base64SubscriptionFilename
-        - rawSubscriptionFilename
-        - subscriptionContentType
-        - subscriptionFormats
-        - count
-        - links
+      - schemaVersion
+      - domain
+      - subscriptionUrl
+      - base64SubscriptionUrl
+      - rawSubscriptionUrl
+      - defaultSubscriptionFormat
+      - base64SubscriptionFilename
+      - rawSubscriptionFilename
+      - subscriptionContentType
+      - subscriptionFormats
+      - count
+      - links
       properties:
         schemaVersion:
           type: string
@@ -3484,14 +4565,15 @@ components:
         links:
           type: array
           items:
-            $ref: "#/components/schemas/ClientLink"
+            $ref: '#/components/schemas/ClientLink'
         artifacts:
           type: array
           items:
-            $ref: "#/components/schemas/ClientArtifact"
+            $ref: '#/components/schemas/ClientArtifact'
     ClientLinkQRRequest:
       type: object
-      required: [uri]
+      required:
+      - uri
       additionalProperties: false
       properties:
         uri:
@@ -3501,55 +4583,80 @@ components:
           description: Client connection URI or config export string to encode as a QR image.
     FirewallRule:
       type: object
-      required: [port, protocol, service]
+      required:
+      - port
+      - protocol
+      - service
       properties:
         port:
           type: integer
         protocol:
           type: string
-          enum: [tcp, udp]
+          enum:
+          - tcp
+          - udp
         service:
           type: string
     ValidationRequest:
       type: object
-      required: [settings, inbounds, warp]
+      required:
+      - settings
+      - inbounds
+      - warp
       additionalProperties: false
       properties:
         settings:
-          $ref: "#/components/schemas/Settings"
+          $ref: '#/components/schemas/Settings'
         inbounds:
           type: array
           items:
-            $ref: "#/components/schemas/Inbound"
+            $ref: '#/components/schemas/Inbound'
         warp:
-          $ref: "#/components/schemas/WarpConfig"
+          $ref: '#/components/schemas/WarpConfig'
     ValidationIssue:
       type: object
-      required: [code, severity, message, source]
+      required:
+      - code
+      - severity
+      - message
+      - source
       additionalProperties: false
       properties:
         code:
           type: string
-          examples: [port_in_use]
+          examples:
+          - port_in_use
         severity:
           type: string
-          enum: [error, warning, info]
+          enum:
+          - error
+          - warning
+          - info
         field:
           type: string
-          examples: [port]
+          examples:
+          - port
         inboundId:
           type: string
-          examples: [edge]
+          examples:
+          - edge
         message:
           type: string
         remediation:
           type: string
         source:
           type: string
-          enum: [candidate, live-host, render, managed-unit-catalog]
+          enum:
+          - candidate
+          - live-host
+          - render
+          - managed-unit-catalog
     ValidationResponse:
       type: object
-      required: [valid, issues, checkedAt]
+      required:
+      - valid
+      - issues
+      - checkedAt
       additionalProperties: false
       properties:
         valid:
@@ -3557,29 +4664,41 @@ components:
         issues:
           type: array
           items:
-            $ref: "#/components/schemas/ValidationIssue"
+            $ref: '#/components/schemas/ValidationIssue'
         checkedAt:
           type: string
           format: date-time
     ValidationFailure:
       type: object
-      required: [error, issues]
+      required:
+      - error
+      - issues
       additionalProperties: false
       properties:
         error:
-          $ref: "#/components/schemas/ErrorObject"
+          $ref: '#/components/schemas/ErrorObject'
         issues:
           type: array
           items:
-            $ref: "#/components/schemas/ValidationIssue"
+            $ref: '#/components/schemas/ValidationIssue'
     ApplyOperation:
       type: object
-      required: [type, interruptionRisk, rollbackAvailable, validationSource]
+      required:
+      - type
+      - interruptionRisk
+      - rollbackAvailable
+      - validationSource
       additionalProperties: false
       properties:
         type:
           type: string
-          enum: [promote_file, remove_file, reload_service, restart_service, disable_service, update_firewall]
+          enum:
+          - promote_file
+          - remove_file
+          - reload_service
+          - restart_service
+          - disable_service
+          - update_firewall
         source:
           type: string
         destination:
@@ -3588,14 +4707,23 @@ components:
           type: string
         interruptionRisk:
           type: string
-          enum: [none, reload, connection-drop, lockout-risk]
+          enum:
+          - none
+          - reload
+          - connection-drop
+          - lockout-risk
         rollbackAvailable:
           type: boolean
         validationSource:
           type: string
     ApplyPlanResponse:
       type: object
-      required: [valid, configs, actions, issues, operations]
+      required:
+      - valid
+      - configs
+      - actions
+      - issues
+      - operations
       properties:
         valid:
           type: boolean
@@ -3618,14 +4746,17 @@ components:
         issues:
           type: array
           items:
-            $ref: "#/components/schemas/ValidationIssue"
+            $ref: '#/components/schemas/ValidationIssue'
         operations:
           type: array
           items:
-            $ref: "#/components/schemas/ApplyOperation"
+            $ref: '#/components/schemas/ApplyOperation'
     ApplyRequest:
       type: object
-      required: [confirm, applyLive, applyServices]
+      required:
+      - confirm
+      - applyLive
+      - applyServices
       additionalProperties: false
       properties:
         confirm:
@@ -3636,7 +4767,11 @@ components:
           type: boolean
     ConfigValidationResult:
       type: object
-      required: [name, config, command, valid]
+      required:
+      - name
+      - config
+      - command
+      - valid
       properties:
         name:
           type: string
@@ -3656,7 +4791,10 @@ components:
           type: string
     ServiceActionResult:
       type: object
-      required: [name, command, success]
+      required:
+      - name
+      - command
+      - success
       properties:
         name:
           type: string
@@ -3672,7 +4810,10 @@ components:
           type: string
     ServiceHealthResult:
       type: object
-      required: [name, command, healthy]
+      required:
+      - name
+      - command
+      - healthy
       properties:
         name:
           type: string
@@ -3688,7 +4829,12 @@ components:
           type: string
     ApplyResponse:
       type: object
-      required: [applied, liveApplied, servicesApplied, plan, writtenFiles]
+      required:
+      - applied
+      - liveApplied
+      - servicesApplied
+      - plan
+      - writtenFiles
       properties:
         applied:
           type: boolean
@@ -3699,7 +4845,7 @@ components:
         rolledBack:
           type: boolean
         plan:
-          $ref: "#/components/schemas/ApplyPlanResponse"
+          $ref: '#/components/schemas/ApplyPlanResponse'
         writtenFiles:
           type: array
           items:
@@ -3719,36 +4865,46 @@ components:
         validations:
           type: array
           items:
-            $ref: "#/components/schemas/ConfigValidationResult"
+            $ref: '#/components/schemas/ConfigValidationResult'
         serviceActions:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceActionResult"
+            $ref: '#/components/schemas/ServiceActionResult'
         healthChecks:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceHealthResult"
+            $ref: '#/components/schemas/ServiceHealthResult'
         rollbackActions:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceActionResult"
+            $ref: '#/components/schemas/ServiceActionResult'
     ApplyHistoryEntry:
       allOf:
-        - $ref: "#/components/schemas/ApplyResponse"
-        - type: object
-          required: [id, timestamp, stage, success]
-          properties:
-            id:
-              type: string
-            timestamp:
-              type: string
-            stage:
-              type: string
-            success:
-              type: boolean
+      - $ref: '#/components/schemas/ApplyResponse'
+      - type: object
+        required:
+        - id
+        - timestamp
+        - stage
+        - success
+        properties:
+          id:
+            type: string
+          timestamp:
+            type: string
+          stage:
+            type: string
+          success:
+            type: boolean
     ApplyJob:
       type: object
-      required: [id, desiredRevision, baseRevision, status, trigger, createdAt]
+      required:
+      - id
+      - desiredRevision
+      - baseRevision
+      - status
+      - trigger
+      - createdAt
       properties:
         id:
           type: string
@@ -3758,7 +4914,12 @@ components:
           type: integer
         status:
           type: string
-          enum: [pending, running, success, failed, rolled_back]
+          enum:
+          - pending
+          - running
+          - success
+          - failed
+          - rolled_back
         trigger:
           type: string
         actorId:
@@ -3775,14 +4936,18 @@ components:
           type: string
     ServiceActionRequest:
       type: object
-      required: [confirm]
+      required:
+      - confirm
       additionalProperties: false
       properties:
         confirm:
           type: boolean
     ServiceActionResponse:
       type: object
-      required: [service, action, success]
+      required:
+      - service
+      - action
+      - success
       properties:
         service:
           type: string
@@ -3796,7 +4961,12 @@ components:
           type: string
     StatusResponse:
       type: object
-      required: [schemaVersion, name, version, mode, services]
+      required:
+      - schemaVersion
+      - name
+      - version
+      - mode
+      - services
       properties:
         schemaVersion:
           type: string
@@ -3809,10 +4979,12 @@ components:
         services:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceStatus"
+            $ref: '#/components/schemas/ServiceStatus'
     ServiceStatus:
       type: object
-      required: [name, managed]
+      required:
+      - name
+      - managed
       properties:
         name:
           type: string
@@ -3832,7 +5004,10 @@ components:
           type: string
     VersionResponse:
       type: object
-      required: [version, runtime, name]
+      required:
+      - version
+      - runtime
+      - name
       properties:
         version:
           type: string
@@ -3842,7 +5017,12 @@ components:
           type: string
     UpdateResponse:
       type: object
-      required: [success, staged, installed, version, message]
+      required:
+      - success
+      - staged
+      - installed
+      - version
+      - message
       additionalProperties: false
       properties:
         success:
@@ -3858,7 +5038,9 @@ components:
           type: string
     RURecommendedPreviewRequest:
       type: object
-      required: [domain, email]
+      required:
+      - domain
+      - email
       additionalProperties: false
       properties:
         domain:
@@ -3869,10 +5051,16 @@ components:
           format: email
         panelAccess:
           type: string
-          enum: [local, direct, caddy]
+          enum:
+          - local
+          - direct
+          - caddy
     RURecommendedPreviewResponse:
       type: object
-      required: [domain, email, panelAccess]
+      required:
+      - domain
+      - email
+      - panelAccess
       additionalProperties: false
       properties:
         domain:
@@ -3882,7 +5070,10 @@ components:
           format: email
         panelAccess:
           type: string
-          enum: [local, direct, caddy]
+          enum:
+          - local
+          - direct
+          - caddy
         panelUrl:
           type: string
           format: uri
@@ -3890,7 +5081,16 @@ components:
           type: string
     SystemStats:
       type: object
-      required: [cpuPercent, memoryUsedMB, memoryTotalMB, diskUsedGB, diskTotalGB, uptimeSeconds, loadAvg1, loadAvg5, loadAvg15]
+      required:
+      - cpuPercent
+      - memoryUsedMB
+      - memoryTotalMB
+      - diskUsedGB
+      - diskTotalGB
+      - uptimeSeconds
+      - loadAvg1
+      - loadAvg5
+      - loadAvg15
       properties:
         cpuPercent:
           type: number
@@ -3912,7 +5112,14 @@ components:
           type: number
     TLSCertInfo:
       type: object
-      required: [path, subject, issuer, notBefore, notAfter, daysRemaining, valid]
+      required:
+      - path
+      - subject
+      - issuer
+      - notBefore
+      - notAfter
+      - daysRemaining
+      - valid
       properties:
         path:
           type: string
@@ -3936,7 +5143,12 @@ components:
           type: string
     NetworkInterface:
       type: object
-      required: [name, rxBytes, txBytes, rxPackets, txPackets]
+      required:
+      - name
+      - rxBytes
+      - txBytes
+      - rxPackets
+      - txPackets
       properties:
         name:
           type: string
@@ -3950,15 +5162,19 @@ components:
           type: integer
     NetworkStats:
       type: object
-      required: [interfaces]
+      required:
+      - interfaces
       properties:
         interfaces:
           type: array
           items:
-            $ref: "#/components/schemas/NetworkInterface"
+            $ref: '#/components/schemas/NetworkInterface'
     ConnectionListener:
       type: object
-      required: [proto, address, port]
+      required:
+      - proto
+      - address
+      - port
       properties:
         proto:
           type: string
@@ -3970,15 +5186,21 @@ components:
           type: string
     ConnectionsStats:
       type: object
-      required: [listeners]
+      required:
+      - listeners
       properties:
         listeners:
           type: array
           items:
-            $ref: "#/components/schemas/ConnectionListener"
+            $ref: '#/components/schemas/ConnectionListener'
     ProcessInfo:
       type: object
-      required: [pid, name, cpuPercent, memoryMB, uptimeSeconds]
+      required:
+      - pid
+      - name
+      - cpuPercent
+      - memoryMB
+      - uptimeSeconds
       properties:
         pid:
           type: integer
@@ -3992,15 +5214,19 @@ components:
           type: integer
     ProcessesStats:
       type: object
-      required: [processes]
+      required:
+      - processes
       properties:
         processes:
           type: array
           items:
-            $ref: "#/components/schemas/ProcessInfo"
+            $ref: '#/components/schemas/ProcessInfo'
     DirSizeInfo:
       type: object
-      required: [path, sizeBytes, sizeHuman]
+      required:
+      - path
+      - sizeBytes
+      - sizeHuman
       properties:
         path:
           type: string
@@ -4010,35 +5236,44 @@ components:
           type: string
     DiskStats:
       type: object
-      required: [dirs]
+      required:
+      - dirs
       properties:
         dirs:
           type: array
           items:
-            $ref: "#/components/schemas/DirSizeInfo"
+            $ref: '#/components/schemas/DirSizeInfo'
     RuntimeObservation:
       type: object
-      required: [system, tls, network, connections, processes, disk]
+      required:
+      - system
+      - tls
+      - network
+      - connections
+      - processes
+      - disk
       properties:
         system:
-          $ref: "#/components/schemas/SystemStats"
+          $ref: '#/components/schemas/SystemStats'
         tls:
-          $ref: "#/components/schemas/TLSCertInfo"
+          $ref: '#/components/schemas/TLSCertInfo'
         network:
-          $ref: "#/components/schemas/NetworkStats"
+          $ref: '#/components/schemas/NetworkStats'
         connections:
-          $ref: "#/components/schemas/ConnectionsStats"
+          $ref: '#/components/schemas/ConnectionsStats'
         processes:
-          $ref: "#/components/schemas/ProcessesStats"
+          $ref: '#/components/schemas/ProcessesStats'
         disk:
-          $ref: "#/components/schemas/DiskStats"
+          $ref: '#/components/schemas/DiskStats'
         errors:
           type: object
           additionalProperties:
             type: string
     LogResult:
       type: object
-      required: [unit, output]
+      required:
+      - unit
+      - output
       properties:
         unit:
           type: string
@@ -4046,15 +5281,19 @@ components:
           type: string
     DNSLookupRequest:
       type: object
-      required: [hostname]
+      required:
+      - hostname
       additionalProperties: false
       properties:
         hostname:
           type: string
-          examples: [example.com]
+          examples:
+          - example.com
     DNSLookupResult:
       type: object
-      required: [hostname, addresses]
+      required:
+      - hostname
+      - addresses
       properties:
         hostname:
           type: string
@@ -4068,12 +5307,14 @@ components:
           type: string
     PingRequest:
       type: object
-      required: [host]
+      required:
+      - host
       additionalProperties: false
       properties:
         host:
           type: string
-          examples: [1.1.1.1]
+          examples:
+          - 1.1.1.1
         count:
           type: integer
           minimum: 1
@@ -4081,7 +5322,11 @@ components:
           default: 3
     PingResult:
       type: object
-      required: [host, transmitted, received, lossPct]
+      required:
+      - host
+      - transmitted
+      - received
+      - lossPct
       properties:
         host:
           type: string
@@ -4103,7 +5348,10 @@ components:
           type: string
     SpeedtestResult:
       type: object
-      required: [pingMs, downloadMbps, uploadMbps]
+      required:
+      - pingMs
+      - downloadMbps
+      - uploadMbps
       properties:
         server:
           type: string
@@ -4117,51 +5365,66 @@ components:
           type: string
     ClientCreateRequest:
       type: object
-      required: [name]
+      required:
+      - name
       additionalProperties: false
       properties:
         name:
           type: string
         email:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         enabled:
           type: boolean
         groupId:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         quotaBytes:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
           minimum: 0
           maximum: 9007199254740991
         quotaResetPolicy:
           type: string
-          enum: [never, daily, weekly, monthly]
+          enum:
+          - never
+          - daily
+          - weekly
+          - monthly
         quotaResetAt:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
         expiresAt:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
         deviceLimit:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           minimum: 0
         notes:
           type: string
         bindings:
           type: array
-          description: >-
-            Bind the client to inbounds atomically with creation. When
-            credential is empty the server generates a high-entropy secret and
-            returns its plaintext once in issuedCredentials.
+          description: Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret
+            and returns its plaintext once in issuedCredentials.
           items:
-            $ref: "#/components/schemas/ClientBindingInput"
+            $ref: '#/components/schemas/ClientBindingInput'
     ClientPatchRequest:
       type: object
-      required: [version]
+      required:
+      - version
       additionalProperties: false
-      description: >-
-        Presence-aware patch. Omitted fields are preserved, explicit null
-        clears nullable/defaultable fields, and supplied values replace them.
+      description: Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace
+        them.
       properties:
         version:
           type: integer
@@ -4170,39 +5433,62 @@ components:
         name:
           type: string
         email:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         enabled:
-          type: [boolean, "null"]
+          type:
+          - boolean
+          - 'null'
         groupId:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         quotaBytes:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
           minimum: 0
           maximum: 9007199254740991
         quotaResetPolicy:
-          type: [string, "null"]
-          enum: [never, daily, weekly, monthly]
+          type:
+          - string
+          - 'null'
+          enum:
+          - never
+          - daily
+          - weekly
+          - monthly
         quotaResetAt:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
         expiresAt:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           format: int64
         deviceLimit:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           minimum: 0
         notes:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
     ClientBindingInput:
       type: object
-      required: [inboundId]
+      required:
+      - inboundId
       properties:
         inboundId:
           type: string
         runtimeIdentity:
           type: string
-          pattern: '^[A-Za-z0-9_-]{1,48}$'
+          pattern: ^[A-Za-z0-9_-]{1,48}$
         credential:
           type: string
           description: Optional explicit credential; server-generated when empty.
@@ -4210,10 +5496,13 @@ components:
           type: boolean
     IssuedCredential:
       type: object
-      required: [bindingId, inboundId, kind, plaintext]
-      description: >-
-        Server-generated credential returned exactly once at creation time.
-        Only the encrypted form is persisted; the plaintext is never stored.
+      required:
+      - bindingId
+      - inboundId
+      - kind
+      - plaintext
+      description: Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is
+        never stored.
       properties:
         bindingId:
           type: string
@@ -4225,7 +5514,10 @@ components:
           type: string
     RevisionView:
       type: object
-      required: [desired, applied, state]
+      required:
+      - desired
+      - applied
+      - state
       properties:
         desired:
           type: integer
@@ -4233,31 +5525,37 @@ components:
           type: integer
         state:
           type: string
-          enum: [synced, pending, failed]
+          enum:
+          - synced
+          - pending
+          - failed
     ClientCreateResponse:
       type: object
-      required: [client, revision, success]
-      description: >-
-        Atomic create envelope: the committed client, any server-generated
-        credentials (plaintext shown exactly once), the new desired revision,
-        and the apply job that ran for that revision. success=false means the
-        client committed but the apply did not finish cleanly.
+      required:
+      - client
+      - revision
+      - success
+      description: 'Atomic create envelope: the committed client, any server-generated credentials (plaintext shown exactly once), the new desired
+        revision, and the apply job that ran for that revision. success=false means the client committed but the apply did not finish cleanly.'
       properties:
         client:
-          $ref: "#/components/schemas/ClientView"
+          $ref: '#/components/schemas/ClientView'
         issuedCredentials:
           type: array
           items:
-            $ref: "#/components/schemas/IssuedCredential"
+            $ref: '#/components/schemas/IssuedCredential'
         revision:
-          $ref: "#/components/schemas/RevisionView"
+          $ref: '#/components/schemas/RevisionView'
         applyJob:
-          $ref: "#/components/schemas/ApplyJob"
+          $ref: '#/components/schemas/ApplyJob'
         success:
           type: boolean
     ClientView:
       type: object
-      required: [id, name, status]
+      required:
+      - id
+      - name
+      - status
       properties:
         id:
           type: string
@@ -4273,8 +5571,6 @@ components:
           type: integer
           format: int64
           minimum: 0
-          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
-          # JS number; larger int64s would lose precision silently.
           maximum: 9007199254740991
         quotaResetPolicy:
           type: string
@@ -4293,7 +5589,14 @@ components:
         status:
           type: string
           description: Effective status.
-          enum: [active, disabled, expired, depleted, pending_apply, apply_failed, orphaned]
+          enum:
+          - active
+          - disabled
+          - expired
+          - depleted
+          - pending_apply
+          - apply_failed
+          - orphaned
         inboundIds:
           type: array
           items:
@@ -4311,10 +5614,15 @@ components:
         bindings:
           type: array
           items:
-            $ref: "#/components/schemas/BindingView"
+            $ref: '#/components/schemas/BindingView'
     BindingView:
       type: object
-      required: [id, inboundId, runtimeIdentity, enabled, version]
+      required:
+      - id
+      - inboundId
+      - runtimeIdentity
+      - enabled
+      - version
       properties:
         id:
           type: string
@@ -4327,12 +5635,16 @@ components:
         version:
           type: integer
         capability:
-          $ref: "#/components/schemas/BindingCapability"
+          $ref: '#/components/schemas/BindingCapability'
         credential:
-          $ref: "#/components/schemas/CredentialMeta"
+          $ref: '#/components/schemas/CredentialMeta'
     BindingCapability:
       type: object
-      required: [protocol, transports, perClientCredentials, requiresCaddy]
+      required:
+      - protocol
+      - transports
+      - perClientCredentials
+      - requiresCaddy
       properties:
         protocol:
           type: string
@@ -4346,7 +5658,8 @@ components:
           type: boolean
     CredentialMeta:
       type: object
-      required: [configured]
+      required:
+      - configured
       properties:
         configured:
           type: boolean
@@ -4359,17 +5672,21 @@ components:
           format: int64
     ClientListResponse:
       type: object
-      required: [items, total]
+      required:
+      - items
+      - total
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ClientView"
+            $ref: '#/components/schemas/ClientView'
         total:
           type: integer
     SubscriptionTokenResponse:
       type: object
-      required: [token, prefix]
+      required:
+      - token
+      - prefix
       properties:
         token:
           type: string
@@ -4382,7 +5699,12 @@ components:
           format: int64
     TrafficTotals:
       type: object
-      required: [clientId, uploadBytes, downloadBytes, totalBytes, depleted]
+      required:
+      - clientId
+      - uploadBytes
+      - downloadBytes
+      - totalBytes
+      - depleted
       properties:
         clientId:
           type: string
@@ -4399,8 +5721,6 @@ components:
           type: integer
           format: int64
           minimum: 0
-          # Capped at Number.MAX_SAFE_INTEGER: the SPA consumes this as a
-          # JS number; larger int64s would lose precision silently.
           maximum: 9007199254740991
         remainingBytes:
           type: integer
@@ -4409,7 +5729,10 @@ components:
           type: boolean
     TrafficBucket:
       type: object
-      required: [at, uploadBytes, downloadBytes]
+      required:
+      - at
+      - uploadBytes
+      - downloadBytes
       properties:
         at:
           type: integer
@@ -4422,7 +5745,12 @@ components:
           format: int64
     TrafficHistoryResponse:
       type: object
-      required: [clientId, from, to, bucket, items]
+      required:
+      - clientId
+      - from
+      - to
+      - bucket
+      - items
       properties:
         clientId:
           type: string
@@ -4437,10 +5765,13 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/TrafficBucket"
+            $ref: '#/components/schemas/TrafficBucket'
     TrafficTopEntry:
       type: object
-      required: [clientId, name, totalBytes]
+      required:
+      - clientId
+      - name
+      - totalBytes
       properties:
         clientId:
           type: string
@@ -4457,9 +5788,33 @@ components:
           format: int64
     TrafficTopResponse:
       type: object
-      required: [items]
+      required:
+      - items
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/TrafficTopEntry"
+            $ref: '#/components/schemas/TrafficTopEntry'
+  headers:
+    Location:
+      description: URI of the created resource.
+      schema:
+        type: string
+        format: uri-reference
+    ETag:
+      description: Opaque resource version for optimistic concurrency.
+      schema:
+        type: string
+    Idempotency-Replayed:
+      description: True when this response was replayed from a durable idempotency record.
+      schema:
+        type: boolean
+    Retry-After:
+      description: Seconds before retrying the request.
+      schema:
+        type: integer
+        minimum: 0
+    Last-Event-ID:
+      description: Latest durable event identifier represented by this stream response.
+      schema:
+        type: string

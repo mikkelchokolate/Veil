@@ -5,6 +5,7 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { apiFetch, setCsrfToken } from "../api/fetcher";
@@ -31,6 +32,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
 	const [session, setSession] = useState<Session | null>(null);
 	const [loading, setLoading] = useState(true);
+	const channelRef = useRef<BroadcastChannel | null>(null);
+
+	const broadcastRefresh = useCallback(() => {
+		channelRef.current?.postMessage({ type: "refresh" });
+		try {
+			localStorage.setItem("veil-auth-refresh", String(Date.now()));
+		} catch {
+			// Storage can be disabled; BroadcastChannel/focus refresh still work.
+		}
+	}, []);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -50,6 +61,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		void refresh();
 	}, [refresh]);
 
+	useEffect(() => {
+		const onRefresh = () => void refresh();
+		let channel: BroadcastChannel | null = null;
+		if (typeof BroadcastChannel !== "undefined") {
+			channel = new BroadcastChannel("veil-auth");
+			channel.onmessage = (event) => {
+				if (event.data?.type === "refresh") onRefresh();
+			};
+			channelRef.current = channel;
+		}
+		const onStorage = (event: StorageEvent) => {
+			if (event.key === "veil-auth-refresh") onRefresh();
+		};
+		const onFocus = () => onRefresh();
+		const onVisibility = () => {
+			if (document.visibilityState === "visible") onRefresh();
+		};
+		window.addEventListener("storage", onStorage);
+		window.addEventListener("focus", onFocus);
+		document.addEventListener("visibilitychange", onVisibility);
+		return () => {
+			window.removeEventListener("storage", onStorage);
+			window.removeEventListener("focus", onFocus);
+			document.removeEventListener("visibilitychange", onVisibility);
+			channel?.close();
+			if (channelRef.current === channel) channelRef.current = null;
+		};
+	}, [refresh]);
+
 	const login = useCallback(
 		async (username: string, password: string) => {
 			const data = await apiFetch<{ csrfToken?: string }>("/api/auth/login", {
@@ -60,8 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				setCsrfToken(data.csrfToken);
 			}
 			await refresh();
+			broadcastRefresh();
 		},
-		[refresh],
+		[refresh, broadcastRefresh],
 	);
 
 	const logout = useCallback(async () => {
@@ -70,8 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		} finally {
 			setSession({ authenticated: false });
 			setCsrfToken(null);
+			broadcastRefresh();
 		}
-	}, []);
+	}, [broadcastRefresh]);
 
 	const value = useMemo(
 		() => ({ session, loading, login, logout, refresh }),

@@ -100,6 +100,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/processes":                               {"get"},
 		"/api/disk":                                    {"get"},
 		"/api/runtime/observation":                     {"get"},
+		"/api/runtime/provenance":                      {"get"},
 		"/api/logs":                                    {"get"},
 		"/api/tools/dns-lookup":                        {"post"},
 		"/api/tools/ping":                              {"post"},

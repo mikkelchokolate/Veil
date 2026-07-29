@@ -1,31 +1,15 @@
-// Central fetch mutator used by every Orval-generated client call.
-//
-// Responsibilities:
-//  - Prefix the panel WebBasePath so API calls resolve under "/<secret>" too.
-//  - Same-origin credentials (the HTTP-only veil_session cookie).
-//  - Attach X-CSRF-Token for cookie-authenticated mutations only.
-//  - Normalise the heterogeneous backend error shapes into a thrown ApiError.
-//
-// NOTHING here is persisted to storage — no admin tokens, no credentials.
-
 let csrfToken: string | null = null;
 
-/** Called once after /api/auth/status succeeds so mutations can carry CSRF. */
-export function setCsrfToken(token: string | null): void {
+export function setCsrfToken(token: string | null) {
 	csrfToken = token;
 }
 
 export class ApiError extends Error {
-	readonly status: number;
-	readonly code: string | undefined;
-	readonly details: unknown;
+	status: number;
+	code: string | undefined;
+	details: unknown;
 
-	constructor(
-		status: number,
-		message: string,
-		code?: string,
-		details?: unknown,
-	) {
+	constructor(status: number, message: string, code?: string, details?: unknown) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
@@ -34,90 +18,123 @@ export class ApiError extends Error {
 	}
 }
 
-/** Base path the SPA is mounted under ("" at root, "/<secret>" otherwise). */
+export class TimeoutError extends Error {
+	constructor(message = "API request timed out") {
+		super(message);
+		this.name = "TimeoutError";
+	}
+}
+
+export class CancelledError extends Error {
+	constructor(message = "API request was cancelled") {
+		super(message);
+		this.name = "CancelledError";
+	}
+}
+
 function panelBasePath(): string {
-	const el =
-		typeof document !== "undefined" ? document.querySelector("base") : null;
-	const href = el?.getAttribute("href") ?? "/";
-	// href is like "/" or "/secret/". Strip trailing slash; "" means root.
+	const element = typeof document !== "undefined" ? document.querySelector("base") : null;
+	const href = element?.getAttribute("href") ?? "/";
 	return href.endsWith("/") ? href.slice(0, -1) : href;
 }
 
 export function apiUrl(path: string): string {
+	if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//")) {
+		throw new Error("API path must be same-origin and relative");
+	}
+	if (!path.startsWith("/")) {
+		throw new Error("API path must start with /");
+	}
 	return `${panelBasePath()}${path}`;
 }
 
-function isMutating(method: string): boolean {
-	const m = method.toUpperCase();
-	return m !== "GET" && m !== "HEAD" && m !== "OPTIONS";
+function isSafeMethod(method: string): boolean {
+	return method === "GET" || method === "HEAD" || method === "OPTIONS";
 }
 
-function extractMessage(
-	body: unknown,
-	fallback: string,
-): { message: string; code?: string } {
-	if (body && typeof body === "object") {
-		const o = body as Record<string, unknown>;
-		const nested =
-			o.error && typeof o.error === "object"
-				? (o.error as Record<string, unknown>)
-				: undefined;
-		const message =
-			(typeof nested?.message === "string" && nested.message) ||
-			(typeof o.message === "string" && o.message) ||
-			(typeof o.error === "string" && o.error) ||
-			fallback;
-		const code =
-			typeof nested?.code === "string"
-				? nested.code
-				: typeof o.code === "string"
-					? o.code
-					: undefined;
-		return { message, ...(code ? { code } : {}) };
+function retryableStatus(status: number): boolean {
+	return status === 502 || status === 503 || status === 504;
+}
+
+function abortError(error: unknown): boolean {
+	return error instanceof DOMException
+		? error.name === "AbortError"
+		: error instanceof Error && error.name === "AbortError";
+}
+
+async function requestOnce(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+	const controller = new AbortController();
+	let timedOut = false;
+	let callerCancelled = options.signal?.aborted ?? false;
+	const onCallerAbort = () => {
+		callerCancelled = true;
+		controller.abort();
+	};
+	options.signal?.addEventListener("abort", onCallerAbort, { once: true });
+	const timeout = globalThis.setTimeout(() => {
+		timedOut = true;
+		controller.abort();
+	}, timeoutMs);
+	try {
+		return await fetch(url, { ...options, signal: controller.signal, redirect: "follow" });
+	} catch (error) {
+		if (abortError(error)) {
+			if (callerCancelled) throw new CancelledError();
+			if (timedOut) throw new TimeoutError();
+		}
+		throw error;
+	} finally {
+		globalThis.clearTimeout(timeout);
+		options.signal?.removeEventListener("abort", onCallerAbort);
 	}
-	return { message: fallback };
 }
 
-export async function apiFetch<T>(
-	url: string,
-	options: RequestInit = {},
-): Promise<T> {
-	const method = (options.method ?? "GET").toUpperCase();
-	const headers = new Headers(options.headers);
-	if (options.body != null && !headers.has("Content-Type")) {
+function assertSameOriginRedirect(response: Response) {
+	if (!response.redirected) return;
+	const finalURL = new URL(response.url, window.location.href);
+	if (finalURL.origin !== window.location.origin) {
+		throw new ApiError(502, "Cross-origin API redirect rejected", "external_redirect");
+	}
+}
+
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+	const method = (options?.method ?? "GET").toUpperCase();
+	const headers = new Headers(options?.headers ?? {});
+	if (!headers.has("Accept")) headers.set("Accept", "application/json");
+	if (options?.body !== undefined && !headers.has("Content-Type")) {
 		headers.set("Content-Type", "application/json");
 	}
-	// CSRF only for cookie-authenticated mutations.
-	if (isMutating(method) && csrfToken) {
-		headers.set("X-CSRF-Token", csrfToken);
+	if (csrfToken && !isSafeMethod(method)) headers.set("X-CSRF-Token", csrfToken);
+	const requestOptions: RequestInit = { credentials: "same-origin", ...options, method, headers };
+	const attempts = isSafeMethod(method) ? 3 : 1;
+	let response: Response | undefined;
+	let lastError: unknown;
+	for (let attempt = 0; attempt < attempts; attempt += 1) {
+		try {
+			response = await requestOnce(apiUrl(path), requestOptions, 15_000);
+			if (!retryableStatus(response.status) || attempt === attempts - 1) break;
+			await response.body?.cancel();
+		} catch (error) {
+			if (error instanceof TimeoutError || error instanceof CancelledError || attempt === attempts - 1) {
+				throw error;
+			}
+			lastError = error;
+		}
 	}
-
-	const res = await fetch(apiUrl(url), {
-		...options,
-		method,
-		headers,
-		credentials: "same-origin",
-	});
-
-	if (res.status === 204) {
-		return undefined as T;
+	if (!response) throw lastError ?? new Error("API request failed");
+	assertSameOriginRedirect(response);
+	const text = await response.text();
+	let body: unknown = undefined;
+	if (text) {
+		try {
+			body = JSON.parse(text);
+		} catch {
+			body = text;
+		}
 	}
-
-	const text = await res.text();
-	let body: unknown;
-	try {
-		body = text ? JSON.parse(text) : undefined;
-	} catch {
-		body = text;
+	if (!response.ok) {
+		const maybe = body as { error?: string; message?: string; code?: string; details?: unknown } | undefined;
+		throw new ApiError(response.status, maybe?.error ?? maybe?.message ?? response.statusText, maybe?.code, maybe?.details);
 	}
-
-	if (!res.ok) {
-		const { message, code } = extractMessage(
-			body,
-			res.statusText || `HTTP ${res.status}`,
-		);
-		throw new ApiError(res.status, message, code, body);
-	}
-
 	return body as T;
 }
