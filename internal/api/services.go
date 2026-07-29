@@ -1,9 +1,15 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -62,9 +68,27 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
+	var lease veilapply.Lease
+	if s.db != nil {
+		owner := fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString())
+		acquiredLease, acquired, leaseErr := veilapply.NewLeaseStore(s.db).Acquire(owner, "service:"+name, time.Now().UTC(), 30*time.Second)
+		if leaseErr != nil {
+			writeError(w, "service operation fence unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !acquired {
+			writeError(w, "another runtime mutation is in progress", http.StatusLocked)
+			return
+		}
+		lease = acquiredLease
+	}
 	err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
 		Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+		Fence: privileged.FenceToken{Owner: lease.Owner, Generation: lease.Generation},
 	})
+	if lease.Generation > 0 {
+		err = errors.Join(err, veilapply.NewLeaseStore(s.db).Release(lease.Owner, lease.Generation))
+	}
 	resp.Success = err == nil
 	if err != nil {
 		resp.Error = err.Error()
