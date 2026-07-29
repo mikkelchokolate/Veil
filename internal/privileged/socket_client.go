@@ -12,15 +12,22 @@ import (
 )
 
 type SocketClient struct {
-	path    string
-	timeout time.Duration
+	path          string
+	timeout       time.Duration
+	mutationLimit time.Duration
+	backupLimit   time.Duration
 }
 
 // randRead is a test hook so the request-id fallback path can be exercised.
 var randRead = rand.Read
 
 func NewSocketClient(path string) *SocketClient {
-	return &SocketClient{path: path, timeout: 30 * time.Second}
+	return &SocketClient{
+		path:          path,
+		timeout:       30 * time.Second,
+		mutationLimit: 15 * time.Minute,
+		backupLimit:   2 * time.Hour,
+	}
 }
 
 func (c *SocketClient) Promote(ctx context.Context, request PromoteRequest) (PromoteResult, error) {
@@ -101,7 +108,7 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 		return wrapOperationError(err)
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(c.timeout)
+	deadline := time.Now().Add(c.operationTimeout(request.Operation))
 	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
 		deadline = contextDeadline
 	}
@@ -134,6 +141,18 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 		return wrapOperationError(err)
 	}
 	return nil
+}
+
+func (c *SocketClient) operationTimeout(operation Operation) time.Duration {
+	switch operation {
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
+		OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+		return c.backupLimit
+	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
+		return c.mutationLimit
+	default:
+		return c.timeout
+	}
 }
 
 func operationForBackupAction(action BackupAction) (Operation, error) {

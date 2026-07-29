@@ -291,7 +291,8 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 		return "", nil
 	}
 	executor := NewProductionExecutor(ProductionConfig{
-		RunCommand: run,
+		RunCommand:          run,
+		PromotionBackupRoot: t.TempDir(),
 		FirewallCommands: map[string][]string{
 			"allow-panel": {"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
 		},
@@ -338,7 +339,7 @@ func TestProductionExecutorFirewallReloadsAfterApplyingRules(t *testing.T) {
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
 		return model.runner(context.Background(), command, 0)
 	}
-	executor := NewProductionExecutor(ProductionConfig{RunCommand: run})
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run, PromotionBackupRoot: t.TempDir()})
 
 	firewall, err := executor.Firewall(context.Background(), ResolvedFirewall{Rules: []FirewallRule{
 		{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil Panel"}},
