@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,8 @@ type applyRollbackRequest struct {
 	SelectedRevision uint64 `json:"selectedRevision"`
 	Confirm          bool   `json:"confirm"`
 }
+
+var rollbackRuntimeIdentityPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,48}$`)
 
 func (s *managementState) handleApplyRollback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -72,6 +75,10 @@ func (s *managementState) handleApplyRollback(w http.ResponseWriter, r *http.Req
 	_ = json.Unmarshal(payload, &fields)
 	if validationErrors := NewManagementStateValidation().ValidateSnapshot(selected, fields); len(validationErrors) > 0 {
 		writeError(w, "selected immutable revision is invalid: "+validationErrors[0], http.StatusUnprocessableEntity)
+		return
+	}
+	if err := validateRollbackNormalizedSnapshot(selected); err != nil {
+		writeError(w, "selected immutable revision is invalid: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -162,6 +169,65 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 	return newRevision, err
 }
 
+func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
+	clients := make(map[string]struct{}, len(snapshot.Clients))
+	for _, current := range snapshot.Clients {
+		if current.ID == "" {
+			return fmt.Errorf("client id is empty")
+		}
+		if _, duplicate := clients[current.ID]; duplicate {
+			return fmt.Errorf("duplicate client id %q", current.ID)
+		}
+		clients[current.ID] = struct{}{}
+	}
+	inbounds := make(map[string]struct{}, len(snapshot.Inbounds))
+	for _, inbound := range snapshot.Inbounds {
+		if inbound.Name == "" {
+			return fmt.Errorf("inbound name is empty")
+		}
+		inbounds[inbound.Name] = struct{}{}
+	}
+	bindings := make(map[string]string, len(snapshot.Bindings))
+	identities := make(map[string]string, len(snapshot.Bindings))
+	for _, binding := range snapshot.Bindings {
+		if binding.ID == "" {
+			return fmt.Errorf("binding id is empty")
+		}
+		if _, duplicate := bindings[binding.ID]; duplicate {
+			return fmt.Errorf("duplicate binding id %q", binding.ID)
+		}
+		if _, ok := clients[binding.ClientID]; !ok {
+			return fmt.Errorf("binding %q references missing client %q", binding.ID, binding.ClientID)
+		}
+		if _, ok := inbounds[binding.InboundID]; !ok {
+			return fmt.Errorf("binding %q references missing inbound %q", binding.ID, binding.InboundID)
+		}
+		if !rollbackRuntimeIdentityPattern.MatchString(binding.RuntimeIdentity) {
+			return fmt.Errorf("binding %q has invalid runtime identity", binding.ID)
+		}
+		identityKey := binding.InboundID + "\x00" + binding.RuntimeIdentity
+		if previous, duplicate := identities[identityKey]; duplicate {
+			return fmt.Errorf("bindings %q and %q duplicate runtime identity for inbound %q", previous, binding.ID, binding.InboundID)
+		}
+		identities[identityKey] = binding.ID
+		bindings[binding.ID] = binding.ClientID
+	}
+	credentials := make(map[string]struct{}, len(snapshot.Credentials))
+	for _, credential := range snapshot.Credentials {
+		if credential.ID == "" {
+			return fmt.Errorf("credential id is empty")
+		}
+		if _, duplicate := credentials[credential.ID]; duplicate {
+			return fmt.Errorf("duplicate credential id %q", credential.ID)
+		}
+		if _, ok := bindings[credential.BindingID]; !ok {
+			return fmt.Errorf("credential %q references missing binding %q", credential.ID, credential.BindingID)
+		}
+		credentials[credential.ID] = struct{}{}
+	}
+	return nil
+}
+
 func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Client, []client.Binding, []client.Credential) {
 	clients := make([]client.Client, 0, len(snapshot.Clients))
 	for _, item := range snapshot.Clients {
@@ -177,6 +243,7 @@ func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Clie
 	for _, item := range snapshot.Bindings {
 		bindings = append(bindings, client.Binding{
 			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID,
+			RuntimeIdentity: item.RuntimeIdentity,
 			Enabled: item.Enabled, ProtocolSettings: item.ProtocolSettings,
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})
