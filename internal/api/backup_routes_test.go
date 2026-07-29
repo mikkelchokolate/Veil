@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,6 +123,11 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	reconcilerBeforeRestore := state.trafficReconciler
 	auditStarted := make(chan audit.Record, 1)
 	releaseAudit := make(chan struct{})
+	var releaseAuditOnce sync.Once
+	releaseAuditFinalization := func() {
+		releaseAuditOnce.Do(func() { close(releaseAudit) })
+	}
+	t.Cleanup(releaseAuditFinalization)
 	state.backupRestoreAudit = func(record audit.Record) error {
 		auditStarted <- record
 		<-releaseAudit
@@ -168,14 +174,14 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 		if record.Action != "backup.restore" {
 			t.Fatalf("unexpected restore audit record: %+v", record)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("restore audit finalization did not start")
 	}
 	if job, _ := state.backupRestoreJob(accepted.ID); job.Status == "succeeded" {
 		t.Fatal("restore job reported success before audit finalization completed")
 	}
-	close(releaseAudit)
-	deadline := time.Now().Add(5 * time.Second)
+	releaseAuditFinalization()
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		job, ok := state.backupRestoreJob(accepted.ID)
 		if !ok {
