@@ -10,10 +10,10 @@ import (
 var ErrApplyLeaseLost = errors.New("apply: durable lease lost")
 
 type Lease struct {
-	Owner      string
-	Operation  string
-	Generation uint64
-	ExpiresAt  int64
+	Owner       string
+	Operation   string
+	Generation  uint64
+	ExpiresAt   int64
 	HeartbeatAt int64
 }
 

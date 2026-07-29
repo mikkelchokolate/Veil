@@ -244,7 +244,7 @@ func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Clie
 		bindings = append(bindings, client.Binding{
 			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID,
 			RuntimeIdentity: item.RuntimeIdentity,
-			Enabled: item.Enabled, ProtocolSettings: item.ProtocolSettings,
+			Enabled:         item.Enabled, ProtocolSettings: item.ProtocolSettings,
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})
 	}

@@ -104,7 +104,7 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 	}
 	runner := &Runner{
 		revs: revs, jobs: jobs, executor: resolved,
-		ownerID: fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString()),
+		ownerID:  fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString()),
 		leaseTTL: 30 * time.Second, heartbeatInterval: 10 * time.Second, now: time.Now,
 		monitorStop: make(chan struct{}), monitorDone: make(chan struct{}),
 	}
