@@ -1,6 +1,7 @@
 package generatedconfig
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -17,10 +18,15 @@ func TestRoutingSourceMaterialFetchUsesInjectedDownloader(t *testing.T) {
 			sum := sha256.Sum256([]byte("body"))
 			return []byte(hex.EncodeToString(sum[:]) + " geoip.dat\n"), nil
 		}
+		if url == "https://example.test/geoip.dat.bundle" {
+			return []byte("bundle"), nil
+		}
 		return []byte("body"), nil
 	}
-
-	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(download)
+	file := RoutingSourceFile{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum", SignatureURL: "https://example.test/geoip.dat.bundle", CertificateIdentity: "test-identity", CertificateOIDCIssuer: "test-issuer"}
+	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{file}}).
+		WithDownloader(download).
+		WithSignatureVerifier(func(context.Context, RoutingSourceFile, []byte, []byte) error { return nil })
 	body, err := material.Fetch(material.source.Files[0])
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)

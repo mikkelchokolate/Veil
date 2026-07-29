@@ -22,6 +22,7 @@ import (
 	"crypto/sha512"
 	"debug/buildinfo"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +34,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -65,6 +67,10 @@ type Runtime struct {
 	Repo string
 	// Version is an immutable upstream tag or commit. "latest" is never valid.
 	Version string
+	// SourceCommit pins source-built runtimes to an immutable 40-hex commit.
+	SourceCommit string
+	// SignaturePolicy identifies a pinned upstream signature policy when used.
+	SignaturePolicy string
 	// Integrity names the mandatory verification policy: upstream-checksum,
 	// pinned-sha256, go-module-sum, or reproducible-go-build.
 	Integrity string
@@ -169,7 +175,10 @@ type Options struct {
 	// ReadGoBuildInfo is injectable for fake binaries in tests. Production reads
 	// the Go build information embedded in the staged executable.
 	ReadGoBuildInfo func(path string) (string, error)
-	// Now supplies the clock (unused today, reserved for retry/backoff).
+	// AfterActivate is a test/fault-injection hook invoked after the atomic link
+	// switch and before manifest finalization.
+	AfterActivate func(runtime Runtime, activePath string) error
+	// Now supplies the clock.
 	Now func() time.Time
 }
 
@@ -491,14 +500,199 @@ func publishVerifiedRuntimePath(ctx context.Context, opts Options, runtime Runti
 	if err != nil {
 		return "", "", "", err
 	}
-	destination := filepath.Join(opts.BinDir, runtime.Binary)
-	if err := os.Rename(stagePath, destination); err != nil {
+	if err := cleanupRuntimeStages(opts.BinDir); err != nil {
 		return "", "", "", err
 	}
-	if err := syncRuntimeDirectory(opts.BinDir); err != nil {
+	storeRoot := filepath.Join(opts.BinDir, ".veil-runtimes")
+	versionDir := filepath.Join(storeRoot, runtime.Name, safeRuntimePathPart(runtime.Version), digest)
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
 		return "", "", "", err
 	}
-	return destination, verified, digest, nil
+	target := filepath.Join(versionDir, runtime.Binary)
+	if existingDigest, digestErr := runtimeFileSHA256(target); errors.Is(digestErr, os.ErrNotExist) {
+		if err := os.Rename(stagePath, target); err != nil {
+			return "", "", "", err
+		}
+		if err := syncRuntimeDirectory(versionDir); err != nil {
+			return "", "", "", err
+		}
+	} else if digestErr != nil {
+		return "", "", "", digestErr
+	} else if existingDigest != digest {
+		return "", "", "", errors.New("immutable runtime target digest mismatch")
+	}
+	active := filepath.Join(opts.BinDir, runtime.Binary)
+	previousTarget, hadPrevious, err := preservePreviousRuntime(active, storeRoot, runtime)
+	if err != nil {
+		return "", "", "", err
+	}
+	if err := switchRuntimeSymlink(active, target); err != nil {
+		return "", "", "", err
+	}
+	rollback := func(cause error) (string, string, string, error) {
+		if rollbackErr := restoreRuntimeSymlink(active, previousTarget, hadPrevious); rollbackErr != nil {
+			cause = errors.Join(cause, fmt.Errorf("restore previous runtime: %w", rollbackErr))
+		}
+		return "", "", "", cause
+	}
+	if opts.AfterActivate != nil {
+		if err := opts.AfterActivate(runtime, active); err != nil {
+			return rollback(err)
+		}
+	}
+	if err := updateRuntimeManifest(storeRoot, runtime, target, verified, digest, opts.Now().UTC()); err != nil {
+		return rollback(err)
+	}
+	return active, verified, digest, nil
+}
+
+type runtimeManifestEntry struct {
+	Version         string    `json:"version"`
+	VerifiedVersion string    `json:"verifiedVersion"`
+	SHA256          string    `json:"sha256"`
+	Path            string    `json:"path"`
+	SourceCommit    string    `json:"sourceCommit,omitempty"`
+	InstalledAt     time.Time `json:"installedAt"`
+}
+
+type runtimeManifest struct {
+	Runtimes map[string]runtimeManifestEntry `json:"runtimes"`
+}
+
+func safeRuntimePathPart(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(value)
+	if value == "" {
+		return "unknown"
+	}
+	return value
+}
+
+func cleanupRuntimeStages(binDir string) error {
+	entries, err := os.ReadDir(binDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".veil-runtime-stage-") {
+			if err := os.RemoveAll(filepath.Join(binDir, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func preservePreviousRuntime(active, storeRoot string, runtime Runtime) (string, bool, error) {
+	info, err := os.Lstat(active)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(active)
+		return target, err == nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("active runtime %s is not regular or symlink", active)
+	}
+	digest, err := runtimeFileSHA256(active)
+	if err != nil {
+		return "", false, err
+	}
+	legacyDir := filepath.Join(storeRoot, runtime.Name, "legacy", digest)
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		return "", false, err
+	}
+	legacyTarget := filepath.Join(legacyDir, runtime.Binary)
+	if _, err := os.Stat(legacyTarget); errors.Is(err, os.ErrNotExist) {
+		if err := os.Rename(active, legacyTarget); err != nil {
+			return "", false, err
+		}
+	} else if err != nil {
+		return "", false, err
+	} else if err := os.Remove(active); err != nil {
+		return "", false, err
+	}
+	return legacyTarget, true, nil
+}
+
+func switchRuntimeSymlink(active, target string) error {
+	temporary := active + ".activate-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	if err := os.Symlink(target, temporary); err != nil {
+		return err
+	}
+	defer os.Remove(temporary)
+	if err := os.Rename(temporary, active); err != nil {
+		return err
+	}
+	return syncRuntimeDirectory(filepath.Dir(active))
+}
+
+func restoreRuntimeSymlink(active, target string, hadPrevious bool) error {
+	if !hadPrevious {
+		if err := os.Remove(active); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return syncRuntimeDirectory(filepath.Dir(active))
+	}
+	return switchRuntimeSymlink(active, target)
+}
+
+func updateRuntimeManifest(root string, runtime Runtime, target, verified, digest string, installedAt time.Time) error {
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	manifestPath := filepath.Join(root, "manifest.json")
+	manifest := runtimeManifest{Runtimes: make(map[string]runtimeManifestEntry)}
+	if body, err := os.ReadFile(manifestPath); err == nil {
+		if len(body) > 1<<20 {
+			return errors.New("runtime manifest exceeds size limit")
+		}
+		if err := json.Unmarshal(body, &manifest); err != nil {
+			return fmt.Errorf("decode runtime manifest: %w", err)
+		}
+		if manifest.Runtimes == nil {
+			manifest.Runtimes = make(map[string]runtimeManifestEntry)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	manifest.Runtimes[runtime.Name] = runtimeManifestEntry{
+		Version: runtime.Version, VerifiedVersion: verified, SHA256: digest,
+		Path: target, SourceCommit: runtime.SourceCommit, InstalledAt: installedAt,
+	}
+	body, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(root, ".manifest-")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if _, err := temporary.Write(append(body, '\n')); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, manifestPath); err != nil {
+		return err
+	}
+	return syncRuntimeDirectory(root)
 }
 
 var semanticVersionPattern = regexp.MustCompile(`(?i)v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)`)
@@ -647,6 +841,8 @@ func main() {
 		{goBin, "mod", "edit", "-require", "github.com/caddyserver/caddy/v2@v2.11.4"},
 		{goBin, "mod", "edit", "-replace", "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317"},
 		{goBin, "mod", "tidy"},
+		// go mod verify ensures every downloaded module matches go.sum before build.
+		{goBin, "mod", "verify"},
 	}
 	for _, args := range cmds {
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
@@ -659,7 +855,7 @@ func main() {
 	}
 
 	// Build the binary.
-	buildArgs := []string{goBin, "build", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."}
+	buildArgs := []string{goBin, "build", "-mod=readonly", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."}
 	cmd := exec.CommandContext(ctx, buildArgs[0], buildArgs[1:]...)
 	cmd.Dir = buildDir
 	cmd.Env = append(goBuildEnv(goBin), "CGO_ENABLED=0")

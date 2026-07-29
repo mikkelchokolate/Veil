@@ -10,7 +10,10 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/cli"
 )
 
-var version = "dev"
+var (
+	version = "dev"
+	commit  = "unknown"
+)
 
 // osExit is the process exit function used by main. It is overridable so that
 // main can be exercised in unit tests without terminating the test process.
@@ -35,7 +38,11 @@ func run() int {
 		}()
 	}
 
-	cmd := cli.NewRootCommand(version)
+	buildVersion := version
+	if commit != "" && commit != "unknown" {
+		buildVersion = fmt.Sprintf("%s (%s)", version, commit)
+	}
+	cmd := cli.NewRootCommand(buildVersion)
 	cmd.SetContext(ctx)
 
 	if err := cmd.Execute(); err != nil {

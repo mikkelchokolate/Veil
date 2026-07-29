@@ -17,6 +17,12 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -92,13 +98,19 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Build Veil browser-test binary
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/veil ./cmd/veil
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA}" -o dist/veil ./cmd/veil
       - name: Install pinned Playwright
         working-directory: test/browser
         run: |
@@ -158,13 +170,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Build package payload
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/veil ./cmd/veil
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA}" -o dist/veil ./cmd/veil
       - name: Install pinned nfpm
         run: |
           . scripts/ci/versions.sh
@@ -186,6 +204,12 @@ jobs:
             label: linux/arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -198,7 +222,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/veil ./cmd/veil
+          go build -trimpath -ldflags "-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA}" -o dist/veil ./cmd/veil
           tar -C dist -czf "dist/veil_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" veil
       - name: Build native packages (deb/rpm/apk)
         run: |
@@ -242,6 +266,12 @@ jobs:
     needs: [quality, browser-e2e, package-smoke]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - name: Verify Docker image version before publishing
         run: |
           docker build --pull --build-arg "VERSION=${GITHUB_REF_NAME}" --tag veil:release-check .
@@ -291,6 +321,12 @@ jobs:
     needs: [quality, browser-e2e, package-smoke, release, docker-publish]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -314,12 +350,27 @@ jobs:
           output-file: dist/veil.sbom.spdx.json
       - name: Generate SLSA v1 release provenance
         run: |
+          set -euo pipefail
+          go_version="$(go version | awk '{print $3}')"
+          node_version="$(node --version | sed 's/^v//')"
+          pnpm_version="$(corepack pnpm --version)"
           python3 scripts/release-provenance.py \
             --dist dist \
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${GITHUB_REF_NAME}" \
-            --commit "${GITHUB_SHA}" \
+            --source-commit "${GITHUB_SHA}" \
+            --go-version "${go_version}" \
+            --node-version "${node_version}" \
+            --pnpm-version "${pnpm_version}" \
+            --dependency-manifest go.sum \
+            --dependency-manifest web/pnpm-lock.yaml \
             --output dist/veil.provenance.json
+      - name: Extract exact changelog release notes
+        run: |
+          python3 scripts/release-notes.py \
+            --changelog CHANGELOG.md \
+            --tag "${GITHUB_REF_NAME}" \
+            --output dist/release-notes.md
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign checksums and SBOM (keyless)
@@ -351,4 +402,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Veil ${GITHUB_REF_NAME}" \
-            --notes "Automated Veil release with Linux amd64/arm64 archives, native deb/rpm/apk packages, checksums, SBOM, keyless cosign signatures, browser E2E, and clean-distribution package upgrade validation."
+            --notes-file dist/release-notes.md

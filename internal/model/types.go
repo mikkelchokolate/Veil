@@ -105,9 +105,12 @@ type RoutingSource struct {
 }
 
 type RoutingSourceFile struct {
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	SHA256URL string `json:"sha256Url,omitempty"`
+	Name                  string `json:"name"`
+	URL                   string `json:"url"`
+	SHA256URL             string `json:"sha256Url,omitempty"`
+	SignatureURL          string `json:"signatureUrl,omitempty"`
+	CertificateIdentity   string `json:"certificateIdentity,omitempty"`
+	CertificateOIDCIssuer string `json:"certificateOidcIssuer,omitempty"`
 }
 
 type WarpConfig struct {

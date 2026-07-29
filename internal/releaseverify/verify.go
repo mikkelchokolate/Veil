@@ -77,6 +77,27 @@ func Verify(e Evidence) error {
 	return nil
 }
 
+// VerifyBlob verifies one Sigstore bundle against an exact certificate identity
+// and issuer. Callers must provide both values from trusted configuration.
+func VerifyBlob(artifact, bundleJSON []byte, certificateIdentity, certificateIssuer string) error {
+	if len(artifact) == 0 || len(bundleJSON) == 0 || strings.TrimSpace(certificateIdentity) == "" || strings.TrimSpace(certificateIssuer) == "" {
+		return errors.New("signed blob evidence is incomplete")
+	}
+	bundle, err := loadBundle(bundleJSON)
+	if err != nil {
+		return err
+	}
+	trusted, err := fetchTrustedRoot()
+	if err != nil {
+		return err
+	}
+	identity, err := verify.NewShortCertificateIdentity(certificateIssuer, "", certificateIdentity, "")
+	if err != nil {
+		return err
+	}
+	return verifyBlob(artifact, bundle, trusted, identity)
+}
+
 func validateEvidencePresence(e Evidence) error {
 	fields := []struct {
 		name  string
