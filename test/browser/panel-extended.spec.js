@@ -180,14 +180,14 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(created.version, 'created client carries version').toBeGreaterThanOrEqual(1);
 
     // First update at the current version succeeds and bumps the version.
-    const ok = await request.put(`/api/v1/clients/${created.id}`, {
+    const ok = await request.patch(`/api/v1/clients/${created.id}`, {
       headers: tokenHeaders,
       data: { name: created.name, notes: 'first write', version: created.version },
     });
     expect(ok.status(), `first update: ${ok.status()} ${await ok.text()}`).toBeLessThan(300);
 
     // Replaying the same stale version must conflict.
-    const conflict = await request.put(`/api/v1/clients/${created.id}`, {
+    const conflict = await request.patch(`/api/v1/clients/${created.id}`, {
       headers: tokenHeaders,
       data: { name: created.name, notes: 'stale write', version: created.version },
     });

@@ -103,7 +103,11 @@ ${SUDO} chown veil:veil /etc/veil/backup.passphrase
 ${SUDO} chmod 600 /etc/veil/backup.passphrase
 run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
   --role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
-${SUDO} ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
+# Keep this ephemeral fixture bounded. Production intentionally defaults to
+# 16 GiB, while verify preflight conservatively reserves the configured policy
+# limit plus its workspace reserve; that does not fit every CI container.
+${SUDO} env VEIL_BACKUP_MAX_BYTES=8388608 \
+  ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
 if [ ! -S /run/veil/helper.sock ]; then
