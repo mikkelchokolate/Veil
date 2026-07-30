@@ -426,7 +426,7 @@ func recoverKeyRotationLocked(options RecoverKeyRotationOptions) error {
 	}
 	sameKeyPath := filepath.Clean(journal.SourceKeyPath) == filepath.Clean(journal.LiveKeyPath)
 	sourceKnown := sourceExists && sourceDigest == journal.PreviousKeySHA256
-	keyKnown := sourceKnown
+	var keyKnown bool
 	if sameKeyPath {
 		sourceKnown = sourceExists && (sourceDigest == journal.PreviousKeySHA256 || sourceDigest == journal.IntendedKeySHA256)
 		keyKnown = sourceKnown

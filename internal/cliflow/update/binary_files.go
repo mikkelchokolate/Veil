@@ -1,6 +1,7 @@
 package update
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +27,7 @@ func NewBinaryFiles() BinaryFiles {
 	return BinaryFiles{}
 }
 
-func (BinaryFiles) Copy(src, dst string) error {
+func (BinaryFiles) Copy(src, dst string) (resultErr error) {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -36,7 +37,9 @@ func (BinaryFiles) Copy(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		resultErr = errors.Join(resultErr, dstFile.Close())
+	}()
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return err
 	}

@@ -491,8 +491,8 @@ func resolveBelow(root, relative string) (string, error) {
 	if strings.TrimSpace(root) == "" || strings.TrimSpace(relative) == "" {
 		return "", newError(ErrorInvalidRequest, "managed root and relative path are required")
 	}
-	if filepath.IsAbs(relative) {
-		return "", newError(ErrorForbiddenOperation, "absolute managed paths are forbidden")
+	if !filepath.IsLocal(relative) {
+		return "", newError(ErrorForbiddenOperation, "non-local managed paths are forbidden")
 	}
 	cleanRelative := filepath.Clean(relative)
 	if cleanRelative == "." || cleanRelative == ".." || strings.HasPrefix(cleanRelative, ".."+string(filepath.Separator)) {

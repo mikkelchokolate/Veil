@@ -27,7 +27,7 @@ func newFenceGuard(path string, required bool) *fenceGuard {
 	return &fenceGuard{path: path, required: required}
 }
 
-func (g *fenceGuard) Accept(token FenceToken) error {
+func (g *fenceGuard) Accept(token FenceToken) (resultErr error) {
 	if token.Owner == "" || token.Generation == 0 {
 		if g.required {
 			return newError(ErrorConflict, "runtime mutation requires a fencing token")
@@ -47,11 +47,12 @@ func (g *fenceGuard) Accept(token FenceToken) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer func() {
+		resultErr = errors.Join(resultErr, releaseLockedFile(lock))
+	}()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
 		return err
 	}
-	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	state := fenceState{}
 	body, err := os.ReadFile(g.path)
 	if err == nil {

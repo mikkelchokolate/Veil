@@ -1,6 +1,7 @@
 package hostaccess
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -243,8 +244,7 @@ func copyRegularFile(source, destination string) error {
 		return err
 	}
 	if _, err := testHooks.copy(output, input); err != nil {
-		output.Close()
-		return err
+		return errors.Join(err, output.Close())
 	}
 	return output.Close()
 }

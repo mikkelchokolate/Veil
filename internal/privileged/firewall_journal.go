@@ -29,7 +29,7 @@ func firewallJournalPath(root string) string {
 	return filepath.Join(root, ".firewall-transaction.json")
 }
 
-func withFirewallLock(root string, action func() (FirewallResult, error)) (FirewallResult, error) {
+func withFirewallLock(root string, action func() (FirewallResult, error)) (result FirewallResult, resultErr error) {
 	if root == "" {
 		return FirewallResult{}, errors.New("firewall transaction root is required")
 	}
@@ -40,11 +40,12 @@ func withFirewallLock(root string, action func() (FirewallResult, error)) (Firew
 	if err != nil {
 		return FirewallResult{}, err
 	}
-	defer lock.Close()
+	defer func() {
+		resultErr = errors.Join(resultErr, releaseLockedFile(lock))
+	}()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
 		return FirewallResult{}, err
 	}
-	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN) //nolint:errcheck
 	return action()
 }
 

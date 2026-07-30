@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -243,15 +244,15 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	hasher := sha256.New()
 	tee := io.TeeReader(resp.Body, hasher)
 	if _, err := io.Copy(f, tee); err != nil {
-		f.Close()
-		return fmt.Errorf("download Go: %w", err)
+		return errors.Join(fmt.Errorf("download Go: %w", err), f.Close())
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close Go download: %w", err)
+	}
 
 	if hex.EncodeToString(hasher.Sum(nil)) != wantHash {
 		return fmt.Errorf("go download checksum mismatch")
@@ -301,10 +302,11 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 				return err
 			}
 			if _, err := io.Copy(out, io.LimitReader(tr, hdr.Size)); err != nil {
-				out.Close()
+				return errors.Join(err, out.Close())
+			}
+			if err := out.Close(); err != nil {
 				return err
 			}
-			out.Close()
 		}
 	}
 	return nil

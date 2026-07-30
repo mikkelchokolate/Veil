@@ -31,7 +31,9 @@ func newPanelUpdateStager(root string) panelUpdateStager {
 	return panelUpdateStager{
 		root:      root,
 		assetName: updateflow.AssetName(),
-		latest:    catalog.LatestContext,
+		latest: func(ctx context.Context) (*updateflow.Release, error) {
+			return catalog.LatestContext(ctx)
+		},
 		download: func(ctx context.Context, url string) ([]byte, error) {
 			return downloadPanelUpdateAsset(ctx, client, url)
 		},

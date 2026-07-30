@@ -39,7 +39,8 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	RuntimeRoutes{}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)
-	PanelRoutes{Info: info, BasePath: basePath, State: state}.Register(mux)
+	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
+	panelRoutes.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
 	StatusRoutes{Info: info, State: state}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)

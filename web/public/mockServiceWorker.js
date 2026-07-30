@@ -21,6 +21,11 @@ addEventListener('activate', function (event) {
 })
 
 addEventListener('message', async function (event) {
+  // Veil hardening: only accept control messages from same-origin clients.
+  if (event.origin !== self.location.origin) {
+    return
+  }
+
   const clientId = Reflect.get(event.source || {}, 'id')
 
   if (!clientId || !self.clients) {

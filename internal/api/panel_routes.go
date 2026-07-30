@@ -17,7 +17,7 @@ type PanelRoutes struct {
 	spa      *spaHandler
 }
 
-func (routes PanelRoutes) Register(mux *http.ServeMux) {
+func (routes *PanelRoutes) Register(mux *http.ServeMux) {
 	if spa, err := newSPAHandler(routes.BasePath); err == nil {
 		routes.spa = spa
 		spa.Register(mux)

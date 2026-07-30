@@ -34,7 +34,7 @@ type preparedPromotionOperation struct {
 	symlinkTarget string
 }
 
-func executePromotionTransaction(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact) (PromoteResult, error) {
+func executePromotionTransaction(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact) (result PromoteResult, resultErr error) {
 	if len(writes) == 0 && len(removes) == 0 && backupRoot == "" {
 		return PromoteResult{}, nil
 	}
@@ -48,11 +48,12 @@ func executePromotionTransaction(backupRoot string, now func() time.Time, kind s
 	if err != nil {
 		return PromoteResult{}, fmt.Errorf("open promotion lock: %w", err)
 	}
-	defer lockFile.Close()
+	defer func() {
+		resultErr = errors.Join(resultErr, releaseLockedFile(lockFile))
+	}()
 	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX); err != nil {
 		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
 	}
-	defer unix.Flock(int(lockFile.Fd()), unix.LOCK_UN) //nolint:errcheck
 	if err := recoverPromotionTransaction(backupRoot); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
@@ -169,7 +170,7 @@ func executePromotionTransaction(backupRoot string, now func() time.Time, kind s
 		return PromoteResult{}, err
 	}
 
-	result := PromoteResult{BackupID: backupID}
+	result = PromoteResult{BackupID: backupID}
 	for index, operation := range operations {
 		var err error
 		if operation.remove {

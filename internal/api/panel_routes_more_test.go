@@ -9,6 +9,14 @@ import (
 	"testing"
 )
 
+func TestPanelRegisterRetainsSPAHandler(t *testing.T) {
+	routes := PanelRoutes{Info: ServerInfo{Version: "test"}, BasePath: "/"}
+	routes.Register(http.NewServeMux())
+	if routes.spa == nil {
+		t.Fatal("expected Register to retain the SPA handler")
+	}
+}
+
 func TestPanelFavicon(t *testing.T) {
 	routes := PanelRoutes{Info: ServerInfo{Version: "test"}}
 
