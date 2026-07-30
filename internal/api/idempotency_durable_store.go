@@ -43,7 +43,7 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 		if record.State != "completed" {
 			record, err = s.waitDurable(r, scope, fingerprint)
 			if err != nil {
-				if errors.Is(err, contextCanceledError) {
+				if errors.Is(err, errIdempotencyWaitCanceled) {
 					writeError(w, "request canceled while waiting for idempotent operation", http.StatusRequestTimeout)
 				} else {
 					w.Header().Set("Retry-After", "1")
@@ -75,7 +75,7 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 	_, _ = w.Write(capture.body.Bytes())
 }
 
-var contextCanceledError = errors.New("idempotency wait canceled")
+var errIdempotencyWaitCanceled = errors.New("idempotency wait canceled")
 
 func (s *idempotencyStore) durableClosed() bool {
 	s.mu.Lock()
@@ -129,7 +129,7 @@ func (s *idempotencyStore) waitDurable(r *http.Request, scope, fingerprint strin
 	for {
 		select {
 		case <-r.Context().Done():
-			return durableIdempotencyRecord{}, contextCanceledError
+			return durableIdempotencyRecord{}, errIdempotencyWaitCanceled
 		case <-timer.C:
 			return durableIdempotencyRecord{}, errors.New("idempotency reservation timeout")
 		case <-ticker.C:

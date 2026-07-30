@@ -187,27 +187,6 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 	_, _ = w.Write([]byte(subscription.Body))
 }
 
-// resolveInboundSnapshot maps a binding's inbound ID to the live inbound
-// snapshot used for link rendering.
-func (s *managementState) resolveInboundSnapshot(inboundID string) (client.InboundSnapshot, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, in := range s.inbounds {
-		if in.Name == inboundID {
-			return client.InboundSnapshot{
-				Name:           in.Name,
-				Protocol:       in.Protocol,
-				Transport:      in.Transport,
-				Port:           in.Port,
-				Enabled:        in.Enabled,
-				Password:       in.Password,
-				ProtocolFields: in.ProtocolFields,
-			}, true
-		}
-	}
-	return client.InboundSnapshot{}, false
-}
-
 // --- authenticated token management ---
 
 func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Request, clientID string) {

@@ -286,7 +286,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			defer response.Body.Close()
 			if response.StatusCode < 200 || response.StatusCode >= 300 {
 				body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-				return fmt.Errorf("Caddy load status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+				return fmt.Errorf("caddy load status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 			}
 			_, err = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 			return err
