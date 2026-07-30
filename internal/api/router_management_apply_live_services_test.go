@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -387,12 +388,20 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	// The Caddy admin API load fails and the systemctl reload fallback also fails,
-	// so the apply stops and rolls back. Each forward/rollback attempt reports one
-	// terminal Caddy result with both errors. The local privileged helper probes
-	// is-active before each reload, adding two calls per reload attempt.
-	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 1 || len(serviceCalls) != 4 {
-		t.Fatalf("expected failed caddy fallback followed by rollback reload: response=%+v calls=%+v", response, serviceCalls)
+	// The forward Caddy load succeeds, the following Hysteria2 restart fails,
+	// and the transaction rolls back the already-published files. Re-applying
+	// the previous Caddy state probes the unit and attempts to start it because
+	// the injected runner reports every systemd command as failed.
+	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 2 || len(response.RollbackActions) != 1 {
+		t.Fatalf("expected failed service action followed by Caddy rollback: response=%+v calls=%+v", response, serviceCalls)
+	}
+	wantCalls := [][]string{
+		{"systemctl", "restart", "veil-hysteria2@hysteria2.service"},
+		{"systemctl", "is-active", "veil-caddy.service"},
+		{"systemctl", "start", "veil-caddy.service"},
+	}
+	if !reflect.DeepEqual(serviceCalls, wantCalls) {
+		t.Fatalf("unexpected forward/rollback service calls: got=%+v want=%+v", serviceCalls, wantCalls)
 	}
 }
 
@@ -497,8 +506,12 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	if string(body) != "old caddy\n" {
 		t.Fatalf("expected rollback to restore old live config, got %q", string(body))
 	}
-	if len(serviceCalls) != 0 {
-		t.Fatalf("expected no systemctl service calls when caddy admin api succeeds: %+v", serviceCalls)
+	wantRollbackCalls := [][]string{
+		{"systemctl", "is-active", "veil-caddy.service"},
+		{"systemctl", "reload", "veil-caddy.service"},
+	}
+	if !reflect.DeepEqual(serviceCalls, wantRollbackCalls) {
+		t.Fatalf("unexpected bounded Caddy rollback calls: got=%+v want=%+v", serviceCalls, wantRollbackCalls)
 	}
 }
 
