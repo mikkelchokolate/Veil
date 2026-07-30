@@ -21,7 +21,7 @@ addEventListener('activate', function (event) {
 })
 
 addEventListener('message', async function (event) {
-  // Veil hardening: only accept control messages from same-origin clients.
+  // Accept control messages only from clients served by this panel origin.
   if (event.origin !== self.location.origin) {
     return
   }

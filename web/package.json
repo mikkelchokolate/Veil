@@ -13,6 +13,7 @@
 		"check": "node_modules/.bin/biome check --error-on-warnings .",
 		"check:fix": "node_modules/.bin/biome check --write .",
 		"gen": "node node_modules/orval/dist/bin/orval.mjs --config orval.config.ts",
+		"postinstall": "node scripts/prepare_msw_worker.mjs",
 		"test": "NODE_OPTIONS=--no-experimental-webstorage vitest run --project=jsdom",
 		"test:browser": "node_modules/.bin/vitest run --project=browser",
 		"test:e2e": "node_modules/.bin/playwright test",
