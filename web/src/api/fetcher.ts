@@ -9,7 +9,12 @@ export class ApiError extends Error {
 	code: string | undefined;
 	details: unknown;
 
-	constructor(status: number, message: string, code?: string, details?: unknown) {
+	constructor(
+		status: number,
+		message: string,
+		code?: string,
+		details?: unknown,
+	) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
@@ -33,7 +38,8 @@ export class CancelledError extends Error {
 }
 
 function panelBasePath(): string {
-	const element = typeof document !== "undefined" ? document.querySelector("base") : null;
+	const element =
+		typeof document !== "undefined" ? document.querySelector("base") : null;
 	const href = element?.getAttribute("href") ?? "/";
 	return href.endsWith("/") ? href.slice(0, -1) : href;
 }
@@ -62,7 +68,11 @@ function abortError(error: unknown): boolean {
 		: error instanceof Error && error.name === "AbortError";
 }
 
-async function requestOnce(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+async function requestOnce(
+	url: string,
+	options: RequestInit,
+	timeoutMs: number,
+): Promise<Response> {
 	const controller = new AbortController();
 	let timedOut = false;
 	let callerCancelled = options.signal?.aborted ?? false;
@@ -76,7 +86,11 @@ async function requestOnce(url: string, options: RequestInit, timeoutMs: number)
 		controller.abort();
 	}, timeoutMs);
 	try {
-		return await fetch(url, { ...options, signal: controller.signal, redirect: "follow" });
+		return await fetch(url, {
+			...options,
+			signal: controller.signal,
+			redirect: "follow",
+		});
 	} catch (error) {
 		if (abortError(error)) {
 			if (callerCancelled) throw new CancelledError();
@@ -93,19 +107,32 @@ function assertSameOriginRedirect(response: Response) {
 	if (!response.redirected) return;
 	const finalURL = new URL(response.url, window.location.href);
 	if (finalURL.origin !== window.location.origin) {
-		throw new ApiError(502, "Cross-origin API redirect rejected", "external_redirect");
+		throw new ApiError(
+			502,
+			"Cross-origin API redirect rejected",
+			"external_redirect",
+		);
 	}
 }
 
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+export async function apiFetch<T>(
+	path: string,
+	options?: RequestInit,
+): Promise<T> {
 	const method = (options?.method ?? "GET").toUpperCase();
 	const headers = new Headers(options?.headers ?? {});
 	if (!headers.has("Accept")) headers.set("Accept", "application/json");
 	if (options?.body !== undefined && !headers.has("Content-Type")) {
 		headers.set("Content-Type", "application/json");
 	}
-	if (csrfToken && !isSafeMethod(method)) headers.set("X-CSRF-Token", csrfToken);
-	const requestOptions: RequestInit = { credentials: "same-origin", ...options, method, headers };
+	if (csrfToken && !isSafeMethod(method))
+		headers.set("X-CSRF-Token", csrfToken);
+	const requestOptions: RequestInit = {
+		credentials: "same-origin",
+		...options,
+		method,
+		headers,
+	};
 	const attempts = isSafeMethod(method) ? 3 : 1;
 	let response: Response | undefined;
 	let lastError: unknown;
@@ -115,7 +142,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 			if (!retryableStatus(response.status) || attempt === attempts - 1) break;
 			await response.body?.cancel();
 		} catch (error) {
-			if (error instanceof TimeoutError || error instanceof CancelledError || attempt === attempts - 1) {
+			if (
+				error instanceof TimeoutError ||
+				error instanceof CancelledError ||
+				attempt === attempts - 1
+			) {
 				throw error;
 			}
 			lastError = error;
@@ -124,7 +155,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 	if (!response) throw lastError ?? new Error("API request failed");
 	assertSameOriginRedirect(response);
 	const text = await response.text();
-	let body: unknown = undefined;
+	let body: unknown;
 	if (text) {
 		try {
 			body = JSON.parse(text);
@@ -133,8 +164,15 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 		}
 	}
 	if (!response.ok) {
-		const maybe = body as { error?: string; message?: string; code?: string; details?: unknown } | undefined;
-		throw new ApiError(response.status, maybe?.error ?? maybe?.message ?? response.statusText, maybe?.code, maybe?.details);
+		const maybe = body as
+			| { error?: string; message?: string; code?: string; details?: unknown }
+			| undefined;
+		throw new ApiError(
+			response.status,
+			maybe?.error ?? maybe?.message ?? response.statusText,
+			maybe?.code,
+			maybe?.details,
+		);
 	}
 	return body as T;
 }

@@ -19,7 +19,8 @@ class TestBroadcastChannel {
 
 	postMessage(data: unknown) {
 		for (const channel of TestBroadcastChannel.channels.get(this.name) ?? []) {
-			if (channel !== this) queueMicrotask(() => channel.onmessage?.({ data } as MessageEvent));
+			if (channel !== this)
+				queueMicrotask(() => channel.onmessage?.({ data } as MessageEvent));
 		}
 	}
 
@@ -32,7 +33,8 @@ class TestBroadcastChannel {
 	}
 
 	removeEventListener(type: string, listener: (event: MessageEvent) => void) {
-		if (type === "message" && this.onmessage === listener) this.onmessage = null;
+		if (type === "message" && this.onmessage === listener)
+			this.onmessage = null;
 	}
 }
 
@@ -83,16 +85,38 @@ describe("cross-tab auth synchronization", () => {
 		);
 		render(
 			<>
-				<Tab><Probe id="tab-one" /></Tab>
-				<Tab><Probe id="tab-two" /></Tab>
+				<Tab>
+					<Probe id="tab-one" />
+				</Tab>
+				<Tab>
+					<Probe id="tab-two" />
+				</Tab>
 			</>,
 		);
-		await waitFor(() => expect(screen.getByTestId("tab-one-session")).toHaveTextContent('"role":"admin"'));
-		await waitFor(() => expect(screen.getByTestId("tab-two-session")).toHaveTextContent('"role":"admin"'));
+		await waitFor(() =>
+			expect(screen.getByTestId("tab-one-session")).toHaveTextContent(
+				'"role":"admin"',
+			),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("tab-two-session")).toHaveTextContent(
+				'"role":"admin"',
+			),
+		);
 
-		await userEvent.click(screen.getByRole("button", { name: "logout-tab-one" }));
-		await waitFor(() => expect(screen.getByTestId("tab-one-session")).toHaveTextContent('"authenticated":false'));
-		await waitFor(() => expect(screen.getByTestId("tab-two-session")).toHaveTextContent('"authenticated":false'));
+		await userEvent.click(
+			screen.getByRole("button", { name: "logout-tab-one" }),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("tab-one-session")).toHaveTextContent(
+				'"authenticated":false',
+			),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("tab-two-session")).toHaveTextContent(
+				'"authenticated":false',
+			),
+		);
 
 		session = {
 			authenticated: true,

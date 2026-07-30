@@ -28,7 +28,9 @@ describe("apiFetch request policy", () => {
 			"//attacker.example/api",
 			"http://attacker.example/api",
 		]) {
-			expect(() => fetcher.apiUrl(value)).toThrow(/relative|absolute|same-origin/i);
+			expect(() => fetcher.apiUrl(value)).toThrow(
+				/relative|absolute|same-origin/i,
+			);
 		}
 	});
 
@@ -81,15 +83,18 @@ describe("apiFetch request policy", () => {
 		const controller = new AbortController();
 		vi.stubGlobal(
 			"fetch",
-			vi.fn((_url: string, options?: RequestInit) =>
-				new Promise<Response>((_resolve, reject) => {
-					options?.signal?.addEventListener("abort", () =>
-						reject(new DOMException("cancelled", "AbortError")),
-					);
-				}),
+			vi.fn(
+				(_url: string, options?: RequestInit) =>
+					new Promise<Response>((_resolve, reject) => {
+						options?.signal?.addEventListener("abort", () =>
+							reject(new DOMException("cancelled", "AbortError")),
+						);
+					}),
 			),
 		);
-		const pending = fetcher.apiFetch("/api/cancel", { signal: controller.signal });
+		const pending = fetcher.apiFetch("/api/cancel", {
+			signal: controller.signal,
+		});
 		const outcome = pending.then(
 			() => undefined,
 			(error: unknown) => error,
@@ -105,12 +110,17 @@ describe("apiFetch request policy", () => {
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockResolvedValue(
-				jsonResponse({ secret: "must not consume" }, {
-					redirected: true,
-					url: "https://attacker.example/capture",
-				}),
+				jsonResponse(
+					{ secret: "must not consume" },
+					{
+						redirected: true,
+						url: "https://attacker.example/capture",
+					},
+				),
 			),
 		);
-		await expect(fetcher.apiFetch("/api/redirect")).rejects.toThrow(/redirect|origin/i);
+		await expect(fetcher.apiFetch("/api/redirect")).rejects.toThrow(
+			/redirect|origin/i,
+		);
 	});
 });
