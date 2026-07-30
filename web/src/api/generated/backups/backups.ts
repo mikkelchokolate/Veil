@@ -69,12 +69,14 @@ import type {
   BackupRestoreRequest,
   BackupVerificationReport,
   BadRequestResponse,
+  ConflictResponse,
   EmptyObject,
-  ErrorEnvelope,
   ForbiddenResponse,
+  LockedResponse,
   NotFoundResponse,
   ServiceUnavailableResponse,
-  UnauthorizedResponse
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -214,6 +216,21 @@ export type postApiBackupsResponse403 = {
   status: 403
 }
 
+export type postApiBackupsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiBackupsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiBackupsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiBackupsResponse503 = {
   data: ServiceUnavailableResponse
   status: 503
@@ -222,7 +239,7 @@ export type postApiBackupsResponse503 = {
 export type postApiBackupsResponseSuccess = (postApiBackupsResponse201) & {
   headers: Headers;
 };
-export type postApiBackupsResponseError = (postApiBackupsResponse400 | postApiBackupsResponse401 | postApiBackupsResponse403 | postApiBackupsResponse503) & {
+export type postApiBackupsResponseError = (postApiBackupsResponse400 | postApiBackupsResponse401 | postApiBackupsResponse403 | postApiBackupsResponse409 | postApiBackupsResponse422 | postApiBackupsResponse423 | postApiBackupsResponse503) & {
   headers: Headers;
 };
 
@@ -264,7 +281,7 @@ export const getPostApiBackupsQueryKey = (backupCreateRequest?: BackupCreateRequ
     }
 
 
-export const getPostApiBackupsQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(backupCreateRequest: BackupCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiBackupsQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(backupCreateRequest: BackupCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -283,10 +300,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackups>>>
-export type PostApiBackupsQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+export type PostApiBackupsQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupCreateRequest: BackupCreateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiBackups>>,
@@ -296,7 +313,7 @@ export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBacku
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupCreateRequest: BackupCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiBackups>>,
@@ -306,7 +323,7 @@ export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBacku
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupCreateRequest: BackupCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -314,7 +331,7 @@ export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBacku
  * @summary Create and verify an encrypted archive
  */
 
-export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+export function usePostApiBackups<TData = Awaited<ReturnType<typeof postApiBackups>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupCreateRequest: BackupCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackups>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -351,10 +368,30 @@ export type postApiBackupsPruneResponse403 = {
   status: 403
 }
 
+export type postApiBackupsPruneResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiBackupsPruneResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiBackupsPruneResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiBackupsPruneResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiBackupsPruneResponseSuccess = (postApiBackupsPruneResponse200) & {
   headers: Headers;
 };
-export type postApiBackupsPruneResponseError = (postApiBackupsPruneResponse400 | postApiBackupsPruneResponse401 | postApiBackupsPruneResponse403) & {
+export type postApiBackupsPruneResponseError = (postApiBackupsPruneResponse400 | postApiBackupsPruneResponse401 | postApiBackupsPruneResponse403 | postApiBackupsPruneResponse409 | postApiBackupsPruneResponse422 | postApiBackupsPruneResponse423 | postApiBackupsPruneResponse503) & {
   headers: Headers;
 };
 
@@ -394,7 +431,7 @@ export const getPostApiBackupsPruneQueryKey = (backupPruneRequest?: BackupPruneR
     }
 
 
-export const getPostApiBackupsPruneQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(backupPruneRequest: BackupPruneRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiBackupsPruneQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(backupPruneRequest: BackupPruneRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -413,10 +450,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsPruneQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsPrune>>>
-export type PostApiBackupsPruneQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+export type PostApiBackupsPruneQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupPruneRequest: BackupPruneRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiBackupsPrune>>,
@@ -426,7 +463,7 @@ export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApi
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupPruneRequest: BackupPruneRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiBackupsPrune>>,
@@ -436,7 +473,7 @@ export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApi
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupPruneRequest: BackupPruneRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -444,7 +481,7 @@ export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApi
  * @summary Apply managed archive retention
  */
 
-export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApiBackupsPrune>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  backupPruneRequest: BackupPruneRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -581,9 +618,19 @@ export type postApiBackupsNameVerifyResponse404 = {
   status: 404
 }
 
+export type postApiBackupsNameVerifyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
 export type postApiBackupsNameVerifyResponse422 = {
-  data: ErrorEnvelope
+  data: ValidationFailedResponse
   status: 422
+}
+
+export type postApiBackupsNameVerifyResponse423 = {
+  data: LockedResponse
+  status: 423
 }
 
 export type postApiBackupsNameVerifyResponse503 = {
@@ -594,7 +641,7 @@ export type postApiBackupsNameVerifyResponse503 = {
 export type postApiBackupsNameVerifyResponseSuccess = (postApiBackupsNameVerifyResponse200) & {
   headers: Headers;
 };
-export type postApiBackupsNameVerifyResponseError = (postApiBackupsNameVerifyResponse401 | postApiBackupsNameVerifyResponse403 | postApiBackupsNameVerifyResponse404 | postApiBackupsNameVerifyResponse422 | postApiBackupsNameVerifyResponse503) & {
+export type postApiBackupsNameVerifyResponseError = (postApiBackupsNameVerifyResponse401 | postApiBackupsNameVerifyResponse403 | postApiBackupsNameVerifyResponse404 | postApiBackupsNameVerifyResponse409 | postApiBackupsNameVerifyResponse422 | postApiBackupsNameVerifyResponse423 | postApiBackupsNameVerifyResponse503) & {
   headers: Headers;
 };
 
@@ -635,7 +682,7 @@ export const getPostApiBackupsNameVerifyQueryKey = (name: string,
     }
 
 
-export const getPostApiBackupsNameVerifyQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(name: string,
+export const getPostApiBackupsNameVerifyQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -655,10 +702,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsNameVerifyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameVerify>>>
-export type PostApiBackupsNameVerifyQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
+export type PostApiBackupsNameVerifyQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -669,7 +716,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -680,7 +727,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -689,7 +736,7 @@ export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof po
  * @summary Decrypt and verify an archive without writing state
  */
 
-export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameVerify<TData = Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -732,9 +779,19 @@ export type postApiBackupsNameRestoreResponse404 = {
   status: 404
 }
 
+export type postApiBackupsNameRestoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
 export type postApiBackupsNameRestoreResponse422 = {
-  data: ErrorEnvelope
+  data: ValidationFailedResponse
   status: 422
+}
+
+export type postApiBackupsNameRestoreResponse423 = {
+  data: LockedResponse
+  status: 423
 }
 
 export type postApiBackupsNameRestoreResponse503 = {
@@ -745,7 +802,7 @@ export type postApiBackupsNameRestoreResponse503 = {
 export type postApiBackupsNameRestoreResponseSuccess = (postApiBackupsNameRestoreResponse202) & {
   headers: Headers;
 };
-export type postApiBackupsNameRestoreResponseError = (postApiBackupsNameRestoreResponse400 | postApiBackupsNameRestoreResponse401 | postApiBackupsNameRestoreResponse403 | postApiBackupsNameRestoreResponse404 | postApiBackupsNameRestoreResponse422 | postApiBackupsNameRestoreResponse503) & {
+export type postApiBackupsNameRestoreResponseError = (postApiBackupsNameRestoreResponse400 | postApiBackupsNameRestoreResponse401 | postApiBackupsNameRestoreResponse403 | postApiBackupsNameRestoreResponse404 | postApiBackupsNameRestoreResponse409 | postApiBackupsNameRestoreResponse422 | postApiBackupsNameRestoreResponse423 | postApiBackupsNameRestoreResponse503) & {
   headers: Headers;
 };
 
@@ -789,7 +846,7 @@ export const getPostApiBackupsNameRestoreQueryKey = (name: string,
     }
 
 
-export const getPostApiBackupsNameRestoreQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(name: string,
+export const getPostApiBackupsNameRestoreQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -809,10 +866,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiBackupsNameRestoreQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameRestore>>>
-export type PostApiBackupsNameRestoreQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
+export type PostApiBackupsNameRestoreQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -823,7 +880,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -834,7 +891,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -843,7 +900,7 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
  * @summary Queue a verified state and key restore
  */
 
-export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient

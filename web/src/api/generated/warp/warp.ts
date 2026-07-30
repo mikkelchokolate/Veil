@@ -61,6 +61,10 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
+  ValidationFailedResponse,
   WarpConfig
 } from '../models';
 
@@ -178,10 +182,30 @@ export type putApiWarpResponse400 = {
   status: 400
 }
 
+export type putApiWarpResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiWarpResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiWarpResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiWarpResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiWarpResponseSuccess = (putApiWarpResponse200) & {
   headers: Headers;
 };
-export type putApiWarpResponseError = (putApiWarpResponse400) & {
+export type putApiWarpResponseError = (putApiWarpResponse400 | putApiWarpResponse409 | putApiWarpResponse422 | putApiWarpResponse423 | putApiWarpResponse503) & {
   headers: Headers;
 };
 
@@ -220,7 +244,7 @@ export const getPutApiWarpQueryKey = (warpConfig?: WarpConfig,) => {
     }
 
 
-export const getPutApiWarpQueryOptions = <TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPutApiWarpQueryOptions = <TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -239,10 +263,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PutApiWarpQueryResult = NonNullable<Awaited<ReturnType<typeof putApiWarp>>>
-export type PutApiWarpQueryError = BadRequestResponse
+export type PutApiWarpQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  warpConfig: WarpConfig, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof putApiWarp>>,
@@ -252,7 +276,7 @@ export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TE
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof putApiWarp>>,
@@ -262,7 +286,7 @@ export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TE
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -270,7 +294,7 @@ export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TE
  * @summary Update WARP state
  */
 
-export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse>(
+export function usePutApiWarp<TData = Awaited<ReturnType<typeof putApiWarp>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  warpConfig: WarpConfig, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiWarp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

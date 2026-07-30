@@ -52,13 +52,16 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   DNSLookupRequest,
   DNSLookupResult,
   EmptyObject,
+  LockedResponse,
   PingRequest,
   PingResult,
   ServiceUnavailableResponse,
-  SpeedtestResult
+  SpeedtestResult,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -78,10 +81,30 @@ export type postApiToolsDnsLookupResponse400 = {
   status: 400
 }
 
+export type postApiToolsDnsLookupResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsDnsLookupResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsDnsLookupResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiToolsDnsLookupResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiToolsDnsLookupResponseSuccess = (postApiToolsDnsLookupResponse200) & {
   headers: Headers;
 };
-export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400) & {
+export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400 | postApiToolsDnsLookupResponse409 | postApiToolsDnsLookupResponse422 | postApiToolsDnsLookupResponse423 | postApiToolsDnsLookupResponse503) & {
   headers: Headers;
 };
 
@@ -113,7 +136,7 @@ export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, 
 
 
 
-export const getPostApiToolsDnsLookupMutationOptions = <TError = BadRequestResponse,
+export const getPostApiToolsDnsLookupMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext> => {
 
@@ -142,12 +165,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiToolsDnsLookupMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsDnsLookup>>>
     export type PostApiToolsDnsLookupMutationBody = DNSLookupRequest
-    export type PostApiToolsDnsLookupMutationError = BadRequestResponse
+    export type PostApiToolsDnsLookupMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary DNS lookup diagnostic
  */
-export const usePostApiToolsDnsLookup = <TError = BadRequestResponse,
+export const usePostApiToolsDnsLookup = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
@@ -167,10 +190,30 @@ export type postApiToolsPingResponse400 = {
   status: 400
 }
 
+export type postApiToolsPingResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsPingResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsPingResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiToolsPingResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiToolsPingResponseSuccess = (postApiToolsPingResponse200) & {
   headers: Headers;
 };
-export type postApiToolsPingResponseError = (postApiToolsPingResponse400) & {
+export type postApiToolsPingResponseError = (postApiToolsPingResponse400 | postApiToolsPingResponse409 | postApiToolsPingResponse422 | postApiToolsPingResponse423 | postApiToolsPingResponse503) & {
   headers: Headers;
 };
 
@@ -202,7 +245,7 @@ export const postApiToolsPing = async (pingRequest: PingRequest, options?: Reque
 
 
 
-export const getPostApiToolsPingMutationOptions = <TError = BadRequestResponse,
+export const getPostApiToolsPingMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext> => {
 
@@ -231,12 +274,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiToolsPingMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsPing>>>
     export type PostApiToolsPingMutationBody = PingRequest
-    export type PostApiToolsPingMutationError = BadRequestResponse
+    export type PostApiToolsPingMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Ping diagnostic
  */
-export const usePostApiToolsPing = <TError = BadRequestResponse,
+export const usePostApiToolsPing = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsPing>>,
@@ -256,6 +299,21 @@ export type postApiToolsSpeedtestResponse400 = {
   status: 400
 }
 
+export type postApiToolsSpeedtestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsSpeedtestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsSpeedtestResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiToolsSpeedtestResponse503 = {
   data: ServiceUnavailableResponse
   status: 503
@@ -264,7 +322,7 @@ export type postApiToolsSpeedtestResponse503 = {
 export type postApiToolsSpeedtestResponseSuccess = (postApiToolsSpeedtestResponse200) & {
   headers: Headers;
 };
-export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse503) & {
+export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse409 | postApiToolsSpeedtestResponse422 | postApiToolsSpeedtestResponse423 | postApiToolsSpeedtestResponse503) & {
   headers: Headers;
 };
 
@@ -296,7 +354,7 @@ export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?:
 
 
 
-export const getPostApiToolsSpeedtestMutationOptions = <TError = BadRequestResponse | ServiceUnavailableResponse,
+export const getPostApiToolsSpeedtestMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext> => {
 
@@ -325,12 +383,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiToolsSpeedtestMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsSpeedtest>>>
     export type PostApiToolsSpeedtestMutationBody = EmptyObject | undefined
-    export type PostApiToolsSpeedtestMutationError = BadRequestResponse | ServiceUnavailableResponse
+    export type PostApiToolsSpeedtestMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Speedtest diagnostic
  */
-export const usePostApiToolsSpeedtest = <TError = BadRequestResponse | ServiceUnavailableResponse,
+export const usePostApiToolsSpeedtest = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsSpeedtest>>,

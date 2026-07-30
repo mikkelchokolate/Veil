@@ -57,13 +57,16 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   DNSLookupRequest,
   DNSLookupResult,
   EmptyObject,
+  LockedResponse,
   PingRequest,
   PingResult,
   ServiceUnavailableResponse,
-  SpeedtestResult
+  SpeedtestResult,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -98,10 +101,30 @@ export type postApiToolsDnsLookupResponse400 = {
   status: 400
 }
 
+export type postApiToolsDnsLookupResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsDnsLookupResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsDnsLookupResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiToolsDnsLookupResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiToolsDnsLookupResponseSuccess = (postApiToolsDnsLookupResponse200) & {
   headers: Headers;
 };
-export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400) & {
+export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400 | postApiToolsDnsLookupResponse409 | postApiToolsDnsLookupResponse422 | postApiToolsDnsLookupResponse423 | postApiToolsDnsLookupResponse503) & {
   headers: Headers;
 };
 
@@ -140,7 +163,7 @@ export const getPostApiToolsDnsLookupQueryKey = (dNSLookupRequest?: DNSLookupReq
     }
 
 
-export const getPostApiToolsDnsLookupQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiToolsDnsLookupQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -159,10 +182,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiToolsDnsLookupQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsDnsLookup>>>
-export type PostApiToolsDnsLookupQueryError = BadRequestResponse
+export type PostApiToolsDnsLookupQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  dNSLookupRequest: DNSLookupRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
@@ -172,7 +195,7 @@ export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
@@ -182,7 +205,7 @@ export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -190,7 +213,7 @@ export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postA
  * @summary DNS lookup diagnostic
  */
 
-export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse>(
+export function usePostApiToolsDnsLookup<TData = Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  dNSLookupRequest: DNSLookupRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -217,10 +240,30 @@ export type postApiToolsPingResponse400 = {
   status: 400
 }
 
+export type postApiToolsPingResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsPingResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsPingResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiToolsPingResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiToolsPingResponseSuccess = (postApiToolsPingResponse200) & {
   headers: Headers;
 };
-export type postApiToolsPingResponseError = (postApiToolsPingResponse400) & {
+export type postApiToolsPingResponseError = (postApiToolsPingResponse400 | postApiToolsPingResponse409 | postApiToolsPingResponse422 | postApiToolsPingResponse423 | postApiToolsPingResponse503) & {
   headers: Headers;
 };
 
@@ -259,7 +302,7 @@ export const getPostApiToolsPingQueryKey = (pingRequest?: PingRequest,) => {
     }
 
 
-export const getPostApiToolsPingQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiToolsPingQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -278,10 +321,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiToolsPingQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsPing>>>
-export type PostApiToolsPingQueryError = BadRequestResponse
+export type PostApiToolsPingQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  pingRequest: PingRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsPing>>,
@@ -291,7 +334,7 @@ export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsPing>>,
@@ -301,7 +344,7 @@ export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -309,7 +352,7 @@ export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToo
  * @summary Ping diagnostic
  */
 
-export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse>(
+export function usePostApiToolsPing<TData = Awaited<ReturnType<typeof postApiToolsPing>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  pingRequest: PingRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -336,6 +379,21 @@ export type postApiToolsSpeedtestResponse400 = {
   status: 400
 }
 
+export type postApiToolsSpeedtestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiToolsSpeedtestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiToolsSpeedtestResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiToolsSpeedtestResponse503 = {
   data: ServiceUnavailableResponse
   status: 503
@@ -344,7 +402,7 @@ export type postApiToolsSpeedtestResponse503 = {
 export type postApiToolsSpeedtestResponseSuccess = (postApiToolsSpeedtestResponse200) & {
   headers: Headers;
 };
-export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse503) & {
+export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse409 | postApiToolsSpeedtestResponse422 | postApiToolsSpeedtestResponse423 | postApiToolsSpeedtestResponse503) & {
   headers: Headers;
 };
 
@@ -383,7 +441,7 @@ export const getPostApiToolsSpeedtestQueryKey = (emptyObject?: EmptyObject,) => 
     }
 
 
-export const getPostApiToolsSpeedtestQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiToolsSpeedtestQueryOptions = <TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -402,10 +460,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiToolsSpeedtestQueryResult = NonNullable<Awaited<ReturnType<typeof postApiToolsSpeedtest>>>
-export type PostApiToolsSpeedtestQueryError = BadRequestResponse | ServiceUnavailableResponse
+export type PostApiToolsSpeedtestQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsSpeedtest>>,
@@ -415,7 +473,7 @@ export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiToolsSpeedtest>>,
@@ -425,7 +483,7 @@ export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -433,7 +491,7 @@ export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postA
  * @summary Speedtest diagnostic
  */
 
-export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ServiceUnavailableResponse>(
+export function usePostApiToolsSpeedtest<TData = Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

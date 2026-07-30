@@ -61,10 +61,14 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
   Inbound,
+  LockedResponse,
   NotFoundResponse,
-  UnauthorizedResponse
+  ServiceUnavailableResponse,
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -223,10 +227,30 @@ export type postApiInboundsResponse403 = {
   status: 403
 }
 
+export type postApiInboundsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiInboundsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiInboundsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiInboundsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiInboundsResponseSuccess = (postApiInboundsResponse201) & {
   headers: Headers;
 };
-export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403) & {
+export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403 | postApiInboundsResponse409 | postApiInboundsResponse422 | postApiInboundsResponse423 | postApiInboundsResponse503) & {
   headers: Headers;
 };
 
@@ -258,7 +282,7 @@ export const postApiInbounds = async (inbound: Inbound, options?: RequestInit): 
 
 
 
-export const getPostApiInboundsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse,
+export const getPostApiInboundsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext> => {
 
@@ -287,12 +311,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiInboundsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInbounds>>>
     export type PostApiInboundsMutationBody = Inbound
-    export type PostApiInboundsMutationError = BadRequestResponse | ForbiddenResponse
+    export type PostApiInboundsMutationError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create an inbound
  */
-export const usePostApiInbounds = <TError = BadRequestResponse | ForbiddenResponse,
+export const usePostApiInbounds = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiInbounds>>,
@@ -441,10 +465,30 @@ export type putApiInboundsNameResponse404 = {
   status: 404
 }
 
+export type putApiInboundsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiInboundsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiInboundsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiInboundsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiInboundsNameResponseSuccess = (putApiInboundsNameResponse200) & {
   headers: Headers;
 };
-export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404) & {
+export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404 | putApiInboundsNameResponse409 | putApiInboundsNameResponse422 | putApiInboundsNameResponse423 | putApiInboundsNameResponse503) & {
   headers: Headers;
 };
 
@@ -477,7 +521,7 @@ export const putApiInboundsName = async (name: string,
 
 
 
-export const getPutApiInboundsNameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const getPutApiInboundsNameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext> => {
 
@@ -506,12 +550,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PutApiInboundsNameMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInboundsName>>>
     export type PutApiInboundsNameMutationBody = Inbound
-    export type PutApiInboundsNameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+    export type PutApiInboundsNameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update an inbound
  */
-export const usePutApiInboundsName = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const usePutApiInboundsName = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiInboundsName>>,
@@ -536,10 +580,30 @@ export type deleteApiInboundsNameResponse404 = {
   status: 404
 }
 
+export type deleteApiInboundsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiInboundsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiInboundsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiInboundsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiInboundsNameResponseSuccess = (deleteApiInboundsNameResponse200) & {
   headers: Headers;
 };
-export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404) & {
+export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404 | deleteApiInboundsNameResponse409 | deleteApiInboundsNameResponse422 | deleteApiInboundsNameResponse423 | deleteApiInboundsNameResponse503) & {
   headers: Headers;
 };
 
@@ -571,7 +635,7 @@ export const deleteApiInboundsName = async (name: string, options?: RequestInit)
 
 
 
-export const getDeleteApiInboundsNameMutationOptions = <TError = ForbiddenResponse | NotFoundResponse,
+export const getDeleteApiInboundsNameMutationOptions = <TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext> => {
 
@@ -600,12 +664,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiInboundsNameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundsName>>>
 
-    export type DeleteApiInboundsNameMutationError = ForbiddenResponse | NotFoundResponse
+    export type DeleteApiInboundsNameMutationError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Delete an inbound
  */
-export const useDeleteApiInboundsName = <TError = ForbiddenResponse | NotFoundResponse,
+export const useDeleteApiInboundsName = <TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiInboundsName>>,

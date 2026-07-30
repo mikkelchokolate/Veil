@@ -14010,18 +14010,39 @@ func (r GetApiRuntimeObservationResponse) ContentType() string {
 	return ""
 }
 
+// GetRuntimeProvenanceResponse401Headers the declared response headers of an HTTP 401 response for GetRuntimeProvenance
+type GetRuntimeProvenanceResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
 type GetRuntimeProvenanceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *map[string]interface{}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetRuntimeProvenanceResponse401Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetRuntimeProvenanceResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetRuntimeProvenanceResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetRuntimeProvenanceResponse) GetJSON403() *Forbidden {
+	return r.JSON403
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -21233,6 +21254,20 @@ func ParseGetRuntimeProvenanceResponse(rsp *http.Response) (*GetRuntimeProvenanc
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -21240,6 +21275,19 @@ func ParseGetRuntimeProvenanceResponse(rsp *http.Response) (*GetRuntimeProvenanc
 		}
 		response.JSON503 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetRuntimeProvenanceResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil

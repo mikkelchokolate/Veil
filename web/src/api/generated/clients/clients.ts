@@ -66,6 +66,8 @@ import type {
   ClientListResponse,
   ClientPatchRequest,
   ClientView,
+  ConflictResponse,
+  LockedResponse,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
   PostApiV1ClientsIdBindingsBody,
@@ -73,7 +75,9 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
   PostApiV1ClientsIdTokensTokenIdRotateBody,
-  SubscriptionTokenResponse
+  ServiceUnavailableResponse,
+  SubscriptionTokenResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -190,10 +194,30 @@ export type postApiV1ClientsResponse400 = {
   status: 400
 }
 
+export type postApiV1ClientsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsResponseSuccess = (postApiV1ClientsResponse201) & {
   headers: Headers;
 };
-export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400) & {
+export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400 | postApiV1ClientsResponse409 | postApiV1ClientsResponse422 | postApiV1ClientsResponse423 | postApiV1ClientsResponse503) & {
   headers: Headers;
 };
 
@@ -232,7 +256,7 @@ export const getPostApiV1ClientsQueryKey = (clientCreateRequest?: ClientCreateRe
     }
 
 
-export const getPostApiV1ClientsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1ClientsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -251,10 +275,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1Clients>>>
-export type PostApiV1ClientsQueryError = BadRequestResponse
+export type PostApiV1ClientsQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  clientCreateRequest: ClientCreateRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1Clients>>,
@@ -264,7 +288,7 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1Clients>>,
@@ -274,7 +298,7 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -282,7 +306,7 @@ export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1C
  * @summary Create a client
  */
 
-export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse>(
+export function usePostApiV1Clients<TData = Awaited<ReturnType<typeof postApiV1Clients>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  clientCreateRequest: ClientCreateRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -304,12 +328,34 @@ export type postApiV1ClientsBulkResponse200 = {
   status: 200
 }
 
+export type postApiV1ClientsBulkResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsBulkResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsBulkResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsBulkResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsBulkResponseSuccess = (postApiV1ClientsBulkResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsBulkResponseError = (postApiV1ClientsBulkResponse409 | postApiV1ClientsBulkResponse422 | postApiV1ClientsBulkResponse423 | postApiV1ClientsBulkResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess)
+export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess | postApiV1ClientsBulkResponseError)
 
 export const getPostApiV1ClientsBulkUrl = () => {
 
@@ -344,7 +390,7 @@ export const getPostApiV1ClientsBulkQueryKey = (postApiV1ClientsBulkBody?: PostA
     }
 
 
-export const getPostApiV1ClientsBulkQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1ClientsBulkQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -363,10 +409,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsBulkQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
-export type PostApiV1ClientsBulkQueryError = unknown
+export type PostApiV1ClientsBulkQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
@@ -376,7 +422,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
@@ -386,7 +432,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -394,7 +440,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
  * @summary Bulk action across clients; per-client results
  */
 
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = unknown>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -498,12 +544,34 @@ export const useGetApiV1ClientsIdBindings = <TError = unknown,
   status: 201
 }
 
+export type postApiV1ClientsIdBindingsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdBindingsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdBindingsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdBindingsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdBindingsResponseSuccess = (postApiV1ClientsIdBindingsResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdBindingsResponseError = (postApiV1ClientsIdBindingsResponse409 | postApiV1ClientsIdBindingsResponse422 | postApiV1ClientsIdBindingsResponse423 | postApiV1ClientsIdBindingsResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess)
+export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess | postApiV1ClientsIdBindingsResponseError)
 
 export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 
@@ -540,7 +608,7 @@ export const getPostApiV1ClientsIdBindingsQueryKey = (id: string,
     }
 
 
-export const getPostApiV1ClientsIdBindingsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(id: string,
+export const getPostApiV1ClientsIdBindingsQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -560,10 +628,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsIdBindingsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>>
-export type PostApiV1ClientsIdBindingsQueryError = unknown
+export type PostApiV1ClientsIdBindingsQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -574,7 +642,7 @@ export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -585,7 +653,7 @@ export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -594,7 +662,7 @@ export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof 
  * @summary Add a binding (optional credential)
  */
 
-export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = unknown>(
+export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -617,12 +685,34 @@ export type patchApiV1ClientsIdBindingsBindingIdResponse200 = {
   status: 200
 }
 
+export type patchApiV1ClientsIdBindingsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type patchApiV1ClientsIdBindingsBindingIdResponseSuccess = (patchApiV1ClientsIdBindingsBindingIdResponse200) & {
   headers: Headers;
 };
-;
+export type patchApiV1ClientsIdBindingsBindingIdResponseError = (patchApiV1ClientsIdBindingsBindingIdResponse409 | patchApiV1ClientsIdBindingsBindingIdResponse422 | patchApiV1ClientsIdBindingsBindingIdResponse423 | patchApiV1ClientsIdBindingsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess)
+export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess | patchApiV1ClientsIdBindingsBindingIdResponseError)
 
 export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -662,7 +752,7 @@ export const getPatchApiV1ClientsIdBindingsBindingIdQueryKey = (id: string,
     }
 
 
-export const getPatchApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(id: string,
+export const getPatchApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
@@ -683,10 +773,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PatchApiV1ClientsIdBindingsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>>
-export type PatchApiV1ClientsIdBindingsBindingIdQueryError = unknown
+export type PatchApiV1ClientsIdBindingsBindingIdQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
@@ -698,7 +788,7 @@ export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnTy
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
@@ -710,7 +800,7 @@ export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnTy
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -720,7 +810,7 @@ export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnTy
  * @summary Update a binding (toggle enabled, optimistic locking)
  */
 
-export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function usePatchApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -744,12 +834,34 @@ export type deleteApiV1ClientsIdBindingsBindingIdResponse200 = {
   status: 200
 }
 
+export type deleteApiV1ClientsIdBindingsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdBindingsBindingIdResponseSuccess = (deleteApiV1ClientsIdBindingsBindingIdResponse200) & {
   headers: Headers;
 };
-;
+export type deleteApiV1ClientsIdBindingsBindingIdResponseError = (deleteApiV1ClientsIdBindingsBindingIdResponse409 | deleteApiV1ClientsIdBindingsBindingIdResponse422 | deleteApiV1ClientsIdBindingsBindingIdResponse423 | deleteApiV1ClientsIdBindingsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess)
+export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess | deleteApiV1ClientsIdBindingsBindingIdResponseError)
 
 export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -787,7 +899,7 @@ export const getDeleteApiV1ClientsIdBindingsBindingIdQueryKey = (id: string,
     }
 
 
-export const getDeleteApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(id: string,
+export const getDeleteApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -807,10 +919,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DeleteApiV1ClientsIdBindingsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>>
-export type DeleteApiV1ClientsIdBindingsBindingIdQueryError = unknown
+export type DeleteApiV1ClientsIdBindingsBindingIdQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -821,7 +933,7 @@ export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnT
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -832,7 +944,7 @@ export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnT
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -841,7 +953,7 @@ export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnT
  * @summary Remove a binding
  */
 
-export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -864,12 +976,34 @@ export type postApiV1ClientsIdCredentialsBindingIdResponse201 = {
   status: 201
 }
 
+export type postApiV1ClientsIdCredentialsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdCredentialsBindingIdResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdCredentialsBindingIdResponseError = (postApiV1ClientsIdCredentialsBindingIdResponse409 | postApiV1ClientsIdCredentialsBindingIdResponse422 | postApiV1ClientsIdCredentialsBindingIdResponse423 | postApiV1ClientsIdCredentialsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess)
+export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess | postApiV1ClientsIdCredentialsBindingIdResponseError)
 
 export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -909,7 +1043,7 @@ export const getPostApiV1ClientsIdCredentialsBindingIdQueryKey = (id: string,
     }
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(id: string,
+export const getPostApiV1ClientsIdCredentialsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
@@ -930,10 +1064,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsIdCredentialsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>>
-export type PostApiV1ClientsIdCredentialsBindingIdQueryError = unknown
+export type PostApiV1ClientsIdCredentialsBindingIdQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>> & Pick<
@@ -945,7 +1079,7 @@ export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<Return
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>> & Pick<
@@ -957,7 +1091,7 @@ export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<Return
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -967,7 +1101,7 @@ export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<Return
  * @summary Set a binding credential
  */
 
-export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingId<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -991,12 +1125,34 @@ export type postApiV1ClientsIdCredentialsBindingIdRotateResponse200 = {
   status: 200
 }
 
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdRotateResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponseError = (postApiV1ClientsIdCredentialsBindingIdRotateResponse409 | postApiV1ClientsIdCredentialsBindingIdRotateResponse422 | postApiV1ClientsIdCredentialsBindingIdRotateResponse423 | postApiV1ClientsIdCredentialsBindingIdRotateResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess)
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess | postApiV1ClientsIdCredentialsBindingIdRotateResponseError)
 
 export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
     bindingId: string,) => {
@@ -1036,7 +1192,7 @@ export const getPostApiV1ClientsIdCredentialsBindingIdRotateQueryKey = (id: stri
     }
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(id: string,
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
@@ -1057,10 +1213,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsIdCredentialsBindingIdRotateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>>
-export type PostApiV1ClientsIdCredentialsBindingIdRotateQueryError = unknown
+export type PostApiV1ClientsIdCredentialsBindingIdRotateQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>> & Pick<
@@ -1072,7 +1228,7 @@ export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>> & Pick<
@@ -1084,7 +1240,7 @@ export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -1094,7 +1250,7 @@ export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<
  * @summary Rotate a binding credential
  */
 
-export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdCredentialsBindingIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -1118,12 +1274,34 @@ export type postApiV1ClientsMigrateLegacyResponse200 = {
   status: 200
 }
 
+export type postApiV1ClientsMigrateLegacyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsMigrateLegacyResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsMigrateLegacyResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsMigrateLegacyResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsMigrateLegacyResponseSuccess = (postApiV1ClientsMigrateLegacyResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsMigrateLegacyResponseError = (postApiV1ClientsMigrateLegacyResponse409 | postApiV1ClientsMigrateLegacyResponse422 | postApiV1ClientsMigrateLegacyResponse423 | postApiV1ClientsMigrateLegacyResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess)
+export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess | postApiV1ClientsMigrateLegacyResponseError)
 
 export const getPostApiV1ClientsMigrateLegacyUrl = () => {
 
@@ -1158,7 +1336,7 @@ export const getPostApiV1ClientsMigrateLegacyQueryKey = () => {
     }
 
 
-export const getPostApiV1ClientsMigrateLegacyQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1ClientsMigrateLegacyQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1177,10 +1355,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsMigrateLegacyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>>
-export type PostApiV1ClientsMigrateLegacyQueryError = unknown
+export type PostApiV1ClientsMigrateLegacyQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>,
@@ -1190,7 +1368,7 @@ export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<type
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>,
@@ -1200,7 +1378,7 @@ export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<type
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -1208,7 +1386,7 @@ export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<type
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
  */
 
-export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = unknown>(
+export function usePostApiV1ClientsMigrateLegacy<TData = Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1320,14 +1498,29 @@ export const useGetApiV1ClientsId = <TError = void,
 }
 
 export type patchApiV1ClientsIdResponse409 = {
-  data: void
+  data: ConflictResponse
   status: 409
+}
+
+export type patchApiV1ClientsIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type patchApiV1ClientsIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type patchApiV1ClientsIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type patchApiV1ClientsIdResponseSuccess = (patchApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409) & {
+export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409 | patchApiV1ClientsIdResponse422 | patchApiV1ClientsIdResponse423 | patchApiV1ClientsIdResponse503) & {
   headers: Headers;
 };
 
@@ -1368,7 +1561,7 @@ export const getPatchApiV1ClientsIdQueryKey = (id: string,
     }
 
 
-export const getPatchApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(id: string,
+export const getPatchApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -1388,10 +1581,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PatchApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsId>>>
-export type PatchApiV1ClientsIdQueryError = void
+export type PatchApiV1ClientsIdQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     clientPatchRequest: ClientPatchRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -1402,7 +1595,7 @@ export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -1413,7 +1606,7 @@ export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1422,7 +1615,7 @@ export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchAp
  * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
 
-export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = void>(
+export function usePatchApiV1ClientsId<TData = Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     clientPatchRequest: ClientPatchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1450,10 +1643,30 @@ export type deleteApiV1ClientsIdResponse404 = {
   status: 404
 }
 
+export type deleteApiV1ClientsIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdResponseSuccess = (deleteApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404) & {
+export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404 | deleteApiV1ClientsIdResponse409 | deleteApiV1ClientsIdResponse422 | deleteApiV1ClientsIdResponse423 | deleteApiV1ClientsIdResponse503) & {
   headers: Headers;
 };
 
@@ -1492,7 +1705,7 @@ export const getDeleteApiV1ClientsIdQueryKey = (id: string,) => {
     }
 
 
-export const getDeleteApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getDeleteApiV1ClientsIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1511,10 +1724,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DeleteApiV1ClientsIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsId>>>
-export type DeleteApiV1ClientsIdQueryError = void
+export type DeleteApiV1ClientsIdQueryError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
@@ -1524,7 +1737,7 @@ export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof delete
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
@@ -1534,7 +1747,7 @@ export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof delete
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -1542,7 +1755,7 @@ export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof delete
  * @summary Delete a client
  */
 
-export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void>(
+export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1646,12 +1859,34 @@ export const useGetApiV1ClientsIdTokens = <TError = unknown,
   status: 201
 }
 
+export type postApiV1ClientsIdTokensResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdTokensResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdTokensResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdTokensResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdTokensResponseSuccess = (postApiV1ClientsIdTokensResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdTokensResponseError = (postApiV1ClientsIdTokensResponse409 | postApiV1ClientsIdTokensResponse422 | postApiV1ClientsIdTokensResponse423 | postApiV1ClientsIdTokensResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess)
+export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess | postApiV1ClientsIdTokensResponseError)
 
 export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 
@@ -1688,7 +1923,7 @@ export const getPostApiV1ClientsIdTokensQueryKey = (id: string,
     }
 
 
-export const getPostApiV1ClientsIdTokensQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(id: string,
+export const getPostApiV1ClientsIdTokensQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -1708,10 +1943,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsIdTokensQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>>
-export type PostApiV1ClientsIdTokensQueryError = unknown
+export type PostApiV1ClientsIdTokensQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -1722,7 +1957,7 @@ export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -1733,7 +1968,7 @@ export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof po
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1742,7 +1977,7 @@ export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof po
  * @summary Issue a subscription token; plaintext returned once
  */
 
-export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1765,12 +2000,34 @@ export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
   status: 200
 }
 
+export type deleteApiV1ClientsIdTokensTokenIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdTokensTokenIdResponseSuccess = (deleteApiV1ClientsIdTokensTokenIdResponse200) & {
   headers: Headers;
 };
-;
+export type deleteApiV1ClientsIdTokensTokenIdResponseError = (deleteApiV1ClientsIdTokensTokenIdResponse409 | deleteApiV1ClientsIdTokensTokenIdResponse422 | deleteApiV1ClientsIdTokensTokenIdResponse423 | deleteApiV1ClientsIdTokensTokenIdResponse503) & {
+  headers: Headers;
+};
 
-export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess)
+export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess | deleteApiV1ClientsIdTokensTokenIdResponseError)
 
 export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (id: string,
     tokenId: string,) => {
@@ -1808,7 +2065,7 @@ export const getDeleteApiV1ClientsIdTokensTokenIdQueryKey = (id: string,
     }
 
 
-export const getDeleteApiV1ClientsIdTokensTokenIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(id: string,
+export const getDeleteApiV1ClientsIdTokensTokenIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -1828,10 +2085,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DeleteApiV1ClientsIdTokensTokenIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>>
-export type DeleteApiV1ClientsIdTokensTokenIdQueryError = unknown
+export type DeleteApiV1ClientsIdTokensTokenIdQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -1842,7 +2099,7 @@ export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -1853,7 +2110,7 @@ export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1862,7 +2119,7 @@ export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<
  * @summary Revoke a subscription token
  */
 
-export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = unknown>(
+export function useDeleteApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1885,12 +2142,34 @@ export type postApiV1ClientsIdTokensTokenIdRotateResponse200 = {
   status: 200
 }
 
+export type postApiV1ClientsIdTokensTokenIdRotateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdTokensTokenIdRotateResponseSuccess = (postApiV1ClientsIdTokensTokenIdRotateResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdTokensTokenIdRotateResponseError = (postApiV1ClientsIdTokensTokenIdRotateResponse409 | postApiV1ClientsIdTokensTokenIdRotateResponse422 | postApiV1ClientsIdTokensTokenIdRotateResponse423 | postApiV1ClientsIdTokensTokenIdRotateResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess)
+export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess | postApiV1ClientsIdTokensTokenIdRotateResponseError)
 
 export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
     tokenId: string,) => {
@@ -1930,7 +2209,7 @@ export const getPostApiV1ClientsIdTokensTokenIdRotateQueryKey = (id: string,
     }
 
 
-export const getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(id: string,
+export const getPostApiV1ClientsIdTokensTokenIdRotateQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
@@ -1951,10 +2230,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsIdTokensTokenIdRotateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>>
-export type PostApiV1ClientsIdTokensTokenIdRotateQueryError = unknown
+export type PostApiV1ClientsIdTokensTokenIdRotateQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody: undefined |  PostApiV1ClientsIdTokensTokenIdRotateBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
@@ -1966,7 +2245,7 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>> & Pick<
@@ -1978,7 +2257,7 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -1988,7 +2267,7 @@ export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnT
  * @summary Rotate a subscription token; new plaintext returned once
  */
 
-export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = unknown>(
+export function usePostApiV1ClientsIdTokensTokenIdRotate<TData = Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}

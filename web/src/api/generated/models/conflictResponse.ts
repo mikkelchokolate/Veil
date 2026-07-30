@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
+import type { ErrorEnvelope } from './errorEnvelope.ts';
 
 /**
- * A required helper, runtime, or dependency is unavailable.
+ * The resource version or idempotency payload conflicts with current state.
  */
-export type ServiceUnavailableResponse = ErrorEnvelope;
+export type ConflictResponse = ErrorEnvelope;

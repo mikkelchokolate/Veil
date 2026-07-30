@@ -43,6 +43,6 @@
 import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
 
 /**
- * A required helper, runtime, or dependency is unavailable.
+ * The resource version or idempotency payload conflicts with current state.
  */
-export type ServiceUnavailableResponse = ErrorEnvelope;
+export type ConflictResponse = ErrorEnvelope;

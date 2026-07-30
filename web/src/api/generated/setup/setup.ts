@@ -61,11 +61,14 @@ import type {
 
 import type {
   BadRequestResponse,
-  ErrorEnvelope,
+  ConflictResponse,
   ForbiddenResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
   SetupCompleteRequest,
   SetupCompleteResponse,
-  SetupStatusResponse
+  SetupStatusResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -189,14 +192,29 @@ export type postApiSetupCompleteResponse403 = {
 }
 
 export type postApiSetupCompleteResponse409 = {
-  data: ErrorEnvelope
+  data: ConflictResponse
   status: 409
+}
+
+export type postApiSetupCompleteResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiSetupCompleteResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiSetupCompleteResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type postApiSetupCompleteResponseSuccess = (postApiSetupCompleteResponse201) & {
   headers: Headers;
 };
-export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409) & {
+export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409 | postApiSetupCompleteResponse422 | postApiSetupCompleteResponse423 | postApiSetupCompleteResponse503) & {
   headers: Headers;
 };
 
@@ -236,7 +254,7 @@ export const getPostApiSetupCompleteQueryKey = (setupCompleteRequest?: SetupComp
     }
 
 
-export const getPostApiSetupCompleteQueryOptions = <TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope>(setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiSetupCompleteQueryOptions = <TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -255,10 +273,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiSetupCompleteQueryResult = NonNullable<Awaited<ReturnType<typeof postApiSetupComplete>>>
-export type PostApiSetupCompleteQueryError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope
+export type PostApiSetupCompleteQueryError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope>(
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  setupCompleteRequest: SetupCompleteRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiSetupComplete>>,
@@ -268,7 +286,7 @@ export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope>(
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiSetupComplete>>,
@@ -278,7 +296,7 @@ export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope>(
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -286,7 +304,7 @@ export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postAp
  * @summary Create the initial administrator
  */
 
-export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope>(
+export function usePostApiSetupComplete<TData = Awaited<ReturnType<typeof postApiSetupComplete>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  setupCompleteRequest: SetupCompleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

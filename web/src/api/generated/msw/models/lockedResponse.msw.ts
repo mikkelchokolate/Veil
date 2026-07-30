@@ -43,6 +43,6 @@
 import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
 
 /**
- * A required helper, runtime, or dependency is unavailable.
+ * A restore or other exclusive operation currently locks mutations.
  */
-export type ServiceUnavailableResponse = ErrorEnvelope;
+export type LockedResponse = ErrorEnvelope;

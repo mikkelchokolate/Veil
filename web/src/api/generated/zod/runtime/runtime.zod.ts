@@ -203,3 +203,8 @@ export const GetApiLogsResponse = zod.object({
   "output": zod.string()
 })
 
+/**
+ * @summary Get verified installed runtime provenance
+ */
+export const GetRuntimeProvenanceResponse = zod.record(zod.string(), zod.unknown())
+

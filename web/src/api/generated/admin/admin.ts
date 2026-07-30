@@ -57,11 +57,15 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   EmptyObject,
   ForbiddenResponse,
   KeyRotationResponse,
+  LockedResponse,
   PrivilegedFailureResponse,
-  UnauthorizedResponse
+  ServiceUnavailableResponse,
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -106,15 +110,35 @@ export type postApiAdminRotateKeyResponse403 = {
   status: 403
 }
 
+export type postApiAdminRotateKeyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiAdminRotateKeyResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiAdminRotateKeyResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiAdminRotateKeyResponse500 = {
   data: PrivilegedFailureResponse
   status: 500
 }
 
+export type postApiAdminRotateKeyResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiAdminRotateKeyResponseSuccess = (postApiAdminRotateKeyResponse200) & {
   headers: Headers;
 };
-export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse500) & {
+export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse409 | postApiAdminRotateKeyResponse422 | postApiAdminRotateKeyResponse423 | postApiAdminRotateKeyResponse500 | postApiAdminRotateKeyResponse503) & {
   headers: Headers;
 };
 
@@ -156,7 +180,7 @@ export const getPostApiAdminRotateKeyQueryKey = (emptyObject?: EmptyObject,) => 
     }
 
 
-export const getPostApiAdminRotateKeyQueryOptions = <TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiAdminRotateKeyQueryOptions = <TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -175,10 +199,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiAdminRotateKeyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiAdminRotateKey>>>
-export type PostApiAdminRotateKeyQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse
+export type PostApiAdminRotateKeyQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse
 
 
-export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse>(
  emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiAdminRotateKey>>,
@@ -188,7 +212,7 @@ export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiAdminRotateKey>>,
@@ -198,7 +222,7 @@ export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -206,7 +230,7 @@ export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postA
  * @summary Rotate the state-encryption key
  */
 
-export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse>(
+export function usePostApiAdminRotateKey<TData = Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

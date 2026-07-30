@@ -52,11 +52,15 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   EmptyObject,
   ForbiddenResponse,
   KeyRotationResponse,
+  LockedResponse,
   PrivilegedFailureResponse,
-  UnauthorizedResponse
+  ServiceUnavailableResponse,
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -86,15 +90,35 @@ export type postApiAdminRotateKeyResponse403 = {
   status: 403
 }
 
+export type postApiAdminRotateKeyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiAdminRotateKeyResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiAdminRotateKeyResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiAdminRotateKeyResponse500 = {
   data: PrivilegedFailureResponse
   status: 500
 }
 
+export type postApiAdminRotateKeyResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiAdminRotateKeyResponseSuccess = (postApiAdminRotateKeyResponse200) & {
   headers: Headers;
 };
-export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse500) & {
+export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse409 | postApiAdminRotateKeyResponse422 | postApiAdminRotateKeyResponse423 | postApiAdminRotateKeyResponse500 | postApiAdminRotateKeyResponse503) & {
   headers: Headers;
 };
 
@@ -129,7 +153,7 @@ export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?:
 
 
 
-export const getPostApiAdminRotateKeyMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse,
+export const getPostApiAdminRotateKeyMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext> => {
 
@@ -158,12 +182,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiAdminRotateKeyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminRotateKey>>>
     export type PostApiAdminRotateKeyMutationBody = EmptyObject | undefined
-    export type PostApiAdminRotateKeyMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse
+    export type PostApiAdminRotateKeyMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse
 
     /**
  * @summary Rotate the state-encryption key
  */
-export const usePostApiAdminRotateKey = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | PrivilegedFailureResponse,
+export const usePostApiAdminRotateKey = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiAdminRotateKey>>,

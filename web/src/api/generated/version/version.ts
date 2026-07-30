@@ -61,12 +61,15 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   EmptyObject,
   ErrorEnvelope,
+  LockedResponse,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
   UpdateResponse,
+  ValidationFailedResponse,
   VersionResponse
 } from '../models';
 
@@ -191,6 +194,21 @@ export type postApiVersionUpdateResponse400 = {
   status: 400
 }
 
+export type postApiVersionUpdateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiVersionUpdateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiVersionUpdateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiVersionUpdateResponse500 = {
   data: PrivilegedFailureResponse
   status: 500
@@ -209,7 +227,7 @@ export type postApiVersionUpdateResponse503 = {
 export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse200) & {
   headers: Headers;
 };
-export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
+export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse409 | postApiVersionUpdateResponse422 | postApiVersionUpdateResponse423 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
   headers: Headers;
 };
 
@@ -248,7 +266,7 @@ export const getPostApiVersionUpdateQueryKey = (emptyObject?: EmptyObject,) => {
     }
 
 
-export const getPostApiVersionUpdateQueryOptions = <TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiVersionUpdateQueryOptions = <TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -267,10 +285,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiVersionUpdateQueryResult = NonNullable<Awaited<ReturnType<typeof postApiVersionUpdate>>>
-export type PostApiVersionUpdateQueryError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
+export type PostApiVersionUpdateQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
 
 
-export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  emptyObject: undefined |  EmptyObject, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiVersionUpdate>>,
@@ -280,7 +298,7 @@ export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiVersionUpdate>>,
@@ -290,7 +308,7 @@ export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -298,7 +316,7 @@ export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postAp
  * @summary Trigger a staged self-update to the latest release
  */
 
-export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postApiVersionUpdate>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse>(
  emptyObject?: EmptyObject, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

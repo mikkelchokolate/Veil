@@ -673,12 +673,19 @@ export type getApiV1EventsResponse200 = {
   status: 200
 }
 
+export type getApiV1EventsResponse429 = {
+  data: void
+  status: 429
+}
+
 export type getApiV1EventsResponseSuccess = (getApiV1EventsResponse200) & {
   headers: Headers;
 };
-;
+export type getApiV1EventsResponseError = (getApiV1EventsResponse429) & {
+  headers: Headers;
+};
 
-export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess)
+export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess | getApiV1EventsResponseError)
 
 export const getGetApiV1EventsUrl = (params?: GetApiV1EventsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -724,7 +731,7 @@ export const getGetApiV1EventsQueryKey = (params?: GetApiV1EventsParams,) => {
     }
 
 
-export const getGetApiV1EventsQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = unknown>(params?: GetApiV1EventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getGetApiV1EventsQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = void>(params?: GetApiV1EventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -743,10 +750,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetApiV1EventsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1Events>>>
-export type GetApiV1EventsQueryError = unknown
+export type GetApiV1EventsQueryError = void
 
 
-export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = unknown>(
+export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = void>(
  params: undefined |  GetApiV1EventsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiV1Events>>,
@@ -756,7 +763,7 @@ export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Even
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = unknown>(
+export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = void>(
  params?: GetApiV1EventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiV1Events>>,
@@ -766,7 +773,7 @@ export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Even
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = unknown>(
+export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = void>(
  params?: GetApiV1EventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -774,7 +781,7 @@ export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Even
  * @summary Unified Server-Sent Events stream (A10)
  */
 
-export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = unknown>(
+export function useGetApiV1Events<TData = Awaited<ReturnType<typeof getApiV1Events>>, TError = void>(
  params?: GetApiV1EventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

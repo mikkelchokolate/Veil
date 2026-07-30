@@ -43,6 +43,6 @@
 import type { ErrorEnvelope } from './errorEnvelope.ts';
 
 /**
- * Runtime dependency is unavailable.
+ * A required helper, runtime, or dependency is unavailable.
  */
 export type ServiceUnavailableResponse = ErrorEnvelope;

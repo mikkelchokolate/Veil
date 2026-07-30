@@ -3435,8 +3435,11 @@ paths:
       - public
   /api/runtime/provenance:
     get:
+      tags:
+      - runtime
       summary: Get verified installed runtime provenance
       operationId: getRuntimeProvenance
+      x-veil-role: viewer
       x-roles:
       - admin
       - viewer
@@ -3452,6 +3455,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 components:

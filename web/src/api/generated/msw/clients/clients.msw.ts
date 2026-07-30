@@ -66,6 +66,8 @@ import type {
   ClientListResponse,
   ClientPatchRequest,
   ClientView,
+  ConflictResponse,
+  LockedResponse,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
   PostApiV1ClientsIdBindingsBody,
@@ -73,7 +75,9 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
   PostApiV1ClientsIdTokensTokenIdRotateBody,
-  SubscriptionTokenResponse
+  ServiceUnavailableResponse,
+  SubscriptionTokenResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -220,10 +224,30 @@ export type postApiV1ClientsResponse400 = {
   status: 400
 }
 
+export type postApiV1ClientsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsResponseSuccess = (postApiV1ClientsResponse201) & {
   headers: Headers;
 };
-export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400) & {
+export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400 | postApiV1ClientsResponse409 | postApiV1ClientsResponse422 | postApiV1ClientsResponse423 | postApiV1ClientsResponse503) & {
   headers: Headers;
 };
 
@@ -255,7 +279,7 @@ export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest,
 
 
 
-export const getPostApiV1ClientsMutationOptions = <TError = BadRequestResponse,
+export const getPostApiV1ClientsMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext> => {
 
@@ -284,12 +308,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1Clients>>>
     export type PostApiV1ClientsMutationBody = ClientCreateRequest
-    export type PostApiV1ClientsMutationError = BadRequestResponse
+    export type PostApiV1ClientsMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create a client
  */
-export const usePostApiV1Clients = <TError = BadRequestResponse,
+export const usePostApiV1Clients = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1Clients>>,
@@ -304,12 +328,34 @@ export const usePostApiV1Clients = <TError = BadRequestResponse,
   status: 200
 }
 
+export type postApiV1ClientsBulkResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsBulkResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsBulkResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsBulkResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsBulkResponseSuccess = (postApiV1ClientsBulkResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsBulkResponseError = (postApiV1ClientsBulkResponse409 | postApiV1ClientsBulkResponse422 | postApiV1ClientsBulkResponse423 | postApiV1ClientsBulkResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess)
+export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess | postApiV1ClientsBulkResponseError)
 
 export const getPostApiV1ClientsBulkUrl = () => {
 
@@ -337,7 +383,7 @@ export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1Cl
 
 
 
-export const getPostApiV1ClientsBulkMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsBulkMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext> => {
 
@@ -366,12 +412,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsBulkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
     export type PostApiV1ClientsBulkMutationBody = PostApiV1ClientsBulkBody
-    export type PostApiV1ClientsBulkMutationError = unknown
+    export type PostApiV1ClientsBulkMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Bulk action across clients; per-client results
  */
-export const usePostApiV1ClientsBulk = <TError = unknown,
+export const usePostApiV1ClientsBulk = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
@@ -498,12 +544,34 @@ export type postApiV1ClientsIdBindingsResponse201 = {
   status: 201
 }
 
+export type postApiV1ClientsIdBindingsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdBindingsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdBindingsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdBindingsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdBindingsResponseSuccess = (postApiV1ClientsIdBindingsResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdBindingsResponseError = (postApiV1ClientsIdBindingsResponse409 | postApiV1ClientsIdBindingsResponse422 | postApiV1ClientsIdBindingsResponse423 | postApiV1ClientsIdBindingsResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess)
+export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess | postApiV1ClientsIdBindingsResponseError)
 
 export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 
@@ -532,7 +600,7 @@ export const postApiV1ClientsIdBindings = async (id: string,
 
 
 
-export const getPostApiV1ClientsIdBindingsMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsIdBindingsMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext> => {
 
@@ -561,12 +629,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsIdBindingsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>>
     export type PostApiV1ClientsIdBindingsMutationBody = PostApiV1ClientsIdBindingsBody
-    export type PostApiV1ClientsIdBindingsMutationError = unknown
+    export type PostApiV1ClientsIdBindingsMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Add a binding (optional credential)
  */
-export const usePostApiV1ClientsIdBindings = <TError = unknown,
+export const usePostApiV1ClientsIdBindings = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>,
@@ -581,12 +649,34 @@ export const usePostApiV1ClientsIdBindings = <TError = unknown,
   status: 200
 }
 
+export type patchApiV1ClientsIdBindingsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type patchApiV1ClientsIdBindingsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type patchApiV1ClientsIdBindingsBindingIdResponseSuccess = (patchApiV1ClientsIdBindingsBindingIdResponse200) & {
   headers: Headers;
 };
-;
+export type patchApiV1ClientsIdBindingsBindingIdResponseError = (patchApiV1ClientsIdBindingsBindingIdResponse409 | patchApiV1ClientsIdBindingsBindingIdResponse422 | patchApiV1ClientsIdBindingsBindingIdResponse423 | patchApiV1ClientsIdBindingsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess)
+export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess | patchApiV1ClientsIdBindingsBindingIdResponseError)
 
 export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -617,7 +707,7 @@ export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
 
 
 
-export const getPatchApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = unknown,
+export const getPatchApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext> => {
 
@@ -646,12 +736,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PatchApiV1ClientsIdBindingsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>>
     export type PatchApiV1ClientsIdBindingsBindingIdMutationBody = PatchApiV1ClientsIdBindingsBindingIdBody
-    export type PatchApiV1ClientsIdBindingsBindingIdMutationError = unknown
+    export type PatchApiV1ClientsIdBindingsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update a binding (toggle enabled, optimistic locking)
  */
-export const usePatchApiV1ClientsIdBindingsBindingId = <TError = unknown,
+export const usePatchApiV1ClientsIdBindingsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>,
@@ -666,12 +756,34 @@ export const usePatchApiV1ClientsIdBindingsBindingId = <TError = unknown,
   status: 200
 }
 
+export type deleteApiV1ClientsIdBindingsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdBindingsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdBindingsBindingIdResponseSuccess = (deleteApiV1ClientsIdBindingsBindingIdResponse200) & {
   headers: Headers;
 };
-;
+export type deleteApiV1ClientsIdBindingsBindingIdResponseError = (deleteApiV1ClientsIdBindingsBindingIdResponse409 | deleteApiV1ClientsIdBindingsBindingIdResponse422 | deleteApiV1ClientsIdBindingsBindingIdResponse423 | deleteApiV1ClientsIdBindingsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess)
+export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess | deleteApiV1ClientsIdBindingsBindingIdResponseError)
 
 export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -701,7 +813,7 @@ export const deleteApiV1ClientsIdBindingsBindingId = async (id: string,
 
 
 
-export const getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = unknown,
+export const getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext> => {
 
@@ -730,12 +842,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiV1ClientsIdBindingsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>>
 
-    export type DeleteApiV1ClientsIdBindingsBindingIdMutationError = unknown
+    export type DeleteApiV1ClientsIdBindingsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Remove a binding
  */
-export const useDeleteApiV1ClientsIdBindingsBindingId = <TError = unknown,
+export const useDeleteApiV1ClientsIdBindingsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>,
@@ -750,12 +862,34 @@ export const useDeleteApiV1ClientsIdBindingsBindingId = <TError = unknown,
   status: 201
 }
 
+export type postApiV1ClientsIdCredentialsBindingIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdCredentialsBindingIdResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdCredentialsBindingIdResponseError = (postApiV1ClientsIdCredentialsBindingIdResponse409 | postApiV1ClientsIdCredentialsBindingIdResponse422 | postApiV1ClientsIdCredentialsBindingIdResponse423 | postApiV1ClientsIdCredentialsBindingIdResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess)
+export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess | postApiV1ClientsIdCredentialsBindingIdResponseError)
 
 export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
     bindingId: string,) => {
@@ -786,7 +920,7 @@ export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
 
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsIdCredentialsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext> => {
 
@@ -815,12 +949,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsIdCredentialsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>>
     export type PostApiV1ClientsIdCredentialsBindingIdMutationBody = PostApiV1ClientsIdCredentialsBindingIdBody
-    export type PostApiV1ClientsIdCredentialsBindingIdMutationError = unknown
+    export type PostApiV1ClientsIdCredentialsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Set a binding credential
  */
-export const usePostApiV1ClientsIdCredentialsBindingId = <TError = unknown,
+export const usePostApiV1ClientsIdCredentialsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>,
@@ -835,12 +969,34 @@ export const usePostApiV1ClientsIdCredentialsBindingId = <TError = unknown,
   status: 200
 }
 
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdRotateResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponseError = (postApiV1ClientsIdCredentialsBindingIdRotateResponse409 | postApiV1ClientsIdCredentialsBindingIdRotateResponse422 | postApiV1ClientsIdCredentialsBindingIdRotateResponse423 | postApiV1ClientsIdCredentialsBindingIdRotateResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess)
+export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess | postApiV1ClientsIdCredentialsBindingIdRotateResponseError)
 
 export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
     bindingId: string,) => {
@@ -871,7 +1027,7 @@ export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
 
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext> => {
 
@@ -900,12 +1056,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>>
     export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationBody = PostApiV1ClientsIdCredentialsBindingIdRotateBody
-    export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationError = unknown
+    export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Rotate a binding credential
  */
-export const usePostApiV1ClientsIdCredentialsBindingIdRotate = <TError = unknown,
+export const usePostApiV1ClientsIdCredentialsBindingIdRotate = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>,
@@ -920,12 +1076,34 @@ export const usePostApiV1ClientsIdCredentialsBindingIdRotate = <TError = unknown
   status: 200
 }
 
+export type postApiV1ClientsMigrateLegacyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsMigrateLegacyResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsMigrateLegacyResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsMigrateLegacyResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsMigrateLegacyResponseSuccess = (postApiV1ClientsMigrateLegacyResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsMigrateLegacyResponseError = (postApiV1ClientsMigrateLegacyResponse409 | postApiV1ClientsMigrateLegacyResponse422 | postApiV1ClientsMigrateLegacyResponse423 | postApiV1ClientsMigrateLegacyResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess)
+export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess | postApiV1ClientsMigrateLegacyResponseError)
 
 export const getPostApiV1ClientsMigrateLegacyUrl = () => {
 
@@ -953,7 +1131,7 @@ export const postApiV1ClientsMigrateLegacy = async ( options?: RequestInit): Pro
 
 
 
-export const getPostApiV1ClientsMigrateLegacyMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsMigrateLegacyMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError,void, TContext> => {
 
@@ -982,12 +1160,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsMigrateLegacyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>>
 
-    export type PostApiV1ClientsMigrateLegacyMutationError = unknown
+    export type PostApiV1ClientsMigrateLegacyMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
  */
-export const usePostApiV1ClientsMigrateLegacy = <TError = unknown,
+export const usePostApiV1ClientsMigrateLegacy = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>,
@@ -1122,14 +1300,29 @@ export type patchApiV1ClientsIdResponse200 = {
 }
 
 export type patchApiV1ClientsIdResponse409 = {
-  data: void
+  data: ConflictResponse
   status: 409
+}
+
+export type patchApiV1ClientsIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type patchApiV1ClientsIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type patchApiV1ClientsIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type patchApiV1ClientsIdResponseSuccess = (patchApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409) & {
+export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409 | patchApiV1ClientsIdResponse422 | patchApiV1ClientsIdResponse423 | patchApiV1ClientsIdResponse503) & {
   headers: Headers;
 };
 
@@ -1162,7 +1355,7 @@ export const patchApiV1ClientsId = async (id: string,
 
 
 
-export const getPatchApiV1ClientsIdMutationOptions = <TError = void,
+export const getPatchApiV1ClientsIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext> => {
 
@@ -1191,12 +1384,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PatchApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsId>>>
     export type PatchApiV1ClientsIdMutationBody = ClientPatchRequest
-    export type PatchApiV1ClientsIdMutationError = void
+    export type PatchApiV1ClientsIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
-export const usePatchApiV1ClientsId = <TError = void,
+export const usePatchApiV1ClientsId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof patchApiV1ClientsId>>,
@@ -1216,10 +1409,30 @@ export type deleteApiV1ClientsIdResponse404 = {
   status: 404
 }
 
+export type deleteApiV1ClientsIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdResponseSuccess = (deleteApiV1ClientsIdResponse200) & {
   headers: Headers;
 };
-export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404) & {
+export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404 | deleteApiV1ClientsIdResponse409 | deleteApiV1ClientsIdResponse422 | deleteApiV1ClientsIdResponse423 | deleteApiV1ClientsIdResponse503) & {
   headers: Headers;
 };
 
@@ -1251,7 +1464,7 @@ export const deleteApiV1ClientsId = async (id: string, options?: RequestInit): P
 
 
 
-export const getDeleteApiV1ClientsIdMutationOptions = <TError = void,
+export const getDeleteApiV1ClientsIdMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext> => {
 
@@ -1280,12 +1493,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsId>>>
 
-    export type DeleteApiV1ClientsIdMutationError = void
+    export type DeleteApiV1ClientsIdMutationError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Delete a client
  */
-export const useDeleteApiV1ClientsId = <TError = void,
+export const useDeleteApiV1ClientsId = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
@@ -1412,12 +1625,34 @@ export type postApiV1ClientsIdTokensResponse201 = {
   status: 201
 }
 
+export type postApiV1ClientsIdTokensResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdTokensResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdTokensResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdTokensResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdTokensResponseSuccess = (postApiV1ClientsIdTokensResponse201) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdTokensResponseError = (postApiV1ClientsIdTokensResponse409 | postApiV1ClientsIdTokensResponse422 | postApiV1ClientsIdTokensResponse423 | postApiV1ClientsIdTokensResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess)
+export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess | postApiV1ClientsIdTokensResponseError)
 
 export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 
@@ -1446,7 +1681,7 @@ export const postApiV1ClientsIdTokens = async (id: string,
 
 
 
-export const getPostApiV1ClientsIdTokensMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsIdTokensMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext> => {
 
@@ -1475,12 +1710,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsIdTokensMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>>
     export type PostApiV1ClientsIdTokensMutationBody = PostApiV1ClientsIdTokensBody
-    export type PostApiV1ClientsIdTokensMutationError = unknown
+    export type PostApiV1ClientsIdTokensMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Issue a subscription token; plaintext returned once
  */
-export const usePostApiV1ClientsIdTokens = <TError = unknown,
+export const usePostApiV1ClientsIdTokens = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>,
@@ -1495,12 +1730,34 @@ export const usePostApiV1ClientsIdTokens = <TError = unknown,
   status: 200
 }
 
+export type deleteApiV1ClientsIdTokensTokenIdResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiV1ClientsIdTokensTokenIdResponseSuccess = (deleteApiV1ClientsIdTokensTokenIdResponse200) & {
   headers: Headers;
 };
-;
+export type deleteApiV1ClientsIdTokensTokenIdResponseError = (deleteApiV1ClientsIdTokensTokenIdResponse409 | deleteApiV1ClientsIdTokensTokenIdResponse422 | deleteApiV1ClientsIdTokensTokenIdResponse423 | deleteApiV1ClientsIdTokensTokenIdResponse503) & {
+  headers: Headers;
+};
 
-export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess)
+export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess | deleteApiV1ClientsIdTokensTokenIdResponseError)
 
 export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (id: string,
     tokenId: string,) => {
@@ -1530,7 +1787,7 @@ export const deleteApiV1ClientsIdTokensTokenId = async (id: string,
 
 
 
-export const getDeleteApiV1ClientsIdTokensTokenIdMutationOptions = <TError = unknown,
+export const getDeleteApiV1ClientsIdTokensTokenIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext> => {
 
@@ -1559,12 +1816,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiV1ClientsIdTokensTokenIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>>
 
-    export type DeleteApiV1ClientsIdTokensTokenIdMutationError = unknown
+    export type DeleteApiV1ClientsIdTokensTokenIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Revoke a subscription token
  */
-export const useDeleteApiV1ClientsIdTokensTokenId = <TError = unknown,
+export const useDeleteApiV1ClientsIdTokensTokenId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>,
@@ -1579,12 +1836,34 @@ export const useDeleteApiV1ClientsIdTokensTokenId = <TError = unknown,
   status: 200
 }
 
+export type postApiV1ClientsIdTokensTokenIdRotateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiV1ClientsIdTokensTokenIdRotateResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiV1ClientsIdTokensTokenIdRotateResponseSuccess = (postApiV1ClientsIdTokensTokenIdRotateResponse200) & {
   headers: Headers;
 };
-;
+export type postApiV1ClientsIdTokensTokenIdRotateResponseError = (postApiV1ClientsIdTokensTokenIdRotateResponse409 | postApiV1ClientsIdTokensTokenIdRotateResponse422 | postApiV1ClientsIdTokensTokenIdRotateResponse423 | postApiV1ClientsIdTokensTokenIdRotateResponse503) & {
+  headers: Headers;
+};
 
-export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess)
+export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess | postApiV1ClientsIdTokensTokenIdRotateResponseError)
 
 export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
     tokenId: string,) => {
@@ -1615,7 +1894,7 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
 
 
 
-export const getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions = <TError = unknown,
+export const getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext> => {
 
@@ -1644,12 +1923,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>>
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationBody = PostApiV1ClientsIdTokensTokenIdRotateBody | undefined
-    export type PostApiV1ClientsIdTokensTokenIdRotateMutationError = unknown
+    export type PostApiV1ClientsIdTokensTokenIdRotateMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Rotate a subscription token; new plaintext returned once
  */
-export const usePostApiV1ClientsIdTokensTokenIdRotate = <TError = unknown,
+export const usePostApiV1ClientsIdTokensTokenIdRotate = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,

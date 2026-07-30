@@ -52,8 +52,12 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
+  LockedResponse,
   ServiceActionRequest,
-  ServiceActionResponse
+  ServiceActionResponse,
+  ServiceUnavailableResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -73,15 +77,35 @@ export type postApiServicesNameRestartResponse400 = {
   status: 400
 }
 
+export type postApiServicesNameRestartResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiServicesNameRestartResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiServicesNameRestartResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiServicesNameRestartResponse500 = {
   data: ServiceActionResponse
   status: 500
 }
 
+export type postApiServicesNameRestartResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiServicesNameRestartResponseSuccess = (postApiServicesNameRestartResponse200) & {
   headers: Headers;
 };
-export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse500) & {
+export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse409 | postApiServicesNameRestartResponse422 | postApiServicesNameRestartResponse423 | postApiServicesNameRestartResponse500 | postApiServicesNameRestartResponse503) & {
   headers: Headers;
 };
 
@@ -114,7 +138,7 @@ export const postApiServicesNameRestart = async (name: string,
 
 
 
-export const getPostApiServicesNameRestartMutationOptions = <TError = BadRequestResponse | ServiceActionResponse,
+export const getPostApiServicesNameRestartMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext> => {
 
@@ -143,12 +167,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiServicesNameRestartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiServicesNameRestart>>>
     export type PostApiServicesNameRestartMutationBody = ServiceActionRequest
-    export type PostApiServicesNameRestartMutationError = BadRequestResponse | ServiceActionResponse
+    export type PostApiServicesNameRestartMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse
 
     /**
  * @summary Restart a managed systemd unit
  */
-export const usePostApiServicesNameRestart = <TError = BadRequestResponse | ServiceActionResponse,
+export const usePostApiServicesNameRestart = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiServicesNameRestart>>,

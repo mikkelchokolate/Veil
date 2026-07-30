@@ -65,10 +65,13 @@ import type {
   ApplyRequest,
   ApplyResponse,
   BadRequestResponse,
+  ConflictResponse,
   GetApiApplyJobs200,
+  LockedResponse,
   PostApiApplyRollbackBody,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
+  ServiceUnavailableResponse,
   ValidationFailedResponse
 } from '../models';
 
@@ -448,14 +451,29 @@ export type postApiApplyJobsIdRetryResponse404 = {
 }
 
 export type postApiApplyJobsIdRetryResponse409 = {
-  data: void
+  data: ConflictResponse
   status: 409
+}
+
+export type postApiApplyJobsIdRetryResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiApplyJobsIdRetryResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiApplyJobsIdRetryResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type postApiApplyJobsIdRetryResponseSuccess = (postApiApplyJobsIdRetryResponse200) & {
   headers: Headers;
 };
-export type postApiApplyJobsIdRetryResponseError = (postApiApplyJobsIdRetryResponse404 | postApiApplyJobsIdRetryResponse409) & {
+export type postApiApplyJobsIdRetryResponseError = (postApiApplyJobsIdRetryResponse404 | postApiApplyJobsIdRetryResponse409 | postApiApplyJobsIdRetryResponse422 | postApiApplyJobsIdRetryResponse423 | postApiApplyJobsIdRetryResponse503) & {
   headers: Headers;
 };
 
@@ -487,7 +505,7 @@ export const postApiApplyJobsIdRetry = async (id: string, options?: RequestInit)
 
 
 
-export const getPostApiApplyJobsIdRetryMutationOptions = <TError = void,
+export const getPostApiApplyJobsIdRetryMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext> => {
 
@@ -516,12 +534,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyJobsIdRetryMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>>
 
-    export type PostApiApplyJobsIdRetryMutationError = void
+    export type PostApiApplyJobsIdRetryMutationError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create a NEW apply job for the same desired revision
  */
-export const usePostApiApplyJobsIdRetry = <TError = void,
+export const usePostApiApplyJobsIdRetry = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
@@ -537,14 +555,29 @@ export const usePostApiApplyJobsIdRetry = <TError = void,
 }
 
 export type postApiApplyReconcileResponse409 = {
-  data: void
+  data: ConflictResponse
   status: 409
+}
+
+export type postApiApplyReconcileResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiApplyReconcileResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiApplyReconcileResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type postApiApplyReconcileResponseSuccess = (postApiApplyReconcileResponse200) & {
   headers: Headers;
 };
-export type postApiApplyReconcileResponseError = (postApiApplyReconcileResponse409) & {
+export type postApiApplyReconcileResponseError = (postApiApplyReconcileResponse409 | postApiApplyReconcileResponse422 | postApiApplyReconcileResponse423 | postApiApplyReconcileResponse503) & {
   headers: Headers;
 };
 
@@ -576,7 +609,7 @@ export const postApiApplyReconcile = async ( options?: RequestInit): Promise<pos
 
 
 
-export const getPostApiApplyReconcileMutationOptions = <TError = void,
+export const getPostApiApplyReconcileMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError,void, TContext> => {
 
@@ -605,12 +638,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyReconcileMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyReconcile>>>
 
-    export type PostApiApplyReconcileMutationError = void
+    export type PostApiApplyReconcileMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
  */
-export const usePostApiApplyReconcile = <TError = void,
+export const usePostApiApplyReconcile = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyReconcile>>,
@@ -636,14 +669,29 @@ export type postApiApplyRollbackResponse404 = {
 }
 
 export type postApiApplyRollbackResponse409 = {
-  data: void
+  data: ConflictResponse
   status: 409
+}
+
+export type postApiApplyRollbackResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiApplyRollbackResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiApplyRollbackResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type postApiApplyRollbackResponseSuccess = (postApiApplyRollbackResponse200) & {
   headers: Headers;
 };
-export type postApiApplyRollbackResponseError = (postApiApplyRollbackResponse400 | postApiApplyRollbackResponse404 | postApiApplyRollbackResponse409) & {
+export type postApiApplyRollbackResponseError = (postApiApplyRollbackResponse400 | postApiApplyRollbackResponse404 | postApiApplyRollbackResponse409 | postApiApplyRollbackResponse422 | postApiApplyRollbackResponse423 | postApiApplyRollbackResponse503) & {
   headers: Headers;
 };
 
@@ -676,7 +724,7 @@ export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiAppl
 
 
 
-export const getPostApiApplyRollbackMutationOptions = <TError = BadRequestResponse | void,
+export const getPostApiApplyRollbackMutationOptions = <TError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext> => {
 
@@ -705,12 +753,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyRollback>>>
     export type PostApiApplyRollbackMutationBody = PostApiApplyRollbackBody
-    export type PostApiApplyRollbackMutationError = BadRequestResponse | void
+    export type PostApiApplyRollbackMutationError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create a new desired revision from an older immutable snapshot
  */
-export const usePostApiApplyRollback = <TError = BadRequestResponse | void,
+export const usePostApiApplyRollback = <TError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyRollback>>,
@@ -730,10 +778,30 @@ export type postApiApplyResponse400 = {
   status: 400
 }
 
+export type postApiApplyResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiApplyResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiApplyResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiApplyResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiApplyResponseSuccess = (postApiApplyResponse200) & {
   headers: Headers;
 };
-export type postApiApplyResponseError = (postApiApplyResponse400) & {
+export type postApiApplyResponseError = (postApiApplyResponse400 | postApiApplyResponse409 | postApiApplyResponse422 | postApiApplyResponse423 | postApiApplyResponse503) & {
   headers: Headers;
 };
 
@@ -765,7 +833,7 @@ export const postApiApply = async (applyRequest: ApplyRequest, options?: Request
 
 
 
-export const getPostApiApplyMutationOptions = <TError = BadRequestResponse,
+export const getPostApiApplyMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext> => {
 
@@ -794,12 +862,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApply>>>
     export type PostApiApplyMutationBody = ApplyRequest
-    export type PostApiApplyMutationError = BadRequestResponse
+    export type PostApiApplyMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Stage and optionally promote current management state
  */
-export const usePostApiApply = <TError = BadRequestResponse,
+export const usePostApiApply = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApply>>,
@@ -814,15 +882,30 @@ export const usePostApiApply = <TError = BadRequestResponse,
   status: 200
 }
 
+export type postApiApplyPlanResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
 export type postApiApplyPlanResponse422 = {
   data: ValidationFailedResponse
   status: 422
 }
 
+export type postApiApplyPlanResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiApplyPlanResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiApplyPlanResponseSuccess = (postApiApplyPlanResponse200) & {
   headers: Headers;
 };
-export type postApiApplyPlanResponseError = (postApiApplyPlanResponse422) & {
+export type postApiApplyPlanResponseError = (postApiApplyPlanResponse409 | postApiApplyPlanResponse422 | postApiApplyPlanResponse423 | postApiApplyPlanResponse503) & {
   headers: Headers;
 };
 
@@ -854,7 +937,7 @@ export const postApiApplyPlan = async ( options?: RequestInit): Promise<postApiA
 
 
 
-export const getPostApiApplyPlanMutationOptions = <TError = ValidationFailedResponse,
+export const getPostApiApplyPlanMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError,void, TContext> => {
 
@@ -883,12 +966,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyPlanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyPlan>>>
 
-    export type PostApiApplyPlanMutationError = ValidationFailedResponse
+    export type PostApiApplyPlanMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Preview the apply plan without writing live files
  */
-export const usePostApiApplyPlan = <TError = ValidationFailedResponse,
+export const usePostApiApplyPlan = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyPlan>>,
@@ -1020,10 +1103,30 @@ export type postApiProfilesRuRecommendedPreviewResponse400 = {
   status: 400
 }
 
+export type postApiProfilesRuRecommendedPreviewResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiProfilesRuRecommendedPreviewResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiProfilesRuRecommendedPreviewResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiProfilesRuRecommendedPreviewResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiProfilesRuRecommendedPreviewResponseSuccess = (postApiProfilesRuRecommendedPreviewResponse200) & {
   headers: Headers;
 };
-export type postApiProfilesRuRecommendedPreviewResponseError = (postApiProfilesRuRecommendedPreviewResponse400) & {
+export type postApiProfilesRuRecommendedPreviewResponseError = (postApiProfilesRuRecommendedPreviewResponse400 | postApiProfilesRuRecommendedPreviewResponse409 | postApiProfilesRuRecommendedPreviewResponse422 | postApiProfilesRuRecommendedPreviewResponse423 | postApiProfilesRuRecommendedPreviewResponse503) & {
   headers: Headers;
 };
 
@@ -1055,7 +1158,7 @@ export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRe
 
 
 
-export const getPostApiProfilesRuRecommendedPreviewMutationOptions = <TError = BadRequestResponse,
+export const getPostApiProfilesRuRecommendedPreviewMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext> => {
 
@@ -1084,12 +1187,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiProfilesRuRecommendedPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>>
     export type PostApiProfilesRuRecommendedPreviewMutationBody = RURecommendedPreviewRequest
-    export type PostApiProfilesRuRecommendedPreviewMutationError = BadRequestResponse
+    export type PostApiProfilesRuRecommendedPreviewMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Preview the ru-recommended install profile
  */
-export const usePostApiProfilesRuRecommendedPreview = <TError = BadRequestResponse,
+export const usePostApiProfilesRuRecommendedPreview = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>,

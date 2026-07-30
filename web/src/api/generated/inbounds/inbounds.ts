@@ -61,10 +61,14 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
   Inbound,
+  LockedResponse,
   NotFoundResponse,
-  UnauthorizedResponse
+  ServiceUnavailableResponse,
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -193,10 +197,30 @@ export type postApiInboundsResponse403 = {
   status: 403
 }
 
+export type postApiInboundsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiInboundsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiInboundsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiInboundsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiInboundsResponseSuccess = (postApiInboundsResponse201) & {
   headers: Headers;
 };
-export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403) & {
+export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403 | postApiInboundsResponse409 | postApiInboundsResponse422 | postApiInboundsResponse423 | postApiInboundsResponse503) & {
   headers: Headers;
 };
 
@@ -235,7 +259,7 @@ export const getPostApiInboundsQueryKey = (inbound?: Inbound,) => {
     }
 
 
-export const getPostApiInboundsQueryOptions = <TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiInboundsQueryOptions = <TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -254,10 +278,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiInboundsQueryResult = NonNullable<Awaited<ReturnType<typeof postApiInbounds>>>
-export type PostApiInboundsQueryError = BadRequestResponse | ForbiddenResponse
+export type PostApiInboundsQueryError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  inbound: Inbound, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiInbounds>>,
@@ -267,7 +291,7 @@ export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiInbounds>>,
@@ -277,7 +301,7 @@ export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -285,7 +309,7 @@ export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbo
  * @summary Create an inbound
  */
 
-export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePostApiInbounds<TData = Awaited<ReturnType<typeof postApiInbounds>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -411,10 +435,30 @@ export type putApiInboundsNameResponse404 = {
   status: 404
 }
 
+export type putApiInboundsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiInboundsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiInboundsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiInboundsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiInboundsNameResponseSuccess = (putApiInboundsNameResponse200) & {
   headers: Headers;
 };
-export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404) & {
+export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404 | putApiInboundsNameResponse409 | putApiInboundsNameResponse422 | putApiInboundsNameResponse423 | putApiInboundsNameResponse503) & {
   headers: Headers;
 };
 
@@ -455,7 +499,7 @@ export const getPutApiInboundsNameQueryKey = (name: string,
     }
 
 
-export const getPutApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(name: string,
+export const getPutApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string,
     inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -475,10 +519,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PutApiInboundsNameQueryResult = NonNullable<Awaited<ReturnType<typeof putApiInboundsName>>>
-export type PutApiInboundsNameQueryError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+export type PutApiInboundsNameQueryError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     inbound: Inbound, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -489,7 +533,7 @@ export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiIn
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -500,7 +544,7 @@ export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiIn
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -509,7 +553,7 @@ export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiIn
  * @summary Update an inbound
  */
 
-export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse>(
+export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiInboundsName>>, TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     inbound: Inbound, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -542,10 +586,30 @@ export type deleteApiInboundsNameResponse404 = {
   status: 404
 }
 
+export type deleteApiInboundsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiInboundsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiInboundsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiInboundsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiInboundsNameResponseSuccess = (deleteApiInboundsNameResponse200) & {
   headers: Headers;
 };
-export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404) & {
+export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404 | deleteApiInboundsNameResponse409 | deleteApiInboundsNameResponse422 | deleteApiInboundsNameResponse423 | deleteApiInboundsNameResponse503) & {
   headers: Headers;
 };
 
@@ -584,7 +648,7 @@ export const getDeleteApiInboundsNameQueryKey = (name: string,) => {
     }
 
 
-export const getDeleteApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getDeleteApiInboundsNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -603,10 +667,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DeleteApiInboundsNameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundsName>>>
-export type DeleteApiInboundsNameQueryError = ForbiddenResponse | NotFoundResponse
+export type DeleteApiInboundsNameQueryError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiInboundsName>>,
@@ -616,7 +680,7 @@ export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof delet
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiInboundsName>>,
@@ -626,7 +690,7 @@ export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof delet
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -634,7 +698,7 @@ export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof delet
  * @summary Delete an inbound
  */
 
-export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse>(
+export function useDeleteApiInboundsName<TData = Awaited<ReturnType<typeof deleteApiInboundsName>>, TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

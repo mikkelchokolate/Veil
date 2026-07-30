@@ -57,8 +57,12 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
   UnauthorizedResponse,
+  ValidationFailedResponse,
   ValidationRequest,
   ValidationResponse
 } from '../models';
@@ -105,10 +109,30 @@ export type postApiValidationResponse403 = {
   status: 403
 }
 
+export type postApiValidationResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiValidationResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiValidationResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiValidationResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiValidationResponseSuccess = (postApiValidationResponse200) & {
   headers: Headers;
 };
-export type postApiValidationResponseError = (postApiValidationResponse400 | postApiValidationResponse401 | postApiValidationResponse403) & {
+export type postApiValidationResponseError = (postApiValidationResponse400 | postApiValidationResponse401 | postApiValidationResponse403 | postApiValidationResponse409 | postApiValidationResponse422 | postApiValidationResponse423 | postApiValidationResponse503) & {
   headers: Headers;
 };
 
@@ -151,7 +175,7 @@ export const getPostApiValidationQueryKey = (validationRequest?: ValidationReque
     }
 
 
-export const getPostApiValidationQueryOptions = <TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(validationRequest: ValidationRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiValidationQueryOptions = <TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(validationRequest: ValidationRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -170,10 +194,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiValidationQueryResult = NonNullable<Awaited<ReturnType<typeof postApiValidation>>>
-export type PostApiValidationQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+export type PostApiValidationQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  validationRequest: ValidationRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiValidation>>,
@@ -183,7 +207,7 @@ export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiVa
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  validationRequest: ValidationRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiValidation>>,
@@ -193,7 +217,7 @@ export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiVa
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  validationRequest: ValidationRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -201,7 +225,7 @@ export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiVa
  * @summary Validate a candidate configuration against live host state
  */
 
-export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>(
+export function usePostApiValidation<TData = Awaited<ReturnType<typeof postApiValidation>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  validationRequest: ValidationRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiValidation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

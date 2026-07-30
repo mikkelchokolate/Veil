@@ -61,12 +61,15 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   EmptyObject,
   ErrorEnvelope,
+  LockedResponse,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
   UpdateResponse,
+  ValidationFailedResponse,
   VersionResponse
 } from '../models';
 
@@ -221,6 +224,21 @@ export type postApiVersionUpdateResponse400 = {
   status: 400
 }
 
+export type postApiVersionUpdateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiVersionUpdateResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiVersionUpdateResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiVersionUpdateResponse500 = {
   data: PrivilegedFailureResponse
   status: 500
@@ -239,7 +257,7 @@ export type postApiVersionUpdateResponse503 = {
 export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse200) & {
   headers: Headers;
 };
-export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
+export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse409 | postApiVersionUpdateResponse422 | postApiVersionUpdateResponse423 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
   headers: Headers;
 };
 
@@ -271,7 +289,7 @@ export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: 
 
 
 
-export const getPostApiVersionUpdateMutationOptions = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
+export const getPostApiVersionUpdateMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext> => {
 
@@ -300,12 +318,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiVersionUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiVersionUpdate>>>
     export type PostApiVersionUpdateMutationBody = EmptyObject | undefined
-    export type PostApiVersionUpdateMutationError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
+    export type PostApiVersionUpdateMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
 
     /**
  * @summary Trigger a staged self-update to the latest release
  */
-export const usePostApiVersionUpdate = <TError = BadRequestResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
+export const usePostApiVersionUpdate = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiVersionUpdate>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiVersionUpdate>>,

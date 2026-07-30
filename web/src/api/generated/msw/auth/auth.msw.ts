@@ -62,19 +62,23 @@ import type {
 import type {
   AuthStatusResponse,
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
   LocaleResponse,
   LocaleUpdateRequest,
+  LockedResponse,
   LoginRequest,
   LoginResponse,
   NotFoundResponse,
+  ServiceUnavailableResponse,
   SessionDeleteRequest,
   SessionInfo,
   SuccessResponse,
   UnauthorizedResponse,
   UserCreateRequest,
   UserResponse,
-  UserUpdateRequest
+  UserUpdateRequest,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -114,10 +118,30 @@ export type postApiAuthLoginResponse401 = {
   status: 401
 }
 
+export type postApiAuthLoginResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiAuthLoginResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiAuthLoginResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiAuthLoginResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiAuthLoginResponseSuccess = (postApiAuthLoginResponse200) & {
   headers: Headers;
 };
-export type postApiAuthLoginResponseError = (postApiAuthLoginResponse400 | postApiAuthLoginResponse401) & {
+export type postApiAuthLoginResponseError = (postApiAuthLoginResponse400 | postApiAuthLoginResponse401 | postApiAuthLoginResponse409 | postApiAuthLoginResponse422 | postApiAuthLoginResponse423 | postApiAuthLoginResponse503) & {
   headers: Headers;
 };
 
@@ -149,7 +173,7 @@ export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: Req
 
 
 
-export const getPostApiAuthLoginMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse,
+export const getPostApiAuthLoginMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError,{data: LoginRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError,{data: LoginRequest}, TContext> => {
 
@@ -178,12 +202,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiAuthLoginMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLogin>>>
     export type PostApiAuthLoginMutationBody = LoginRequest
-    export type PostApiAuthLoginMutationError = BadRequestResponse | UnauthorizedResponse
+    export type PostApiAuthLoginMutationError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create a browser session
  */
-export const usePostApiAuthLogin = <TError = BadRequestResponse | UnauthorizedResponse,
+export const usePostApiAuthLogin = <TError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogin>>, TError,{data: LoginRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiAuthLogin>>,
@@ -198,12 +222,34 @@ export const usePostApiAuthLogin = <TError = BadRequestResponse | UnauthorizedRe
   status: 200
 }
 
+export type postApiAuthLogoutResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiAuthLogoutResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiAuthLogoutResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiAuthLogoutResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiAuthLogoutResponseSuccess = (postApiAuthLogoutResponse200) & {
   headers: Headers;
 };
-;
+export type postApiAuthLogoutResponseError = (postApiAuthLogoutResponse409 | postApiAuthLogoutResponse422 | postApiAuthLogoutResponse423 | postApiAuthLogoutResponse503) & {
+  headers: Headers;
+};
 
-export type postApiAuthLogoutResponse = (postApiAuthLogoutResponseSuccess)
+export type postApiAuthLogoutResponse = (postApiAuthLogoutResponseSuccess | postApiAuthLogoutResponseError)
 
 export const getPostApiAuthLogoutUrl = () => {
 
@@ -231,7 +277,7 @@ export const postApiAuthLogout = async ( options?: RequestInit): Promise<postApi
 
 
 
-export const getPostApiAuthLogoutMutationOptions = <TError = unknown,
+export const getPostApiAuthLogoutMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError,void, TContext> => {
 
@@ -260,12 +306,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiAuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLogout>>>
 
-    export type PostApiAuthLogoutMutationError = unknown
+    export type PostApiAuthLogoutMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Delete the browser session cookie
  */
-export const usePostApiAuthLogout = <TError = unknown,
+export const usePostApiAuthLogout = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLogout>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiAuthLogout>>,
@@ -412,10 +458,30 @@ export type postApiAuthLocaleResponse404 = {
   status: 404
 }
 
+export type postApiAuthLocaleResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiAuthLocaleResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiAuthLocaleResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiAuthLocaleResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiAuthLocaleResponseSuccess = (postApiAuthLocaleResponse200) & {
   headers: Headers;
 };
-export type postApiAuthLocaleResponseError = (postApiAuthLocaleResponse400 | postApiAuthLocaleResponse401 | postApiAuthLocaleResponse403 | postApiAuthLocaleResponse404) & {
+export type postApiAuthLocaleResponseError = (postApiAuthLocaleResponse400 | postApiAuthLocaleResponse401 | postApiAuthLocaleResponse403 | postApiAuthLocaleResponse404 | postApiAuthLocaleResponse409 | postApiAuthLocaleResponse422 | postApiAuthLocaleResponse423 | postApiAuthLocaleResponse503) & {
   headers: Headers;
 };
 
@@ -452,7 +518,7 @@ export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest
 
 
 
-export const getPostApiAuthLocaleMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+export const getPostApiAuthLocaleMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError,{data: LocaleUpdateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError,{data: LocaleUpdateRequest}, TContext> => {
 
@@ -481,12 +547,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiAuthLocaleMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAuthLocale>>>
     export type PostApiAuthLocaleMutationBody = LocaleUpdateRequest
-    export type PostApiAuthLocaleMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type PostApiAuthLocaleMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update the current browser user's locale
  */
-export const usePostApiAuthLocale = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+export const usePostApiAuthLocale = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAuthLocale>>, TError,{data: LocaleUpdateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiAuthLocale>>,
@@ -646,10 +712,30 @@ export type deleteApiAuthSessionsResponse404 = {
   status: 404
 }
 
+export type deleteApiAuthSessionsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiAuthSessionsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiAuthSessionsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiAuthSessionsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiAuthSessionsResponseSuccess = (deleteApiAuthSessionsResponse200) & {
   headers: Headers;
 };
-export type deleteApiAuthSessionsResponseError = (deleteApiAuthSessionsResponse400 | deleteApiAuthSessionsResponse401 | deleteApiAuthSessionsResponse403 | deleteApiAuthSessionsResponse404) & {
+export type deleteApiAuthSessionsResponseError = (deleteApiAuthSessionsResponse400 | deleteApiAuthSessionsResponse401 | deleteApiAuthSessionsResponse403 | deleteApiAuthSessionsResponse404 | deleteApiAuthSessionsResponse409 | deleteApiAuthSessionsResponse422 | deleteApiAuthSessionsResponse423 | deleteApiAuthSessionsResponse503) & {
   headers: Headers;
 };
 
@@ -682,7 +768,7 @@ export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteR
 
 
 
-export const getDeleteApiAuthSessionsMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+export const getDeleteApiAuthSessionsMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError,{data: SessionDeleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError,{data: SessionDeleteRequest}, TContext> => {
 
@@ -711,12 +797,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiAuthSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiAuthSessions>>>
     export type DeleteApiAuthSessionsMutationBody = SessionDeleteRequest
-    export type DeleteApiAuthSessionsMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type DeleteApiAuthSessionsMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Revoke an active browser session
  */
-export const useDeleteApiAuthSessions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+export const useDeleteApiAuthSessions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAuthSessions>>, TError,{data: SessionDeleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiAuthSessions>>,
@@ -858,10 +944,30 @@ export type postApiUsersResponse403 = {
   status: 403
 }
 
+export type postApiUsersResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiUsersResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiUsersResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiUsersResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiUsersResponseSuccess = (postApiUsersResponse201) & {
   headers: Headers;
 };
-export type postApiUsersResponseError = (postApiUsersResponse400 | postApiUsersResponse401 | postApiUsersResponse403) & {
+export type postApiUsersResponseError = (postApiUsersResponse400 | postApiUsersResponse401 | postApiUsersResponse403 | postApiUsersResponse409 | postApiUsersResponse422 | postApiUsersResponse423 | postApiUsersResponse503) & {
   headers: Headers;
 };
 
@@ -894,7 +1000,7 @@ export const postApiUsers = async (userCreateRequest: UserCreateRequest, options
 
 
 
-export const getPostApiUsersMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse,
+export const getPostApiUsersMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsers>>, TError,{data: UserCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiUsers>>, TError,{data: UserCreateRequest}, TContext> => {
 
@@ -923,12 +1029,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiUsersMutationResult = NonNullable<Awaited<ReturnType<typeof postApiUsers>>>
     export type PostApiUsersMutationBody = UserCreateRequest
-    export type PostApiUsersMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+    export type PostApiUsersMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create a Panel user
  */
-export const usePostApiUsers = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse,
+export const usePostApiUsers = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsers>>, TError,{data: UserCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiUsers>>,
@@ -958,10 +1064,30 @@ export type putApiUsersUsernameResponse404 = {
   status: 404
 }
 
+export type putApiUsersUsernameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiUsersUsernameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiUsersUsernameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiUsersUsernameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiUsersUsernameResponseSuccess = (putApiUsersUsernameResponse200) & {
   headers: Headers;
 };
-export type putApiUsersUsernameResponseError = (putApiUsersUsernameResponse400 | putApiUsersUsernameResponse403 | putApiUsersUsernameResponse404) & {
+export type putApiUsersUsernameResponseError = (putApiUsersUsernameResponse400 | putApiUsersUsernameResponse403 | putApiUsersUsernameResponse404 | putApiUsersUsernameResponse409 | putApiUsersUsernameResponse422 | putApiUsersUsernameResponse423 | putApiUsersUsernameResponse503) & {
   headers: Headers;
 };
 
@@ -994,7 +1120,7 @@ export const putApiUsersUsername = async (username: string,
 
 
 
-export const getPutApiUsersUsernameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const getPutApiUsersUsernameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError,{username: string;data: UserUpdateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError,{username: string;data: UserUpdateRequest}, TContext> => {
 
@@ -1023,12 +1149,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PutApiUsersUsernameMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersUsername>>>
     export type PutApiUsersUsernameMutationBody = UserUpdateRequest
-    export type PutApiUsersUsernameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+    export type PutApiUsersUsernameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update a Panel user
  */
-export const usePutApiUsersUsername = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const usePutApiUsersUsername = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersUsername>>, TError,{username: string;data: UserUpdateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiUsersUsername>>,
@@ -1058,10 +1184,30 @@ export type deleteApiUsersUsernameResponse404 = {
   status: 404
 }
 
+export type deleteApiUsersUsernameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiUsersUsernameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiUsersUsernameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiUsersUsernameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiUsersUsernameResponseSuccess = (deleteApiUsersUsernameResponse204) & {
   headers: Headers;
 };
-export type deleteApiUsersUsernameResponseError = (deleteApiUsersUsernameResponse400 | deleteApiUsersUsernameResponse403 | deleteApiUsersUsernameResponse404) & {
+export type deleteApiUsersUsernameResponseError = (deleteApiUsersUsernameResponse400 | deleteApiUsersUsernameResponse403 | deleteApiUsersUsernameResponse404 | deleteApiUsersUsernameResponse409 | deleteApiUsersUsernameResponse422 | deleteApiUsersUsernameResponse423 | deleteApiUsersUsernameResponse503) & {
   headers: Headers;
 };
 
@@ -1093,7 +1239,7 @@ export const deleteApiUsersUsername = async (username: string, options?: Request
 
 
 
-export const getDeleteApiUsersUsernameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const getDeleteApiUsersUsernameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError,{username: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError,{username: string}, TContext> => {
 
@@ -1122,12 +1268,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteApiUsersUsernameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiUsersUsername>>>
 
-    export type DeleteApiUsersUsernameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse
+    export type DeleteApiUsersUsernameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Delete a Panel user
  */
-export const useDeleteApiUsersUsername = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse,
+export const useDeleteApiUsersUsername = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUsername>>, TError,{username: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiUsersUsername>>,

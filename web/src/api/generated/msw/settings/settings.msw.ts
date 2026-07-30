@@ -61,9 +61,13 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
   Settings,
-  UnauthorizedResponse
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -222,10 +226,30 @@ export type putApiSettingsResponse403 = {
   status: 403
 }
 
+export type putApiSettingsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiSettingsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiSettingsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiSettingsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiSettingsResponseSuccess = (putApiSettingsResponse200) & {
   headers: Headers;
 };
-export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403) & {
+export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403 | putApiSettingsResponse409 | putApiSettingsResponse422 | putApiSettingsResponse423 | putApiSettingsResponse503) & {
   headers: Headers;
 };
 
@@ -257,7 +281,7 @@ export const putApiSettings = async (settings: Settings, options?: RequestInit):
 
 
 
-export const getPutApiSettingsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse,
+export const getPutApiSettingsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext> => {
 
@@ -286,12 +310,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PutApiSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof putApiSettings>>>
     export type PutApiSettingsMutationBody = Settings
-    export type PutApiSettingsMutationError = BadRequestResponse | ForbiddenResponse
+    export type PutApiSettingsMutationError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update Panel settings
  */
-export const usePutApiSettings = <TError = BadRequestResponse | ForbiddenResponse,
+export const usePutApiSettings = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiSettings>>,

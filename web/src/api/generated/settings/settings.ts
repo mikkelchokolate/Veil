@@ -61,9 +61,13 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
   ForbiddenResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
   Settings,
-  UnauthorizedResponse
+  UnauthorizedResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -192,10 +196,30 @@ export type putApiSettingsResponse403 = {
   status: 403
 }
 
+export type putApiSettingsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiSettingsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiSettingsResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiSettingsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiSettingsResponseSuccess = (putApiSettingsResponse200) & {
   headers: Headers;
 };
-export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403) & {
+export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403 | putApiSettingsResponse409 | putApiSettingsResponse422 | putApiSettingsResponse423 | putApiSettingsResponse503) & {
   headers: Headers;
 };
 
@@ -234,7 +258,7 @@ export const getPutApiSettingsQueryKey = (settings?: Settings,) => {
     }
 
 
-export const getPutApiSettingsQueryOptions = <TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPutApiSettingsQueryOptions = <TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -253,10 +277,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PutApiSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof putApiSettings>>>
-export type PutApiSettingsQueryError = BadRequestResponse | ForbiddenResponse
+export type PutApiSettingsQueryError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  settings: Settings, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof putApiSettings>>,
@@ -266,7 +290,7 @@ export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettin
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof putApiSettings>>,
@@ -276,7 +300,7 @@ export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettin
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -284,7 +308,7 @@ export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettin
  * @summary Update Panel settings
  */
 
-export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse>(
+export function usePutApiSettings<TData = Awaited<ReturnType<typeof putApiSettings>>, TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  settings: Settings, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

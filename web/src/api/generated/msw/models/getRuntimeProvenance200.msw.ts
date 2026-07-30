@@ -40,9 +40,5 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
 
-/**
- * A required helper, runtime, or dependency is unavailable.
- */
-export type ServiceUnavailableResponse = ErrorEnvelope;
+export type GetRuntimeProvenance200 = { [key: string]: unknown };

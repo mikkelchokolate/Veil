@@ -62,6 +62,28 @@ func TestOpenAPIOperationsDeclareRolesAndProductionErrors(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRuntimeProvenanceUsesRuntimeTagAndAuthMetadata(t *testing.T) {
+	document := loadOpenAPIMap(t)
+	paths := mapValue(t, document, "paths")
+	pathItem, _ := paths["/api/runtime/provenance"].(map[string]any)
+	operation, _ := pathItem["get"].(map[string]any)
+
+	tags, _ := operation["tags"].([]any)
+	if len(tags) != 1 || fmt.Sprint(tags[0]) != "runtime" {
+		t.Fatalf("runtime provenance tags = %v, want [runtime]", tags)
+	}
+	if got := fmt.Sprint(operation["x-veil-role"]); got != "viewer" {
+		t.Fatalf("runtime provenance x-veil-role = %q, want viewer", got)
+	}
+	responses, _ := operation["responses"].(map[string]any)
+	for _, status := range []string{"401", "403", "503"} {
+		response, ok := responseByStatus(responses, status)
+		if !ok || !responseHasExampleOrReference(response) {
+			t.Errorf("runtime provenance response %s missing referenced production error", status)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsOperationalHeaders(t *testing.T) {
 	document := loadOpenAPIMap(t)
 	components := mapValue(t, document, "components")

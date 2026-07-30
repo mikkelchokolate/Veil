@@ -61,11 +61,14 @@ import type {
 
 import type {
   BadRequestResponse,
-  ErrorEnvelope,
+  ConflictResponse,
   ForbiddenResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
   SetupCompleteRequest,
   SetupCompleteResponse,
-  SetupStatusResponse
+  SetupStatusResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -219,14 +222,29 @@ export type postApiSetupCompleteResponse403 = {
 }
 
 export type postApiSetupCompleteResponse409 = {
-  data: ErrorEnvelope
+  data: ConflictResponse
   status: 409
+}
+
+export type postApiSetupCompleteResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiSetupCompleteResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiSetupCompleteResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
 }
 
 export type postApiSetupCompleteResponseSuccess = (postApiSetupCompleteResponse201) & {
   headers: Headers;
 };
-export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409) & {
+export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409 | postApiSetupCompleteResponse422 | postApiSetupCompleteResponse423 | postApiSetupCompleteResponse503) & {
   headers: Headers;
 };
 
@@ -259,7 +277,7 @@ export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRe
 
 
 
-export const getPostApiSetupCompleteMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope,
+export const getPostApiSetupCompleteMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext> => {
 
@@ -288,12 +306,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiSetupCompleteMutationResult = NonNullable<Awaited<ReturnType<typeof postApiSetupComplete>>>
     export type PostApiSetupCompleteMutationBody = SetupCompleteRequest
-    export type PostApiSetupCompleteMutationError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope
+    export type PostApiSetupCompleteMutationError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Create the initial administrator
  */
-export const usePostApiSetupComplete = <TError = BadRequestResponse | ForbiddenResponse | ErrorEnvelope,
+export const usePostApiSetupComplete = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiSetupComplete>>, TError,{data: SetupCompleteRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiSetupComplete>>,

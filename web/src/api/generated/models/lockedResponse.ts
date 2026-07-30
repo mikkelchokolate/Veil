@@ -40,9 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { ErrorEnvelope } from './errorEnvelope.msw.ts';
+import type { ErrorEnvelope } from './errorEnvelope.ts';
 
 /**
- * A required helper, runtime, or dependency is unavailable.
+ * A restore or other exclusive operation currently locks mutations.
  */
-export type ServiceUnavailableResponse = ErrorEnvelope;
+export type LockedResponse = ErrorEnvelope;

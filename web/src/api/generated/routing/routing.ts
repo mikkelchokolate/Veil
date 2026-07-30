@@ -61,9 +61,13 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
+  LockedResponse,
   NotFoundResponse,
   RoutingPresetResponse,
-  RoutingRule
+  RoutingRule,
+  ServiceUnavailableResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -180,10 +184,30 @@ export type postApiRoutingRulesResponse400 = {
   status: 400
 }
 
+export type postApiRoutingRulesResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiRoutingRulesResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiRoutingRulesResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiRoutingRulesResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiRoutingRulesResponseSuccess = (postApiRoutingRulesResponse201) & {
   headers: Headers;
 };
-export type postApiRoutingRulesResponseError = (postApiRoutingRulesResponse400) & {
+export type postApiRoutingRulesResponseError = (postApiRoutingRulesResponse400 | postApiRoutingRulesResponse409 | postApiRoutingRulesResponse422 | postApiRoutingRulesResponse423 | postApiRoutingRulesResponse503) & {
   headers: Headers;
 };
 
@@ -222,7 +246,7 @@ export const getPostApiRoutingRulesQueryKey = (routingRule?: RoutingRule,) => {
     }
 
 
-export const getPostApiRoutingRulesQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiRoutingRulesQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -241,10 +265,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiRoutingRulesQueryResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingRules>>>
-export type PostApiRoutingRulesQueryError = BadRequestResponse
+export type PostApiRoutingRulesQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  routingRule: RoutingRule, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiRoutingRules>>,
@@ -254,7 +278,7 @@ export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApi
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiRoutingRules>>,
@@ -264,7 +288,7 @@ export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApi
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -272,7 +296,7 @@ export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApi
  * @summary Create a routing rule
  */
 
-export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse>(
+export function usePostApiRoutingRules<TData = Awaited<ReturnType<typeof postApiRoutingRules>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -393,10 +417,30 @@ export type putApiRoutingRulesNameResponse404 = {
   status: 404
 }
 
+export type putApiRoutingRulesNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiRoutingRulesNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiRoutingRulesNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiRoutingRulesNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiRoutingRulesNameResponseSuccess = (putApiRoutingRulesNameResponse200) & {
   headers: Headers;
 };
-export type putApiRoutingRulesNameResponseError = (putApiRoutingRulesNameResponse400 | putApiRoutingRulesNameResponse404) & {
+export type putApiRoutingRulesNameResponseError = (putApiRoutingRulesNameResponse400 | putApiRoutingRulesNameResponse404 | putApiRoutingRulesNameResponse409 | putApiRoutingRulesNameResponse422 | putApiRoutingRulesNameResponse423 | putApiRoutingRulesNameResponse503) & {
   headers: Headers;
 };
 
@@ -437,7 +481,7 @@ export const getPutApiRoutingRulesNameQueryKey = (name: string,
     }
 
 
-export const getPutApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(name: string,
+export const getPutApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string,
     routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -457,10 +501,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PutApiRoutingRulesNameQueryResult = NonNullable<Awaited<ReturnType<typeof putApiRoutingRulesName>>>
-export type PutApiRoutingRulesNameQueryError = BadRequestResponse | NotFoundResponse
+export type PutApiRoutingRulesNameQueryError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     routingRule: RoutingRule, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -471,7 +515,7 @@ export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -482,7 +526,7 @@ export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -491,7 +535,7 @@ export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putA
  * @summary Update a routing rule
  */
 
-export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse>(
+export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string,
     routingRule: RoutingRule, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -519,10 +563,30 @@ export type deleteApiRoutingRulesNameResponse404 = {
   status: 404
 }
 
+export type deleteApiRoutingRulesNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiRoutingRulesNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiRoutingRulesNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiRoutingRulesNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type deleteApiRoutingRulesNameResponseSuccess = (deleteApiRoutingRulesNameResponse200) & {
   headers: Headers;
 };
-export type deleteApiRoutingRulesNameResponseError = (deleteApiRoutingRulesNameResponse404) & {
+export type deleteApiRoutingRulesNameResponseError = (deleteApiRoutingRulesNameResponse404 | deleteApiRoutingRulesNameResponse409 | deleteApiRoutingRulesNameResponse422 | deleteApiRoutingRulesNameResponse423 | deleteApiRoutingRulesNameResponse503) & {
   headers: Headers;
 };
 
@@ -561,7 +625,7 @@ export const getDeleteApiRoutingRulesNameQueryKey = (name: string,) => {
     }
 
 
-export const getDeleteApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getDeleteApiRoutingRulesNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -580,10 +644,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DeleteApiRoutingRulesNameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>>
-export type DeleteApiRoutingRulesNameQueryError = NotFoundResponse
+export type DeleteApiRoutingRulesNameQueryError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiRoutingRulesName>>,
@@ -593,7 +657,7 @@ export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof d
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof deleteApiRoutingRulesName>>,
@@ -603,7 +667,7 @@ export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof d
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -611,7 +675,7 @@ export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof d
  * @summary Delete a routing rule
  */
 
-export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse>(
+export function useDeleteApiRoutingRulesName<TData = Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -720,10 +784,30 @@ export type postApiRoutingPresetsNameResponse404 = {
   status: 404
 }
 
+export type postApiRoutingPresetsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiRoutingPresetsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiRoutingPresetsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type postApiRoutingPresetsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiRoutingPresetsNameResponseSuccess = (postApiRoutingPresetsNameResponse200) & {
   headers: Headers;
 };
-export type postApiRoutingPresetsNameResponseError = (postApiRoutingPresetsNameResponse404) & {
+export type postApiRoutingPresetsNameResponseError = (postApiRoutingPresetsNameResponse404 | postApiRoutingPresetsNameResponse409 | postApiRoutingPresetsNameResponse422 | postApiRoutingPresetsNameResponse423 | postApiRoutingPresetsNameResponse503) & {
   headers: Headers;
 };
 
@@ -762,7 +846,7 @@ export const getPostApiRoutingPresetsNameQueryKey = (name: string,) => {
     }
 
 
-export const getPostApiRoutingPresetsNameQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiRoutingPresetsNameQueryOptions = <TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -781,10 +865,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiRoutingPresetsNameQueryResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingPresetsName>>>
-export type PostApiRoutingPresetsNameQueryError = NotFoundResponse
+export type PostApiRoutingPresetsNameQueryError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiRoutingPresetsName>>,
@@ -794,7 +878,7 @@ export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiRoutingPresetsName>>,
@@ -804,7 +888,7 @@ export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof p
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -812,7 +896,7 @@ export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof p
  * @summary Apply a routing preset
  */
 
-export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse>(
+export function usePostApiRoutingPresetsName<TData = Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

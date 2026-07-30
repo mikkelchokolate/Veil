@@ -54,13 +54,17 @@ import type {
   BadRequestResponse,
   ConnectionsStats,
   DiskStats,
+  ForbiddenResponse,
   GetApiLogsParams,
+  GetRuntimeProvenance200,
   LogResult,
   NetworkStats,
   ProcessesStats,
   RuntimeObservation,
+  ServiceUnavailableResponse,
   SystemStats,
-  TLSCertInfo
+  TLSCertInfo,
+  UnauthorizedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -739,4 +743,103 @@ export const useGetApiLogs = <TError = BadRequestResponse,
         TContext
       > => {
       return useMutation(getGetApiLogsMutationOptions(options), queryClient);
+    }
+    export type getRuntimeProvenanceResponse200 = {
+  data: GetRuntimeProvenance200
+  status: 200
+}
+
+export type getRuntimeProvenanceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getRuntimeProvenanceResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getRuntimeProvenanceResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type getRuntimeProvenanceResponseSuccess = (getRuntimeProvenanceResponse200) & {
+  headers: Headers;
+};
+export type getRuntimeProvenanceResponseError = (getRuntimeProvenanceResponse401 | getRuntimeProvenanceResponse403 | getRuntimeProvenanceResponse503) & {
+  headers: Headers;
+};
+
+export type getRuntimeProvenanceResponse = (getRuntimeProvenanceResponseSuccess | getRuntimeProvenanceResponseError)
+
+export const getGetRuntimeProvenanceUrl = () => {
+
+
+
+
+  return `/api/runtime/provenance`
+}
+
+/**
+ * @summary Get verified installed runtime provenance
+ */
+export const getRuntimeProvenance = async ( options?: RequestInit): Promise<getRuntimeProvenanceResponse> => {
+
+  return apiFetch<getRuntimeProvenanceResponse>(getGetRuntimeProvenanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRuntimeProvenanceMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError,void, TContext> => {
+
+const mutationKey = ['getRuntimeProvenance'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getRuntimeProvenance>>, void> = () => {
+
+
+          return  getRuntimeProvenance(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetRuntimeProvenanceMutationResult = NonNullable<Awaited<ReturnType<typeof getRuntimeProvenance>>>
+
+    export type GetRuntimeProvenanceMutationError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+
+    /**
+ * @summary Get verified installed runtime provenance
+ */
+export const useGetRuntimeProvenance = <TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getRuntimeProvenance>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetRuntimeProvenanceMutationOptions(options), queryClient);
     }

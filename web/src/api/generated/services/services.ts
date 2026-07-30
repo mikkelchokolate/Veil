@@ -57,8 +57,12 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
+  LockedResponse,
   ServiceActionRequest,
-  ServiceActionResponse
+  ServiceActionResponse,
+  ServiceUnavailableResponse,
+  ValidationFailedResponse
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -93,15 +97,35 @@ export type postApiServicesNameRestartResponse400 = {
   status: 400
 }
 
+export type postApiServicesNameRestartResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type postApiServicesNameRestartResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type postApiServicesNameRestartResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
 export type postApiServicesNameRestartResponse500 = {
   data: ServiceActionResponse
   status: 500
 }
 
+export type postApiServicesNameRestartResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type postApiServicesNameRestartResponseSuccess = (postApiServicesNameRestartResponse200) & {
   headers: Headers;
 };
-export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse500) & {
+export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse409 | postApiServicesNameRestartResponse422 | postApiServicesNameRestartResponse423 | postApiServicesNameRestartResponse500 | postApiServicesNameRestartResponse503) & {
   headers: Headers;
 };
 
@@ -142,7 +166,7 @@ export const getPostApiServicesNameRestartQueryKey = (name: string,
     }
 
 
-export const getPostApiServicesNameRestartQueryOptions = <TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(name: string,
+export const getPostApiServicesNameRestartQueryOptions = <TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse>(name: string,
     serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -162,10 +186,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiServicesNameRestartQueryResult = NonNullable<Awaited<ReturnType<typeof postApiServicesNameRestart>>>
-export type PostApiServicesNameRestartQueryError = BadRequestResponse | ServiceActionResponse
+export type PostApiServicesNameRestartQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse
 
 
-export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse>(
  name: string,
     serviceActionRequest: ServiceActionRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -176,7 +200,7 @@ export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse>(
  name: string,
     serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -187,7 +211,7 @@ export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse>(
  name: string,
     serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -196,7 +220,7 @@ export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof 
  * @summary Restart a managed systemd unit
  */
 
-export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ServiceActionResponse>(
+export function usePostApiServicesNameRestart<TData = Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse>(
  name: string,
     serviceActionRequest: ServiceActionRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient

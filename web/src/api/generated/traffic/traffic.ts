@@ -497,12 +497,19 @@ export const useGetApiV1TrafficStream = <TError = unknown,
   status: 200
 }
 
+export type getApiV1EventsResponse429 = {
+  data: void
+  status: 429
+}
+
 export type getApiV1EventsResponseSuccess = (getApiV1EventsResponse200) & {
   headers: Headers;
 };
-;
+export type getApiV1EventsResponseError = (getApiV1EventsResponse429) & {
+  headers: Headers;
+};
 
-export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess)
+export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess | getApiV1EventsResponseError)
 
 export const getGetApiV1EventsUrl = (params?: GetApiV1EventsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -541,7 +548,7 @@ export const getApiV1Events = async (params?: GetApiV1EventsParams, options?: Re
 
 
 
-export const getGetApiV1EventsMutationOptions = <TError = unknown,
+export const getGetApiV1EventsMutationOptions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext> => {
 
@@ -570,12 +577,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type GetApiV1EventsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1Events>>>
 
-    export type GetApiV1EventsMutationError = unknown
+    export type GetApiV1EventsMutationError = void
 
     /**
  * @summary Unified Server-Sent Events stream (A10)
  */
-export const useGetApiV1Events = <TError = unknown,
+export const useGetApiV1Events = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Events>>, TError,{params?: GetApiV1EventsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1Events>>,

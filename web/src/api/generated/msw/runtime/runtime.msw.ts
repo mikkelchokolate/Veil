@@ -59,13 +59,17 @@ import type {
   BadRequestResponse,
   ConnectionsStats,
   DiskStats,
+  ForbiddenResponse,
   GetApiLogsParams,
+  GetRuntimeProvenance200,
   LogResult,
   NetworkStats,
   ProcessesStats,
   RuntimeObservation,
+  ServiceUnavailableResponse,
   SystemStats,
-  TLSCertInfo
+  TLSCertInfo,
+  UnauthorizedResponse
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -989,6 +993,135 @@ export function useGetApiLogs<TData = Awaited<ReturnType<typeof getApiLogs>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getRuntimeProvenanceResponse200 = {
+  data: GetRuntimeProvenance200
+  status: 200
+}
+
+export type getRuntimeProvenanceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getRuntimeProvenanceResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getRuntimeProvenanceResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type getRuntimeProvenanceResponseSuccess = (getRuntimeProvenanceResponse200) & {
+  headers: Headers;
+};
+export type getRuntimeProvenanceResponseError = (getRuntimeProvenanceResponse401 | getRuntimeProvenanceResponse403 | getRuntimeProvenanceResponse503) & {
+  headers: Headers;
+};
+
+export type getRuntimeProvenanceResponse = (getRuntimeProvenanceResponseSuccess | getRuntimeProvenanceResponseError)
+
+export const getGetRuntimeProvenanceUrl = () => {
+
+
+
+
+  return `/api/runtime/provenance`
+}
+
+/**
+ * @summary Get verified installed runtime provenance
+ */
+export const getRuntimeProvenance = async ( options?: RequestInit): Promise<getRuntimeProvenanceResponse> => {
+
+  return apiFetch<getRuntimeProvenanceResponse>(getGetRuntimeProvenanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRuntimeProvenanceQueryKey = () => {
+    return [
+    `/api/runtime/provenance`
+    ] as const;
+    }
+
+
+export const getGetRuntimeProvenanceQueryOptions = <TData = Awaited<ReturnType<typeof getRuntimeProvenance>>, TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRuntimeProvenanceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRuntimeProvenance>>> = ({ signal }) => getRuntimeProvenance({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRuntimeProvenanceQueryResult = NonNullable<Awaited<ReturnType<typeof getRuntimeProvenance>>>
+export type GetRuntimeProvenanceQueryError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+
+
+export function useGetRuntimeProvenance<TData = Awaited<ReturnType<typeof getRuntimeProvenance>>, TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRuntimeProvenance>>,
+          TError,
+          Awaited<ReturnType<typeof getRuntimeProvenance>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRuntimeProvenance<TData = Awaited<ReturnType<typeof getRuntimeProvenance>>, TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRuntimeProvenance>>,
+          TError,
+          Awaited<ReturnType<typeof getRuntimeProvenance>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRuntimeProvenance<TData = Awaited<ReturnType<typeof getRuntimeProvenance>>, TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get verified installed runtime provenance
+ */
+
+export function useGetRuntimeProvenance<TData = Awaited<ReturnType<typeof getRuntimeProvenance>>, TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRuntimeProvenanceQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

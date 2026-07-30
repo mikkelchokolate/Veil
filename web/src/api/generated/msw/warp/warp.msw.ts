@@ -61,6 +61,10 @@ import type {
 
 import type {
   BadRequestResponse,
+  ConflictResponse,
+  LockedResponse,
+  ServiceUnavailableResponse,
+  ValidationFailedResponse,
   WarpConfig
 } from '../models';
 
@@ -208,10 +212,30 @@ export type putApiWarpResponse400 = {
   status: 400
 }
 
+export type putApiWarpResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putApiWarpResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type putApiWarpResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type putApiWarpResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
 export type putApiWarpResponseSuccess = (putApiWarpResponse200) & {
   headers: Headers;
 };
-export type putApiWarpResponseError = (putApiWarpResponse400) & {
+export type putApiWarpResponseError = (putApiWarpResponse400 | putApiWarpResponse409 | putApiWarpResponse422 | putApiWarpResponse423 | putApiWarpResponse503) & {
   headers: Headers;
 };
 
@@ -243,7 +267,7 @@ export const putApiWarp = async (warpConfig: WarpConfig, options?: RequestInit):
 
 
 
-export const getPutApiWarpMutationOptions = <TError = BadRequestResponse,
+export const getPutApiWarpMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiWarp>>, TError,{data: WarpConfig}, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiWarp>>, TError,{data: WarpConfig}, TContext> => {
 
@@ -272,12 +296,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PutApiWarpMutationResult = NonNullable<Awaited<ReturnType<typeof putApiWarp>>>
     export type PutApiWarpMutationBody = WarpConfig
-    export type PutApiWarpMutationError = BadRequestResponse
+    export type PutApiWarpMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
  * @summary Update WARP state
  */
-export const usePutApiWarp = <TError = BadRequestResponse,
+export const usePutApiWarp = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiWarp>>, TError,{data: WarpConfig}, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiWarp>>,
