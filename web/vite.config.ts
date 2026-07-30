@@ -29,6 +29,10 @@ export default defineConfig({
 					environment: "jsdom",
 					setupFiles: ["./src/test/setup.ts"],
 					globals: true,
+					// The jsdom suite shares one MSW server and browser-global state from
+					// setup.ts. Running files concurrently lets one file's afterEach cleanup
+					// tear down another file's active render, so keep file execution serial.
+					fileParallelism: false,
 					css: false,
 					include: ["src/**/*.test.{ts,tsx}"],
 					exclude: ["src/**/*.browser.test.{ts,tsx}"],
