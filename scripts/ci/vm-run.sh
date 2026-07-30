@@ -178,7 +178,7 @@ run_job_docker_simple() { # base/browser: one ephemeral container per job
     --name "veil-ci-${IMAGE_TARGET}-$$" \
     --cpus "${CI_CPUS}" --memory "${CI_MEMORY}g" \
     --shm-size 1g \
-    --network host \
+    --network bridge \
     -v "${EXCHANGE}:/exchange" \
     -v "${CACHE_ROOT}/gomod:/home/ci/go/pkg/mod" \
     -v "${CACHE_ROOT}/gobuild:/home/ci/.cache/go-build" \
@@ -201,10 +201,11 @@ run_job_docker_systemd() {
   docker run -d \
     --name "${ctr}" \
     --privileged \
-    --cgroupns=host \
+    --cgroupns=private \
     --cpus "${CI_CPUS}" --memory "${CI_MEMORY}g" \
-    -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
-    --network host \
+    --tmpfs /run:rw,nosuid,nodev,mode=755 \
+    --tmpfs /run/lock:rw,nosuid,nodev,mode=755 \
+    --network bridge \
     -v /var/run/docker.sock:/opt/oci/docker.sock \
     -v "${EXCHANGE}:/exchange" \
     -v "${EXCHANGE}:${EXCHANGE}" \
