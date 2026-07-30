@@ -1,0 +1,6 @@
+name: CodeQL configuration
+
+# This suite includes the default and security-extended queries,
+# plus maintainability and reliability queries.
+queries:
+  - uses: security-and-quality
