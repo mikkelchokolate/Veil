@@ -30,4 +30,24 @@ describe("mock service worker security", () => {
 		);
 		expect(preparationScript).toContain("MSW worker message handler changed");
 	});
+
+	it("provides postinstall inputs before the container install layer", () => {
+		const dockerfile = readFileSync(
+			resolve(process.cwd(), "../Dockerfile"),
+			"utf8",
+		);
+		const install = dockerfile.indexOf("RUN pnpm install --frozen-lockfile");
+		const scriptCopy = dockerfile.indexOf(
+			"COPY web/scripts/prepare_msw_worker.mjs ./scripts/",
+		);
+		const workerCopy = dockerfile.indexOf(
+			"COPY web/public/mockServiceWorker.js ./public/",
+		);
+
+		expect(install).toBeGreaterThan(-1);
+		expect(scriptCopy).toBeGreaterThan(-1);
+		expect(workerCopy).toBeGreaterThan(-1);
+		expect(scriptCopy).toBeLessThan(install);
+		expect(workerCopy).toBeLessThan(install);
+	});
 });

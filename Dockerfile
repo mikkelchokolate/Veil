@@ -49,6 +49,8 @@ RUN npm_config_update_notifier=false npm install --global --ignore-scripts --no-
 
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml web/.npmrc web/pnpm-workspace.yaml ./
+COPY web/scripts/prepare_msw_worker.mjs ./scripts/
+COPY web/public/mockServiceWorker.js ./public/
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
