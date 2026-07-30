@@ -95,10 +95,10 @@ for name in (os.environ["ASSET"], "checksums.txt", "install-privileged.sh"):
 PY
 
 tar -xzf "$work/$asset" -C "$work" veil
-[ -f "$work/veil" ] && [ ! -L "$work/veil" ] || {
+if [ ! -f "$work/veil" ] || [ -L "$work/veil" ]; then
   echo "Verified archive did not contain a regular veil binary" >&2
   exit 1
-}
+fi
 archive_digest="$(sha256sum "$work/$asset" | awk '{print $1}')"
 binary_digest="$(sha256sum "$work/veil" | awk '{print $1}')"
 installer_digest="$(sha256sum "$work/install-privileged.sh" | awk '{print $1}')"
