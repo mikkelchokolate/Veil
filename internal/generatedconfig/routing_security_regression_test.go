@@ -41,7 +41,7 @@ func TestRoutingSourceRejectsUnapprovedPublicHost(t *testing.T) {
 	if _, err := DownloadRouteDat("http://127.0.0.1/data"); err == nil {
 		t.Fatal("exported downloader accepted non-HTTPS/private source")
 	}
-	file := RoutingSourceFile{Name: "geoip.dat", URL: "https://unapproved.invalid/geoip.dat", SHA256URL: "https://unapproved.invalid/geoip.dat.sha256sum"}
+	file := RoutingSourceFile{Name: "geoip.dat", URL: "https://unapproved.invalid/geoip.dat", SHA256URL: "https://unapproved.invalid/geoip.dat.sha256sum", PinnedSHA256: strings.Repeat("0", 64)}
 	material := NewRoutingSourceMaterial(t.TempDir(), RoutingSource{Files: []RoutingSourceFile{file}}).WithDownloader(func(string) ([]byte, error) { return []byte("unused"), nil })
 	if _, err := material.Fetch(file); err == nil || !strings.Contains(err.Error(), "not allowed") {
 		t.Fatalf("expected host allowlist rejection, got %v", err)

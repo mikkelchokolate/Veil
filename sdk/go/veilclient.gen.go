@@ -1412,10 +1412,28 @@ type RoutingSource struct {
 
 // RoutingSourceFile defines model for RoutingSourceFile.
 type RoutingSourceFile struct {
-	Name      string  `json:"name"`
-	Sha256Url *string `json:"sha256Url,omitempty"`
-	Url       string  `json:"url"`
+	// CertificateIdentity Exact expected Sigstore signing certificate identity.
+	CertificateIdentity *string `json:"certificateIdentity,omitempty"`
+
+	// CertificateOidcIssuer Exact expected Sigstore certificate OIDC issuer.
+	CertificateOidcIssuer *string `json:"certificateOidcIssuer,omitempty"`
+	Name                  string  `json:"name"`
+
+	// PinnedSha256 Exact digest anchored in the reviewed Veil source for immutable built-in assets.
+	PinnedSha256 *string `json:"pinnedSha256,omitempty"`
+	Sha256Url    string  `json:"sha256Url"`
+
+	// SignatureUrl Sigstore bundle URL for an updateable external source.
+	SignatureUrl *string `json:"signatureUrl,omitempty"`
+	Url          string  `json:"url"`
+	union        json.RawMessage
 }
+
+// RoutingSourceFile0 defines model for RoutingSourceFile.0.
+type RoutingSourceFile0 = interface{}
+
+// RoutingSourceFile1 defines model for RoutingSourceFile.1.
+type RoutingSourceFile1 = interface{}
 
 // RuntimeObservation defines model for RuntimeObservation.
 type RuntimeObservation struct {
@@ -2318,6 +2336,181 @@ type PostApiVersionUpdateJSONRequestBody = EmptyObject
 
 // PutApiWarpJSONRequestBody defines body for PutApiWarp for application/json ContentType.
 type PutApiWarpJSONRequestBody = WarpConfig
+
+// AsRoutingSourceFile0 returns the union data inside the RoutingSourceFile as a RoutingSourceFile0
+func (t RoutingSourceFile) AsRoutingSourceFile0() (RoutingSourceFile0, error) {
+	var body RoutingSourceFile0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRoutingSourceFile0 overwrites any union data inside the RoutingSourceFile as the provided RoutingSourceFile0
+func (t *RoutingSourceFile) FromRoutingSourceFile0(v RoutingSourceFile0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRoutingSourceFile0 performs a merge with any union data inside the RoutingSourceFile, using the provided RoutingSourceFile0
+func (t *RoutingSourceFile) MergeRoutingSourceFile0(v RoutingSourceFile0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRoutingSourceFile1 returns the union data inside the RoutingSourceFile as a RoutingSourceFile1
+func (t RoutingSourceFile) AsRoutingSourceFile1() (RoutingSourceFile1, error) {
+	var body RoutingSourceFile1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRoutingSourceFile1 overwrites any union data inside the RoutingSourceFile as the provided RoutingSourceFile1
+func (t *RoutingSourceFile) FromRoutingSourceFile1(v RoutingSourceFile1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRoutingSourceFile1 performs a merge with any union data inside the RoutingSourceFile, using the provided RoutingSourceFile1
+func (t *RoutingSourceFile) MergeRoutingSourceFile1(v RoutingSourceFile1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RoutingSourceFile) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.CertificateIdentity != nil {
+		object["certificateIdentity"], err = json.Marshal(t.CertificateIdentity)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'certificateIdentity': %w", err)
+		}
+	}
+
+	if t.CertificateOidcIssuer != nil {
+		object["certificateOidcIssuer"], err = json.Marshal(t.CertificateOidcIssuer)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'certificateOidcIssuer': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if t.PinnedSha256 != nil {
+		object["pinnedSha256"], err = json.Marshal(t.PinnedSha256)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'pinnedSha256': %w", err)
+		}
+	}
+
+	object["sha256Url"], err = json.Marshal(t.Sha256Url)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'sha256Url': %w", err)
+	}
+
+	if t.SignatureUrl != nil {
+		object["signatureUrl"], err = json.Marshal(t.SignatureUrl)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'signatureUrl': %w", err)
+		}
+	}
+
+	object["url"], err = json.Marshal(t.Url)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'url': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *RoutingSourceFile) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["certificateIdentity"]; found {
+		err = json.Unmarshal(raw, &t.CertificateIdentity)
+		if err != nil {
+			return fmt.Errorf("error reading 'certificateIdentity': %w", err)
+		}
+	}
+
+	if raw, found := object["certificateOidcIssuer"]; found {
+		err = json.Unmarshal(raw, &t.CertificateOidcIssuer)
+		if err != nil {
+			return fmt.Errorf("error reading 'certificateOidcIssuer': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["pinnedSha256"]; found {
+		err = json.Unmarshal(raw, &t.PinnedSha256)
+		if err != nil {
+			return fmt.Errorf("error reading 'pinnedSha256': %w", err)
+		}
+	}
+
+	if raw, found := object["sha256Url"]; found {
+		err = json.Unmarshal(raw, &t.Sha256Url)
+		if err != nil {
+			return fmt.Errorf("error reading 'sha256Url': %w", err)
+		}
+	}
+
+	if raw, found := object["signatureUrl"]; found {
+		err = json.Unmarshal(raw, &t.SignatureUrl)
+		if err != nil {
+			return fmt.Errorf("error reading 'signatureUrl': %w", err)
+		}
+	}
+
+	if raw, found := object["url"]; found {
+		err = json.Unmarshal(raw, &t.Url)
+		if err != nil {
+			return fmt.Errorf("error reading 'url': %w", err)
+		}
+	}
+
+	return err
+}
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error

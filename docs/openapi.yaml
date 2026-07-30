@@ -4405,6 +4405,14 @@ components:
       required:
       - name
       - url
+      - sha256Url
+      oneOf:
+      - required:
+        - pinnedSha256
+      - required:
+        - signatureUrl
+        - certificateIdentity
+        - certificateOidcIssuer
       properties:
         name:
           type: string
@@ -4414,6 +4422,21 @@ components:
         sha256Url:
           type: string
           format: uri
+        pinnedSha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Exact digest anchored in the reviewed Veil source for immutable built-in assets.
+        signatureUrl:
+          type: string
+          format: uri
+          description: Sigstore bundle URL for an updateable external source.
+        certificateIdentity:
+          type: string
+          description: Exact expected Sigstore signing certificate identity.
+        certificateOidcIssuer:
+          type: string
+          format: uri
+          description: Exact expected Sigstore certificate OIDC issuer.
     RoutingSource:
       type: object
       properties:

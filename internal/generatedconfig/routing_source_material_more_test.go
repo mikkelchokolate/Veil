@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+func testPinnedRoutingFile(body string) RoutingSourceFile {
+	digest := sha256.Sum256([]byte(body))
+	return RoutingSourceFile{
+		Name:         "geoip.dat",
+		URL:          "https://example.test/geoip.dat",
+		SHA256URL:    "https://example.test/geoip.dat.sha256sum",
+		PinnedSHA256: hex.EncodeToString(digest[:]),
+	}
+}
+
 func TestRoutingSourceMaterialFetchUsesInjectedDownloader(t *testing.T) {
 	called := false
 	download := func(url string) ([]byte, error) {
@@ -37,7 +47,7 @@ func TestRoutingSourceMaterialFetchUsesInjectedDownloader(t *testing.T) {
 }
 
 func TestRoutingSourceMaterialFetchReturnsBodyDownloadError(t *testing.T) {
-	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(func(url string) ([]byte, error) {
+	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{testPinnedRoutingFile("body")}}).WithDownloader(func(url string) ([]byte, error) {
 		if url == "https://example.test/geoip.dat" {
 			return nil, errors.New("body download failed")
 		}
@@ -51,7 +61,7 @@ func TestRoutingSourceMaterialFetchReturnsBodyDownloadError(t *testing.T) {
 }
 
 func TestRoutingSourceMaterialFetchReturnsChecksumDownloadError(t *testing.T) {
-	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(func(url string) ([]byte, error) {
+	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{testPinnedRoutingFile("body")}}).WithDownloader(func(url string) ([]byte, error) {
 		switch url {
 		case "https://example.test/geoip.dat":
 			return []byte("body"), nil
@@ -69,7 +79,7 @@ func TestRoutingSourceMaterialFetchReturnsChecksumDownloadError(t *testing.T) {
 }
 
 func TestRoutingSourceMaterialFetchReturnsChecksumVerifyError(t *testing.T) {
-	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(func(url string) ([]byte, error) {
+	material := NewRoutingSourceMaterial("/etc/veil", RoutingSource{Files: []RoutingSourceFile{testPinnedRoutingFile("body")}}).WithDownloader(func(url string) ([]byte, error) {
 		switch url {
 		case "https://example.test/geoip.dat":
 			return []byte("body"), nil
@@ -96,7 +106,7 @@ func TestRoutingSourceMaterialWriteGeneratedReturnsFileWriteError(t *testing.T) 
 	body := []byte("geoip-body")
 	sum := sha256.Sum256(body)
 	checksum := []byte(hex.EncodeToString(sum[:]) + " geoip.dat\n")
-	material := NewRoutingSourceMaterial(badRoot, RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(func(url string) ([]byte, error) {
+	material := NewRoutingSourceMaterial(badRoot, RoutingSource{Files: []RoutingSourceFile{testPinnedRoutingFile("geoip-body")}}).WithDownloader(func(url string) ([]byte, error) {
 		switch url {
 		case "https://example.test/geoip.dat":
 			return body, nil
@@ -115,7 +125,7 @@ func TestRoutingSourceMaterialWriteGeneratedReturnsFileWriteError(t *testing.T) 
 
 func TestRoutingSourceMaterialWriteGeneratedReturnsFetchError(t *testing.T) {
 	root := t.TempDir()
-	material := NewRoutingSourceMaterial(root, RoutingSource{Files: []RoutingSourceFile{{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256sum"}}}).WithDownloader(func(url string) ([]byte, error) {
+	material := NewRoutingSourceMaterial(root, RoutingSource{Files: []RoutingSourceFile{testPinnedRoutingFile("body")}}).WithDownloader(func(url string) ([]byte, error) {
 		return nil, errors.New("fetch failed")
 	})
 

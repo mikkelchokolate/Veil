@@ -2,6 +2,8 @@ package generatedconfig
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -169,7 +171,27 @@ func (m RoutingSourceMaterial) Fetch(file RoutingSourceFile) ([]byte, error) {
 	if file.SHA256URL == "" {
 		return nil, fmt.Errorf("routing source %q requires a SHA-256 checksum URL", file.Name)
 	}
-	for _, rawURL := range []string{file.URL, file.SHA256URL} {
+	hasSignature := file.SignatureURL != "" || file.CertificateIdentity != "" || file.CertificateOIDCIssuer != ""
+	completeSignature := file.SignatureURL != "" && file.CertificateIdentity != "" && file.CertificateOIDCIssuer != ""
+	if hasSignature && !completeSignature {
+		return nil, fmt.Errorf("routing source %q has incomplete authenticated signature metadata", file.Name)
+	}
+	if !completeSignature && file.PinnedSHA256 == "" {
+		return nil, fmt.Errorf("routing source %q requires authenticated signature metadata or a pinned SHA-256 digest", file.Name)
+	}
+	if file.PinnedSHA256 != "" {
+		if len(file.PinnedSHA256) != sha256.Size*2 || strings.ToLower(file.PinnedSHA256) != file.PinnedSHA256 {
+			return nil, fmt.Errorf("routing source %q has invalid pinned SHA-256 digest", file.Name)
+		}
+		if _, err := hex.DecodeString(file.PinnedSHA256); err != nil {
+			return nil, fmt.Errorf("routing source %q has invalid pinned SHA-256 digest", file.Name)
+		}
+	}
+	urls := []string{file.URL, file.SHA256URL}
+	if completeSignature {
+		urls = append(urls, file.SignatureURL)
+	}
+	for _, rawURL := range urls {
 		if err := validateRoutingSourceURL(rawURL); err != nil {
 			return nil, err
 		}
@@ -203,11 +225,14 @@ func (m RoutingSourceMaterial) Fetch(file RoutingSourceFile) ([]byte, error) {
 	if err := verifyRouteDatChecksum(file.Name, body, string(checksumBody)); err != nil {
 		return nil, err
 	}
-	if file.SignatureURL == "" || file.CertificateIdentity == "" || file.CertificateOIDCIssuer == "" {
-		return nil, fmt.Errorf("routing source %q requires authenticated signature metadata", file.Name)
+	if file.PinnedSHA256 != "" {
+		digest := sha256.Sum256(body)
+		if hex.EncodeToString(digest[:]) != file.PinnedSHA256 {
+			return nil, fmt.Errorf("routing source %q does not match its pinned SHA-256 digest", file.Name)
+		}
 	}
-	if err := validateRoutingSourceURL(file.SignatureURL); err != nil {
-		return nil, err
+	if !completeSignature {
+		return body, nil
 	}
 	bundle, err := download(ctx, file.SignatureURL)
 	if err != nil {

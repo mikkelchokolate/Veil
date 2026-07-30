@@ -1,13 +1,27 @@
 package routing
 
-const routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
+const (
+	routingRulesRepository = "https://github.com/runetfreedom/russia-v2ray-rules-dat"
+	routingRulesRelease    = "202607301129"
+)
 
 func routeDatSource() RoutingSource {
+	const releaseBase = routingRulesRepository + "/releases/download/" + routingRulesRelease
 	return RoutingSource{
-		Repository: routingRulesRepository,
+		Repository: routingRulesRepository + "/releases/tag/" + routingRulesRelease,
 		Files: []RoutingSourceFile{
-			{Name: "geoip.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat", SHA256URL: "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat.sha256sum"},
-			{Name: "geosite.dat", URL: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat", SHA256URL: "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat.sha256sum"},
+			{
+				Name:         "geoip.dat",
+				URL:          releaseBase + "/geoip.dat",
+				SHA256URL:    releaseBase + "/geoip.dat.sha256sum",
+				PinnedSHA256: "3aeb1cc31bbf0e490217bb2d14a1d207f372bfe92abff1b1c1a01ee59a2f2327",
+			},
+			{
+				Name:         "geosite.dat",
+				URL:          releaseBase + "/geosite.dat",
+				SHA256URL:    releaseBase + "/geosite.dat.sha256sum",
+				PinnedSHA256: "ae2b3e8375a00992a979d09c4bc28f14f15f39096349881d3b3c50ae3d1e269a",
+			},
 		},
 	}
 }

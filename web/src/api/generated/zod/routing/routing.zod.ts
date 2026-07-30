@@ -157,15 +157,23 @@ export const DeleteApiRoutingRulesNameResponse = zod.unknown()
 /**
  * @summary List routing presets and source material
  */
+export const getApiRoutingPresetsResponseSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const getApiRoutingPresetsResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+
+
 export const GetApiRoutingPresetsResponse = zod.object({
   "activePreset": zod.string().optional(),
   "source": zod.object({
   "repository": zod.string().optional(),
-  "files": zod.array(zod.object({
+  "files": zod.array(zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
   "name": zod.string(),
   "url": zod.url(),
-  "sha256Url": zod.url().optional()
-})).optional()
+  "sha256Url": zod.url(),
+  "pinnedSha256": zod.string().regex(getApiRoutingPresetsResponseSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
+  "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
+  "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
+}))).optional()
 }),
   "rules": zod.array(zod.object({
   "name": zod.string(),
@@ -178,11 +186,15 @@ export const GetApiRoutingPresetsResponse = zod.object({
   "description": zod.string(),
   "source": zod.object({
   "repository": zod.string().optional(),
-  "files": zod.array(zod.object({
+  "files": zod.array(zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
   "name": zod.string(),
   "url": zod.url(),
-  "sha256Url": zod.url().optional()
-})).optional()
+  "sha256Url": zod.url(),
+  "pinnedSha256": zod.string().regex(getApiRoutingPresetsResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
+  "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
+  "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
+}))).optional()
 }),
   "rules": zod.array(zod.object({
   "name": zod.string(),
@@ -213,15 +225,23 @@ export const PostApiRoutingPresetsNameHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiRoutingPresetsNameHeaderIdempotencyKeyMax).regex(postApiRoutingPresetsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const postApiRoutingPresetsNameResponseSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+
+
 export const PostApiRoutingPresetsNameResponse = zod.object({
   "activePreset": zod.string().optional(),
   "source": zod.object({
   "repository": zod.string().optional(),
-  "files": zod.array(zod.object({
+  "files": zod.array(zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
   "name": zod.string(),
   "url": zod.url(),
-  "sha256Url": zod.url().optional()
-})).optional()
+  "sha256Url": zod.url(),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
+  "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
+  "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
+}))).optional()
 }),
   "rules": zod.array(zod.object({
   "name": zod.string(),
@@ -234,11 +254,15 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "description": zod.string(),
   "source": zod.object({
   "repository": zod.string().optional(),
-  "files": zod.array(zod.object({
+  "files": zod.array(zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
   "name": zod.string(),
   "url": zod.url(),
-  "sha256Url": zod.url().optional()
-})).optional()
+  "sha256Url": zod.url(),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
+  "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
+  "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
+}))).optional()
 }),
   "rules": zod.array(zod.object({
   "name": zod.string(),

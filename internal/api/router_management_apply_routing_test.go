@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,10 +12,34 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 )
+
+func pinRoutingTestBodies(source RoutingSource, bodies map[string]string) RoutingSource {
+	source.Files = append([]generatedconfig.RoutingSourceFile(nil), source.Files...)
+	for index := range source.Files {
+		body, ok := bodies[source.Files[index].Name]
+		if !ok {
+			continue
+		}
+		digest := sha256.Sum256([]byte(body))
+		source.Files[index].PinnedSHA256 = hex.EncodeToString(digest[:])
+		source.Files[index].SignatureURL = ""
+		source.Files[index].CertificateIdentity = ""
+		source.Files[index].CertificateOIDCIssuer = ""
+	}
+	return source
+}
 
 func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	oldDownloader := routeDatDownloader
+	oldVerifier := routeDatSignatureVerifier
+	oldTransform := routeDatSourceTransform
+	routeDatSourceTransform = func(source RoutingSource) RoutingSource {
+		return pinRoutingTestBodies(source, map[string]string{"geoip.dat": "fake geoip dat", "geosite.dat": "fake geosite dat"})
+	}
+	routeDatSignatureVerifier = func(context.Context, generatedconfig.RoutingSourceFile, []byte, []byte) error { return nil }
 	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("fake geoip dat"), nil
@@ -27,9 +53,16 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
 			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
 		}
+		if strings.HasSuffix(url, ".bundle") {
+			return []byte(`{"fake":"sigstore bundle"}`), nil
+		}
 		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
 	}
-	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+	t.Cleanup(func() {
+		routeDatDownloader = oldDownloader
+		routeDatSignatureVerifier = oldVerifier
+		routeDatSourceTransform = oldTransform
+	})
 
 	applyRoot := t.TempDir()
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
@@ -80,6 +113,12 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 
 func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	oldDownloader := routeDatDownloader
+	oldVerifier := routeDatSignatureVerifier
+	oldTransform := routeDatSourceTransform
+	routeDatSourceTransform = func(source RoutingSource) RoutingSource {
+		return pinRoutingTestBodies(source, map[string]string{"geoip.dat": "expected geoip dat", "geosite.dat": "fake geosite dat"})
+	}
+	routeDatSignatureVerifier = func(context.Context, generatedconfig.RoutingSourceFile, []byte, []byte) error { return nil }
 	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("tampered geoip dat"), nil
@@ -93,9 +132,16 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
 			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
 		}
+		if strings.HasSuffix(url, ".bundle") {
+			return []byte(`{"fake":"sigstore bundle"}`), nil
+		}
 		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
 	}
-	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+	t.Cleanup(func() {
+		routeDatDownloader = oldDownloader
+		routeDatSignatureVerifier = oldVerifier
+		routeDatSourceTransform = oldTransform
+	})
 
 	applyRoot := t.TempDir()
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})

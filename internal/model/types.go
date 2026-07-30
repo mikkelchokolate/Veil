@@ -108,6 +108,7 @@ type RoutingSourceFile struct {
 	Name                  string `json:"name"`
 	URL                   string `json:"url"`
 	SHA256URL             string `json:"sha256Url,omitempty"`
+	PinnedSHA256          string `json:"pinnedSha256,omitempty"`
 	SignatureURL          string `json:"signatureUrl,omitempty"`
 	CertificateIdentity   string `json:"certificateIdentity,omitempty"`
 	CertificateOIDCIssuer string `json:"certificateOidcIssuer,omitempty"`

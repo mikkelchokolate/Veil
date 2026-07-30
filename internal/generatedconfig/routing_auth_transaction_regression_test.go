@@ -73,7 +73,7 @@ func TestRoutingSourceRejectsOversizedAuthenticatedPayload(t *testing.T) {
 	const maximum = 64 << 20
 	body := make([]byte, maximum+1)
 	sum := sha256.Sum256(body)
-	file := RoutingSourceFile{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256"}
+	file := RoutingSourceFile{Name: "geoip.dat", URL: "https://example.test/geoip.dat", SHA256URL: "https://example.test/geoip.dat.sha256", PinnedSHA256: hex.EncodeToString(sum[:])}
 	material := NewRoutingSourceMaterial(t.TempDir(), RoutingSource{Files: []RoutingSourceFile{file}}).WithDownloader(func(url string) ([]byte, error) {
 		if strings.HasSuffix(url, ".sha256") {
 			return []byte(hex.EncodeToString(sum[:]) + "  geoip.dat\n"), nil

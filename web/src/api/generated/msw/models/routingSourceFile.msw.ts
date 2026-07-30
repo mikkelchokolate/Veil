@@ -41,8 +41,19 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export interface RoutingSourceFile {
+export type RoutingSourceFile = (unknown & {
   name: string;
   url: string;
-  sha256Url?: string;
-}
+  sha256Url: string;
+  /**
+     * Exact digest anchored in the reviewed Veil source for immutable built-in assets.
+     * @pattern ^[0-9a-f]{64}$
+     */
+  pinnedSha256?: string;
+  /** Sigstore bundle URL for an updateable external source. */
+  signatureUrl?: string;
+  /** Exact expected Sigstore signing certificate identity. */
+  certificateIdentity?: string;
+  /** Exact expected Sigstore certificate OIDC issuer. */
+  certificateOidcIssuer?: string;
+});
