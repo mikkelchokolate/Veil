@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -83,9 +82,12 @@ func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
 	if ok.Code != http.StatusOK {
 		t.Fatalf("active restart status=%d body=%s", ok.Code, ok.Body.String())
 	}
-	want := []privileged.ServiceActionRequest{{Unit: "veil-hysteria2@edge.service", Action: privileged.ServiceAction("restart")}}
-	if !reflect.DeepEqual(client.serviceActions, want) {
+	if len(client.serviceActions) != 1 {
 		t.Fatalf("service actions=%+v", client.serviceActions)
+	}
+	action := client.serviceActions[0]
+	if action.Unit != "veil-hysteria2@edge.service" || action.Action != privileged.ServiceAction("restart") || action.Fence.Owner == "" || action.Fence.Generation == 0 {
+		t.Fatalf("service action lacks expected target/action/fence: %+v", action)
 	}
 
 	blocked := httptest.NewRecorder()
@@ -93,7 +95,7 @@ func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
 	if blocked.Code != http.StatusBadRequest {
 		t.Fatalf("broad fallback restart status=%d body=%s", blocked.Code, blocked.Body.String())
 	}
-	if !reflect.DeepEqual(client.serviceActions, want) {
+	if len(client.serviceActions) != 1 || client.serviceActions[0] != action {
 		t.Fatalf("broad fallback restart should not call privileged helper, got %+v", client.serviceActions)
 	}
 }

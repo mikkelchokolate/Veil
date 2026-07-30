@@ -14,7 +14,7 @@ import (
 // Subscription-Userinfo header carries the client's real recorded traffic
 // totals, not hardcoded zeros.
 func TestSubscriptionUserinfoUsesRealTraffic(t *testing.T) {
-	r, state := newTrafficRouter(t)
+	r, state := newSubscriptionTestRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 
 	// Record real traffic against the durable normalized binding.

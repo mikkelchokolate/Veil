@@ -35,7 +35,8 @@ func TestSubscriptionRendererMatchesLegacyFacade(t *testing.T) {
 	for _, p := range protocols {
 		t.Run(p.name, func(t *testing.T) {
 			c, _ := repo.Create(Client{Name: "u-" + p.name, Enabled: true, QuotaResetPolicy: ResetNever})
-			b, _ := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: p.snapID, Enabled: true})
+			runtimeIdentity := "runtime_" + p.name
+			b, _ := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: p.snapID, RuntimeIdentity: runtimeIdentity, Enabled: true})
 			if _, err := creds.Set(b.ID, "password", "pw-"+p.name); err != nil {
 				t.Fatalf("set cred: %v", err)
 			}
@@ -55,21 +56,16 @@ func TestSubscriptionRendererMatchesLegacyFacade(t *testing.T) {
 			}
 			// Per-client semantics differ by protocol:
 			//  - hysteria2/naiveproxy embed the per-client password.
-			//  - olcRTC authenticates with a shared inbound key + per-client username.
-			//  - mieru renders a per-profile config block keyed by the client name.
+			//  - olcRTC/Mieru use the binding's immutable runtime identity,
+			//    never the mutable display name.
 			switch p.proto {
 			case "hysteria2", "naiveproxy":
 				if !strings.Contains(joined, "pw-"+p.name) {
 					t.Fatalf("%s link must carry per-client credential, got %q", p.proto, joined)
 				}
-			case "olcrtc":
-				if !strings.Contains(joined, "u-"+p.name) {
-					t.Fatalf("olcrtc link must carry per-client username, got %q", joined)
-				}
-			case "mieru":
-				// Mieru's per-profile link must at least reference the profile name.
-				if !strings.Contains(joined, "u-"+p.name) && len(joined) == 0 {
-					t.Fatalf("mieru render produced no per-profile artifact")
+			case "olcrtc", "mieru":
+				if !strings.Contains(joined, runtimeIdentity) {
+					t.Fatalf("%s link must carry immutable runtime identity %q, got %q", p.proto, runtimeIdentity, joined)
 				}
 			}
 			// Registry must advertise per-client capability for this protocol.

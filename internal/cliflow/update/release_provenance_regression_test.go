@@ -65,7 +65,7 @@ func TestInstallerRequiresCosignIdentityAndSLSAProvenanceBeforeChecksum(t *testi
 	}
 	script := string(body)
 	for _, required := range []string{
-		"cosign verify-blob",
+		"verify-blob --bundle",
 		"https://token.actions.githubusercontent.com",
 		"mikkelchokolate/Veil",
 		"release.yml",
@@ -77,9 +77,9 @@ func TestInstallerRequiresCosignIdentityAndSLSAProvenanceBeforeChecksum(t *testi
 			t.Errorf("installer does not enforce release trust requirement %q", required)
 		}
 	}
-	cosignAt := strings.Index(script, "cosign verify-blob")
-	checksumAt := strings.Index(script, "sha256sum -c")
-	if cosignAt < 0 || checksumAt < 0 || cosignAt > checksumAt {
-		t.Error("installer must verify signature/provenance before trusting archive checksum")
+	cosignAt := strings.Index(script, `"$cosign" verify-blob`)
+	archiveChecksumAt := strings.Index(script, `awk -v asset="$asset" '$2 == asset`)
+	if cosignAt < 0 || archiveChecksumAt < 0 || cosignAt > archiveChecksumAt {
+		t.Error("installer must verify signatures and provenance before trusting the release archive checksum")
 	}
 }

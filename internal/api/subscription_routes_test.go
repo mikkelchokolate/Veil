@@ -9,17 +9,38 @@ import (
 	"testing"
 )
 
+func newSubscriptionTestRouter(t *testing.T) (http.Handler, *managementState) {
+	t.Helper()
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
+	return router, state
+}
+
 // seedClientWithToken creates a client + binding + credential + token and
 // returns the plaintext token. The subscription endpoint then renders links.
 func seedClientWithToken(t *testing.T, r http.Handler) (plaintext, clientID string) {
 	t.Helper()
-	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-sub","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true,"protocolFields":{"domain":"vpn.example.com"}}`)
+	inbound := v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-sub","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
+	if inbound.Code != http.StatusCreated && inbound.Code != http.StatusOK {
+		t.Fatalf("seed inbound: %d %s", inbound.Code, inbound.Body.String())
+	}
+	var inboundEnvelope struct {
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(inbound.Body.Bytes(), &inboundEnvelope); err != nil || !inboundEnvelope.Success {
+		t.Fatalf("seed inbound did not apply: decode=%v body=%s", err, inbound.Body.String())
+	}
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","bindings":[{"inboundId":"hy2-sub","credential":"pw-alice"}]}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("seed client: %d %s", w.Code, w.Body.String())
 	}
 	var c map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&c)
+	if err := json.NewDecoder(w.Body).Decode(&c); err != nil {
+		t.Fatalf("decode seeded client: %v", err)
+	}
+	if success, ok := c["success"].(bool); ok && !success {
+		t.Fatalf("seed client did not apply: %s", w.Body.String())
+	}
 	// S2 nested the created client under "client"; tolerate both shapes.
 	if nested, ok := c["client"].(map[string]any); ok {
 		c = nested
@@ -40,7 +61,7 @@ func seedClientWithToken(t *testing.T, r http.Handler) (plaintext, clientID stri
 }
 
 func TestPublicSubscriptionServesLinksByToken(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, _ := seedClientWithToken(t, r)
 
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext, nil)
@@ -67,7 +88,7 @@ func TestPublicSubscriptionServesLinksByToken(t *testing.T) {
 }
 
 func TestPublicSubscriptionRawFormat(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, _ := seedClientWithToken(t, r)
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext+"?format=raw", nil)
 	w := httptest.NewRecorder()
@@ -81,7 +102,7 @@ func TestPublicSubscriptionRawFormat(t *testing.T) {
 }
 
 func TestPublicSubscriptionUnknownToken404(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	req := httptest.NewRequest(http.MethodGet, "/s/nonexistent-token", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -91,7 +112,7 @@ func TestPublicSubscriptionUnknownToken404(t *testing.T) {
 }
 
 func TestPublicSubscriptionRevokedToken404(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 	// Find the token id.
 	wl := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens", "")
@@ -115,7 +136,7 @@ func TestPublicSubscriptionRevokedToken404(t *testing.T) {
 }
 
 func TestPublicSubscriptionDisabledClientEmpty(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 	// Disable the client.
 	v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+clientID, `{"version":1,"name":"alice","enabled":false}`)
@@ -131,7 +152,7 @@ func TestPublicSubscriptionDisabledClientEmpty(t *testing.T) {
 }
 
 func TestTokenRotateIssuesNewInvalidatesOld(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, clientID := seedClientWithToken(t, r)
 	wl := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens", "")
 	var list struct {
@@ -168,7 +189,7 @@ func TestTokenRotateIssuesNewInvalidatesOld(t *testing.T) {
 }
 
 func TestPublicSubscriptionHTMLLanding(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, _ := newSubscriptionTestRouter(t)
 	plaintext, _ := seedClientWithToken(t, r)
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext, nil)
 	req.Header.Set("Accept", "text/html")

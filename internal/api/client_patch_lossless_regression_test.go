@@ -34,7 +34,7 @@ func TestV1ClientPatchExplicitNullClearsNullableFields(t *testing.T) {
 	version := int(created["version"].(float64))
 
 	response := v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id,
-		`{"version":`+strconv.Itoa(version)+`,"email":null,"groupId":null,"quotaBytes":null,"quotaResetAt":null,"expiresAt":null,"deviceLimit":null,"notes":null}`)
+		`{"version":`+strconv.Itoa(version)+`,"email":null,"groupId":null,"quotaBytes":null,"quotaResetPolicy":null,"quotaResetAt":null,"expiresAt":null,"deviceLimit":null,"notes":null}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("PATCH status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -44,11 +44,14 @@ func TestV1ClientPatchExplicitNullClearsNullableFields(t *testing.T) {
 			t.Errorf("%s=%v; explicit null must clear it", field, value)
 		}
 	}
+	if policy, _ := updated["quotaResetPolicy"].(string); policy != "never" {
+		t.Errorf("quotaResetPolicy=%v; explicit null must canonicalize to %q", updated["quotaResetPolicy"], "never")
+	}
 	if notes, exists := updated["notes"]; exists && notes != "" && notes != nil {
 		t.Errorf("notes=%v; explicit null must clear it", notes)
 	}
 	assertDurableClientFieldsEqual(t, created, updated, map[string]bool{
-		"email": true, "groupId": true, "quotaBytes": true, "quotaResetAt": true,
+		"email": true, "groupId": true, "quotaBytes": true, "quotaResetPolicy": true, "quotaResetAt": true,
 		"expiresAt": true, "deviceLimit": true, "notes": true, "version": true, "updatedAt": true,
 	})
 }
@@ -86,7 +89,7 @@ func TestClientPatchOpenAPIAndGeneratedContractIncludesEveryDurableField(t *test
 	if !strings.Contains(pathBlock, "\n    patch:\n") || strings.Contains(pathBlock, "\n    put:\n") {
 		t.Fatalf("client update must be PATCH-only; path block:\n%s", pathBlock)
 	}
-	if !strings.Contains(pathBlock, `$ref: "#/components/schemas/ClientPatchRequest"`) {
+	if !strings.Contains(pathBlock, "#/components/schemas/ClientPatchRequest") {
 		t.Fatal("PATCH operation must use ClientPatchRequest with field-presence semantics")
 	}
 

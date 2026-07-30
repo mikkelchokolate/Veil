@@ -14,8 +14,8 @@ func TestOpenAPIDocumentsLiveValidationAndStructuredApplyPreview(t *testing.T) {
 	document := string(body)
 	for _, required := range []string{
 		"  /api/validation:",
-		"$ref: \"#/components/schemas/ValidationRequest\"",
-		"$ref: \"#/components/schemas/ValidationResponse\"",
+		"#/components/schemas/ValidationRequest",
+		"#/components/schemas/ValidationResponse",
 		"    ValidationIssue:",
 		"    ApplyOperation:",
 		"    ValidationFailure:",
@@ -45,11 +45,15 @@ func TestOpenAPIApplyPlanRequiresStructuredCollections(t *testing.T) {
 		section = section[:len("    ApplyPlanResponse:")+next]
 	}
 	for _, required := range []string{
-		"required: [valid, configs, actions, issues, operations]",
+		"- valid",
+		"- configs",
+		"- actions",
+		"- issues",
+		"- operations",
 		"issues:",
-		"$ref: \"#/components/schemas/ValidationIssue\"",
+		"#/components/schemas/ValidationIssue",
 		"operations:",
-		"$ref: \"#/components/schemas/ApplyOperation\"",
+		"#/components/schemas/ApplyOperation",
 	} {
 		if !strings.Contains(section, required) {
 			t.Fatalf("ApplyPlanResponse missing %q:\n%s", required, section)
