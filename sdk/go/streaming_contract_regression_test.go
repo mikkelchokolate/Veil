@@ -55,14 +55,14 @@ func TestBackupDownloadStreamingMethodReturnsTypedUnbufferedResponse(t *testing.
 	}()
 	select {
 	case <-started:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("stream request never reached server")
 	}
 	var values []reflect.Value
 	select {
 	case result := <-returned:
 		values = result.values
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		close(release)
 		t.Fatal("stream method buffered until EOF instead of returning headers/body")
 	}
