@@ -195,12 +195,13 @@ func (r *Runner) monitorForeignLease() {
 				r.mu.Unlock()
 				return
 			}
-			if err := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL); err == nil {
-				err = r.jobs.MarkApplyingInterrupted("apply owner lease expired after panel startup")
+			recoveryErr := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL)
+			if recoveryErr == nil {
+				recoveryErr = r.jobs.MarkApplyingInterrupted("apply owner lease expired after panel startup")
 			}
-			if err != nil {
+			if recoveryErr != nil {
 				r.mu.Lock()
-				r.startupErr = err
+				r.startupErr = recoveryErr
 				r.mu.Unlock()
 			}
 			return
