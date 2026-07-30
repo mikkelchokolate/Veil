@@ -29,6 +29,8 @@ func TestCodeQLWorkflowUsesAdvancedConfiguration(t *testing.T) {
 		"build-mode: ${{ matrix.build-mode }}",
 		"config-file: ./.github/codeql/codeql-config.yml",
 		"dependency-caching: true",
+		"Prepare embedded web assets",
+		"web/dist/index.html",
 		"go build ./...",
 		`category: "/language:${{ matrix.language }}"`,
 	} {

@@ -46,6 +46,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Prepare embedded web assets
+        if: matrix.language == 'go'
+        run: |
+          if [ ! -f web/dist/index.html ]; then
+            mkdir -p web/dist
+            printf '%s\n' '<!doctype html><title>CodeQL analysis stub</title>' > web/dist/index.html
+          fi
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
