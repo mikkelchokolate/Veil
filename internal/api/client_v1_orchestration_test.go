@@ -386,6 +386,11 @@ func newApplyTrackedRouterWithState(t *testing.T) (http.Handler, *managementStat
 	if !ok {
 		t.Fatalf("reloader is not *managementState: %T", reloader)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Errorf("close apply-tracked management state: %v", err)
+		}
+	})
 	return r, st
 }
 

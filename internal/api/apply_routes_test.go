@@ -55,7 +55,16 @@ func newApplyTrackedRouter(t *testing.T) (http.Handler, *[][]string) {
 	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}}`), 0o600, 0o700); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir})
+	r, reloader := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir})
+	state, ok := reloader.(*managementState)
+	if !ok {
+		t.Fatalf("reloader is not *managementState: %T", reloader)
+	}
+	t.Cleanup(func() {
+		if err := state.Close(); err != nil {
+			t.Errorf("close apply-tracked management state: %v", err)
+		}
+	})
 	return r, &calls
 }
 
