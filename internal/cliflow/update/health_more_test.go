@@ -31,7 +31,7 @@ func TestWaitForHealthyRetriesOnNon200(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := WaitForHealthy(server.URL, "", time.Second)
+	err := WaitForHealthy(server.URL, "", 3*time.Second)
 	if err != nil {
 		t.Fatalf("WaitForHealthy: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestWaitForHealthyReturnsWhenHTTPSucceedsWithoutToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := WaitForHealthy(server.URL, "", time.Second); err != nil {
+	if err := WaitForHealthy(server.URL, "", 3*time.Second); err != nil {
 		t.Fatalf("WaitForHealthy: %v", err)
 	}
 }

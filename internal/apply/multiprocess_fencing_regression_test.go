@@ -58,9 +58,7 @@ func TestApplyFencingAcrossOSProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForFenceFile(t, started, 5*time.Second)
-	// Lease timestamps are persisted at whole-second precision. Waiting over two
-	// seconds makes expiry deterministic across scheduler and wall-clock boundaries.
-	time.Sleep(2200 * time.Millisecond)
+	waitForFenceLeaseExpiry(t, dbPath, 5*time.Second)
 	processB := child("process-b", resultB)
 	if output, err := processB.CombinedOutput(); err != nil {
 		_ = os.WriteFile(resume, []byte("resume"), 0o600)
@@ -136,9 +134,13 @@ func TestApplyFenceSubprocessHelper(t *testing.T) {
 		}
 		return Result{Success: true, Operations: []OperationResult{{Type: "runtime", Target: owner, Success: true}}}, nil
 	}))
-	runner.ownerID = owner
-	runner.leaseTTL = time.Second
-	runner.heartbeatInterval = time.Hour
+	if owner == "process-a" {
+		runner.leaseTTL = time.Second
+		runner.heartbeatInterval = time.Hour
+	} else {
+		runner.leaseTTL = 5 * time.Second
+		runner.heartbeatInterval = 100 * time.Millisecond
+	}
 	job, runErr := runner.RunContext(context.Background(), state.Desired, "multiprocess", owner)
 	result := fencingSubprocessResult{JobID: job.ID, Status: job.Status}
 	if runErr != nil {
@@ -150,6 +152,30 @@ func TestApplyFenceSubprocessHelper(t *testing.T) {
 	}
 	if err := os.WriteFile(os.Getenv("VEIL_APPLY_FENCE_RESULT"), payload, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func waitForFenceLeaseExpiry(t *testing.T, dbPath string, timeout time.Duration) {
+	t.Helper()
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	leases := NewLeaseStore(db)
+	deadline := time.Now().Add(timeout)
+	for {
+		lease, err := leases.Current()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lease.Owner != "" && lease.ExpiresAt <= time.Now().Unix() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for persisted lease expiry: %+v", lease)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
