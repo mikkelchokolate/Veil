@@ -1,14 +1,29 @@
 package hysteria2
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"golang.org/x/crypto/argon2"
+)
+
+const (
+	trafficStatsArgonTime    = 2
+	trafficStatsArgonMemory  = 19 * 1024
+	trafficStatsArgonThreads = 1
+	trafficStatsSecretBytes  = 32
 )
 
 func TrafficStatsSecret(settings model.Settings, inbound model.Inbound) string {
-	material := "veil-hysteria2-traffic-stats\x00" + inbound.Name + "\x00" + hysteria2Password(settings, inbound)
-	digest := sha256.Sum256([]byte(material))
-	return hex.EncodeToString(digest[:])
+	password := []byte(hysteria2Password(settings, inbound))
+	salt := []byte("veil-hysteria2-traffic-stats\x00" + inbound.Name)
+	digest := argon2.IDKey(
+		password,
+		salt,
+		trafficStatsArgonTime,
+		trafficStatsArgonMemory,
+		trafficStatsArgonThreads,
+		trafficStatsSecretBytes,
+	)
+	return hex.EncodeToString(digest)
 }
