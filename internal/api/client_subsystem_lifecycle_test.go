@@ -9,6 +9,31 @@ import (
 
 func newClientLifecycleTestState(t *testing.T) *managementState {
 	t.Helper()
+	originalFirewall := firewallApplierInstance
+	originalRunner := serviceActionRunner
+	originalHealth := serviceHealthChecker
+	originalValidator := stagedConfigValidator
+	firewallApplierInstance = &fakeFirewallApplier{}
+	serviceActionRunner = func(command []string) ServiceActionResult {
+		return ServiceActionResult{Name: command[len(command)-1], Command: append([]string(nil), command...), Success: true}
+	}
+	serviceHealthChecker = func(name string) ServiceHealthResult {
+		return ServiceHealthResult{Name: name, Healthy: true}
+	}
+	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
+		results := make([]ConfigValidationResult, 0, len(paths))
+		for _, path := range paths {
+			results = append(results, ConfigValidationResult{Name: filepath.Base(path), Config: path, Valid: true})
+		}
+		return results
+	}
+	t.Cleanup(func() {
+		firewallApplierInstance = originalFirewall
+		serviceActionRunner = originalRunner
+		serviceHealthChecker = originalHealth
+		stagedConfigValidator = originalValidator
+	})
+
 	root := t.TempDir()
 	state := newManagementState(ServerInfo{
 		Version: "test", Mode: "dev",
