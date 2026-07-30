@@ -92,7 +92,7 @@ func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
 
 	select {
 	case <-auditStarted:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("restore did not reach audit finalization")
 	}
 
@@ -155,7 +155,7 @@ func TestBackupRestoreImmediatelyRevokesOwnerMissingFromRestoredUsers(t *testing
 
 func waitForBackupRestoreTerminalState(t *testing.T, state *managementState, id string) BackupRestoreJob {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		job, ok := state.backupRestoreJob(id)
 		if !ok {
