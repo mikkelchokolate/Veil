@@ -46,14 +46,35 @@ async function seedInbound(request, name, port, enabled = false) {
   return resp;
 }
 
-async function createClientAPI(request, name, extra = {}) {
+async function createClientMutation(request, name, extra = {}) {
   const resp = await request.post('/api/v1/clients', {
     headers: tokenHeaders,
     data: { name, ...extra },
   });
   expect(resp.status(), `client create failed: ${resp.status()} ${await resp.text()}`).toBeLessThan(300);
-  const body = await resp.json();
-  return body.client;
+  return resp.json();
+}
+
+async function createClientAPI(request, name, extra = {}) {
+  return (await createClientMutation(request, name, extra)).client;
+}
+
+async function waitForApplyJob(request, jobID) {
+  let job;
+  await expect
+    .poll(
+      async () => {
+        job = await (
+          await request.get(`/api/apply/jobs/${jobID}`, { headers: tokenHeaders })
+        ).json();
+        return ['queued', 'running', 'applying', 'rolling_back'].includes(job.status)
+          ? null
+          : job.status;
+      },
+      { timeout: 30_000, intervals: [250, 500, 1000] },
+    )
+    .not.toBeNull();
+  return job;
 }
 
 test.describe('Veil Panel — extended critical flows', () => {
@@ -254,43 +275,80 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(orig.status).toBe('failed');
   });
 
-  test('subscription token lifecycle: issue, fetch, revoke, 404', async ({ page, request }) => {
-    const stamp = Date.now();
-    const created = await createClientAPI(request, `e2e-token-${stamp}`);
+  test('subscription token lifecycle: issue, fetch, revoke, 404', async ({ browser, playwright }) => {
+    const helperBase = process.env.VEIL_BROWSER_BACKUP_URL;
+    test.skip(!helperBase, 'set VEIL_BROWSER_BACKUP_URL to a helper-backed panel');
+    const context = await browser.newContext({ baseURL: helperBase });
+    const page = await context.newPage();
+    const request = await playwright.request.newContext({ baseURL: helperBase });
+    try {
+      const firewallUpdate = await request.put('/api/settings', {
+        headers: tokenHeaders,
+        data: {
+          panelListen: '127.0.0.1:2098',
+          mode: 'server',
+          firewallManagement: false,
+        },
+      });
+      const firewallText = await firewallUpdate.text();
+      expect(
+        firewallUpdate.status(),
+        `disable firewall management: ${firewallUpdate.status()} ${firewallText}`,
+      ).toBeLessThan(300);
+      const firewallMutation = JSON.parse(firewallText);
+      expect(firewallMutation.applyJob, 'settings mutation returns an apply job').toBeTruthy();
+      const firewallJob = await waitForApplyJob(request, firewallMutation.applyJob.id);
+      expect(firewallJob.status, `settings apply job: ${JSON.stringify(firewallJob)}`).toBe('succeeded');
 
-    await login(page, adminUsername, adminPassword);
-    await page.goto(`/clients/${created.id}`);
-    await page.getByRole('tab', { name: /^subscription$/i }).click();
+      const stamp = Date.now();
+      const creation = await createClientMutation(request, `e2e-token-${stamp}`);
+      const created = creation.client;
+      const createdApplyJob = creation.applyJob;
+      expect(createdApplyJob, 'client mutation returns an apply job').toBeTruthy();
 
-    await page.getByPlaceholder(/label/i).fill(`e2e-label-${stamp}`);
-    await page.getByRole('button', { name: /create token/i }).click();
+      // Public subscriptions render only immutable applied state. The
+      // helper-backed panel can complete the real privileged apply; wait for
+      // that exact mutation before issuing a public token.
+      const applyJob = await waitForApplyJob(request, createdApplyJob.id);
+      expect(applyJob.status, `client apply job: ${JSON.stringify(applyJob)}`).toBe('succeeded');
 
-    // Plaintext URL shown exactly once.
-    const urlEl = page.locator('code.mono').filter({ hasText: '/s/' }).first();
-    await expect(urlEl).toBeVisible({ timeout: 10_000 });
-    const subURL = (await urlEl.textContent()).trim();
-    expect(subURL).toContain('/s/');
+      await login(page, adminUsername, adminPassword);
+      await page.goto(`/clients/${created.id}`);
+      await page.getByRole('tab', { name: /^subscription$/i }).click();
 
-    // The live token serves the subscription…
-    const live = await request.get(subURL);
-    expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
+      await page.getByPlaceholder(/label/i).fill(`e2e-label-${stamp}`);
+      await page.getByRole('button', { name: /create token/i }).click();
 
-    // …until revoked.
-    const tokenRow = page.getByRole('row').filter({ hasText: `e2e-label-${stamp}` });
-    await expect(tokenRow.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
-    const revoked = page.waitForResponse((response) => {
-      const path = new URL(response.url()).pathname;
-      return (
-        response.request().method() === 'DELETE' &&
-        path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
-      );
-    });
-    await tokenRow.getByRole('button', { name: /^revoke$/i }).click();
-    const revokedResponse = await revoked;
-    expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
-    await expect(tokenRow.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
-    const dead = await request.get(subURL);
-    expect(dead.status(), 'revoked token must 404 (oracle-safe)').toBe(404);
+      // Plaintext URL shown exactly once.
+      const urlEl = page.locator('code.mono').filter({ hasText: '/s/' }).first();
+      await expect(urlEl).toBeVisible({ timeout: 10_000 });
+      const subURL = (await urlEl.textContent()).trim();
+      expect(subURL).toContain('/s/');
+
+      // The live token serves the applied subscription…
+      const live = await request.get(subURL);
+      expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
+
+      // …until revoked.
+      const tokenRow = page.getByRole('row').filter({ hasText: `e2e-label-${stamp}` });
+      await expect(tokenRow.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
+      const revoked = page.waitForResponse((response) => {
+        const path = new URL(response.url()).pathname;
+        return (
+          response.request().method() === 'DELETE' &&
+          path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
+        );
+      });
+      await tokenRow.getByRole('button', { name: /^revoke$/i }).click();
+      const revokedResponse = await revoked;
+      expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
+      await expect(tokenRow.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
+      const dead = await request.get(subURL);
+      expect(dead.status(), 'revoked token must 404 (oracle-safe)').toBe(404);
+    } finally {
+      await request.dispose();
+      await context.close();
+    }
   });
 
   test('backup create, verify, restore rolls state back', async ({ playwright }) => {
