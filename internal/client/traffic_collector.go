@@ -41,11 +41,12 @@ type Collector struct {
 	interval  time.Duration
 	onExhaust func(clientID string)
 
-	mu      sync.Mutex
-	health  map[string]providerHealthState
-	running bool
-	stop    chan struct{}
-	done    chan struct{}
+	mu        sync.Mutex
+	collectMu sync.Mutex
+	health    map[string]providerHealthState
+	running   bool
+	stop      chan struct{}
+	done      chan struct{}
 }
 
 func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(clientID string)) *Collector {
@@ -85,6 +86,9 @@ func (c *Collector) ensureProviderHealthLocked(key string) {
 }
 
 func (c *Collector) CollectOnce() error {
+	c.collectMu.Lock()
+	defer c.collectMu.Unlock()
+
 	c.mu.Lock()
 	providers := append([]TrafficProvider(nil), c.providers...)
 	c.mu.Unlock()
