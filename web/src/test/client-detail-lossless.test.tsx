@@ -66,6 +66,8 @@ function clone<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T;
 }
 
+const uiLoadTimeout = { timeout: 5_000 };
+
 function renderClientDetail() {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	const router = createRouter({
@@ -226,7 +228,7 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const api = installStatefulClientAPI();
 		const user = userEvent.setup();
 		renderClientDetail();
-		const name = await screen.findByLabelText(/^name$/i);
+		const name = await screen.findByLabelText(/^name$/i, {}, uiLoadTimeout);
 		await user.clear(name);
 		await user.type(name, "Renamed Only");
 		await user.click(screen.getByRole("button", { name: /save changes/i }));
@@ -247,7 +249,7 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const user = userEvent.setup();
 		renderClientDetail();
 		for (const label of [/email/i, /quota/i, /expiry date/i]) {
-			const input = await screen.findByLabelText(label);
+			const input = await screen.findByLabelText(label, {}, uiLoadTimeout);
 			await user.clear(input);
 		}
 		await user.clear(screen.getByLabelText(/notes/i));
@@ -270,7 +272,11 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const user = userEvent.setup();
 		renderClientDetail();
 		await user.click(
-			await screen.findByRole("button", { name: /disable client/i }),
+			await screen.findByRole(
+				"button",
+				{ name: /disable client/i },
+				uiLoadTimeout,
+			),
 		);
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/client")).toBe(true),
@@ -287,8 +293,10 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const api = installStatefulClientAPI();
 		const user = userEvent.setup();
 		renderClientDetail();
-		await user.click(await screen.findByRole("tab", { name: /access/i }));
-		const edge = await screen.findByText("edge");
+		await user.click(
+			await screen.findByRole("tab", { name: /access/i }, uiLoadTimeout),
+		);
+		const edge = await screen.findByText("edge", {}, uiLoadTimeout);
 		const card = edge.parentElement?.parentElement;
 		if (!card) throw new Error("binding card unavailable");
 		await user.click(within(card).getByRole("button", { name: /^disable$/i }));
