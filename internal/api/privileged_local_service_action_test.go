@@ -8,6 +8,48 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
+func TestLocalPrivilegedClientCapturesCaddyLoaderAtConstruction(t *testing.T) {
+	root := t.TempDir()
+	state := &managementState{
+		statePath:            filepath.Join(root, "state.json"),
+		applyRoot:            filepath.Join(root, "apply"),
+		liveRoot:             filepath.Join(root, "live"),
+		keyPath:              filepath.Join(root, "state.key"),
+		backupPassphrasePath: filepath.Join(root, "backup.passphrase"),
+		backupDir:            filepath.Join(root, "backups"),
+		version:              "v0.0.1",
+		settings:             Settings{PanelAccess: "caddy"},
+	}
+
+	orig := caddyAdminLoader
+	defer func() { caddyAdminLoader = orig }()
+	firstCalls := 0
+	secondCalls := 0
+	caddyAdminLoader = func(config []byte) error {
+		firstCalls++
+		if string(config) != `{"apps":{}}` {
+			t.Fatalf("unexpected Caddy config: %s", config)
+		}
+		return nil
+	}
+	client := newLocalPrivilegedClient(state)
+	caddyAdminLoader = func([]byte) error {
+		secondCalls++
+		return nil
+	}
+
+	loader, ok := client.(privileged.CaddyLoader)
+	if !ok {
+		t.Fatalf("local privileged client does not implement CaddyLoader: %T", client)
+	}
+	if err := loader.CaddyLoad(context.Background(), privileged.CaddyLoadRequest{Config: []byte(`{"apps":{}}`)}); err != nil {
+		t.Fatalf("load Caddy config: %v", err)
+	}
+	if firstCalls != 1 || secondCalls != 0 {
+		t.Fatalf("loader capture mismatch: first=%d second=%d", firstCalls, secondCalls)
+	}
+}
+
 func TestLocalPrivilegedClientReloadFallsBackToStartWhenInactive(t *testing.T) {
 	root := t.TempDir()
 	state := &managementState{

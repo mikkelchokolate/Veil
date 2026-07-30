@@ -375,7 +375,7 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	}
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
-	caddyAdminLoader = func(_ []byte) error { return fmt.Errorf("caddy admin api unavailable") }
+	caddyAdminLoader = func(_ []byte) error { return nil }
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
@@ -483,7 +483,14 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	}
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
-	caddyAdminLoader = func(_ []byte) error { return nil }
+	caddyLoads := 0
+	caddyAdminLoader = func(_ []byte) error {
+		caddyLoads++
+		if caddyLoads == 1 {
+			return nil
+		}
+		return fmt.Errorf("caddy admin api unavailable during rollback")
+	}
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
