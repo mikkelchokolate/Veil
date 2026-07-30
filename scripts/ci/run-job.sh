@@ -23,6 +23,9 @@ declare -A JOB_IMAGE=(
   [standard]=base
   [full]=system
   [stress]=base
+  [multi-process]=base
+  [sigkill]=base
+  [filesystem-faults]=base
 )
 
 image="${JOB_IMAGE[${JOB}]:-}"

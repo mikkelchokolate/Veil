@@ -96,6 +96,72 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
+  multi-process:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: multi-process job
+        run: bash scripts/ci/multi-process.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-multi-process
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  sigkill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: SIGKILL recovery job
+        run: bash scripts/ci/sigkill.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-sigkill
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  filesystem-faults:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: filesystem fault-injection job
+        run: bash scripts/ci/filesystem-faults.sh
+      - name: Upload CI artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-filesystem-faults
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
   privilege-boundary:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

@@ -127,7 +127,7 @@ ci-host:
 	bash scripts/ci/host-run.sh standard
 
 ci-job:
-	@test -n "$(JOB)" || (echo "usage: make ci-job JOB=<frontend|test|lint|browser-e2e|privilege-boundary|e2e|package-smoke|image-build|full|stress>" >&2; exit 1)
+	@test -n "$(JOB)" || (echo "usage: make ci-job JOB=<frontend|test|lint|browser-e2e|privilege-boundary|e2e|package-smoke|image-build|multi-process|sigkill|filesystem-faults|full|stress>" >&2; exit 1)
 	bash scripts/ci/run-job.sh $(JOB)
 
 ci-job-host:
