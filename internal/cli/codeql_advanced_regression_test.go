@@ -32,7 +32,8 @@ func TestCodeQLWorkflowUsesAdvancedConfiguration(t *testing.T) {
 		"Prepare embedded web assets",
 		"web/dist/index.html",
 		"go build ./...",
-		`category: "/language:${{ matrix.language }}"`,
+		`.github/workflows/codeql.yml:analyze`,
+		`format('/language:{0}', matrix.language)`,
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("CodeQL Advanced workflow is missing %q", required)

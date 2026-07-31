@@ -69,4 +69,6 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
-          category: "/language:${{ matrix.language }}"
+          # Preserve Go's base-branch category so PR alert diffing can close
+          # existing findings; new interpreted-language scans stay distinct.
+          category: "${{ matrix.language == 'go' && '.github/workflows/codeql.yml:analyze' || format('/language:{0}', matrix.language) }}"
