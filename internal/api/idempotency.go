@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 const (
@@ -33,12 +35,13 @@ type idempotencyEntry struct {
 func (e *idempotencyEntry) signal() { e.doneOnce.Do(func() { close(e.done) }) }
 
 type idempotencyStore struct {
-	mu      sync.Mutex
-	entries map[string]*idempotencyEntry
-	now     func() time.Time
-	closed  bool
-	db      *sql.DB
-	owner   string
+	mu           sync.Mutex
+	entries      map[string]*idempotencyEntry
+	now          func() time.Time
+	closed       bool
+	db           *sql.DB
+	owner        string
+	replayCipher *secrets.Cipher
 }
 
 func newIdempotencyStore(databases ...*sql.DB) *idempotencyStore {
@@ -48,6 +51,22 @@ func newIdempotencyStore(databases ...*sql.DB) *idempotencyStore {
 	}
 	store.owner = idempotencyOwnerID()
 	return store
+}
+
+func (s *idempotencyStore) setReplayCipher(source *secrets.Cipher) error {
+	if source == nil {
+		return nil
+	}
+	material := append(source.KeyBytes(), []byte("veil-idempotency-replay-v1")...)
+	digest := sha256.Sum256(material)
+	var key [secrets.KeySize]byte
+	copy(key[:], digest[:])
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		return err
+	}
+	s.replayCipher = cipher
+	return nil
 }
 
 func (s *idempotencyStore) Close() error {
@@ -224,7 +243,19 @@ func idempotencyScope(r *http.Request, key string) string {
 	if actor == "" {
 		actor = clientIP(r)
 	}
-	return actor + "\x00" + r.Method + "\x00" + r.URL.EscapedPath() + "\x00" + key
+	return actor + "\x00" + idempotencyAuthGeneration(r) + "\x00" + r.Method + "\x00" + r.URL.EscapedPath() + "\x00" + key
+}
+
+func idempotencyAuthGeneration(r *http.Request) string {
+	credential := currentSessionToken(r)
+	if credential == "" {
+		credential = strings.TrimSpace(r.Header.Get("Authorization"))
+	}
+	if credential == "" {
+		credential = "anonymous:" + clientIP(r)
+	}
+	digest := sha256.Sum256([]byte(credential))
+	return hex.EncodeToString(digest[:])
 }
 
 func idempotencyFingerprint(r *http.Request, body []byte) string {

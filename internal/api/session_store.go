@@ -1,7 +1,7 @@
 package api
 
 import (
-	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -74,9 +74,11 @@ type sessionStoreFile struct {
 }
 
 type sessionJournalRecord struct {
-	Operation string         `json:"operation"`
-	TokenHash string         `json:"tokenHash,omitempty"`
-	Session   *storedSession `json:"session,omitempty"`
+	Operation   string          `json:"operation"`
+	TokenHash   string          `json:"tokenHash,omitempty"`
+	Session     *storedSession  `json:"session,omitempty"`
+	TokenHashes []string        `json:"tokenHashes,omitempty"`
+	Sessions    []storedSession `json:"sessions,omitempty"`
 }
 
 const maxActiveSessions = 1024
@@ -90,6 +92,7 @@ type SessionRegistry struct {
 	idleTimeout     time.Duration
 	absoluteTimeout time.Duration
 	persistInterval time.Duration
+	storageErr      error
 }
 
 var globalSessions = mustNewSessionRegistry("")
@@ -369,14 +372,8 @@ func (r *SessionRegistry) DeleteByUsername(username string) (int, error) {
 			hashes = append(hashes, tokenHash)
 		}
 	}
-	for _, tokenHash := range hashes {
-		if err := r.persistDeleteLocked(tokenHash); err != nil {
-			return 0, err
-		}
-	}
-	for _, tokenHash := range hashes {
-		delete(r.sessions, tokenHash)
-		delete(r.rawCSRF, tokenHash)
+	if err := r.deleteManyLocked(hashes); err != nil {
+		return 0, err
 	}
 	return len(hashes), nil
 }
@@ -391,16 +388,32 @@ func (r *SessionRegistry) DeleteAllExcept(currentToken string) (int, error) {
 			hashes = append(hashes, tokenHash)
 		}
 	}
-	for _, tokenHash := range hashes {
-		if err := r.persistDeleteLocked(tokenHash); err != nil {
-			return 0, err
-		}
+	if err := r.deleteManyLocked(hashes); err != nil {
+		return 0, err
 	}
+	return len(hashes), nil
+}
+
+func (r *SessionRegistry) deleteManyLocked(hashes []string) error {
+	removed := make(map[string]evictedSession, len(hashes))
 	for _, tokenHash := range hashes {
+		removed[tokenHash] = evictedSession{record: r.sessions[tokenHash], csrf: r.rawCSRF[tokenHash]}
 		delete(r.sessions, tokenHash)
 		delete(r.rawCSRF, tokenHash)
 	}
-	return len(hashes), nil
+	if len(hashes) == 0 || r.path == "" {
+		return nil
+	}
+	if err := r.appendJournalLocked(sessionJournalRecord{Operation: "delete_many", TokenHashes: hashes}); err != nil {
+		for tokenHash, previous := range removed {
+			r.sessions[tokenHash] = previous.record
+			if previous.csrf != "" {
+				r.rawCSRF[tokenHash] = previous.csrf
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *SessionRegistry) load() error {
@@ -472,6 +485,14 @@ func (r *SessionRegistry) journalPath() string {
 }
 
 func (r *SessionRegistry) storageHealthyLocked() error {
+	if r.storageErr != nil {
+		if err := r.compactJournalLocked(); err == nil {
+			r.storageErr = nil
+		} else {
+			r.storageErr = err
+			return err
+		}
+	}
 	if r.path == "" {
 		return nil
 	}
@@ -532,26 +553,51 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 	if err := file.Close(); err != nil {
 		return err
 	}
-	return syncSessionDirectory(r.path)
+	if err := syncSessionDirectory(r.path); err != nil {
+		return err
+	}
+	if info, err := os.Stat(r.journalPath()); err == nil && info.Size() > 1024*1024 {
+		if compactErr := r.compactJournalLocked(); compactErr != nil {
+			r.storageErr = compactErr
+		}
+	}
+	return nil
+}
+
+func (r *SessionRegistry) compactJournalLocked() error {
+	record := sessionJournalRecord{Operation: "replace_all", Sessions: make([]storedSession, 0, len(r.sessions))}
+	for _, session := range r.sessions {
+		record.Sessions = append(record.Sessions, session)
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	return writeSessionFile(r.journalPath(), append(body, '\n'))
 }
 
 func (r *SessionRegistry) loadJournalLocked() error {
 	if r.path == "" {
 		return nil
 	}
-	file, err := os.Open(r.journalPath())
+	body, err := os.ReadFile(r.journalPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	for scanner.Scan() {
+	complete := len(body) == 0 || body[len(body)-1] == '\n'
+	lines := bytes.Split(body, []byte{'\n'})
+	for index, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
 		var record sessionJournalRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+		if err := json.Unmarshal(line, &record); err != nil {
+			if !complete && index == len(lines)-1 {
+				break
+			}
 			return err
 		}
 		switch record.Operation {
@@ -563,11 +609,24 @@ func (r *SessionRegistry) loadJournalLocked() error {
 		case "delete":
 			delete(r.sessions, record.TokenHash)
 			delete(r.rawCSRF, record.TokenHash)
+		case "delete_many":
+			for _, tokenHash := range record.TokenHashes {
+				delete(r.sessions, tokenHash)
+				delete(r.rawCSRF, tokenHash)
+			}
+		case "replace_all":
+			r.sessions = make(map[string]storedSession, len(record.Sessions))
+			for _, session := range record.Sessions {
+				if session.TokenHash == "" {
+					return errors.New("invalid session journal checkpoint")
+				}
+				r.sessions[session.TokenHash] = session
+			}
 		default:
 			return errors.New("invalid session journal operation")
 		}
 	}
-	return scanner.Err()
+	return nil
 }
 
 func (r *SessionRegistry) saveLocked() error {

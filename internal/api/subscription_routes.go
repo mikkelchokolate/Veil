@@ -36,22 +36,28 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 		return
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/s/")
-	// Strip any sub-path (defensive: only the token segment is used).
-	token := rest
-	if i := strings.Index(rest, "/"); i >= 0 {
-		token = rest[:i]
-	}
-	if token == "" {
+	if rest == "" || strings.Contains(rest, "/") {
 		writeNotFound(w)
 		return
 	}
-	tok, err := s.tokenStore.LookupByPlaintext(token)
+	token := rest
+	var tok *client.SubscriptionToken
+	var err error
+	if r.Method == http.MethodHead {
+		tok, err = s.tokenStore.LookupReadOnly(token)
+	} else {
+		tok, err = s.tokenStore.LookupByPlaintext(token)
+	}
 	if err != nil {
 		writeError(w, "subscription lookup failed", http.StatusInternalServerError)
 		return
 	}
 	if tok == nil {
 		writeNotFound(w) // unknown/disabled/revoked/expired -> indistinguishable 404
+		return
+	}
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	cl, links, applied, desired, err := s.appliedSubscription(tok.ClientID)
@@ -110,6 +116,7 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 		ExpiresAt: row.ExpiresAt, DeviceLimit: row.DeviceLimit, Notes: row.Notes, Depleted: row.Depleted,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Version: row.Version}
 	bindings := make([]client.Binding, 0)
+	bindingIDs := make(map[string]struct{})
 	inboundIDs := make([]string, 0)
 	for _, binding := range snapshot.Bindings {
 		if binding.ClientID != clientID {
@@ -118,18 +125,29 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 		bindings = append(bindings, client.Binding{ID: binding.ID, ClientID: binding.ClientID, InboundID: binding.InboundID,
 			RuntimeIdentity: binding.RuntimeIdentity, Enabled: binding.Enabled, ProtocolSettings: binding.ProtocolSettings,
 			CreatedAt: binding.CreatedAt, UpdatedAt: binding.UpdatedAt, Version: binding.Version})
+		bindingIDs[binding.ID] = struct{}{}
 		inboundIDs = append(inboundIDs, binding.InboundID)
 	}
-	plaintext := make(map[string]string, len(snapshot.Credentials))
+	selected := make(map[string]model.CredentialSnapshot, len(bindingIDs))
 	for _, credential := range snapshot.Credentials {
 		if credential.Kind != "password" {
 			continue
 		}
+		if _, ok := bindingIDs[credential.BindingID]; !ok {
+			continue
+		}
+		previous, ok := selected[credential.BindingID]
+		if !ok || credential.CredentialVersion > previous.CredentialVersion {
+			selected[credential.BindingID] = credential
+		}
+	}
+	plaintext := make(map[string]string, len(selected))
+	for bindingID, credential := range selected {
 		value, err := s.clientCreds.RevealEncrypted(credential.EncryptedValue)
 		if err != nil {
 			return client.View{}, nil, revisions.Applied, revisions.Desired, err
 		}
-		plaintext[credential.BindingID] = value
+		plaintext[bindingID] = value
 	}
 	inbounds := make(map[string]client.InboundSnapshot, len(snapshot.Inbounds))
 	for _, inbound := range snapshot.Inbounds {
@@ -137,7 +155,11 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 			Transport: inbound.Transport, Port: inbound.Port, Enabled: inbound.Enabled,
 			Password: inbound.Password, ProtocolFields: inbound.ProtocolFields}
 	}
-	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Now(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
+	effectiveAt := snapshot.EffectiveAt
+	if effectiveAt == 0 {
+		effectiveAt, _ = s.applySnapshots.EffectiveAt(revisions.Applied)
+	}
+	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Unix(effectiveAt, 0).UTC(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
 	links := []model.ClientLink{}
 	if view.Status == client.StatusActive {
 		renderer := s.subRenderer.WithSettings(clientaccess.Settings{Domain: snapshot.Settings.Domain})
@@ -164,9 +186,17 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 	}
 	clientaccess.NewClientSubscriptionDeliveryHeaders(subscription).Apply(w.Header())
 	var upload, download int64
+	trafficState := "unsupported"
 	if s.trafficStore != nil {
-		upload, download, _ = s.trafficStore.TotalsForClient(cl.ID)
+		var trafficErr error
+		upload, download, trafficErr = s.trafficStore.TotalsForClient(cl.ID)
+		if trafficErr != nil {
+			trafficState = "unavailable"
+		} else {
+			trafficState = "observed"
+		}
 	}
+	w.Header().Set("X-Veil-Traffic-State", trafficState)
 	meta := clientaccess.SubscriptionMetaHeaders{
 		Upload:                     upload,
 		Download:                   download,
@@ -210,10 +240,12 @@ func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Re
 		if !decodeJSONRequest(w, r, &req) {
 			return
 		}
-		issued, err := s.tokenStore.Issue(clientID, req.Label, req.ExpiresAt)
+		issued, err := s.tokenStore.IssueBy(clientID, req.Label, actorFromRequest(r), req.ExpiresAt)
 		if err != nil {
 			if errors.Is(err, client.ErrNotFound) {
 				writeNotFound(w)
+			} else if errors.Is(err, client.ErrValidation) {
+				writeError(w, err.Error(), http.StatusBadRequest)
 			} else {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 			}
