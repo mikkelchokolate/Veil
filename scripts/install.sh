@@ -32,8 +32,27 @@ curl -fsSLo "$cosign" "https://github.com/sigstore/cosign/releases/download/${CO
 printf '%s  %s\n' "$cosign_sha256" "$cosign" | sha256sum -c - >/dev/null
 chmod 0755 "$cosign"
 
-release_json="$(curl -fsSL "https://api.github.com/repos/${OFFICIAL_REPO}/releases/latest")"
-tag="$(printf '%s\n' "$release_json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+requested_tag="latest"
+expect_version=""
+for argument in "$@"; do
+  if [ -n "$expect_version" ]; then
+    requested_tag="$argument"
+    expect_version=""
+    continue
+  fi
+  case "$argument" in
+    --version) expect_version="1" ;;
+    --version=*) requested_tag="${argument#--version=}" ;;
+  esac
+done
+[ -z "$expect_version" ] || { echo "Missing value for --version" >&2; exit 1; }
+
+if [ "$requested_tag" = "latest" ]; then
+  release_json="$(curl -fsSL "https://api.github.com/repos/${OFFICIAL_REPO}/releases/latest")"
+  tag="$(printf '%s\n' "$release_json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+else
+  tag="$requested_tag"
+fi
 case "$tag" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
   *) echo "Latest release has an invalid tag: $tag" >&2; exit 1 ;;

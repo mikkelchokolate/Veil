@@ -178,6 +178,9 @@ type Options struct {
 	// AfterActivate is a test/fault-injection hook invoked after the atomic link
 	// switch and before manifest finalization.
 	AfterActivate func(runtime Runtime, activePath string) error
+	// AfterPreserve is a fault-injection hook after an old regular binary has
+	// moved to immutable storage but before the active symlink changes.
+	AfterPreserve func(runtime Runtime, activePath string) error
 	// Now supplies the clock.
 	Now func() time.Time
 }
@@ -201,6 +204,52 @@ const defaultBinDir = "/usr/local/bin"
 
 // DefaultBinDir is the canonical install directory for runtime binaries.
 func DefaultBinDir() string { return defaultBinDir }
+
+func runtimeVersionProbeArgs(binary string, args []string) []string {
+	probe := []string{
+		"--quiet", "--pipe", "--wait", "--collect",
+		"--property=Type=exec", "--property=NoNewPrivileges=yes",
+		"--property=PrivateNetwork=yes", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes",
+		"--property=ProtectSystem=strict", "--property=ProtectHome=yes",
+		"--property=ProtectKernelTunables=yes", "--property=ProtectKernelModules=yes", "--property=ProtectControlGroups=yes",
+		"--property=RestrictSUIDSGID=yes", "--property=LockPersonality=yes", "--property=MemoryDenyWriteExecute=yes",
+		"--property=CapabilityBoundingSet=", "--property=RestrictAddressFamilies=AF_UNIX",
+		"--property=SystemCallArchitectures=native",
+		"--property=SystemCallFilter=@system-service ~@mount @privileged @resources @raw-io @reboot @swap @obsolete @debug",
+		"--property=MemoryMax=128M", "--property=TasksMax=32", "--", binary,
+	}
+	return append(probe, args...)
+}
+
+func bubblewrapVersionProbeArgs(binary string, args []string) []string {
+	probe := []string{
+		"--die-with-parent", "--new-session", "--unshare-all",
+		"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+		"--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--", binary,
+	}
+	return append(probe, args...)
+}
+
+func runSandboxedVersionProbe(ctx context.Context, binary string, args []string) (string, error) {
+	command := "systemd-run"
+	commandArgs := runtimeVersionProbeArgs(binary, args)
+	if _, err := os.Stat("/run/systemd/private"); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect systemd manager: %w", err)
+		}
+		var lookupErr error
+		command, lookupErr = exec.LookPath("bwrap")
+		if lookupErr != nil {
+			return "", errors.New("no supported runtime version-probe sandbox is available")
+		}
+		commandArgs = bubblewrapVersionProbeArgs(binary, args)
+	}
+	output, err := exec.CommandContext(ctx, command, commandArgs...).CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("run %s sandboxed version probe: %w", filepath.Base(binary), err)
+	}
+	return string(output), nil
+}
 
 func (o Options) withDefaults() Options {
 	legacyFetchRelease := o.FetchRelease
@@ -269,14 +318,7 @@ func (o Options) withDefaults() Options {
 		o.LookPath = exec.LookPath
 	}
 	if o.RunVersion == nil {
-		o.RunVersion = func(ctx context.Context, binary string, args []string) (string, error) {
-			cmd := exec.CommandContext(ctx, binary, args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return string(output), fmt.Errorf("run %s version probe: %w", filepath.Base(binary), err)
-			}
-			return string(output), nil
-		}
+		o.RunVersion = runSandboxedVersionProbe
 	}
 	if o.VerifyPinnedSHA256 == nil {
 		o.VerifyPinnedSHA256 = func(body []byte, expected string) error {
@@ -522,18 +564,36 @@ func publishVerifiedRuntimePath(ctx context.Context, opts Options, runtime Runti
 		return "", "", "", errors.New("immutable runtime target digest mismatch")
 	}
 	active := filepath.Join(opts.BinDir, runtime.Binary)
-	previousTarget, hadPrevious, err := preservePreviousRuntime(active, storeRoot, runtime)
+	journal, err := beginRuntimeActivation(storeRoot, runtime, active, target, digest, opts.Now().UTC())
 	if err != nil {
 		return "", "", "", err
 	}
-	if err := switchRuntimeSymlink(active, target); err != nil {
-		return "", "", "", err
-	}
 	rollback := func(cause error) (string, string, string, error) {
-		if rollbackErr := restoreRuntimeSymlink(active, previousTarget, hadPrevious); rollbackErr != nil {
+		if rollbackErr := rollbackRuntimeActivation(storeRoot, journal); rollbackErr != nil {
 			cause = errors.Join(cause, fmt.Errorf("restore previous runtime: %w", rollbackErr))
 		}
 		return "", "", "", cause
+	}
+	previousTarget, hadPrevious, err := preservePreviousRuntime(active, storeRoot, runtime)
+	if err != nil {
+		return rollback(err)
+	}
+	if previousTarget != journal.PreviousTarget || hadPrevious != journal.HadPrevious {
+		return rollback(errors.New("runtime activation precondition changed after journal creation"))
+	}
+	if err := updateRuntimeActivationPhase(storeRoot, &journal, "previous-preserved", opts.Now().UTC()); err != nil {
+		return rollback(err)
+	}
+	if opts.AfterPreserve != nil {
+		if err := opts.AfterPreserve(runtime, active); err != nil {
+			return rollback(err)
+		}
+	}
+	if err := switchRuntimeSymlink(active, target); err != nil {
+		return rollback(err)
+	}
+	if err := updateRuntimeActivationPhase(storeRoot, &journal, "active-switched", opts.Now().UTC()); err != nil {
+		return rollback(err)
 	}
 	if opts.AfterActivate != nil {
 		if err := opts.AfterActivate(runtime, active); err != nil {
@@ -542,6 +602,12 @@ func publishVerifiedRuntimePath(ctx context.Context, opts Options, runtime Runti
 	}
 	if err := updateRuntimeManifest(storeRoot, runtime, target, verified, digest, opts.Now().UTC()); err != nil {
 		return rollback(err)
+	}
+	if err := updateRuntimeActivationPhase(storeRoot, &journal, "manifest-committed", opts.Now().UTC()); err != nil {
+		return rollback(err)
+	}
+	if err := removeRuntimeActivationJournal(storeRoot); err != nil {
+		return "", "", "", err
 	}
 	return active, verified, digest, nil
 }
@@ -629,16 +695,6 @@ func switchRuntimeSymlink(active, target string) error {
 		return err
 	}
 	return syncRuntimeDirectory(filepath.Dir(active))
-}
-
-func restoreRuntimeSymlink(active, target string, hadPrevious bool) error {
-	if !hadPrevious {
-		if err := os.Remove(active); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return syncRuntimeDirectory(filepath.Dir(active))
-	}
-	return switchRuntimeSymlink(active, target)
 }
 
 func updateRuntimeManifest(root string, runtime Runtime, target, verified, digest string, installedAt time.Time) error {

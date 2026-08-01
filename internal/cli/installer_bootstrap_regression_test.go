@@ -124,6 +124,74 @@ func TestPrivilegedInstallerAllowsVerifiedDevelopmentPayloadOnlyExplicitly(t *te
 	}
 }
 
+func TestBootstrapSelectsRequestedVersionBeforeAnyReleaseDownload(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	parseAt := strings.Index(script, `--version) expect_version=`)
+	downloadAt := strings.Index(script, `base="https://github.com/${OFFICIAL_REPO}/releases/download/${tag}"`)
+	if parseAt < 0 || downloadAt < 0 || parseAt > downloadAt {
+		t.Fatal("piped bootstrap does not select --version before constructing download URLs")
+	}
+	if !strings.Contains(script, `tag="$requested_tag"`) {
+		t.Fatal("piped bootstrap still resolves latest when an exact --version was requested")
+	}
+}
+
+func TestPrivilegedBinaryHandoffCopiesAndHashesOneOpenedInode(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, marker := range []string{"O_NOFOLLOW", "os.fstat(source_fd)", "st_nlink != 1", "st_uid != expected_uid", "os.read(source_fd", "os.fsync(temp_fd)"} {
+		if !strings.Contains(script, marker) {
+			t.Errorf("verified root handoff lacks %q", marker)
+		}
+	}
+}
+
+func TestPrivilegedInstallFailureRestoresPreviousBinary(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-owned installer transaction test")
+	}
+	checkBash(t)
+	installerBody, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	installerDigest := fmt.Sprintf("%x", sha256.Sum256(installerBody))
+	root := t.TempDir()
+	source := filepath.Join(root, "candidate")
+	candidate := []byte("#!/bin/sh\nexit 47\n")
+	if err := os.WriteFile(source, candidate, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	candidateDigest := fmt.Sprintf("%x", sha256.Sum256(candidate))
+	destination := filepath.Join(root, "install")
+	if err := os.MkdirAll(destination, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := []byte("#!/bin/sh\nexit 0\n")
+	if err := os.WriteFile(filepath.Join(destination, "veil"), old, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("bash", "../../scripts/install-privileged.sh", "--local-bin", source, "--install-dir", destination, "--yes")
+	command.Env = append(os.Environ(), "VEIL_INSTALLER_SHA256="+installerDigest, "VEIL_VERIFIED_BINARY_SHA256="+candidateDigest)
+	if output, err := command.CombinedOutput(); err == nil {
+		t.Fatalf("failing installed binary unexpectedly succeeded: %s", output)
+	}
+	restored, err := os.ReadFile(filepath.Join(destination, "veil"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(restored) != string(old) {
+		t.Fatalf("failed install left replacement binary: %q", restored)
+	}
+}
+
 func firstPositiveIndex(text string, needles ...string) int {
 	best := -1
 	for _, needle := range needles {

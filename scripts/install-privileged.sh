@@ -80,9 +80,10 @@ run_veil_install() {
     return $?
   fi
   if [[ -z "${YES}" && -r /dev/tty ]]; then
-    exec "${RUN_BIN}" install "${args[@]}" < /dev/tty
+    "${RUN_BIN}" install "${args[@]}" < /dev/tty
+    return $?
   fi
-  exec "${RUN_BIN}" install "${args[@]}"
+  "${RUN_BIN}" install "${args[@]}"
 }
 
 require_value() {
@@ -188,11 +189,62 @@ if [[ -n "${LOCAL_BIN}" && -z "${UNSAFE_DEVELOPMENT}" ]]; then
     echo "Verified binary handoff metadata is missing." >&2
     exit 1
   fi
-  actual_binary="$(sha256sum "${LOCAL_BIN}" | awk '{print $1}')"
-  if [[ "${actual_binary,,}" != "${expected_binary,,}" ]]; then
-    echo "Verified binary handoff digest mismatch." >&2
-    exit 1
-  fi
+  require_cmd python3
+  mkdir -p "${INSTALL_DIR}"
+  verified_copy="$(VEIL_LOCAL_SOURCE="${LOCAL_BIN}" VEIL_EXPECTED_BINARY_SHA256="${expected_binary}" \
+    VEIL_EXPECTED_SOURCE_UID="${SUDO_UID:-$(id -u)}" VEIL_INSTALL_DIR="${INSTALL_DIR}" python3 - <<'PY'
+import hashlib, os, stat, tempfile
+
+source = os.environ["VEIL_LOCAL_SOURCE"]
+expected = os.environ["VEIL_EXPECTED_BINARY_SHA256"].lower()
+expected_uid = int(os.environ["VEIL_EXPECTED_SOURCE_UID"])
+install_dir = os.environ["VEIL_INSTALL_DIR"]
+parent = os.path.dirname(os.path.abspath(source))
+parent_stat = os.lstat(parent)
+if not stat.S_ISDIR(parent_stat.st_mode) or parent_stat.st_uid != expected_uid or parent_stat.st_mode & 0o022:
+    raise SystemExit("Verified binary source directory ownership/mode is unsafe")
+flags = os.O_RDONLY | os.O_CLOEXEC
+flags |= getattr(os, "O_NOFOLLOW", 0)
+source_fd = os.open(source, flags)
+temp_path = ""
+try:
+    source_stat = os.fstat(source_fd)
+    if not stat.S_ISREG(source_stat.st_mode) or source_stat.st_nlink != 1 or source_stat.st_uid != expected_uid:
+        raise SystemExit("Verified binary source inode ownership/type/link count is unsafe")
+    install_stat = os.stat(install_dir)
+    if not stat.S_ISDIR(install_stat.st_mode) or install_stat.st_uid != 0 or install_stat.st_mode & 0o022:
+        raise SystemExit("Install directory ownership/mode is unsafe")
+    temp_fd, temp_path = tempfile.mkstemp(prefix=".veil-verified-", dir=install_dir)
+    digest = hashlib.sha256()
+    try:
+        while True:
+            block = os.read(source_fd, 1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+            view = memoryview(block)
+            while view:
+                written = os.write(temp_fd, view)
+                view = view[written:]
+        os.fchmod(temp_fd, 0o755)
+        os.fchown(temp_fd, 0, 0)
+        os.fsync(temp_fd)
+    finally:
+        os.close(temp_fd)
+    if digest.hexdigest() != expected:
+        os.unlink(temp_path)
+        raise SystemExit("Verified binary handoff digest mismatch")
+    directory_fd = os.open(install_dir, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    print(temp_path)
+finally:
+    os.close(source_fd)
+PY
+  )"
+  LOCAL_BIN="${verified_copy}"
 fi
 
 if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
@@ -208,6 +260,13 @@ if [[ -n "${LOCAL_BIN}" ]]; then
     echo "Dry run: using local Veil binary ${RUN_BIN} without installing it."
   else
     mkdir -p "${INSTALL_DIR}"
+	previous_binary=""
+	had_previous=""
+	if [[ -e "${INSTALL_DIR}/veil" ]]; then
+	  previous_binary="$(mktemp "${INSTALL_DIR}/.veil-previous.XXXXXX")"
+	  install -m 0755 "${INSTALL_DIR}/veil" "${previous_binary}"
+	  had_previous="1"
+	fi
     install -m 0755 "${LOCAL_BIN}" "${INSTALL_DIR}/veil"
     RUN_BIN="${INSTALL_DIR}/veil"
     echo "Installed local binary ${LOCAL_BIN} to ${RUN_BIN}"
@@ -221,8 +280,23 @@ if [[ -n "${LOCAL_BIN}" ]]; then
   if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
   if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
-  run_veil_install
-  exit $?
+  if run_veil_install; then
+	if [[ -n "${previous_binary:-}" ]]; then rm -f "${previous_binary}"; fi
+	if [[ "${LOCAL_BIN}" == "${INSTALL_DIR}"/.veil-verified-* ]]; then rm -f "${LOCAL_BIN}"; fi
+	exit 0
+  else
+	status=$?
+  fi
+  if [[ -z "${DRY_RUN}" ]]; then
+	if [[ -n "${had_previous:-}" ]]; then
+	  install -m 0755 "${previous_binary}" "${INSTALL_DIR}/veil"
+	else
+	  rm -f "${INSTALL_DIR}/veil"
+	fi
+	rm -f "${previous_binary:-}"
+	if [[ "${LOCAL_BIN}" == "${INSTALL_DIR}"/.veil-verified-* ]]; then rm -f "${LOCAL_BIN}"; fi
+  fi
+  exit "${status}"
 fi
 
 # Idempotency: skip download only when the installed binary already matches the target.

@@ -116,6 +116,7 @@ func TestSuccessfulRuntimeInstallRecordsActualDigestAndVerifiedUpstreamVersion(t
 			}
 			return checksums, nil
 		},
+		RunVersion: fixedRuntimeVersion("versioned-runtime v1.2.3"),
 	}, runtime)
 	if result.Err != nil {
 		t.Fatalf("precondition install failed: %v", result.Err)

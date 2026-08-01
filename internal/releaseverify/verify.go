@@ -23,6 +23,7 @@ type Evidence struct {
 	Repository       string
 	WorkflowPath     string
 	ReleaseTag       string
+	SourceCommit     string
 	ArchiveName      string
 	Archive          []byte
 	ChecksumsName    string
@@ -224,6 +225,19 @@ func verifyProvenanceStatement(body []byte, e Evidence) error {
 	}
 	if !hasSubject(statement.Subject, checksumsName, digestHex(e.Checksums)) {
 		return fmt.Errorf("provenance has no subject digest for %s", checksumsName)
+	}
+	if e.SourceCommit != "" {
+		matched := false
+		for _, dependency := range statement.Predicate.BuildDefinition.ResolvedDependencies {
+			if strings.Contains(strings.ToLower(dependency.URI), strings.ToLower("github.com/"+e.Repository)) &&
+				strings.EqualFold(dependency.Digest["gitCommit"], e.SourceCommit) {
+				matched = true
+				break
+			}
+		}
+		if len(e.SourceCommit) != 40 || !matched {
+			return fmt.Errorf("provenance source commit does not match expected commit %s", e.SourceCommit)
+		}
 	}
 	return nil
 }

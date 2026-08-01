@@ -30,7 +30,8 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 		"sha256sum -c",
 		"tar -xzf",
 		"/usr/local/bin",
-		"exec \"${RUN_BIN}\" install",
+		`"${RUN_BIN}" install`,
+		"run_veil_install",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q:\n%s", want, script)
@@ -169,7 +170,7 @@ func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `exec "${RUN_BIN}" install`} {
+	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `run_veil_install`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should execute downloaded temp binary without installing; missing %q:\n%s", want, script)
 		}
@@ -316,7 +317,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
-		"go test ${packages} -race -count=1 -coverprofile=coverage.out",
+		"go test ${packages} -race -count=1 -timeout 30m -coverprofile=coverage.out",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",

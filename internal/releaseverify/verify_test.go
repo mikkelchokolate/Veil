@@ -84,6 +84,19 @@ func TestVerifyRejectsMalformedBundleBeforeTrustingChecksums(t *testing.T) {
 	}
 }
 
+func TestProvenanceRejectsWrongSourceCommitWithOtherwiseValidStatement(t *testing.T) {
+	evidence := Evidence{
+		Repository: "mikkelchokolate/Veil", WorkflowPath: ".github/workflows/release.yml", ReleaseTag: "v1.2.3",
+		ArchiveName: "veil.tar.gz", Archive: []byte("archive"), ChecksumsName: "checksums.txt", Checksums: []byte("checksums"),
+		SourceCommit: strings.Repeat("a", 40),
+	}
+	body := validProvenanceForTest(t, evidence)
+	evidence.SourceCommit = strings.Repeat("b", 40)
+	if err := verifyProvenanceStatement(body, evidence); err == nil || !strings.Contains(err.Error(), "source commit") {
+		t.Fatalf("wrong signed source commit accepted: %v", err)
+	}
+}
+
 func validProvenanceForTest(t *testing.T, evidence Evidence) []byte {
 	t.Helper()
 	digest := func(body []byte) string {
@@ -110,6 +123,13 @@ func validProvenanceForTest(t *testing.T, evidence Evidence) []byte {
 				"builder": map[string]any{"id": workflowIdentity(evidence.Repository, evidence.WorkflowPath, evidence.ReleaseTag)},
 			},
 		},
+	}
+	if evidence.SourceCommit != "" {
+		build := statement["predicate"].(map[string]any)["buildDefinition"].(map[string]any)
+		build["resolvedDependencies"] = []any{map[string]any{
+			"uri":    "git+https://github.com/" + evidence.Repository,
+			"digest": map[string]any{"gitCommit": evidence.SourceCommit},
+		}}
 	}
 	body, err := json.Marshal(statement)
 	if err != nil {
