@@ -40,10 +40,10 @@ func TestTokenMutationCannotCrossClientBoundary(t *testing.T) {
 }
 
 func TestExpiredTokenRotationRequiresFutureExpiry(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	r, state := newApplyTrackedRouterWithState(t)
 	_, clientID := seedClientWithToken(t, r)
-	expired := time.Now().Add(-time.Hour).Unix()
-	issued := v1Request(t, r, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens", fmt.Sprintf(`{"label":"expired","expiresAt":%d}`, expired))
+	initialExpiry := time.Now().Add(time.Hour).Unix()
+	issued := v1Request(t, r, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens", fmt.Sprintf(`{"label":"expired","expiresAt":%d}`, initialExpiry))
 	if issued.Code != http.StatusCreated {
 		t.Fatalf("issue expired token: %d %s", issued.Code, issued.Body.String())
 	}
@@ -53,6 +53,10 @@ func TestExpiredTokenRotationRequiresFutureExpiry(t *testing.T) {
 		} `json:"token"`
 	}
 	_ = json.NewDecoder(issued.Body).Decode(&issuedBody)
+	expired := time.Now().Add(-time.Hour).Unix()
+	if _, err := state.db.Exec(`UPDATE subscription_tokens SET expires_at=? WHERE id=?`, expired, issuedBody.Token.ID); err != nil {
+		t.Fatalf("expire token: %v", err)
+	}
 	rotationURL := "/api/v1/clients/" + clientID + "/tokens/" + issuedBody.Token.ID + "/rotate"
 	if response := v1Request(t, r, http.MethodPost, rotationURL, ""); response.Code != http.StatusBadRequest {
 		t.Fatalf("expired rotation without expiry: %d %s", response.Code, response.Body.String())

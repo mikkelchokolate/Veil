@@ -793,6 +793,9 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			if err != nil {
 				return err
 			}
+			if currentBinding.ClientID != clientID {
+				return client.ErrNotFound
+			}
 			if *req.Enabled {
 				existingClient, err := tx.Get(currentBinding.ClientID)
 				if err != nil {
@@ -819,6 +822,13 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 	}
 	if r.Method == http.MethodDelete {
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			binding, err := tx.GetBinding(bindingID)
+			if err != nil {
+				return err
+			}
+			if binding.ClientID != clientID {
+				return client.ErrNotFound
+			}
 			return s.clientService.RemoveBindingTx(tx, bindingID, clientID)
 		})
 		if err != nil {
@@ -852,6 +862,13 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		}
 		var cred client.Credential
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			binding, err := tx.GetBinding(bindingID)
+			if err != nil {
+				return err
+			}
+			if binding.ClientID != clientID {
+				return client.ErrNotFound
+			}
 			nc, err := s.clientService.SetCredentialTx(tx, bindingID, req.Kind, req.Value)
 			if err != nil {
 				return err
@@ -884,6 +901,13 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		if req.Value == "" {
 			var gen client.GeneratedCredential
 			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+				binding, err := tx.GetBinding(bindingID)
+				if err != nil {
+					return err
+				}
+				if binding.ClientID != clientID {
+					return client.ErrNotFound
+				}
 				g, err := s.clientService.RotateCredentialGeneratedTx(tx, bindingID, req.Kind)
 				if err != nil {
 					return err
@@ -901,6 +925,13 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 		}
 		var cred client.Credential
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
+			binding, err := tx.GetBinding(bindingID)
+			if err != nil {
+				return err
+			}
+			if binding.ClientID != clientID {
+				return client.ErrNotFound
+			}
 			nc, err := s.clientService.RotateCredentialTx(tx, bindingID, req.Kind, req.Value)
 			if err != nil {
 				return err

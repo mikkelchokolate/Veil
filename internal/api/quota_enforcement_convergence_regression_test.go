@@ -76,13 +76,23 @@ func TestQuotaEnforcementRetriesUntilDepletedRevisionIsApplied(t *testing.T) {
 	}
 
 	state.applyRunner = veilapply.NewRunner(state.applyRevisions, state.applyJobs, state.executeApplyRevision)
+	if _, err := state.db.Exec(`UPDATE quota_enforcement SET next_retry_at=0 WHERE client_id=?`, clientID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.db.Exec(`CREATE TRIGGER fail_duplicate_quota_terminal BEFORE UPDATE OF state ON quota_enforcement
+WHEN OLD.state='enforced' AND NEW.state='enforced' BEGIN SELECT RAISE(ABORT,'terminal persistence failure'); END`); err != nil {
+		t.Fatal(err)
+	}
 	changed, retryErr := state.trafficReconciler.ReconcileOnce()
-	if retryErr != nil {
-		t.Errorf("retry reconcile: changed=%d err=%v", changed, retryErr)
+	if retryErr == nil {
+		t.Errorf("expected duplicate terminal persistence failure: changed=%d", changed)
 	}
 	after, err := state.applyRevisions.Get()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if after.Desired != failedRevision.Desired {
+		t.Errorf("quota retry generated a new revision: failed=%+v after=%+v", failedRevision, after)
 	}
 	if after.Applied != after.Desired || after.Applied < failedRevision.Desired {
 		t.Errorf("retry did not converge applied state: failed=%+v after=%+v", failedRevision, after)
@@ -92,6 +102,16 @@ func TestQuotaEnforcementRetriesUntilDepletedRevisionIsApplied(t *testing.T) {
 		t.Errorf("load enforced state: %v", err)
 	} else if enforcedState != "enforced" {
 		t.Errorf("enforcement state = %q, want enforced", enforcedState)
+	}
+	if _, err := state.db.Exec(`DROP TRIGGER fail_duplicate_quota_terminal`); err != nil {
+		t.Fatal(err)
+	}
+	if changedAgain, err := state.trafficReconciler.ReconcileOnce(); err != nil || changedAgain != 0 {
+		t.Errorf("enforced quota retried after terminal marker failure: changed=%d err=%v", changedAgain, err)
+	}
+	stable, err := state.applyRevisions.Get()
+	if err != nil || stable.Desired != after.Desired {
+		t.Errorf("terminal marker failure generated another revision: after=%+v stable=%+v err=%v", after, stable, err)
 	}
 	live := captureSnapshotTestTree(t, state.liveRoot)
 	for path, file := range live {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
@@ -48,6 +49,10 @@ func (s *managementState) withClientMutation(r *http.Request, actor string, muta
 // Returns the committed desired revision (0 when revision tracking is
 // disabled, e.g. tests without a StatePath).
 func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) error) (uint64, error) {
+	return s.commitClientMutationBoundLocked(mutate, nil)
+}
+
+func (s *managementState) commitClientMutationBoundLocked(mutate func(tx *client.Tx) error, bind func(tx *client.Tx, revision uint64) error) (uint64, error) {
 	if s.clientRepo == nil {
 		return 0, fmt.Errorf("client store unavailable")
 	}
@@ -79,6 +84,12 @@ func (s *managementState) commitClientMutationLocked(mutate func(tx *client.Tx) 
 		if err != nil {
 			_ = tx.Rollback()
 			return err
+		}
+		if bind != nil {
+			if err := bind(tx, revision); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err
@@ -131,6 +142,7 @@ func (s *managementState) snapshotWithClientStateLocked(
 	clients []client.Client, bindings []client.Binding, creds []client.Credential,
 ) managementSnapshot {
 	input := managementstate.SnapshotInput{
+		EffectiveAt:   time.Now().UTC().Unix(),
 		Setup:         s.setup,
 		Settings:      s.settings,
 		Inbounds:      s.inbounds,
