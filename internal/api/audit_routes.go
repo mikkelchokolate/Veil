@@ -74,12 +74,23 @@ func (s *managementState) recordRequestAudit(r *http.Request, record audit.Recor
 	if record.Actor == "" {
 		record.Actor = "system"
 	}
-	if err := s.auditRecorder().Append(record); err != nil {
+	recorder := s.auditRecorder()
+	if err := recorder.Append(record); err != nil {
 		s.auditHealthMu.Lock()
 		s.auditDegraded = true
 		s.auditHealthMu.Unlock()
 		log.Printf("SECURITY AUDIT DEGRADED: audit record persistence failed: %v", err)
 		return err
+	}
+	if err := recorder.Degraded(); err != nil {
+		s.auditHealthMu.Lock()
+		s.auditDegraded = true
+		s.auditHealthMu.Unlock()
+		log.Printf("SECURITY AUDIT DEGRADED: primary audit unavailable; durable spool active: %v", err)
+	} else {
+		s.auditHealthMu.Lock()
+		s.auditDegraded = false
+		s.auditHealthMu.Unlock()
 	}
 	return nil
 }

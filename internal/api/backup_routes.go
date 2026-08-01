@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -174,7 +175,8 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
-		var offset int64
+		var offset, expectedSize int64
+		expectedCreatedAt := ""
 		for {
 			result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 				Action: privileged.BackupActionRead, ArchiveName: name,
@@ -186,6 +188,16 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 				}
 				return
 			}
+			if len(result.Archives) != 1 {
+				return
+			}
+			identity := result.Archives[0]
+			if offset == 0 {
+				expectedSize, expectedCreatedAt = identity.Size, identity.CreatedAt
+				w.Header().Set("Content-Length", strconv.FormatInt(expectedSize, 10))
+			} else if identity.Size != expectedSize || identity.CreatedAt != expectedCreatedAt {
+				return
+			}
 			if len(result.Data) == 0 && result.More {
 				return
 			}
@@ -194,6 +206,9 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			}
 			offset += int64(len(result.Data))
 			if !result.More {
+				if offset != expectedSize {
+					return
+				}
 				break
 			}
 		}
@@ -312,7 +327,7 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	var restoreLease veilapply.Lease
 	if s.db != nil {
 		owner := fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString())
-		lease, acquired, leaseErr := veilapply.NewLeaseStore(s.db).Acquire(owner, "backup-restore", time.Now().UTC(), 2*time.Hour)
+		lease, acquired, leaseErr := veilapply.NewLeaseStore(s.db).Acquire(owner, "backup-restore:"+id, time.Now().UTC(), 2*time.Hour)
 		if leaseErr != nil || !acquired {
 			s.mu.Unlock()
 			message := "restore fencing lease is busy"
@@ -345,7 +360,8 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	} else {
 		result, err = s.backupOperation(s.lifecycleContext(), privileged.BackupRequest{
 			Action: privileged.BackupActionRestore, ArchiveName: name,
-			Fence: privileged.FenceToken{Owner: restoreLease.Owner, Generation: restoreLease.Generation},
+			Fence: privileged.FenceToken{Owner: restoreLease.Owner, Generation: restoreLease.Generation,
+				LeaseExpiresAt: restoreLease.ExpiresAt, OperationID: restoreLease.Operation},
 		})
 	}
 	// Reopen on both success and failure. The helper rolls all staged files back

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -142,8 +143,9 @@ func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
 			end = int64(len(body))
 		}
 		return privileged.BackupResult{
-			Data: body[start:end],
-			More: end < int64(len(body)),
+			Archives: []privileged.BackupArchive{{Name: "large.enc", Size: int64(len(body)), CreatedAt: "2026-08-01T00:00:00Z"}},
+			Data:     body[start:end],
+			More:     end < int64(len(body)),
 		}, nil
 	}}
 
@@ -158,6 +160,35 @@ func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
 	}
 	if readCalls < 2 {
 		t.Fatalf("helper read calls=%d, want multiple bounded chunks", readCalls)
+	}
+}
+
+type failingDownloadWriter struct {
+	header http.Header
+	writes int
+}
+
+func (w *failingDownloadWriter) Header() http.Header { return w.header }
+func (w *failingDownloadWriter) WriteHeader(int)     {}
+func (w *failingDownloadWriter) Write([]byte) (int, error) {
+	w.writes++
+	return 0, io.ErrClosedPipe
+}
+
+func TestInterruptedBackupDownloadStopsReadingImmediately(t *testing.T) {
+	state := newPanelBackupState(t)
+	calls := 0
+	state.privileged = backupStubClient{backup: func(_ context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {
+		calls++
+		return privileged.BackupResult{
+			Archives: []privileged.BackupArchive{{Name: request.ArchiveName, Size: 2 * 1024 * 1024, CreatedAt: "2026-08-01T00:00:00Z"}},
+			Data:     make([]byte, 1024*1024), More: true,
+		}, nil
+	}}
+	writer := &failingDownloadWriter{header: make(http.Header)}
+	state.handleBackupByName(writer, adminJSONRequest(http.MethodGet, "/api/backups/interrupted.enc/download", ""))
+	if calls != 1 || writer.writes != 1 {
+		t.Fatalf("interrupted download continued: helper calls=%d writes=%d", calls, writer.writes)
 	}
 }
 
