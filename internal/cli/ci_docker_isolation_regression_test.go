@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestDockerBuildsNeverUseHostNetworking(t *testing.T) {
+	root := filepath.Join("..", "..", "scripts", "ci")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".sh") {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(body), "--network host") {
+			t.Errorf("%s uses forbidden host networking", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDockerCIBackendDoesNotShareHostNetworkOrRuntimeNamespace(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "ci", "vm-run.sh")
 	data, err := os.ReadFile(path)

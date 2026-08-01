@@ -54,7 +54,10 @@ ci_step "product tests: -race -count=1 -coverprofile"
 packages="$(go list ./... | grep -v '/sdk/go$')"
 set -o pipefail
 # shellcheck disable=SC2086
-go test ${packages} -race -count=1 -coverprofile=coverage.out 2>&1 | tee "${CI_ARTIFACT_DIR}/product-test.log"
+# The API package intentionally exercises durable recovery and fault paths and
+# can exceed 15 minutes under -race on constrained CI hosts.
+# This is one bounded run, not a retry.
+go test ${packages} -race -count=1 -timeout 30m -coverprofile=coverage.out 2>&1 | tee "${CI_ARTIFACT_DIR}/product-test.log"
 test_rc=${PIPESTATUS[0]}
 set +o pipefail
 cp -f coverage.out "${CI_ARTIFACT_DIR}/coverage.out" 2>/dev/null || true

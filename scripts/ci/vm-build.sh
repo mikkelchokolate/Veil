@@ -54,12 +54,7 @@ build_target() {
   ci_step "building ${tag}"
   local no_cache=()
   [ "${CI_CLEAN:-0}" = "1" ] && no_cache=(--no-cache)
-  # --network host: build-time transport only (identical image content, and
-  # the image key inputs do not include the network mode). The default bridge
-  # NAT is silently broken on some hosts (downloads stall with growing Send-Q
-  # and LAST_ACK connections); host networking matches the daemon's egress.
   docker build "${no_cache[@]}" \
-    --network host \
     --target "${target}" \
     --tag "${tag}" \
     --build-arg "UBUNTU_BASE=ubuntu:24.04@${UBUNTU_24_04_DIGEST}" \

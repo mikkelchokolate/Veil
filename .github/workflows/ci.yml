@@ -62,6 +62,8 @@ jobs:
           node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+      - name: runtime probe sandbox
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: test job
         run: bash scripts/ci/test.sh
       - name: Upload CI artifacts (incl. product-test.log and coverage)
@@ -212,6 +214,8 @@ jobs:
           node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+      - name: runtime probe sandbox
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: e2e job (real pinned protocol runtimes)
         run: bash scripts/ci/e2e.sh
       - name: Upload CI artifacts (incl. protocol logs)
