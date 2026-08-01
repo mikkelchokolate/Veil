@@ -46,7 +46,8 @@ func (ctx ManagementApplyContext) fenceToken() privileged.FenceToken {
 	if !ok {
 		return privileged.FenceToken{}
 	}
-	return privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation}
+	return privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
+		LeaseExpiresAt: fence.LeaseExpiresAt, OperationID: fence.OperationID}
 }
 
 func NewManagementApplyContext(state *managementState) ManagementApplyContext {
@@ -156,6 +157,21 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	if ctx.state.privileged == nil {
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
+	}
+	publicationArtifacts := append(append([]string(nil), artifactIDs...), removeIDs...)
+	expectedManifest, previousManifest, err := publicationArtifactDigests(generatedRoot, ctx.state.liveRoot, artifactIDs, removeIDs)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build publication manifest: %w", err)
+	}
+	if err := veilapply.MarkRuntimeMutationStarting(ctx.operationContext(), veilapply.PublicationDetails{
+		ExpectedLiveManifestSHA256: expectedManifest,
+		PreviousLiveManifestSHA256: previousManifest,
+		Artifacts:                  publicationArtifacts,
+		ServicePhase:               "pending",
+		FirewallPhase:              "pending",
+		LiveRoot:                   ctx.state.liveRoot,
+	}); err != nil {
+		return nil, nil, nil, fmt.Errorf("persist publication phase before promotion: %w", err)
 	}
 	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
 		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs, Fence: ctx.fenceToken(),

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
@@ -122,6 +123,44 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer s.serviceActionMu.Unlock()
+	}
+	if s.applyTrackingEnabled() {
+		desiredRevision, err := s.ensureRunnableRevision()
+		if err != nil {
+			writeError(w, "failed to read desired revision", http.StatusServiceUnavailable)
+			return
+		}
+		var response ApplyResponse
+		status := http.StatusInternalServerError
+		var workflowErr error
+		_, runErr := s.applyRunner.RunOperationContext(r.Context(), desiredRevision, "manual", actorFromRequest(r),
+			apply.ContextExecutorFunc(func(ctx context.Context, revision uint64) (apply.Result, error) {
+				var result apply.Result
+				response, status, result, workflowErr = s.executeApplyRevisionRequestContext(ctx, revision, req)
+				return result, workflowErr
+			}))
+		if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
+			status = http.StatusUnprocessableEntity
+		}
+		s.logUserAction(r, "apply_configuration", "system", runErr == nil && status == http.StatusOK, "")
+		if workflowErr != nil {
+			writeError(w, workflowErr.Error(), status)
+			return
+		}
+		if status != http.StatusOK {
+			if status == http.StatusInternalServerError && runErr != nil {
+				writeError(w, runErr.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			writeJSONStatus(w, status, response)
+			return
+		}
+		if runErr != nil {
+			writeError(w, runErr.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, response)
+		return
 	}
 	s.mu.Lock()
 	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, r.Context())).RunLocked(req)

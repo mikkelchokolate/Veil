@@ -1,10 +1,8 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -27,6 +25,10 @@ func (routes *PanelRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", routes.handleHealth)
 	mux.HandleFunc("/api/version", routes.handleVersion)
 	mux.HandleFunc("/api/version/update", routes.handleUpdateVersion)
+	mux.HandleFunc("/api/version/update/jobs/", routes.handlePanelUpdateJob)
+	if routes.State != nil && routes.State.db != nil {
+		routes.State.reconcilePanelUpdateJobs(routes.Info.Version)
+	}
 }
 
 func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -200,11 +202,14 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
-		ArtifactID: "veil-update",
-		Version:    version,
-	})
+	updateJob, err := routes.State.createPanelUpdateJob(version)
 	if err != nil {
+		writeError(w, "create durable update job", http.StatusInternalServerError)
+		return
+	}
+	result, applyJob, err := routes.State.installPanelUpdate(r.Context(), version)
+	if err != nil {
+		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err)
 		writePrivilegedError(w, err)
 		return
 	}
@@ -214,22 +219,21 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
-
-	state := routes.State
-	privilegedClient := routes.State.privileged
+	routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil)
 	releaseLocks = false
+	routes.State.updateWG.Add(1)
 	go func() {
-		defer state.endPanelUpdate()
-		time.Sleep(100 * time.Millisecond)
-		_ = privilegedClient.RestartPanel(context.Background())
+		defer routes.State.updateWG.Done()
+		routes.State.restartPanelForUpdate(updateJob.ID)
 	}()
 
-	writeJSON(w, map[string]any{
-		"success":   true,
+	writeJSONStatus(w, http.StatusAccepted, map[string]any{
+		"jobId":     updateJob.ID,
+		"status":    "restart_pending",
 		"staged":    result.Staged,
 		"installed": result.Installed,
 		"version":   result.Version,
-		"message":   "Update staged successfully. Restarting panel service...",
+		"message":   "Update installed; durable restart verification is pending.",
 	})
 }
 

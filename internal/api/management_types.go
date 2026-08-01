@@ -90,6 +90,7 @@ type managementState struct {
 	backupRestoreOwnerSessionGrace time.Duration
 	serviceActionMu                sync.Mutex
 	updateMu                       sync.Mutex
+	updateWG                       sync.WaitGroup
 	updateStager                   func(context.Context) (string, error)
 	configurationValidator         ConfigurationValidator
 	enforceConfigurationValidation bool
@@ -113,6 +114,7 @@ type managementState struct {
 	trafficStore            *client.TrafficStore
 	trafficCollector        *client.Collector
 	trafficReconciler       *client.Reconciler
+	expirationReconciler    *expirationReconciler
 	sse                     *sseBroadcaster
 	clientSubsystemStopping bool
 	// A3: normalized client state pinned from the immutable revision snapshot
@@ -121,4 +123,5 @@ type managementState struct {
 	renderClients     []model.ClientSnapshot
 	renderBindings    []model.BindingSnapshot
 	renderCredentials []model.CredentialSnapshot
+	renderEffectiveAt int64
 }

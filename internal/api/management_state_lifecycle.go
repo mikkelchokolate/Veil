@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
@@ -265,6 +266,7 @@ func (l ManagementStateLifecycle) loadCoherentStateLocked() error {
 
 func (l ManagementStateLifecycle) SnapshotLocked() (managementSnapshot, error) {
 	input := managementstate.SnapshotInput{
+		EffectiveAt:   time.Now().UTC().Unix(),
 		Setup:         l.state.setup,
 		Settings:      l.state.settings,
 		Inbounds:      l.state.inbounds,

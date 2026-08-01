@@ -31,6 +31,7 @@ type recordingPrivilegedClient struct {
 	rotateCalls           int
 	recoverRotationCalls  int
 	restartCalls          atomic.Int32
+	restartErr            error
 	err                   error
 }
 
@@ -169,7 +170,7 @@ func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged
 			Name: "veil_backup_20260605_120000.tar.gz.enc", Size: 8, Encrypted: true,
 		}}}, nil
 	case privileged.BackupActionRead:
-		return privileged.BackupResult{ArchiveName: request.ArchiveName, Data: []byte("VEILBACK")}, nil
+		return privileged.BackupResult{ArchiveName: request.ArchiveName, Archives: []privileged.BackupArchive{{Name: request.ArchiveName, Size: 8, CreatedAt: "2026-06-05T12:00:00Z"}}, Data: []byte("VEILBACK")}, nil
 	case privileged.BackupActionVerify:
 		return privileged.BackupResult{ArchiveName: request.ArchiveName, Verified: true}, nil
 	case privileged.BackupActionPrune:
@@ -207,6 +208,9 @@ func (c *recordingPrivilegedClient) StageUpdate(_ context.Context, request privi
 
 func (c *recordingPrivilegedClient) RestartPanel(context.Context) error {
 	c.restartCalls.Add(1)
+	if c.restartErr != nil {
+		return c.restartErr
+	}
 	return c.err
 }
 
@@ -292,28 +296,72 @@ func TestPrivilegedBackupRoutesNeverReadHTTPPassphrase(t *testing.T) {
 
 func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	routes := PanelRoutes{
-		Info: ServerInfo{Version: "0.6.0"},
-		State: newManagementState(ServerInfo{
-			Mode: "dev", Privileged: client,
-			UpdateStager: func(context.Context) (string, error) { return "v0.6.0", nil },
-		}),
-	}
+	_, state := newApplyTrackedRouterWithState(t)
+	state.privileged = client
+	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	routes := PanelRoutes{Info: ServerInfo{Version: "0.6.0"}, State: state}
 	response := httptest.NewRecorder()
 	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
-	if response.Code != http.StatusOK {
+	if response.Code != http.StatusAccepted {
 		t.Fatalf("update status=%d body=%s", response.Code, response.Body.String())
 	}
-	if !reflect.DeepEqual(client.updates, []privileged.UpdateRequest{{ArtifactID: "veil-update", Version: "v0.6.0"}}) {
+	if len(client.updates) != 1 || client.updates[0].ArtifactID != "veil-update" || client.updates[0].Version != "v0.6.0" ||
+		client.updates[0].Fence.Generation == 0 || client.updates[0].Fence.OperationID == "" {
 		t.Fatalf("updates=%+v", client.updates)
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for client.restartCalls.Load() != 1 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if client.restartCalls.Load() != 1 {
 		t.Fatalf("restart calls=%d", client.restartCalls.Load())
 	}
+	var accepted struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil || accepted.JobID == "" {
+		t.Fatalf("durable update response=%s err=%v", response.Body.String(), err)
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		persisted, err := state.getPanelUpdateJob(accepted.JobID)
+		if err == nil && persisted.Status == "restarting" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("durable update job did not enter restarting state")
+}
+
+func TestPanelUpdateRestartFailureIsDurablyReported(t *testing.T) {
+	client := &recordingPrivilegedClient{restartErr: errors.New("restart unavailable")}
+	_, state := newApplyTrackedRouterWithState(t)
+	state.privileged = client
+	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	routes := PanelRoutes{Info: ServerInfo{Version: "0.5.0"}, State: state}
+	response := httptest.NewRecorder()
+	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("update status=%d body=%s", response.Code, response.Body.String())
+	}
+	var accepted struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil || accepted.JobID == "" {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := state.getPanelUpdateJob(accepted.JobID)
+		if err == nil && job.Status == "failed" {
+			if !strings.Contains(job.Error, "restart unavailable") {
+				t.Fatalf("job error=%q", job.Error)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("restart failure was not persisted")
 }
 
 func TestPrivilegedUpdateUnavailableTellsOperatorHowToRepair(t *testing.T) {

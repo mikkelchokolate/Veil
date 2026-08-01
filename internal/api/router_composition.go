@@ -47,6 +47,9 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	LogRoutes{State: state}.Register(mux)
 
 	state.idempotency = newIdempotencyStore(state.db)
+	if err := state.idempotency.setReplayCipher(state.cipher); err != nil {
+		_ = state.idempotency.Close()
+	}
 	gated := clientRequestGateMiddleware(state, mux)
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if info.RequirePrivilegedHelper {

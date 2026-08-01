@@ -1,14 +1,10 @@
 package api
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -68,27 +64,59 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
-	var lease veilapply.Lease
-	if s.db != nil {
-		owner := fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString())
-		acquiredLease, acquired, leaseErr := veilapply.NewLeaseStore(s.db).Acquire(owner, "service:"+name, time.Now().UTC(), 30*time.Second)
-		if leaseErr != nil {
-			writeError(w, "service operation fence unavailable", http.StatusServiceUnavailable)
+	if !s.applyTrackingEnabled() {
+		if s.requireApplyTracking {
+			writeError(w, "durable apply tracking is required for service mutations", http.StatusServiceUnavailable)
 			return
 		}
-		if !acquired {
-			writeError(w, "another runtime mutation is in progress", http.StatusLocked)
+		// Unpersisted development/test states do not represent a production
+		// runtime. Preserve their local adapter behavior without weakening the
+		// persisted production path above.
+		err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
+			Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+		})
+		resp.Success = err == nil
+		if err != nil {
+			resp.Error = err.Error()
+			writePrivilegedError(w, err)
 			return
 		}
-		lease = acquiredLease
+		writeJSON(w, resp)
+		return
 	}
-	err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
-		Unit: runtime.Unit, Action: privileged.ServiceAction(action),
-		Fence: privileged.FenceToken{Owner: lease.Owner, Generation: lease.Generation},
-	})
-	if lease.Generation > 0 {
-		err = errors.Join(err, veilapply.NewLeaseStore(s.db).Release(lease.Owner, lease.Generation))
+	revision, err := s.ensureRunnableRevision()
+	if err != nil {
+		writeError(w, "service operation fence unavailable", http.StatusServiceUnavailable)
+		return
 	}
+	_, err = s.applyRunner.RunOperationContext(r.Context(), revision, "service:"+action, actorFromRequest(r),
+		veilapply.ContextExecutorFunc(func(ctx context.Context, pinnedRevision uint64) (veilapply.Result, error) {
+			result, err := s.convergeRevisionForSideEffect(ctx, pinnedRevision)
+			if err != nil {
+				return result, err
+			}
+			fence, ok := veilapply.FenceFromContext(ctx)
+			if !ok || fence.Owner == "" || fence.Generation == 0 {
+				return veilapply.Result{Success: false, ErrorCode: "FENCE_REQUIRED"}, veilapply.ErrApplyLeaseLost
+			}
+			if err := veilapply.MarkRuntimeMutationStarting(ctx, veilapply.PublicationDetails{
+				Artifacts: []string{runtime.Unit}, ServicePhase: action,
+			}); err != nil {
+				return veilapply.Result{Success: false, ErrorCode: "PUBLICATION_INTENT"}, err
+			}
+			actionErr := s.privileged.ServiceAction(ctx, privileged.ServiceActionRequest{
+				Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+				Fence: privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
+					LeaseExpiresAt: fence.LeaseExpiresAt, OperationID: fence.OperationID},
+			})
+			operation := veilapply.OperationResult{Type: "service", Target: runtime.Unit, Success: actionErr == nil}
+			if actionErr != nil {
+				operation.Detail = actionErr.Error()
+			}
+			result.Success = actionErr == nil
+			result.Operations = append(result.Operations, operation)
+			return result, actionErr
+		}))
 	resp.Success = err == nil
 	if err != nil {
 		resp.Error = err.Error()

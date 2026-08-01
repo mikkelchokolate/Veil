@@ -169,14 +169,20 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, error) {
 	out := make([]Inbound, len(s.inbounds))
 	copy(out, s.inbounds)
-	// Build lookup: bindingID -> client, bindingID -> credential.
+	// Build lookup by binding and the exact protocol-required kind. A binding
+	// can legitimately have several credential kinds, so binding ID alone is
+	// not a safe key.
 	clientByID := make(map[string]model.ClientSnapshot, len(s.renderClients))
 	for _, c := range s.renderClients {
 		clientByID[c.ID] = c
 	}
-	credByBinding := make(map[string]model.CredentialSnapshot, len(s.renderCredentials))
+	type credentialKey struct{ bindingID, kind string }
+	credByBinding := make(map[credentialKey]model.CredentialSnapshot, len(s.renderCredentials))
 	for _, cr := range s.renderCredentials {
-		credByBinding[cr.BindingID] = cr
+		key := credentialKey{bindingID: cr.BindingID, kind: cr.Kind}
+		if current, exists := credByBinding[key]; !exists || cr.CredentialVersion > current.CredentialVersion {
+			credByBinding[key] = cr
+		}
 	}
 	// Group enabled bindings by inbound.
 	bindingsByInbound := make(map[string][]model.BindingSnapshot)
@@ -194,10 +200,10 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 		rc := make([]RuntimeCredential, 0, len(bindings))
 		for _, b := range bindings {
 			c, ok := clientByID[b.ClientID]
-			if !ok || !c.Enabled || c.Depleted {
+			if !ok || !c.Enabled || c.Depleted || (c.ExpiresAt != nil && *c.ExpiresAt <= s.renderEffectiveAt) {
 				continue
 			}
-			cred, ok := credByBinding[b.ID]
+			cred, ok := credByBinding[credentialKey{bindingID: b.ID, kind: "password"}]
 			if !ok {
 				return nil, fmt.Errorf("enabled binding %s has no active credential", b.ID)
 			}
@@ -265,6 +271,10 @@ func (s *managementState) Reload() error {
 func (s *managementState) Close() error {
 	if s.lifecycleCancel != nil {
 		s.lifecycleCancel()
+	}
+	s.updateWG.Wait()
+	if s.applyRunner != nil {
+		s.applyRunner.Close()
 	}
 	s.clientRequestMu.Lock()
 	defer s.clientRequestMu.Unlock()

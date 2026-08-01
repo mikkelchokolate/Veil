@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
@@ -40,7 +42,13 @@ func TestPanelUpdateStagerPersistsVerifiedArchiveAndChecksums(t *testing.T) {
 				return []byte("signed-evidence"), nil
 			}
 		},
-		verify: func(releaseverify.Evidence) error { return nil },
+		resolveCommit: func(context.Context, string) (string, error) { return strings.Repeat("a", 40), nil },
+		verify: func(evidence releaseverify.Evidence) error {
+			if evidence.SourceCommit != strings.Repeat("a", 40) {
+				return fmt.Errorf("source commit = %q", evidence.SourceCommit)
+			}
+			return nil
+		},
 	}
 
 	version, err := stager.Stage(context.Background())
@@ -50,11 +58,23 @@ func TestPanelUpdateStagerPersistsVerifiedArchiveAndChecksums(t *testing.T) {
 	if version != "v0.6.0" {
 		t.Fatalf("version=%q", version)
 	}
-	gotArchive, err := os.ReadFile(filepath.Join(root, "veil-update.tar.gz"))
+	manifestBody, err := os.ReadFile(filepath.Join(root, "update-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotChecksums, err := os.ReadFile(filepath.Join(root, "checksums.txt"))
+	var manifest panelUpdateManifest
+	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Version != version || manifest.Digest != hex.EncodeToString(hash[:]) {
+		t.Fatalf("manifest=%+v", manifest)
+	}
+	stageRoot := filepath.Join(root, filepath.FromSlash(manifest.Directory))
+	gotArchive, err := os.ReadFile(filepath.Join(stageRoot, "veil-update.tar.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotChecksums, err := os.ReadFile(filepath.Join(stageRoot, "checksums.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}

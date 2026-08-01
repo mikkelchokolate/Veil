@@ -76,6 +76,19 @@ func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newObservabilityTestState(t, client)
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	state.mu.Lock()
+	snapshot, err := state.snapshotLocked()
+	state.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.applySnapshots.Save(0, payload); err != nil {
+		t.Fatal(err)
+	}
 
 	ok := httptest.NewRecorder()
 	state.handleServiceActionRoute(ok, httptest.NewRequest(http.MethodPost, "/api/services/hysteria2-edge/restart", strings.NewReader(`{"confirm":true}`)))

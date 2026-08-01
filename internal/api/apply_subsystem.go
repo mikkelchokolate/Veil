@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,12 +21,14 @@ import (
 type clientBackgroundWorkers struct {
 	collector  *client.Collector
 	reconciler *client.Reconciler
+	expiration *expirationReconciler
 }
 
 func detachClientBackgroundWorkers(s *managementState) clientBackgroundWorkers {
-	workers := clientBackgroundWorkers{collector: s.trafficCollector, reconciler: s.trafficReconciler}
+	workers := clientBackgroundWorkers{collector: s.trafficCollector, reconciler: s.trafficReconciler, expiration: s.expirationReconciler}
 	s.trafficCollector = nil
 	s.trafficReconciler = nil
+	s.expirationReconciler = nil
 	return workers
 }
 
@@ -37,6 +38,9 @@ func stopClientBackgroundWorkers(workers clientBackgroundWorkers) {
 	}
 	if workers.reconciler != nil {
 		workers.reconciler.Stop()
+	}
+	if workers.expiration != nil {
+		workers.expiration.Stop()
 	}
 }
 
@@ -123,12 +127,14 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 	meta := protocols.MetadataOf(p)
 	_, perClient := protocols.AsClientAccessProvider(p)
 	return &client.BindingCapability{
-		Protocol:             meta.Protocol,
-		Transports:           meta.Transports,
-		PerClientCredentials: perClient,
-		RequiresCaddy:        meta.RequiresCaddy,
-		TrafficAccounting:    meta.Protocol == "hysteria2",
-		QuotaEnforcement:     meta.Protocol == "hysteria2",
+		Protocol:              meta.Protocol,
+		Transports:            meta.Transports,
+		PerClientCredentials:  perClient,
+		RequiresCaddy:         meta.RequiresCaddy,
+		TrafficAccounting:     meta.Protocol == "hysteria2",
+		QuotaEnforcement:      meta.Protocol == "hysteria2",
+		CredentialKinds:       []string{"password"},
+		ExpirationEnforcement: perClient,
 	}
 }
 
@@ -171,40 +177,9 @@ func initClientSubsystem(s *managementState) {
 	startReconciler := false
 	if s.trafficReconciler == nil {
 		s.trafficReconciler = client.NewTransactionalReconciler(clientRepo, s.trafficStore, 0, func(mutation client.QuotaMutation) error {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			err := s.trafficStore.WithRecordLock(func() error {
-				_, err := s.commitClientMutationLocked(func(tx *client.Tx) error {
-					if mutation.ResetPeriod {
-						if err := client.ResetQuotaPeriodTx(tx, mutation.ClientID); err != nil {
-							return err
-						}
-					}
-					current, err := tx.Get(mutation.ClientID)
-					if err != nil {
-						return err
-					}
-					current.Depleted = mutation.Depleted
-					if mutation.NextResetAt != nil {
-						next := *mutation.NextResetAt
-						current.QuotaResetAt = &next
-					}
-					_, err = tx.Update(current, current.Version)
-					return err
-				})
-				return err
-			})
-			if err != nil {
+			if err := s.enforceQuotaMutation(mutation); err != nil {
 				log.Printf("traffic: reconcile client %s depleted=%v reset=%v: %v", mutation.ClientID, mutation.Depleted, mutation.ResetPeriod, err)
 				return err
-			}
-			outcome := s.autoApplyResultLocked(nil, "system")
-			if !outcome.success {
-				message := "quota runtime apply failed"
-				if outcome.job != nil && outcome.job.ErrorMessage != "" {
-					message = outcome.job.ErrorMessage
-				}
-				return errors.New(message)
 			}
 			return nil
 		})
@@ -222,6 +197,10 @@ func initClientSubsystem(s *managementState) {
 	}
 	if startReconciler {
 		s.trafficReconciler.Start()
+	}
+	if s.expirationReconciler == nil {
+		s.expirationReconciler = newExpirationReconciler(s)
+		s.expirationReconciler.Start()
 	}
 }
 
@@ -277,6 +256,30 @@ func (s *managementState) RefreshTrafficProviders() {
 // applyTrackingEnabled reports whether durable revisions/jobs are available.
 func (s *managementState) applyTrackingEnabled() bool {
 	return s.applyRunner != nil && s.applyRevisions != nil && s.applyJobs != nil
+}
+
+func (s *managementState) ensureRunnableRevision() (uint64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	revisions, err := s.applyRevisions.Get()
+	if err != nil {
+		return 0, err
+	}
+	if revisions.Desired == 0 && !s.applySnapshots.Has(0) {
+		return s.bumpDesiredRevisionLocked()
+	}
+	return revisions.Desired, nil
+}
+
+func (s *managementState) convergeRevisionForSideEffect(ctx context.Context, revision uint64) (apply.Result, error) {
+	revisions, err := s.applyRevisions.Get()
+	if err != nil {
+		return apply.Result{}, err
+	}
+	if revisions.Applied == revision {
+		return apply.Result{Success: true}, nil
+	}
+	return s.executeApplyRevisionContext(ctx, revision)
 }
 
 // bumpDesiredRevisionLocked records a committed configuration mutation for the
@@ -373,6 +376,12 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 }
 
 func (s *managementState) executeApplyRevisionContext(operationContext context.Context, revision uint64) (apply.Result, error) {
+	_, _, result, err := s.executeApplyRevisionRequestContext(operationContext, revision,
+		ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	return result, err
+}
+
+func (s *managementState) executeApplyRevisionRequestContext(operationContext context.Context, revision uint64, request ApplyRequest) (ApplyResponse, int, apply.Result, error) {
 	if operationContext == nil {
 		operationContext = s.lifecycleContext()
 	}
@@ -380,29 +389,29 @@ func (s *managementState) executeApplyRevisionContext(operationContext context.C
 	snapshot, err := s.loadRevisionSnapshotLocked(revision)
 	if err != nil {
 		s.mu.Unlock()
-		return apply.Result{Success: false, ErrorCode: "SNAPSHOT_UNAVAILABLE", ErrorMessage: err.Error()}, err
+		result := apply.Result{Success: false, ErrorCode: "SNAPSHOT_UNAVAILABLE", ErrorMessage: err.Error()}
+		return ApplyResponse{}, http.StatusInternalServerError, result, err
 	}
 	execution := s.newApplyExecutionStateLocked(snapshot)
 	s.mu.Unlock()
 
-	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(execution, operationContext)).
-		RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(execution, operationContext)).RunLocked(request)
 
 	s.mu.Lock()
 	s.orphanedUnits = append([]string(nil), execution.orphanedUnits...)
 	s.mu.Unlock()
 
-	res := apply.Result{Success: err == nil && status == http.StatusOK, RolledBack: response.RolledBack}
+	result := apply.Result{Success: err == nil && status == http.StatusOK, RolledBack: response.RolledBack}
 	if err != nil {
-		res.ErrorCode = "APPLY_ERROR"
-		res.ErrorMessage = err.Error()
-		return res, err
+		result.ErrorCode = "APPLY_ERROR"
+		result.ErrorMessage = err.Error()
+		return response, status, result, err
 	}
 	if status != http.StatusOK {
-		res.ErrorCode = applyFailureCode(response)
-		res.ErrorMessage = applyFailureMessage(response, status)
+		result.ErrorCode = applyFailureCode(response)
+		result.ErrorMessage = applyFailureMessage(response, status)
 	}
-	return res, nil
+	return response, status, result, nil
 }
 
 func (s *managementState) loadRevisionSnapshotLocked(revision uint64) (managementSnapshot, error) {
@@ -416,6 +425,12 @@ func (s *managementState) loadRevisionSnapshotLocked(revision uint64) (managemen
 	var snapshot managementSnapshot
 	if err := json.Unmarshal(payload, &snapshot); err != nil {
 		return managementSnapshot{}, fmt.Errorf("apply: decode revision %d snapshot: %w", revision, err)
+	}
+	if snapshot.EffectiveAt == 0 {
+		snapshot.EffectiveAt, err = s.applySnapshots.EffectiveAt(revision)
+		if err != nil {
+			return managementSnapshot{}, err
+		}
 	}
 	if err := s.decryptSnapshot(&snapshot); err != nil {
 		return managementSnapshot{}, fmt.Errorf("apply: decrypt revision %d snapshot: %w", revision, err)
@@ -447,6 +462,7 @@ func (s *managementState) newApplyExecutionStateLocked(snapshot managementSnapsh
 		renderClients:                  append([]model.ClientSnapshot(nil), snapshot.Clients...),
 		renderBindings:                 append([]model.BindingSnapshot(nil), snapshot.Bindings...),
 		renderCredentials:              append([]model.CredentialSnapshot(nil), snapshot.Credentials...),
+		renderEffectiveAt:              snapshot.EffectiveAt,
 	}
 }
 
@@ -505,6 +521,7 @@ func applyRenderSnapshot(s *managementState, snap managementSnapshot) {
 	s.renderClients = snap.Clients
 	s.renderBindings = snap.Bindings
 	s.renderCredentials = snap.Credentials
+	s.renderEffectiveAt = snap.EffectiveAt
 }
 
 // applyFailureCode maps an unsuccessful apply response to a stable error code.
