@@ -55,6 +55,24 @@ type Repository struct {
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{queries: queries{q: db}, db: db} }
 
+func (r *Repository) ExpirationEnforcement(clientID string) (*ExpirationEnforcement, error) {
+	var state, lastError string
+	var desired, applied uint64
+	var attempts int
+	var nextRetry int64
+	err := r.db.QueryRow(`SELECT state,desired_revision,applied_revision,attempts,next_retry_at,last_error
+FROM expiration_enforcement WHERE client_id=?`, clientID).
+		Scan(&state, &desired, &applied, &attempts, &nextRetry, &lastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("client: read expiration enforcement: %w", err)
+	}
+	return &ExpirationEnforcement{State: state, DesiredRevision: desired, AppliedRevision: applied,
+		Attempts: attempts, NextRetryAt: nextRetry, LastError: lastError}, nil
+}
+
 // Tx is a transactional view of the repository. All methods execute within
 // the bound *sql.Tx so a multi-entity mutation (client + bindings +
 // credentials + revision snapshot) commits or rolls back atomically.
@@ -290,6 +308,29 @@ func (q queries) List(f ListFilter) ([]Client, int, error) {
 		out = append(out, c)
 	}
 	return out, total, rows.Err()
+}
+
+func (q queries) ListKeyset(afterCreated int64, afterID string, limit int) ([]Client, error) {
+	if limit < 1 || limit > 1000 {
+		limit = 100
+	}
+	rows, err := q.q.Query(`SELECT id,name,email,enabled,group_id,quota_bytes,quota_reset_policy,quota_reset_at,
+ expires_at,device_limit,notes,depleted,created_at,updated_at,version
+FROM clients WHERE created_at>? OR (created_at=? AND id>?)
+ORDER BY created_at,id LIMIT ?`, afterCreated, afterCreated, afterID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("client: keyset list: %w", err)
+	}
+	defer rows.Close()
+	var out []Client
+	for rows.Next() {
+		current, err := scanClient(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, current)
+	}
+	return out, rows.Err()
 }
 
 func buildWhere(f ListFilter) (string, []any) {

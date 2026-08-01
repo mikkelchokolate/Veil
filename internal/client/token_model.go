@@ -12,6 +12,7 @@ type SubscriptionToken struct {
 	TokenHash  string `json:"-"` // never serialized
 	Prefix     string `json:"prefix"`
 	Label      string `json:"label,omitempty"`
+	CreatedBy  string `json:"createdBy,omitempty"`
 	Enabled    bool   `json:"enabled"`
 	ExpiresAt  *int64 `json:"expiresAt,omitempty"`
 	CreatedAt  int64  `json:"createdAt"`

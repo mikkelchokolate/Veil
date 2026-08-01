@@ -52,6 +52,27 @@ func TestTrafficMonotonicAsymmetricResetAndStaleTimestamp(t *testing.T) {
 	}
 }
 
+func TestTrafficRowsAreCleanedUpWithBindingAndClient(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	store := NewTrafficStore(db)
+	current, _ := repo.Create(Client{Name: "cleanup", Enabled: true, QuotaResetPolicy: ResetNever})
+	binding, _ := repo.CreateBinding(Binding{ClientID: current.ID, InboundID: "hy2", Enabled: true})
+	if err := store.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 1, AtUnix: 1, Monotonic: true, ProviderKey: "provider:" + binding.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteBinding(binding.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"traffic_counters", "traffic_samples", "traffic_runtime_state"} {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("orphan rows in %s: count=%d err=%v", table, count, err)
+		}
+	}
+}
+
 func TestTrafficCounterOverflowRollsBack(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

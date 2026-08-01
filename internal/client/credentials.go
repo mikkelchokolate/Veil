@@ -35,13 +35,63 @@ func (s *CredentialStore) RevealEncrypted(encrypted []byte) (string, error) {
 	return plaintext, nil
 }
 
-// Set encrypts and stores a credential for a binding, creating credential
-// version 1 (or the next version if one already exists for that kind).
+// Set encrypts and stores a credential for a binding. If an active credential
+// already exists, Set atomically rotates it; it never creates two active rows.
 func (s *CredentialStore) Set(bindingID, kind, plaintext string) (Credential, error) {
 	if s.cipher == nil {
 		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
 	}
-	return insertCredentialQ(s.db, s.cipher, bindingID, kind, plaintext, nextVersionForQ(s.db, bindingID, kind))
+	if err := validateCredentialKind(kind); err != nil {
+		return Credential{}, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Credential{}, err
+	}
+	defer tx.Rollback()
+	credential, err := setCredentialQ(tx, s.cipher, bindingID, kind, plaintext)
+	if err != nil {
+		return Credential{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Credential{}, err
+	}
+	return credential, nil
+}
+
+func validateCredentialKind(kind string) error {
+	// Every currently registered ClientAccessProvider consumes a password.
+	// Keep this explicit and fail closed until another capability is implemented.
+	if kind != "password" {
+		return fmt.Errorf("%w: unsupported credential kind %q", ErrValidation, kind)
+	}
+	return nil
+}
+
+func setCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext string) (Credential, error) {
+	var active int
+	if err := q.QueryRow(`SELECT COUNT(*) FROM client_credentials WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, bindingID, kind).Scan(&active); err != nil {
+		return Credential{}, fmt.Errorf("client: count active credentials: %w", err)
+	}
+	if active > 1 {
+		return Credential{}, fmt.Errorf("%w: binding %s has ambiguous active %s credentials", ErrValidation, bindingID, kind)
+	}
+	if active == 0 {
+		return insertCredentialQ(q, cipher, bindingID, kind, plaintext, nextVersionForQ(q, bindingID, kind))
+	}
+	now := nowUnix()
+	if _, err := q.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
+		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
+	}
+	credential, err := insertCredentialQ(q, cipher, bindingID, kind, plaintext, nextVersionForQ(q, bindingID, kind))
+	if err != nil {
+		return Credential{}, err
+	}
+	credential.RotatedAt = &now
+	if _, err := q.Exec(`UPDATE client_credentials SET rotated_at=? WHERE id=?`, now, credential.ID); err != nil {
+		return Credential{}, fmt.Errorf("client: mark rotated credential: %w", err)
+	}
+	return credential, nil
 }
 
 // insertCredentialQ is the querier-based insert shared by the autocommit store
@@ -77,7 +127,10 @@ func (t *Tx) SetCredential(creds *CredentialStore, bindingID, kind, plaintext st
 	if creds.cipher == nil {
 		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
 	}
-	return insertCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext, nextVersionForQ(t.q, bindingID, kind))
+	if err := validateCredentialKind(kind); err != nil {
+		return Credential{}, err
+	}
+	return setCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext)
 }
 
 // RotateCredential revokes the active credential of the given kind and stores
@@ -87,6 +140,9 @@ func (t *Tx) SetCredential(creds *CredentialStore, bindingID, kind, plaintext st
 func (t *Tx) RotateCredential(creds *CredentialStore, bindingID, kind, plaintext string) (Credential, error) {
 	if creds.cipher == nil {
 		return Credential{}, fmt.Errorf("client: credential cipher unavailable")
+	}
+	if err := validateCredentialKind(kind); err != nil {
+		return Credential{}, err
 	}
 	now := nowUnix()
 	if _, err := t.q.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
@@ -155,6 +211,9 @@ func (t *Tx) ReencryptCredentials(oldCipher, newCipher *secrets.Cipher) error {
 // implementation committed the revoke first and inserted the replacement in
 // autocommit, which could strand a binding with no active credential.
 func (s *CredentialStore) Rotate(bindingID, kind, plaintext string) (Credential, error) {
+	if err := validateCredentialKind(kind); err != nil {
+		return Credential{}, err
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Credential{}, err
@@ -195,10 +254,19 @@ func (s *CredentialStore) ActiveForBinding(bindingID, kind string) (Credential, 
 func activeCredentialQ(q interface {
 	QueryRow(query string, args ...any) *sql.Row
 }, bindingID, kind string) (Credential, error) {
+	var active int
+	if err := q.QueryRow(`SELECT COUNT(*) FROM client_credentials WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, bindingID, kind).Scan(&active); err != nil {
+		return Credential{}, err
+	}
+	if active == 0 {
+		return Credential{}, sql.ErrNoRows
+	}
+	if active != 1 {
+		return Credential{}, fmt.Errorf("client: ambiguous active credentials for binding %s kind %s", bindingID, kind)
+	}
 	row := q.QueryRow(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
   created_at, rotated_at, revoked_at FROM client_credentials
-  WHERE binding_id=? AND kind=? AND revoked_at IS NULL
-  ORDER BY credential_version DESC LIMIT 1`, bindingID, kind)
+  WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, bindingID, kind)
 	return scanCredential(row, true)
 }
 

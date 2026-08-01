@@ -14,7 +14,7 @@ func TestStatsProviderRead(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"alice":{"tx":1024,"rx":2048},"bob":{"tx":512,"rx":256},"unknown":{"tx":100,"rx":100}}`))
+		_, _ = w.Write([]byte(`{"alice":{"tx":1024,"rx":2048},"bob":{"tx":512,"rx":256}}`))
 	}))
 	defer server.Close()
 	provider := NewStatsProvider("test", server.URL+"/traffic", map[string]string{"alice": "binding-1", "bob": "binding-2"})
@@ -25,6 +25,24 @@ func TestStatsProviderRead(t *testing.T) {
 	}
 	if len(readings) != 2 || readings["binding-1"].UploadBytes != 1024 || readings["binding-2"].DownloadBytes != 256 {
 		t.Fatalf("unexpected readings: %+v", readings)
+	}
+}
+
+func TestStatsProviderRejectsCounterOverflowAndUnknownIdentity(t *testing.T) {
+	for name, payload := range map[string]string{
+		"overflow": `{"alice":{"tx":18446744073709551615,"rx":1}}`,
+		"unknown":  `{"unknown":{"tx":1,"rx":1}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(payload))
+			}))
+			defer server.Close()
+			provider := NewStatsProvider("test", server.URL+"/traffic", map[string]string{"alice": "binding-1"})
+			if _, err := provider.Read(); err == nil {
+				t.Fatalf("accepted invalid stats payload %s", payload)
+			}
+		})
 	}
 }
 

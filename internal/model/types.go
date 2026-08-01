@@ -271,7 +271,10 @@ type SetupState struct {
 }
 
 type ManagementSnapshot struct {
-	SchemaVersion int           `json:"schemaVersion,omitempty"`
+	SchemaVersion int `json:"schemaVersion,omitempty"`
+	// EffectiveAt is the deterministic policy-evaluation time for this
+	// immutable revision. Replays must not substitute the current wall clock.
+	EffectiveAt   int64         `json:"effectiveAt"`
 	Setup         SetupState    `json:"setup"`
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`

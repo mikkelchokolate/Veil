@@ -3,6 +3,7 @@ package managementstate
 import "github.com/mikkelchokolate/Veil/internal/model"
 
 type SnapshotInput struct {
+	EffectiveAt   int64
 	Setup         model.SetupState
 	Settings      model.Settings
 	Inbounds      []model.Inbound
@@ -30,6 +31,7 @@ type SnapshotTarget struct {
 
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 	return model.ManagementSnapshot{
+		EffectiveAt:   input.EffectiveAt,
 		Setup:         input.Setup,
 		Settings:      cloneSettings(input.Settings),
 		Inbounds:      cloneInbounds(input.Inbounds),

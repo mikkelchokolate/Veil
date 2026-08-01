@@ -49,7 +49,17 @@ type View struct {
 	// Bindings is the full binding read model: each bound inbound with its id,
 	// enabled flag and the protocol capabilities relevant to a client binding.
 	// Empty when no inbound lookup was attached to the service.
-	Bindings []BindingView `json:"bindings,omitempty"`
+	Bindings              []BindingView          `json:"bindings,omitempty"`
+	ExpirationEnforcement *ExpirationEnforcement `json:"expirationEnforcement,omitempty"`
+}
+
+type ExpirationEnforcement struct {
+	State           string `json:"state"`
+	DesiredRevision uint64 `json:"desiredRevision"`
+	AppliedRevision uint64 `json:"appliedRevision"`
+	Attempts        int    `json:"attempts"`
+	NextRetryAt     int64  `json:"nextRetryAt,omitempty"`
+	LastError       string `json:"lastError,omitempty"`
 }
 
 // BindingView describes one client->inbound binding enriched with the
@@ -78,12 +88,14 @@ type CredentialMeta struct {
 
 // BindingCapability captures the protocol capabilities of a bound inbound.
 type BindingCapability struct {
-	Protocol             string   `json:"protocol"`
-	Transports           []string `json:"transports"`
-	PerClientCredentials bool     `json:"perClientCredentials"`
-	RequiresCaddy        bool     `json:"requiresCaddy"`
-	TrafficAccounting    bool     `json:"trafficAccounting"`
-	QuotaEnforcement     bool     `json:"quotaEnforcement"`
+	Protocol              string   `json:"protocol"`
+	Transports            []string `json:"transports"`
+	PerClientCredentials  bool     `json:"perClientCredentials"`
+	RequiresCaddy         bool     `json:"requiresCaddy"`
+	TrafficAccounting     bool     `json:"trafficAccounting"`
+	QuotaEnforcement      bool     `json:"quotaEnforcement"`
+	CredentialKinds       []string `json:"credentialKinds,omitempty"`
+	ExpirationEnforcement bool     `json:"expirationEnforcement"`
 }
 
 // ErrValidation marks a 400-class client-side validation failure.
@@ -474,7 +486,7 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 	}
 	out := []BindingCredential{}
 	for _, c := range clients {
-		if !c.Enabled || c.Depleted {
+		if !c.Enabled || c.Depleted || (c.ExpiresAt != nil && *c.ExpiresAt <= s.now()) {
 			continue
 		}
 		bindings, err := s.repo.BindingsForClient(c.ID)
@@ -510,7 +522,12 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 }
 
 func (s *Service) toView(c Client) (View, error) {
-	return s.viewWith(c, s.repo.BindingsForClient, s.creds.ActiveForBinding, s.creds.ListForBinding)
+	view, err := s.viewWith(c, s.repo.BindingsForClient, s.creds.ActiveForBinding, s.creds.ListForBinding)
+	if err != nil {
+		return View{}, err
+	}
+	view.ExpirationEnforcement, err = s.repo.ExpirationEnforcement(c.ID)
+	return view, err
 }
 
 func (s *Service) viewWith(c Client,

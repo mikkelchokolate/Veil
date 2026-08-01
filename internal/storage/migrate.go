@@ -345,6 +345,164 @@ CREATE UNIQUE INDEX idx_idempotency_actor_endpoint_key
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 `,
 	},
+	{
+		version: 13,
+		name:    "credential_and_expiration_invariants",
+		sql: `
+-- credential_version is unique per binding/kind, so the highest active
+-- version is the only provable winner. Revoke every older active duplicate
+-- before installing the fail-closed partial uniqueness constraint.
+UPDATE client_credentials AS old
+SET revoked_at=COALESCE(old.rotated_at, old.created_at)
+WHERE old.revoked_at IS NULL
+  AND EXISTS (
+    SELECT 1 FROM client_credentials AS newer
+    WHERE newer.binding_id=old.binding_id
+      AND newer.kind=old.kind
+      AND newer.revoked_at IS NULL
+      AND newer.credential_version>old.credential_version
+  );
+CREATE UNIQUE INDEX idx_client_credentials_one_active_kind
+  ON client_credentials(binding_id, kind)
+  WHERE revoked_at IS NULL;
+CREATE TRIGGER validate_credential_kind_insert BEFORE INSERT ON client_credentials
+WHEN NEW.kind <> 'password'
+BEGIN SELECT RAISE(ABORT, 'unsupported credential kind'); END;
+CREATE TRIGGER validate_credential_kind_update BEFORE UPDATE OF kind ON client_credentials
+WHEN NEW.kind <> 'password'
+BEGIN SELECT RAISE(ABORT, 'unsupported credential kind'); END;
+
+CREATE TABLE expiration_enforcement (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','enforced','failed')),
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  effective_at INTEGER NOT NULL,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_expiration_enforcement_retry
+  ON expiration_enforcement(state, next_retry_at, client_id);
+CREATE INDEX idx_clients_expiration_keyset
+  ON clients(expires_at, created_at, id)
+  WHERE enabled=1 AND expires_at IS NOT NULL;
+`,
+	},
+	{
+		version: 14,
+		name:    "apply_publication_intent",
+		sql: `
+ALTER TABLE runtime_publications ADD COLUMN owner_process TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN operation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN lease_expires_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE runtime_publications ADD COLUMN phase TEXT NOT NULL DEFAULT 'published';
+ALTER TABLE runtime_publications ADD COLUMN expected_live_manifest_sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN previous_live_manifest_sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE runtime_publications ADD COLUMN service_phase TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE runtime_publications ADD COLUMN firewall_phase TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE runtime_publications ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_runtime_publications_phase ON runtime_publications(phase, revision, job_id);
+`,
+	},
+	{
+		version: 15,
+		name:    "apply_publication_live_root",
+		sql: `
+ALTER TABLE runtime_publications ADD COLUMN live_root TEXT NOT NULL DEFAULT '';
+`,
+	},
+	{
+		version: 16,
+		name:    "enforcement_finalization",
+		sql: `
+ALTER TABLE runtime_publications ADD COLUMN confirmations_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE quota_enforcement RENAME TO quota_enforcement_old;
+CREATE TABLE quota_enforcement (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','failed','enforced')),
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+INSERT INTO quota_enforcement(client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at)
+SELECT client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at FROM quota_enforcement_old;
+DROP TABLE quota_enforcement_old;
+CREATE INDEX idx_quota_enforcement_retry ON quota_enforcement(state,next_retry_at,client_id);
+`,
+	},
+	{
+		version: 17,
+		name:    "idempotency_takeover_results",
+		sql: `
+ALTER TABLE idempotency_records ADD COLUMN operation_generation INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE idempotency_records ADD COLUMN auth_generation TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotency_records ADD COLUMN result_record_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotency_records ADD COLUMN response_encrypted INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE idempotency_records ADD COLUMN replay_expires_at INTEGER NOT NULL DEFAULT 0;
+DROP INDEX idx_idempotency_actor_endpoint_key;
+CREATE UNIQUE INDEX idx_idempotency_actor_auth_endpoint_key
+  ON idempotency_records(actor_id,auth_generation,endpoint,idempotency_key);
+CREATE TABLE idempotency_results (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  operation_generation INTEGER NOT NULL,
+  response_status INTEGER NOT NULL,
+  response_headers BLOB NOT NULL,
+  response_body BLOB,
+  encrypted INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX idx_idempotency_results_expiry ON idempotency_results(expires_at);
+`,
+	},
+	{
+		version: 18,
+		name:    "panel_update_jobs",
+		sql: `
+CREATE TABLE panel_update_jobs (
+  id TEXT PRIMARY KEY,
+  target_version TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('staging','restart_pending','restarting','succeeded','failed')),
+  stage_apply_job_id TEXT NOT NULL DEFAULT '',
+  restart_apply_job_id TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_panel_update_jobs_status ON panel_update_jobs(status,updated_at,id);
+`,
+	},
+	{
+		version: 19,
+		name:    "traffic_cleanup",
+		sql: `
+CREATE TRIGGER traffic_binding_cleanup AFTER DELETE ON client_bindings BEGIN
+  DELETE FROM traffic_counters WHERE binding_id=OLD.id;
+  DELETE FROM traffic_samples WHERE binding_id=OLD.id;
+  DELETE FROM traffic_runtime_state WHERE provider_key LIKE '%:' || OLD.id;
+END;
+CREATE TRIGGER traffic_client_cleanup AFTER DELETE ON clients BEGIN
+  DELETE FROM traffic_counters WHERE client_id=OLD.id;
+  DELETE FROM traffic_samples WHERE client_id=OLD.id;
+END;
+`,
+	},
+	{
+		version: 20,
+		name:    "subscription_token_label",
+		sql: `
+ALTER TABLE subscription_tokens ADD COLUMN label TEXT NOT NULL DEFAULT '';
+UPDATE subscription_tokens SET label=created_by,created_by='';
+`,
+	},
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its

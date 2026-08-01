@@ -63,8 +63,10 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 		clientID string
 		mutation QuotaMutation
 	}
-	for page := 1; ; page++ {
-		clients, total, listErr := r.repo.List(ListFilter{Page: page, PageSize: 100})
+	var afterCreated int64
+	var afterID string
+	for {
+		clients, listErr := r.repo.ListKeyset(afterCreated, afterID, 100)
 		if listErr != nil {
 			return changed, errors.Join(append(reconcileErrors, listErr)...)
 		}
@@ -96,8 +98,9 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			pendingUpdates = append(pendingUpdates, enforcementUpdate{clientID: item.clientID, state: "pending"})
 		}
 		if markErr := r.markEnforcementBatch(pendingUpdates, now.Unix()); markErr != nil {
-			reconcileErrors = append(reconcileErrors, fmt.Errorf("reserve quota enforcement page %d: %w", page, markErr))
-			if page*100 >= total {
+			reconcileErrors = append(reconcileErrors, fmt.Errorf("reserve quota enforcement keyset after %s: %w", afterID, markErr))
+			afterCreated, afterID = clients[len(clients)-1].CreatedAt, clients[len(clients)-1].ID
+			if len(clients) < 100 {
 				break
 			}
 			continue
@@ -113,9 +116,10 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			changed++
 		}
 		if markErr := r.markEnforcementBatch(terminalUpdates, now.Unix()); markErr != nil {
-			reconcileErrors = append(reconcileErrors, fmt.Errorf("finalize quota enforcement page %d: %w", page, markErr))
+			reconcileErrors = append(reconcileErrors, fmt.Errorf("finalize quota enforcement keyset after %s: %w", afterID, markErr))
 		}
-		if page*100 >= total {
+		afterCreated, afterID = clients[len(clients)-1].CreatedAt, clients[len(clients)-1].ID
+		if len(clients) < 100 {
 			break
 		}
 	}
@@ -127,14 +131,18 @@ func (r *Reconciler) enforcementPending(clientID string) (bool, error) {
 		return false, nil
 	}
 	var state string
-	err := r.repo.db.QueryRow(`SELECT state FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&state)
+	var nextRetry int64
+	err := r.repo.db.QueryRow(`SELECT state,next_retry_at FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&state, &nextRetry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	return state == "pending" || state == "failed", nil
+	if state == "failed" && nextRetry > r.now().UTC().Unix() {
+		return false, nil
+	}
+	return state == "pending" || state == "applying" || state == "failed", nil
 }
 
 type enforcementUpdate struct {
@@ -154,12 +162,13 @@ func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64
 	defer tx.Rollback()
 	statement, err := tx.Prepare(`INSERT INTO quota_enforcement
   (client_id,state,next_retry_at,last_error,attempts,updated_at)
-  VALUES(?,?,?,?,1,?)
+  SELECT ?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
   ON CONFLICT(client_id) DO UPDATE SET
     state=excluded.state,
-    next_retry_at=excluded.next_retry_at,
+    next_retry_at=CASE WHEN quota_enforcement.desired_revision>0 AND excluded.state='failed'
+                       THEN quota_enforcement.next_retry_at ELSE excluded.next_retry_at END,
     last_error=excluded.last_error,
-    attempts=quota_enforcement.attempts+1,
+    attempts=CASE WHEN excluded.state='pending' THEN quota_enforcement.attempts+1 ELSE quota_enforcement.attempts END,
     updated_at=excluded.updated_at`)
 	if err != nil {
 		return err
@@ -174,7 +183,7 @@ func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64
 		if update.state != "enforced" {
 			nextRetry = now
 		}
-		if _, err := statement.Exec(update.clientID, update.state, nextRetry, message, now); err != nil {
+		if _, err := statement.Exec(update.clientID, update.state, nextRetry, message, now, update.clientID); err != nil {
 			return err
 		}
 	}

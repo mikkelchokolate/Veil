@@ -37,7 +37,7 @@ func TestStatsProviderUsesAuthenticatedOfficialTrafficAPI(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"custom_identity":{"tx":514,"rx":4017},"unknown_identity":{"tx":99,"rx":100}}`))
+		_, _ = w.Write([]byte(`{"custom_identity":{"tx":514,"rx":4017}}`))
 	}))
 	defer server.Close()
 

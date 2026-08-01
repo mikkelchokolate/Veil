@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,10 @@ import (
 type TrafficProvider interface {
 	Key() string
 	Read() (map[string]ProviderReading, error)
+}
+
+type ContextTrafficProvider interface {
+	ReadContext(context.Context) (map[string]ProviderReading, error)
 }
 
 type ProviderReading struct {
@@ -47,6 +52,7 @@ type Collector struct {
 	running   bool
 	stop      chan struct{}
 	done      chan struct{}
+	cancel    context.CancelFunc
 }
 
 func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(clientID string)) *Collector {
@@ -86,6 +92,10 @@ func (c *Collector) ensureProviderHealthLocked(key string) {
 }
 
 func (c *Collector) CollectOnce() error {
+	return c.CollectOnceContext(context.Background())
+}
+
+func (c *Collector) CollectOnceContext(ctx context.Context) error {
 	c.collectMu.Lock()
 	defer c.collectMu.Unlock()
 
@@ -95,7 +105,15 @@ func (c *Collector) CollectOnce() error {
 	now := time.Now().Unix()
 	var collectionErrors []error
 	for _, provider := range providers {
-		readings, err := provider.Read()
+		var readings map[string]ProviderReading
+		var err error
+		if contextual, ok := provider.(ContextTrafficProvider); ok {
+			providerCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			readings, err = contextual.ReadContext(providerCtx)
+			cancel()
+		} else {
+			readings, err = provider.Read()
+		}
 		if err == nil {
 			for _, reading := range readings {
 				if c.store == nil {
@@ -189,8 +207,10 @@ func (c *Collector) Start() {
 	c.running = true
 	stop := make(chan struct{})
 	done := make(chan struct{})
+	workerCtx, cancel := context.WithCancel(context.Background())
 	c.stop = stop
 	c.done = done
+	c.cancel = cancel
 	c.mu.Unlock()
 	go func() {
 		defer close(done)
@@ -201,7 +221,7 @@ func (c *Collector) Start() {
 			case <-stop:
 				return
 			case <-ticker.C:
-				_ = c.CollectOnce()
+				_ = c.CollectOnceContext(workerCtx)
 			}
 		}
 	}()
@@ -220,13 +240,26 @@ func (c *Collector) Stop() {
 	c.running = false
 	stop := c.stop
 	done := c.done
+	cancel := c.cancel
 	close(stop)
+	if cancel != nil {
+		cancel()
+	}
 	c.mu.Unlock()
-	<-done
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		c.recordFailure("collector", errors.New("traffic provider shutdown timed out"), time.Now().Unix())
+		c.mu.Lock()
+		c.running = true
+		c.mu.Unlock()
+		return
+	}
 	c.mu.Lock()
 	if c.stop == stop {
 		c.stop = nil
 		c.done = nil
+		c.cancel = nil
 	}
 	c.mu.Unlock()
 }

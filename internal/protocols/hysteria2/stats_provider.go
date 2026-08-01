@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -55,6 +56,10 @@ type trafficStats struct {
 }
 
 func (p *StatsProvider) Read() (map[string]client.ProviderReading, error) {
+	return p.ReadContext(context.Background())
+}
+
+func (p *StatsProvider) ReadContext(ctx context.Context) (map[string]client.ProviderReading, error) {
 	if p == nil || strings.TrimSpace(p.endpoint) == "" {
 		return nil, errors.New("hysteria2 traffic endpoint is not configured")
 	}
@@ -62,7 +67,7 @@ func (p *StatsProvider) Read() (map[string]client.ProviderReading, error) {
 	if err != nil || parsed.Scheme != "http" || parsed.Hostname() == "" || parsed.User != nil {
 		return nil, errors.New("hysteria2 traffic endpoint must be an absolute HTTP URL")
 	}
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, p.endpoint, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -91,24 +96,24 @@ func (p *StatsProvider) Read() (map[string]client.ProviderReading, error) {
 		return nil, fmt.Errorf("decode hysteria2 traffic response: %w", err)
 	}
 	out := make(map[string]client.ProviderReading, len(payload))
+	var unknown []string
 	for runtimeIdentity, counters := range payload {
 		bindingID, ok := p.bindings[runtimeIdentity]
 		if !ok || bindingID == "" {
+			unknown = append(unknown, runtimeIdentity)
 			continue
+		}
+		if counters.Tx > math.MaxInt64 || counters.Rx > math.MaxInt64 {
+			return nil, fmt.Errorf("hysteria2 traffic counter for identity %q exceeds int64 range", runtimeIdentity)
 		}
 		out[bindingID] = client.ProviderReading{
 			BindingID:     bindingID,
-			UploadBytes:   clampUint64(counters.Tx),
-			DownloadBytes: clampUint64(counters.Rx),
+			UploadBytes:   int64(counters.Tx),
+			DownloadBytes: int64(counters.Rx),
 		}
 	}
-	return out, nil
-}
-
-func clampUint64(value uint64) int64 {
-	const maxInt64 = uint64(^uint64(0) >> 1)
-	if value > maxInt64 {
-		return int64(maxInt64)
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("hysteria2 traffic response contains %d unknown runtime identities", len(unknown))
 	}
-	return int64(value)
+	return out, nil
 }
