@@ -6,14 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"golang.org/x/sys/unix"
 )
 
 type fenceState struct {
-	Owner      string `json:"owner"`
-	Generation uint64 `json:"generation"`
+	Owner       string `json:"owner"`
+	Generation  uint64 `json:"generation"`
+	OperationID string `json:"operationId"`
 }
 
 type fenceGuard struct {
@@ -33,6 +35,12 @@ func (g *fenceGuard) Accept(token FenceToken) (resultErr error) {
 			return newError(ErrorConflict, "runtime mutation requires a fencing token")
 		}
 		return nil
+	}
+	if g.required && token.OperationID == "" {
+		return newError(ErrorConflict, "runtime mutation requires a fenced operation identity")
+	}
+	if g.required && token.LeaseExpiresAt <= time.Now().UTC().Unix() {
+		return newError(ErrorConflict, "runtime mutation lease has expired")
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -83,9 +91,13 @@ func acceptFenceState(state *fenceState, token FenceToken) error {
 	if token.Generation == state.Generation && state.Owner != "" && token.Owner != state.Owner {
 		return newError(ErrorConflict, "runtime fencing generation belongs to another owner")
 	}
+	if token.Generation == state.Generation && state.OperationID != "" && token.OperationID != state.OperationID {
+		return newError(ErrorConflict, "runtime fencing generation belongs to another operation")
+	}
 	if token.Generation > state.Generation || state.Owner == "" {
 		state.Generation = token.Generation
 		state.Owner = token.Owner
+		state.OperationID = token.OperationID
 	}
 	return nil
 }

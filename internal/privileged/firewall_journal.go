@@ -23,6 +23,11 @@ type firewallTransactionJournal struct {
 	Initial       ufwState         `json:"initial"`
 	Desired       ResolvedFirewall `json:"desired"`
 	UpdatedAt     int64            `json:"updatedAt"`
+	Fence         FenceToken       `json:"fence"`
+}
+
+func sameFirewallFence(left, right FenceToken) bool {
+	return left.Owner == right.Owner && left.Generation == right.Generation && left.OperationID == right.OperationID
 }
 
 func firewallJournalPath(root string) string {
@@ -64,6 +69,9 @@ func runFirewallTransaction(ctx context.Context, config ProductionConfig, reques
 			if journal.TransactionID != request.TransactionID || journal.Phase != "applied" {
 				return FirewallResult{}, errors.New("firewall transaction is not prepared for commit")
 			}
+			if !sameFirewallFence(journal.Fence, request.Fence) {
+				return FirewallResult{}, errors.New("firewall transaction fence mismatch")
+			}
 			if err := removeFirewallJournal(config.PromotionBackupRoot); err != nil {
 				return FirewallResult{}, err
 			}
@@ -75,6 +83,9 @@ func runFirewallTransaction(ctx context.Context, config ProductionConfig, reques
 			}
 			if journal.TransactionID != request.TransactionID {
 				return FirewallResult{}, errors.New("firewall transaction ID mismatch")
+			}
+			if !sameFirewallFence(journal.Fence, request.Fence) {
+				return FirewallResult{}, errors.New("firewall transaction fence mismatch")
 			}
 			if err := rollbackFirewallJournal(ctx, config.RunCommand, journal); err != nil {
 				return FirewallResult{}, err
@@ -102,14 +113,25 @@ func runFirewallTransaction(ctx context.Context, config ProductionConfig, reques
 		transactionID := uuid.NewString()
 		journal := firewallTransactionJournal{
 			Version: firewallJournalVersion, TransactionID: transactionID, Phase: "prepared",
-			Initial: initial, Desired: request, UpdatedAt: time.Now().UTC().Unix(),
+			Initial: initial, Desired: request, UpdatedAt: time.Now().UTC().Unix(), Fence: request.Fence,
 		}
 		if err := writeFirewallJournal(config.PromotionBackupRoot, journal); err != nil {
 			return FirewallResult{}, err
 		}
 		result, err := reconcileUFW(ctx, config.RunCommand, request)
 		if err != nil {
-			_ = removeFirewallJournal(config.PromotionBackupRoot)
+			watchdogCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			rollbackErr := rollbackFirewallJournal(watchdogCtx, config.RunCommand, journal)
+			cancel()
+			if rollbackErr != nil {
+				journal.Phase = "rollback-failed"
+				journal.UpdatedAt = time.Now().UTC().Unix()
+				writeErr := writeFirewallJournal(config.PromotionBackupRoot, journal)
+				return FirewallResult{}, errors.Join(err, fmt.Errorf("firewall rollback failed: %w", rollbackErr), writeErr)
+			}
+			if removeErr := removeFirewallJournal(config.PromotionBackupRoot); removeErr != nil {
+				return FirewallResult{}, errors.Join(err, removeErr)
+			}
 			return FirewallResult{}, err
 		}
 		journal.Phase = "applied"
@@ -150,7 +172,7 @@ func recoverFirewallTransactionLocked(ctx context.Context, config ProductionConf
 	return removeFirewallJournal(config.PromotionBackupRoot)
 }
 
-func rollbackFirewallJournal(ctx context.Context, runner CommandRunner, journal firewallTransactionJournal) error {
+func rollbackFirewallJournal(_ context.Context, runner CommandRunner, journal firewallTransactionJournal) error {
 	if journal.Version != firewallJournalVersion || journal.TransactionID == "" {
 		return errors.New("invalid firewall transaction journal")
 	}
@@ -158,7 +180,9 @@ func rollbackFirewallJournal(ctx context.Context, runner CommandRunner, journal 
 	if err != nil {
 		return fmt.Errorf("parse journal desired rules: %w", err)
 	}
-	return restoreUFWState(ctx, runner, journal.Initial, desired)
+	watchdogCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	return restoreUFWState(watchdogCtx, runner, journal.Initial, desired)
 }
 
 func writeFirewallJournal(root string, journal firewallTransactionJournal) error {

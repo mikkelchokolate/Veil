@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,13 +19,16 @@ import (
 
 const promotionTransactionJournalName = ".promotion-transaction.json"
 
+var promotionJournalRemove = os.Remove
+
 type promotionTransactionJournal struct {
-	Version       int               `json:"version"`
-	TransactionID string            `json:"transactionId"`
-	Kind          string            `json:"kind"`
-	Phase         string            `json:"phase"`
-	ManifestPath  string            `json:"manifestPath"`
-	Manifest      promotionManifest `json:"manifest"`
+	Version         int               `json:"version"`
+	TransactionID   string            `json:"transactionId"`
+	Kind            string            `json:"kind"`
+	Phase           string            `json:"phase"`
+	ManifestPath    string            `json:"manifestPath"`
+	Manifest        promotionManifest `json:"manifest"`
+	FenceGeneration uint64            `json:"fenceGeneration"`
 }
 
 type preparedPromotionOperation struct {
@@ -35,6 +39,11 @@ type preparedPromotionOperation struct {
 }
 
 func executePromotionTransaction(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact) (result PromoteResult, resultErr error) {
+	return executePromotionTransactionFenced(backupRoot, now, kind, writes, removes, 0, nil)
+}
+
+func executePromotionTransactionFenced(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact,
+	fenceGeneration uint64, validateDestination func(string, string) bool) (result PromoteResult, resultErr error) {
 	if len(writes) == 0 && len(removes) == 0 && backupRoot == "" {
 		return PromoteResult{}, nil
 	}
@@ -54,7 +63,7 @@ func executePromotionTransaction(backupRoot string, now func() time.Time, kind s
 	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX); err != nil {
 		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
 	}
-	if err := recoverPromotionTransaction(backupRoot); err != nil {
+	if err := recoverPromotionTransactionWithPolicy(backupRoot, validateDestination, fenceGeneration); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
 	if len(writes) == 0 && len(removes) == 0 {
@@ -72,7 +81,7 @@ func executePromotionTransaction(backupRoot string, now func() time.Time, kind s
 	manifestPath := filepath.Join(backupRoot, backupID, "manifest.json")
 	journal := promotionTransactionJournal{
 		Version: 1, TransactionID: transactionID, Kind: kind, Phase: "prepared",
-		ManifestPath: manifestPath,
+		ManifestPath: manifestPath, FenceGeneration: fenceGeneration,
 		Manifest: promotionManifest{
 			Version: 1, TransactionID: transactionID, BackupID: backupID,
 			Kind: kind, Phase: "prepared",
@@ -233,6 +242,10 @@ func rollbackPromotionAfterError(root string, journal promotionTransactionJourna
 }
 
 func recoverPromotionTransaction(root string) error {
+	return recoverPromotionTransactionWithPolicy(root, nil, 0)
+}
+
+func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
 	path := filepath.Join(root, promotionTransactionJournalName)
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -248,7 +261,76 @@ func recoverPromotionTransaction(root string) error {
 	if journal.Version != 1 || journal.TransactionID == "" {
 		return errors.New("invalid promotion transaction journal")
 	}
+	if journal.FenceGeneration > 0 && acceptedGeneration > 0 && acceptedGeneration < journal.FenceGeneration {
+		return errors.New("promotion recovery fencing generation regressed")
+	}
+	if err := validatePromotionDestinations(journal, validateDestination); err != nil {
+		return err
+	}
+	if journal.Phase == "manifest-committed" && journal.Manifest.Phase == "committed" {
+		if err := verifyCommittedPromotion(root, journal); err != nil {
+			return err
+		}
+		return removePromotionJournal(root)
+	}
 	return restorePromotionPreTransaction(root, &journal)
+}
+
+func validatePromotionDestinations(journal promotionTransactionJournal, validate func(string, string) bool) error {
+	if validate == nil {
+		return nil
+	}
+	for _, record := range journal.Manifest.Records {
+		if !validate(record.ArtifactID, record.Destination) {
+			return fmt.Errorf("promotion destination is no longer permitted for %s", record.ArtifactID)
+		}
+	}
+	return nil
+}
+
+func verifyCommittedPromotion(root string, journal promotionTransactionJournal) error {
+	if journal.ManifestPath == "" || !pathWithin(root, journal.ManifestPath) {
+		return errors.New("committed promotion manifest escapes backup root")
+	}
+	body, err := os.ReadFile(journal.ManifestPath)
+	if err != nil {
+		return err
+	}
+	expected, err := json.Marshal(journal.Manifest)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(body, expected) {
+		return errors.New("committed promotion manifest does not match journal")
+	}
+	for _, record := range journal.Manifest.Records {
+		if record.Phase != "committed" {
+			return fmt.Errorf("promotion artifact %s is not committed", record.ArtifactID)
+		}
+		switch record.Operation {
+		case "remove":
+			if _, err := os.Lstat(record.Destination); !errors.Is(err, os.ErrNotExist) {
+				if err == nil {
+					return fmt.Errorf("removed promotion artifact still exists: %s", record.ArtifactID)
+				}
+				return err
+			}
+		case "symlink":
+			target, err := os.Readlink(record.Destination)
+			if err != nil || promotionDigest([]byte(target)) != record.NewDigest {
+				return fmt.Errorf("committed promotion symlink mismatch for %s", record.ArtifactID)
+			}
+		default:
+			body, err := readManagedConfigFile(record.Destination)
+			if err != nil {
+				return err
+			}
+			if promotionDigest(body) != record.NewDigest {
+				return fmt.Errorf("committed promotion digest mismatch for %s", record.ArtifactID)
+			}
+		}
+	}
+	return nil
 }
 
 func restorePromotionPreTransaction(root string, journal *promotionTransactionJournal) error {
@@ -314,7 +396,7 @@ func writePromotionJournal(root string, journal promotionTransactionJournal) err
 
 func removePromotionJournal(root string) error {
 	path := filepath.Join(root, promotionTransactionJournalName)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := promotionJournalRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return syncPromotionParent(path)

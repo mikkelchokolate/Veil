@@ -10,8 +10,23 @@ import (
 )
 
 type ufwState struct {
-	enabled bool
-	rules   map[string]string
+	Enabled bool              `json:"enabled"`
+	Rules   map[string]string `json:"rules"`
+	Entries []ufwRuleState    `json:"entries"`
+}
+
+type ufwRuleState struct {
+	Family      string   `json:"family"`
+	Action      string   `json:"action"`
+	Direction   string   `json:"direction"`
+	Interface   string   `json:"interface,omitempty"`
+	Source      string   `json:"source"`
+	Destination string   `json:"destination"`
+	Protocol    string   `json:"protocol,omitempty"`
+	Order       int      `json:"order"`
+	Enabled     bool     `json:"enabled"`
+	Comment     string   `json:"comment,omitempty"`
+	Args        []string `json:"args"`
 }
 
 type ufwDesiredRule struct {
@@ -66,7 +81,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 		desiredTargets[rule.target] = struct{}{}
 	}
 	staleTargets := make([]string, 0)
-	for target, comment := range initial.rules {
+	for target, comment := range initial.Rules {
 		if !isVeilManagedFirewallComment(comment) {
 			continue
 		}
@@ -80,7 +95,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 			return FirewallResult{}, rollback(fmt.Errorf("delete stale Veil firewall rule %s: %w", target, err))
 		}
 	}
-	if !initial.enabled {
+	if !initial.Enabled {
 		if _, err := runUFW(ctx, runner, 20*time.Second, "--force", "enable"); err != nil {
 			return FirewallResult{}, rollback(fmt.Errorf("enable ufw: %w", err))
 		}
@@ -97,16 +112,16 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	if err != nil {
 		return FirewallResult{}, rollback(fmt.Errorf("parse final ufw status: %w", err))
 	}
-	if !finalState.enabled {
+	if !finalState.Enabled {
 		return FirewallResult{}, rollback(errors.New("ufw remained disabled after reconciliation"))
 	}
 	for _, rule := range desired {
-		if finalState.rules[rule.target] != rule.comment {
+		if finalState.Rules[rule.target] != rule.comment {
 			return FirewallResult{}, rollback(fmt.Errorf("firewall rule %s was not durably reconciled", rule.id))
 		}
 	}
 	for _, target := range staleTargets {
-		if _, exists := finalState.rules[target]; exists {
+		if _, exists := finalState.Rules[target]; exists {
 			return FirewallResult{}, rollback(fmt.Errorf("stale Veil firewall rule %s remains", target))
 		}
 	}
@@ -155,7 +170,7 @@ func containsManagementAccessRule(rules []ufwDesiredRule) bool {
 }
 
 func hasExistingManagementAccess(state ufwState) bool {
-	for target, comment := range state.rules {
+	for target, comment := range state.Rules {
 		lowerTarget := strings.ToLower(target)
 		lowerComment := strings.ToLower(comment)
 		if strings.HasPrefix(lowerTarget, "22/") || strings.Contains(lowerComment, "openssh") ||
@@ -174,23 +189,37 @@ func restoreUFWState(ctx context.Context, runner CommandRunner, initial ufwState
 			joined = errors.Join(joined, err)
 		}
 	}
-	targets := make([]string, 0, len(initial.rules))
-	for target := range initial.rules {
-		targets = append(targets, target)
-	}
-	sort.Strings(targets)
-	for _, target := range targets {
-		comment := initial.rules[target]
-		args := []string{"allow", target}
-		if comment != "" {
-			args = append(args, "comment", comment)
+	if len(initial.Entries) > 0 {
+		entries := append([]ufwRuleState(nil), initial.Entries...)
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Order < entries[j].Order })
+		for _, entry := range entries {
+			if len(entry.Args) < 2 {
+				joined = errors.Join(joined, errors.New("firewall recovery entry is incomplete"))
+				continue
+			}
+			if _, err := runUFW(ctx, runner, 10*time.Second, entry.Args...); err != nil {
+				joined = errors.Join(joined, err)
+			}
 		}
-		if _, err := runUFW(ctx, runner, 10*time.Second, args...); err != nil {
-			joined = errors.Join(joined, err)
+	} else {
+		targets := make([]string, 0, len(initial.Rules))
+		for target := range initial.Rules {
+			targets = append(targets, target)
+		}
+		sort.Strings(targets)
+		for _, target := range targets {
+			comment := initial.Rules[target]
+			args := []string{"allow", target}
+			if comment != "" {
+				args = append(args, "comment", comment)
+			}
+			if _, err := runUFW(ctx, runner, 10*time.Second, args...); err != nil {
+				joined = errors.Join(joined, err)
+			}
 		}
 	}
 
-	if initial.enabled {
+	if initial.Enabled {
 		if _, err := runUFW(ctx, runner, 20*time.Second, "--force", "enable"); err != nil {
 			joined = errors.Join(joined, err)
 		}
@@ -209,7 +238,7 @@ func runUFW(ctx context.Context, runner CommandRunner, timeout time.Duration, ar
 }
 
 func parseUFWStatus(output string) (ufwState, error) {
-	state := ufwState{rules: make(map[string]string)}
+	state := ufwState{Rules: make(map[string]string)}
 	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
 	if len(lines) == 0 {
 		return state, errors.New("empty ufw status")
@@ -225,7 +254,7 @@ func parseUFWStatus(output string) (ufwState, error) {
 			statusKnown = true
 			inactive := strings.Contains(lower, "inactive") || strings.Contains(lower, "disabled") || strings.Contains(lower, "выключ")
 			active := strings.Contains(lower, "active") || strings.Contains(lower, "enabled") || strings.Contains(lower, "включ")
-			state.enabled = active && !inactive
+			state.Enabled = active && !inactive
 			continue
 		}
 		if strings.HasPrefix(lower, "to ") || strings.HasPrefix(lower, "--") {
@@ -241,7 +270,39 @@ func parseUFWStatus(output string) (ufwState, error) {
 		if len(parts) == 2 {
 			comment = strings.TrimSpace(parts[1])
 		}
-		state.rules[target] = comment
+		family := "ipv4"
+		if strings.Contains(line, "(v6)") {
+			family = "ipv6"
+		}
+		destination := strings.TrimSpace(strings.ReplaceAll(target, "(v6)", ""))
+		protocol := ""
+		if slash := strings.LastIndex(destination, "/"); slash >= 0 && slash+1 < len(destination) {
+			protocol = destination[slash+1:]
+		}
+		action := strings.ToLower(fields[1])
+		source := "Anywhere"
+		if len(fields) > 2 {
+			source = strings.Join(fields[2:], " ")
+		}
+		entry := ufwRuleState{
+			Family: family, Action: action, Direction: "in", Source: source,
+			Destination: destination, Protocol: protocol, Order: len(state.Entries) + 1,
+			Comment: comment, Args: []string{action, destination},
+		}
+		for i := 2; i+1 < len(fields); i++ {
+			if strings.EqualFold(fields[i], "on") {
+				entry.Interface = fields[i+1]
+				break
+			}
+		}
+		if comment != "" {
+			entry.Args = append(entry.Args, "comment", comment)
+		}
+		state.Entries = append(state.Entries, entry)
+		state.Rules[target] = comment
+	}
+	for i := range state.Entries {
+		state.Entries[i].Enabled = state.Enabled
 	}
 	if !statusKnown {
 		return state, errors.New("ufw status did not contain a machine-locale status line")

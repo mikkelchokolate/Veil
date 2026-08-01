@@ -425,13 +425,14 @@ func isUFWDuplicateRule(output string) bool {
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
-	if err := recoverPromotionTransaction(backupRoot); err != nil {
+	if err := recoverPromotionTransactionWithPolicy(backupRoot, request.ValidateDestination, request.FenceGeneration); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
 	if request.RestoreBackupID != "" {
 		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID)
 	}
-	return executePromotionTransaction(backupRoot, now, "promotion", request.Artifacts, request.RemoveArtifacts)
+	return executePromotionTransactionFenced(backupRoot, now, "promotion", request.Artifacts, request.RemoveArtifacts,
+		request.FenceGeneration, request.ValidateDestination)
 }
 
 type promotionManifest struct {
@@ -682,6 +683,7 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return BackupResult{
 			ArchiveName: request.ArchiveName,
+			Archives:    []BackupArchive{{Name: request.ArchiveName, Size: info.Size(), CreatedAt: info.ModTime().UTC().Format(time.RFC3339)}},
 			Data:        data,
 			More:        request.Offset+int64(len(data)) < info.Size(),
 		}, nil
@@ -788,7 +790,8 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			request.StatePath,
 			request.KeyPath,
 			passphrase,
-			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath, MaxBytes: maxBytes},
+			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath, MaxBytes: maxBytes,
+				FencingGeneration: request.FenceGeneration},
 		)
 		if err != nil {
 			return BackupResult{}, err

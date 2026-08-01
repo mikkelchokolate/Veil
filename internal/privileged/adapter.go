@@ -116,6 +116,9 @@ func (a *LocalAdapter) FirewallApply(ctx context.Context, request FirewallReques
 }
 
 func (a *LocalAdapter) StageUpdate(ctx context.Context, request UpdateRequest) (UpdateResult, error) {
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return UpdateResult{}, err
+	}
 	resolved, err := a.policy.ResolveUpdate(request)
 	if err != nil {
 		return UpdateResult{}, err
@@ -128,6 +131,10 @@ func (a *LocalAdapter) StageUpdate(ctx context.Context, request UpdateRequest) (
 }
 
 func (a *LocalAdapter) RestartPanel(ctx context.Context) error {
+	request, _ := RestartPanelRequestFromContext(ctx)
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return err
+	}
 	if a.executor.RestartPanel == nil {
 		return newError(ErrorOperationFailed, "Panel restart executor is unavailable")
 	}

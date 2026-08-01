@@ -83,7 +83,7 @@ func (c *SocketClient) StageUpdate(ctx context.Context, request UpdateRequest) (
 }
 
 func (c *SocketClient) RestartPanel(ctx context.Context) error {
-	request := RestartPanelRequest{}
+	request, _ := RestartPanelRequestFromContext(ctx)
 	return c.call(ctx, RequestEnvelope{Operation: OperationRestartPanel, RestartPanel: &request}, nil)
 }
 

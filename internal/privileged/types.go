@@ -79,8 +79,10 @@ const (
 )
 
 type FenceToken struct {
-	Owner      string `json:"owner"`
-	Generation uint64 `json:"generation"`
+	Owner          string `json:"owner"`
+	Generation     uint64 `json:"generation"`
+	LeaseExpiresAt int64  `json:"leaseExpiresAt"`
+	OperationID    string `json:"operationId"`
 }
 
 type PromoteRequest struct {
@@ -201,8 +203,9 @@ type FirewallResult struct {
 }
 
 type UpdateRequest struct {
-	ArtifactID string `json:"artifactId"`
-	Version    string `json:"version,omitempty"`
+	ArtifactID string     `json:"artifactId"`
+	Version    string     `json:"version,omitempty"`
+	Fence      FenceToken `json:"fence"`
 }
 
 type UpdateResult struct {
@@ -212,7 +215,9 @@ type UpdateResult struct {
 	Version    string `json:"version,omitempty"`
 }
 
-type RestartPanelRequest struct{}
+type RestartPanelRequest struct {
+	Fence FenceToken `json:"fence"`
+}
 
 type SyncCaddyCertRequest struct {
 	Domain string     `json:"domain"`
