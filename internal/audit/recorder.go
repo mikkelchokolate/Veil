@@ -58,6 +58,7 @@ type Recorder struct {
 	queueCapacity      int
 	backpressurePolicy string
 	maxSpoolBytes      int64
+	degraded           error
 }
 
 func NewRecorder(path string, options RecorderOptions) *Recorder {
@@ -93,7 +94,9 @@ func NewRecorder(path string, options RecorderOptions) *Recorder {
 		spoolPath: options.SpoolPath, queueCapacity: queueCapacity,
 		backpressurePolicy: policy, maxSpoolBytes: maxSpoolBytes,
 	}
-	_ = recorder.replaySpool()
+	if err := recorder.replaySpool(); err != nil {
+		recorder.degraded = err
+	}
 	return recorder
 }
 
@@ -106,6 +109,7 @@ func (r *Recorder) Append(record Record) error {
 	} else {
 		record.Timestamp = record.Timestamp.UTC()
 	}
+
 	record.Details = redactDetails(record.Details)
 	body, err := json.Marshal(record)
 	if err != nil {
@@ -115,7 +119,13 @@ func (r *Recorder) Append(record Record) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.degraded != nil && r.spoolPath != "" {
+		if err := r.replaySpoolLocked(); err == nil {
+			r.degraded = nil
+		}
+	}
 	if err := r.appendPrimaryLocked(body); err != nil {
+		r.degraded = err
 		if r.spoolPath != "" && r.backpressurePolicy == "spool_critical" && criticalAuditAction(record.Action) {
 			if spoolErr := r.appendSpoolLocked(body); spoolErr == nil {
 				return nil
@@ -126,6 +136,15 @@ func (r *Recorder) Append(record Record) error {
 		return err
 	}
 	return nil
+}
+
+func (r *Recorder) Degraded() error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.degraded
 }
 
 func (r *Recorder) appendPrimaryLocked(body []byte) error {
@@ -194,6 +213,10 @@ func (r *Recorder) replaySpool() error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.replaySpoolLocked()
+}
+
+func (r *Recorder) replaySpoolLocked() error {
 	body, err := os.ReadFile(r.spoolPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -246,6 +269,7 @@ func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	records := make([]Record, 0, limit)
+
 	for generation := 0; generation <= r.backups && len(records) < limit; generation++ {
 		path := r.path
 		if generation > 0 {
@@ -260,6 +284,7 @@ func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {
 		}
 		for i := len(fileRecords) - 1; i >= 0 && len(records) < limit; i-- {
 			record := fileRecords[i]
+
 			if !before.IsZero() && !record.Timestamp.Before(before) {
 				continue
 			}
