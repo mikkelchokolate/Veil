@@ -16,6 +16,11 @@ import (
 
 const restoreTransactionJournalName = ".veil-restore-journal.json"
 
+var (
+	restoreJournalRemove = os.Remove
+	errRestoreCommitted  = errors.New("restore committed; journal finalization pending")
+)
+
 type restoreTransactionJournal struct {
 	Version          int                  `json:"version"`
 	TransactionID    string               `json:"transactionId"`
@@ -24,6 +29,7 @@ type restoreTransactionJournal struct {
 	IntendedRevision uint64               `json:"intendedRevision"`
 	WALCleanupPhase  string               `json:"walShmCleanupPhase"`
 	Files            []restoreJournalFile `json:"files"`
+	FenceGeneration  uint64               `json:"fenceGeneration"`
 }
 
 type restoreJournalFile struct {
@@ -48,6 +54,7 @@ type restoreJournalDisk struct {
 	IntendedRevision uint64                   `json:"intendedRevision"`
 	WALCleanupPhase  string                   `json:"walShmCleanupPhase"`
 	Files            []restoreJournalDiskFile `json:"files"`
+	FenceGeneration  uint64                   `json:"fenceGeneration"`
 }
 
 type restoreJournalDiskFile struct {
@@ -94,17 +101,61 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	if err := validateRestoreJournalMembers(journal.Files); err != nil {
 		return err
 	}
+	intended, err := restoreJournalTargetsMatch(journal.Files, true)
+	if err != nil {
+		return err
+	}
+	if journal.Phase == "committed" || intended {
+		if err := verifyRestoreRevisionBinding(databasePath, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
+			return err
+		}
+		if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
+			return err
+		}
+		if journal.Phase != "committed" {
+			journal.Phase = "committed"
+			journal.WALCleanupPhase = "committed"
+			for i := range journal.Files {
+				journal.Files[i].Phase = "committed"
+			}
+			if err := writeRestoreJournal(root, journal); err != nil {
+				return err
+			}
+		}
+		return removeRestoreJournal(root)
+	}
 	return rollbackRestoreJournal(root, &journal)
 }
 
 func prepareRestoreJournal(statePath string, staged []*stagedRestoreFile, names []string, previousRevision, intendedRevision uint64) (restoreTransactionJournal, error) {
+	return prepareRestoreJournalFenced(statePath, staged, names, previousRevision, intendedRevision, 0)
+}
+
+func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, names []string, previousRevision, intendedRevision, fenceGeneration uint64) (restoreTransactionJournal, error) {
 	if len(staged) != len(names) {
 		return restoreTransactionJournal{}, errors.New("restore journal member mismatch")
+	}
+	expectedNames := []string{"state.json", "state.key"}
+	if len(staged) == 3 {
+		expectedNames = append(expectedNames, "veil.db")
+	}
+	if len(staged) != len(expectedNames) {
+		return restoreTransactionJournal{}, errors.New("restore journal requires the exact archive member set")
+	}
+	seenNames := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		seenNames[name] = struct{}{}
+	}
+	for _, name := range expectedNames {
+		if _, ok := seenNames[name]; !ok || len(seenNames) != len(expectedNames) {
+			return restoreTransactionJournal{}, errors.New("restore journal requires the exact archive member set")
+		}
 	}
 	journal := restoreTransactionJournal{
 		Version: 2, TransactionID: uuid.NewString(), Phase: "prepared",
 		PreviousRevision: previousRevision, IntendedRevision: intendedRevision,
 		WALCleanupPhase: "pending", Files: make([]restoreJournalFile, 0, len(staged)),
+		FenceGeneration: fenceGeneration,
 	}
 	for index, item := range staged {
 		record := restoreJournalFile{
@@ -201,12 +252,21 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 		}
 		journal.Files[index].Phase = "committed"
 	}
+	if err := verifyRestoreRevisionBinding(databasePath, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
+		return err
+	}
+	if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
+		return err
+	}
 	journal.Phase = "committed"
 	journal.WALCleanupPhase = "committed"
 	if err := writeRestoreJournal(root, *journal); err != nil {
 		return err
 	}
-	return removeRestoreJournal(root)
+	if err := removeRestoreJournal(root); err != nil {
+		return fmt.Errorf("%w: %v", errRestoreCommitted, err)
+	}
+	return nil
 }
 
 func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) error {
@@ -278,6 +338,7 @@ func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
 		Version: journal.Version, TransactionID: journal.TransactionID, Phase: journal.Phase,
 		PreviousRevision: journal.PreviousRevision, IntendedRevision: journal.IntendedRevision,
 		WALCleanupPhase: journal.WALCleanupPhase, Files: make([]restoreJournalDiskFile, 0, len(journal.Files)),
+		FenceGeneration: journal.FenceGeneration,
 	}
 	for _, file := range journal.Files {
 		if filepath.Dir(file.StagedPath) != filepath.Dir(file.TargetPath) || filepath.Dir(file.SafetyPath) != filepath.Dir(file.TargetPath) {
@@ -308,8 +369,14 @@ func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTrans
 		Version: disk.Version, TransactionID: disk.TransactionID, Phase: disk.Phase,
 		PreviousRevision: disk.PreviousRevision, IntendedRevision: disk.IntendedRevision,
 		WALCleanupPhase: disk.WALCleanupPhase, Files: make([]restoreJournalFile, 0, len(disk.Files)),
+		FenceGeneration: disk.FenceGeneration,
 	}
+	seen := make(map[string]struct{}, len(disk.Files))
 	for _, file := range disk.Files {
+		if _, duplicate := seen[file.Name]; duplicate {
+			return restoreTransactionJournal{}, fmt.Errorf("duplicate restore journal member %s", file.Name)
+		}
+		seen[file.Name] = struct{}{}
 		target, ok := expected[file.Name]
 		if !ok || file.TargetID != file.Name {
 			return restoreTransactionJournal{}, fmt.Errorf("restore journal target mismatch for %s", file.Name)
@@ -323,6 +390,14 @@ func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTrans
 			HadPrevious: file.HadPrevious, PreviousDigest: file.PreviousDigest, IntendedDigest: file.IntendedDigest,
 			Mode: file.Mode, UID: file.UID, GID: file.GID, Phase: file.Phase,
 		})
+	}
+	if len(seen) != len(expected) {
+		for name := range expected {
+			if _, ok := seen[name]; !ok {
+				return restoreTransactionJournal{}, fmt.Errorf("missing restore journal member %s", name)
+			}
+		}
+		return restoreTransactionJournal{}, errors.New("restore journal member set mismatch")
 	}
 	return journal, nil
 }
@@ -355,9 +430,101 @@ func validateRestoreJournalMembers(files []restoreJournalFile) error {
 	return nil
 }
 
+func restoreJournalTargetsMatch(files []restoreJournalFile, intended bool) (bool, error) {
+	for _, file := range files {
+		digest := file.PreviousDigest
+		if intended {
+			digest = file.IntendedDigest
+		}
+		body, err := os.ReadFile(file.TargetPath)
+		if errors.Is(err, os.ErrNotExist) {
+			if !intended && !file.HadPrevious {
+				continue
+			}
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if backupChecksum(body) != digest {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func restoreJournalDigest(files []restoreJournalFile, name string, intended bool) string {
+	for _, file := range files {
+		if file.Name == name {
+			if intended {
+				return file.IntendedDigest
+			}
+			return file.PreviousDigest
+		}
+	}
+	return ""
+}
+
+func verifyRestoreRevisionBinding(databasePath string, expectedRevision uint64, stateDigest string, requireBinding bool) error {
+	if databasePath == "" {
+		return nil
+	}
+	db, err := storage.OpenExisting(databasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var revision uint64
+	if err := db.QueryRow(`SELECT desired_revision FROM revisions WHERE id=1`).Scan(&revision); err != nil {
+		if errors.Is(err, sql.ErrNoRows) && expectedRevision == 0 {
+			return nil
+		}
+		return fmt.Errorf("restore desired revision row: %w", err)
+	}
+	if revision != expectedRevision {
+		return fmt.Errorf("restore revision mismatch: got %d want %d", revision, expectedRevision)
+	}
+	if revision == 0 {
+		return nil
+	}
+	var bound string
+	if err := db.QueryRow(`SELECT state_sha256 FROM revision_snapshots WHERE revision=?`, revision).Scan(&bound); err != nil {
+		if errors.Is(err, sql.ErrNoRows) && !requireBinding {
+			return nil
+		}
+		return fmt.Errorf("restore state digest binding: %w", err)
+	}
+	if bound == "" && !requireBinding {
+		return nil
+	}
+	if bound == "" || bound != stateDigest {
+		return errors.New("restore state digest is not bound to the intended revision")
+	}
+	return nil
+}
+
+func ensureRestoreFencingFloor(databasePath string, generation uint64) error {
+	if databasePath == "" || generation == 0 {
+		return nil
+	}
+	db, err := storage.OpenExisting(databasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	result, err := db.Exec(`UPDATE apply_lease SET generation=CASE WHEN generation<? THEN ? ELSE generation END WHERE id=1`, generation, generation)
+	if err != nil {
+		return fmt.Errorf("restore apply fencing floor: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return errors.New("restore apply fencing floor row is missing")
+	}
+	return nil
+}
+
 func removeRestoreJournal(root string) error {
 	path := filepath.Join(root, restoreTransactionJournalName)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := restoreJournalRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return syncRestoreParent(path)

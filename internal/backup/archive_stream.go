@@ -420,7 +420,7 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 		staged = append(staged, databaseBackup)
 		names = append(names, "veil.db")
 	}
-	journal, err := prepareRestoreJournal(statePath, staged, names, previousRevision, verified.report.DesiredRevision)
+	journal, err := prepareRestoreJournalFenced(statePath, staged, names, previousRevision, verified.report.DesiredRevision, options.FencingGeneration)
 	if err != nil {
 		for _, file := range staged {
 			_ = file.cleanupStaged()
@@ -442,11 +442,19 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 		}
 		return ""
 	}(), &journal); err != nil {
+		if errors.Is(err, errRestoreCommitted) {
+			// The exact intended set, revision binding and fencing floor are
+			// already durable. Leave the marker for idempotent startup cleanup;
+			// never roll a committed restore back because unlink failed.
+			goto restoreCommitted
+		}
 		if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
 			return RestoreResult{}, fmt.Errorf("finalize restored backup: %v; rollback: %w", err, rollbackErr)
 		}
 		return RestoreResult{}, fmt.Errorf("finalize restored backup: %w", err)
 	}
+
+restoreCommitted:
 	if stateBackup.hadOriginal {
 		result.SafetyStatePath = stateSafety
 	}

@@ -47,8 +47,23 @@ func TestRestoreRecoversSIGKILLAfterEveryFilePublication(t *testing.T) {
 				t.Fatalf("recover interrupted restore: %v", err)
 			}
 
-			if state := classifyRestoreTriple(t, fixture); state == "mixed" {
+			state := classifyRestoreTriple(t, fixture)
+			if state == "mixed" {
+				state = classifyRestoreTripleWithFencingFloor(t, fixture, 41)
+			}
+			if state == "mixed" {
 				t.Fatal("restore recovery left a mixed state.json/state.key/veil.db triple")
+			} else if state == "intended" {
+				db, err := storage.OpenExisting(fixture.databasePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var generation uint64
+				err = db.QueryRow(`SELECT generation FROM apply_lease WHERE id=1`).Scan(&generation)
+				_ = db.Close()
+				if err != nil || generation < 41 {
+					t.Fatalf("restored fencing floor=%d err=%v, want >=41", generation, err)
+				}
 			}
 		})
 	}
@@ -93,7 +108,7 @@ func TestRestoreCrashProcess(t *testing.T) {
 		statePath,
 		keyPath,
 		"",
-		RestoreOptions{DatabasePath: databasePath, Now: func() time.Time {
+		RestoreOptions{DatabasePath: databasePath, FencingGeneration: 41, Now: func() time.Time {
 			return time.Date(2026, time.July, 27, 13, 0, 0, 0, time.UTC)
 		}},
 	)
@@ -202,6 +217,31 @@ func prepareRestoreTripleFixture(t *testing.T) restoreTripleFixture {
 		t.Fatal(err)
 	}
 	return fixture
+}
+
+func classifyRestoreTripleWithFencingFloor(t *testing.T, fixture restoreTripleFixture, floor uint64) string {
+	t.Helper()
+	state, err := os.ReadFile(fixture.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(fixture.keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha256.Sum256(state) != sha256.Sum256(fixture.intendedState) || sha256.Sum256(key) != sha256.Sum256(fixture.intendedKey) {
+		return "mixed"
+	}
+	db, err := storage.OpenExisting(fixture.databasePath)
+	if err != nil {
+		return "mixed"
+	}
+	defer db.Close()
+	var generation uint64
+	if err := db.QueryRow(`SELECT generation FROM apply_lease WHERE id=1`).Scan(&generation); err != nil || generation < floor {
+		return "mixed"
+	}
+	return "intended"
 }
 
 func classifyRestoreTriple(t *testing.T, fixture restoreTripleFixture) string {

@@ -73,10 +73,11 @@ type VerificationReport struct {
 }
 
 type RestoreOptions struct {
-	CheckOnly    bool
-	Now          func() time.Time
-	DatabasePath string
-	MaxBytes     int64
+	CheckOnly         bool
+	Now               func() time.Time
+	DatabasePath      string
+	MaxBytes          int64
+	FencingGeneration uint64
 }
 
 type RestoreResult struct {
