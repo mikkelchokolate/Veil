@@ -51,11 +51,11 @@ END;`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Status == StatusApplying {
-		t.Errorf("runtime-successful job was stranded applying after finalization failure: %+v", persisted)
+	if persisted.Status != StatusApplying || persisted.ErrorCode != "FINALIZATION_PENDING" {
+		t.Errorf("unresolved finalization was not durably retained: %+v", persisted)
 	}
-	if persisted.FinishedAt == nil {
-		t.Errorf("finalization failure left no durable terminal timestamp: %+v", persisted)
+	if persisted.FinishedAt != nil {
+		t.Errorf("unresolved finalization was falsely made terminal: %+v", persisted)
 	}
 	if len(persisted.Operations) != 0 {
 		t.Errorf("operations committed outside failed finalization transaction: %+v", persisted.Operations)

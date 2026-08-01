@@ -81,6 +81,16 @@ func (s *SnapshotStore) Load(revision uint64) ([]byte, error) {
 	return []byte(payload), nil
 }
 
+// EffectiveAt returns the immutable row creation time used to evaluate legacy
+// snapshots written before effectiveAt became part of the JSON payload.
+func (s *SnapshotStore) EffectiveAt(revision uint64) (int64, error) {
+	var createdAt int64
+	if err := s.db.QueryRow(`SELECT created_at FROM revision_snapshots WHERE revision=?`, revision).Scan(&createdAt); err != nil {
+		return 0, fmt.Errorf("apply: load effective time rev %d: %w", revision, err)
+	}
+	return createdAt, nil
+}
+
 // Has reports whether a snapshot exists for a revision.
 func (s *SnapshotStore) Has(revision uint64) bool {
 	var n int

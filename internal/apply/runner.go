@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,22 +22,66 @@ var (
 )
 
 type Fence struct {
-	Owner      string
-	Generation uint64
+	Owner          string
+	Generation     uint64
+	OperationID    string
+	LeaseExpiresAt int64
 }
 
 type fenceContextKey struct{}
+type publicationContextKey struct{}
+
+type PublicationDetails struct {
+	ExpectedLiveManifestSHA256 string
+	PreviousLiveManifestSHA256 string
+	Artifacts                  []string
+	ServicePhase               string
+	FirewallPhase              string
+	LiveRoot                   string
+}
+
+type fenceContextState struct {
+	owner       string
+	generation  uint64
+	operationID string
+	expiresAt   atomic.Int64
+}
 
 func ContextWithFence(ctx context.Context, fence Fence) context.Context {
-	return context.WithValue(ctx, fenceContextKey{}, fence)
+	state := &fenceContextState{owner: fence.Owner, generation: fence.Generation, operationID: fence.OperationID}
+	state.expiresAt.Store(fence.LeaseExpiresAt)
+	return context.WithValue(ctx, fenceContextKey{}, state)
 }
 
 func FenceFromContext(ctx context.Context) (Fence, bool) {
 	if ctx == nil {
 		return Fence{}, false
 	}
-	fence, ok := ctx.Value(fenceContextKey{}).(Fence)
-	return fence, ok && fence.Owner != "" && fence.Generation > 0
+	state, ok := ctx.Value(fenceContextKey{}).(*fenceContextState)
+	if !ok || state.owner == "" || state.generation == 0 {
+		return Fence{}, false
+	}
+	return Fence{Owner: state.owner, Generation: state.generation, OperationID: state.operationID,
+		LeaseExpiresAt: state.expiresAt.Load()}, true
+}
+
+func updateFenceExpiry(ctx context.Context, expiresAt int64) {
+	if state, ok := ctx.Value(fenceContextKey{}).(*fenceContextState); ok {
+		state.expiresAt.Store(expiresAt)
+	}
+}
+
+// MarkRuntimeMutationStarting durably advances the publication transaction
+// before the first live side effect. It is a no-op for untracked test/dev
+// workflows that have no Runner-owned publication context.
+func MarkRuntimeMutationStarting(ctx context.Context, details PublicationDetails) error {
+	if ctx == nil {
+		return nil
+	}
+	if record, ok := ctx.Value(publicationContextKey{}).(func(PublicationDetails) error); ok {
+		return record(details)
+	}
+	return nil
 }
 
 type Executor interface {
@@ -49,11 +94,17 @@ type ContextExecutor interface {
 }
 
 type Result struct {
-	Success      bool
-	RolledBack   bool
-	ErrorCode    string
-	ErrorMessage string
-	Operations   []OperationResult
+	Success       bool
+	RolledBack    bool
+	ErrorCode     string
+	ErrorMessage  string
+	Operations    []OperationResult
+	Confirmations []EnforcementConfirmation
+}
+
+type EnforcementConfirmation struct {
+	Kind     string `json:"kind"`
+	ClientID string `json:"clientId"`
 }
 
 type ExecutorFunc func(revision uint64) (Result, error)
@@ -114,17 +165,13 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		return runner
 	}
 	runner.leases = NewLeaseStore(revs.db)
-	monitor, err := runner.recoverStartup()
+	_, err := runner.recoverStartup()
 	if err != nil {
 		runner.startupErr = err
 		close(runner.monitorDone)
 		return runner
 	}
-	if monitor {
-		go runner.monitorForeignLease()
-	} else {
-		close(runner.monitorDone)
-	}
+	go runner.monitorRecovery()
 	return runner
 }
 
@@ -167,46 +214,49 @@ func processOwnerAlive(owner string) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-func (r *Runner) monitorForeignLease() {
+func (r *Runner) monitorRecovery() {
 	defer close(r.monitorDone)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-r.monitorStop:
 			return
 		case <-ticker.C:
-			lease, err := r.leases.Current()
-			if err != nil {
-				r.mu.Lock()
-				r.startupErr = err
-				r.mu.Unlock()
-				return
-			}
-			if lease.Owner == "" || lease.Owner == r.ownerID {
-				return
-			}
-			if lease.ExpiresAt > r.now().Unix() && processOwnerAlive(lease.Owner) {
+			r.mu.Lock()
+			active := r.active
+			r.mu.Unlock()
+			if active {
 				continue
 			}
-			if err := r.leases.Expire(lease.Owner, lease.Generation); err != nil && !errors.Is(err, ErrApplyLeaseLost) {
-				r.mu.Lock()
-				r.startupErr = err
-				r.mu.Unlock()
-				return
+			lease, err := r.leases.Current()
+			if err != nil {
+				r.setRecoveryError(err)
+				continue
+			}
+			now := r.now()
+			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
+				continue
+			}
+			if lease.Owner != "" {
+				if err := r.leases.Expire(lease.Owner, lease.Generation); err != nil && !errors.Is(err, ErrApplyLeaseLost) {
+					r.setRecoveryError(err)
+					continue
+				}
 			}
 			recoveryErr := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL)
 			if recoveryErr == nil {
-				recoveryErr = r.jobs.MarkApplyingInterrupted("apply owner lease expired after panel startup")
+				recoveryErr = r.jobs.MarkApplyingInterrupted("apply job had no valid durable lease during continuous recovery")
 			}
-			if recoveryErr != nil {
-				r.mu.Lock()
-				r.startupErr = recoveryErr
-				r.mu.Unlock()
-			}
-			return
+			r.setRecoveryError(recoveryErr)
 		}
 	}
+}
+
+func (r *Runner) setRecoveryError(err error) {
+	r.mu.Lock()
+	r.startupErr = err
+	r.mu.Unlock()
 }
 
 func (r *Runner) Close() {
@@ -219,6 +269,35 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr er
 }
 
 func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor string) (job Job, runErr error) {
+	return r.runContext(ctx, revision, trigger, actor, r.executor)
+}
+
+// RunOperationContext routes a non-plan runtime mutation (for example an
+// explicit service action) through the exact same durable lease, fencing,
+// publication, job and finalization machinery as a normal revision apply.
+func (r *Runner) RunOperationContext(ctx context.Context, revision uint64, trigger, actor string, executor Executor) (job Job, runErr error) {
+	if executor == nil {
+		return Job{}, errors.New("apply: operation executor is nil")
+	}
+	return r.runContext(ctx, revision, trigger, actor, executor)
+}
+
+func (r *Runner) RunContextWithConfirmations(ctx context.Context, revision uint64, trigger, actor string, confirmations ...EnforcementConfirmation) (Job, error) {
+	executor := ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (Result, error) {
+		var result Result
+		var err error
+		if contextual, ok := r.executor.(ContextExecutor); ok {
+			result, err = contextual.ExecuteContext(operationContext, pinnedRevision)
+		} else {
+			result, err = r.executor.Execute(pinnedRevision)
+		}
+		result.Confirmations = append(result.Confirmations, confirmations...)
+		return result, err
+	})
+	return r.runContext(ctx, revision, trigger, actor, executor)
+}
+
+func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor string, executor Executor) (job Job, runErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -239,8 +318,12 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 		r.active = false
 		r.mu.Unlock()
 	}()
+	if err := r.recoverBeforeAcquisition(); err != nil {
+		return Job{}, err
+	}
 
-	operation := trigger + ":revision:" + fmt.Sprint(revision)
+	jobID := uuid.NewString()
+	operation := jobID
 	lease, acquired, err := r.leases.Acquire(r.ownerID, operation, r.now(), r.leaseTTL)
 	if err != nil {
 		return Job{}, fmt.Errorf("apply: acquire durable lease: %w", err)
@@ -270,7 +353,7 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 	}
 
 	job = Job{
-		ID: uuid.NewString(), DesiredRevision: revision, BaseRevision: revisions.Applied,
+		ID: jobID, DesiredRevision: revision, BaseRevision: revisions.Applied,
 		Status: StatusPending, Trigger: trigger, ActorID: actor, CreatedAt: nowUnix(),
 		OwnerProcess: r.ownerID, LeaseGeneration: lease.Generation,
 	}
@@ -278,21 +361,35 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 		return job, err
 	}
 	if err := r.jobs.MarkStatus(job.ID, StatusApplying, "", ""); err != nil {
-		_ = finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, "job_store", err.Error(), nil, false, false)
+		_ = finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, "job_store", err.Error(), nil, nil, false, false)
 		return job, err
 	}
 	job.Status = StatusApplying
+	if err := recordRuntimePublicationIntent(r.revs.db, job, lease, r.now().UTC().Unix()); err != nil {
+		finishErr := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed,
+			"PUBLICATION_INTENT_FAILED", err.Error(), nil, nil, false, false)
+		if finishErr == nil {
+			leaseReleased = true
+		}
+		return job, errors.Join(err, finishErr)
+	}
 
-	execCtx, cancelExecutor := context.WithCancel(ContextWithFence(ctx, Fence{Owner: r.ownerID, Generation: lease.Generation}))
+	execCtx := ContextWithFence(ctx, Fence{
+		Owner: r.ownerID, Generation: lease.Generation, OperationID: lease.Operation, LeaseExpiresAt: lease.ExpiresAt,
+	})
+	execCtx = context.WithValue(execCtx, publicationContextKey{}, func(details PublicationDetails) error {
+		return markRuntimePublicationPublishing(r.revs.db, job.ID, lease.Generation, details, r.now().UTC().Unix())
+	})
+	execCtx, cancelExecutor := context.WithCancel(execCtx)
 	stopHeartbeat := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
 	go r.heartbeat(execCtx, lease.Generation, stopHeartbeat, heartbeatErr, cancelExecutor)
 	var result Result
 	var execErr error
-	if executor, ok := r.executor.(ContextExecutor); ok {
-		result, execErr = executor.ExecuteContext(execCtx, revision)
+	if contextExecutor, ok := executor.(ContextExecutor); ok {
+		result, execErr = contextExecutor.ExecuteContext(execCtx, revision)
 	} else {
-		result, execErr = r.executor.Execute(revision)
+		result, execErr = executor.Execute(revision)
 	}
 	if execErr == nil && !result.Success {
 		message := result.ErrorMessage
@@ -312,7 +409,24 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 		if code == "" {
 			code = "apply_failed"
 		}
-		finishErr := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, code, execErr.Error(), result.Operations, false, false)
+		safeRollback := result.RolledBack || len(result.Operations) == 0
+		if !safeRollback {
+			pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, execErr)
+			if pendingErr == nil {
+				leaseReleased = true
+			}
+			job.Status = StatusApplying
+			job.ErrorCode = "RECOVERY_PENDING"
+			job.ErrorMessage = execErr.Error()
+			job.Operations = result.Operations
+			return job, errors.Join(execErr, pendingErr)
+		}
+		rollbackErr := markRuntimePublicationRolledBack(r.revs.db, job.ID, lease.Generation, r.now().UTC().Unix())
+		var finishErr error
+		if rollbackErr == nil {
+			finishErr = finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, code, execErr.Error(), result.Operations, nil, false, false)
+		}
+		finishErr = errors.Join(rollbackErr, finishErr)
 		if finishErr == nil {
 			leaseReleased = true
 		}
@@ -323,19 +437,22 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 		return job, errors.Join(execErr, finishErr)
 	}
 
-	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Operations, r.now().UTC().Unix()); err != nil {
-		finishErr := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, "PUBLICATION_RECEIPT_FAILED", err.Error(), result.Operations, false, false)
-		if finishErr == nil {
-			leaseReleased = true
-		}
-		return job, errors.Join(err, finishErr)
-	}
-	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, true, false); err != nil {
+	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Operations, result.Confirmations, r.now().UTC().Unix()); err != nil {
 		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
 		if pendingErr == nil {
 			leaseReleased = true
 		}
-		job.Status = StatusFailed
+		job.Status = StatusApplying
+		job.ErrorCode = "PUBLICATION_RECEIPT_PENDING"
+		job.ErrorMessage = err.Error()
+		return job, errors.Join(err, pendingErr)
+	}
+	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, result.Confirmations, true, false); err != nil {
+		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
+		if pendingErr == nil {
+			leaseReleased = true
+		}
+		job.Status = StatusApplying
 		job.ErrorCode = "FINALIZATION_PENDING"
 		job.ErrorMessage = err.Error()
 		return job, errors.Join(err, pendingErr)
@@ -344,6 +461,20 @@ func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor
 	job.Status = StatusSucceeded
 	job.Operations = result.Operations
 	return job, nil
+}
+
+func (r *Runner) recoverBeforeAcquisition() error {
+	valid, err := r.leases.Valid(r.now())
+	if err != nil {
+		return fmt.Errorf("apply: inspect lease before acquisition: %w", err)
+	}
+	if valid {
+		return nil
+	}
+	if err := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL); err != nil {
+		return err
+	}
+	return r.jobs.MarkApplyingInterrupted("apply job had no valid durable lease before acquisition")
 }
 
 func (r *Runner) heartbeat(ctx context.Context, generation uint64, stop <-chan struct{}, result chan<- error, cancel context.CancelFunc) {
@@ -358,11 +489,13 @@ func (r *Runner) heartbeat(ctx context.Context, generation uint64, stop <-chan s
 			result <- nil
 			return
 		case <-ticker.C:
-			if err := r.leases.Heartbeat(r.ownerID, generation, r.now(), r.leaseTTL); err != nil {
+			now := r.now()
+			if err := r.leases.Heartbeat(r.ownerID, generation, now, r.leaseTTL); err != nil {
 				cancel()
 				result <- fmt.Errorf("apply: heartbeat durable lease: %w", err)
 				return
 			}
+			updateFenceExpiry(ctx, now.Add(r.leaseTTL).UTC().Unix())
 		}
 	}
 }
