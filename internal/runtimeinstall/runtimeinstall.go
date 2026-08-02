@@ -206,6 +206,7 @@ const defaultBinDir = "/usr/local/bin"
 func DefaultBinDir() string { return defaultBinDir }
 
 func runtimeVersionProbeArgs(binary string, args []string) []string {
+	const sandboxBinary = "/run/veil-runtime-probe"
 	probe := []string{
 		"--quiet", "--pipe", "--wait", "--collect",
 		"--property=Type=exec", "--property=NoNewPrivileges=yes",
@@ -216,7 +217,9 @@ func runtimeVersionProbeArgs(binary string, args []string) []string {
 		"--property=CapabilityBoundingSet=", "--property=RestrictAddressFamilies=AF_UNIX",
 		"--property=SystemCallArchitectures=native",
 		"--property=SystemCallFilter=@system-service ~@mount @privileged @resources @raw-io @reboot @swap @obsolete @debug",
-		"--property=MemoryMax=128M", "--property=TasksMax=32", "--", binary,
+		"--property=MemoryMax=128M", "--property=TasksMax=32",
+		"--property=BindReadOnlyPaths=" + binary + ":" + sandboxBinary,
+		"--", sandboxBinary,
 	}
 	return append(probe, args...)
 }

@@ -27,8 +27,12 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 		}
 	}
 	separator := slices.Index(args, "--")
-	if separator < 0 || separator+1 >= len(args) || args[separator+1] != binary {
+	if separator < 0 || separator+1 >= len(args) || args[separator+1] != "/run/veil-runtime-probe" {
 		t.Fatalf("runtime command is not isolated after --: %q", args)
+	}
+	bind := "--property=BindReadOnlyPaths=" + binary + ":/run/veil-runtime-probe"
+	if !slices.Contains(args[:separator], bind) {
+		t.Fatalf("staged runtime is not bound into the systemd sandbox: %q", args)
 	}
 	for _, option := range args[:separator] {
 		if strings.Contains(option, "PrivateNetwork=no") {
