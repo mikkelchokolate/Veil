@@ -222,10 +222,12 @@ func runtimeVersionProbeArgs(binary string, args []string) []string {
 }
 
 func bubblewrapVersionProbeArgs(binary string, args []string) []string {
+	const sandboxBinary = "/run/veil-runtime-probe"
 	probe := []string{
 		"--die-with-parent", "--new-session", "--unshare-all",
 		"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
-		"--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--", binary,
+		"--ro-bind", binary, sandboxBinary,
+		"--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--", sandboxBinary,
 	}
 	return append(probe, args...)
 }
@@ -246,6 +248,13 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 	}
 	output, err := exec.CommandContext(ctx, command, commandArgs...).CombinedOutput()
 	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if len(detail) > 4096 {
+			detail = detail[:4096] + "…"
+		}
+		if detail != "" {
+			return string(output), fmt.Errorf("run %s sandboxed version probe: %w: %s", filepath.Base(binary), err, detail)
+		}
 		return string(output), fmt.Errorf("run %s sandboxed version probe: %w", filepath.Base(binary), err)
 	}
 	return string(output), nil

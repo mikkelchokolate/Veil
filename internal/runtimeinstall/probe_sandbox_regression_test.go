@@ -40,7 +40,14 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 func TestRuntimeVersionProbeBubblewrapFallbackIsReadOnlyAndNetworkIsolated(t *testing.T) {
 	args := bubblewrapVersionProbeArgs("/tmp/staged-runtime", []string{"version"})
 	joined := strings.Join(args, " ")
-	for _, required := range []string{"--unshare-all", "--ro-bind / /", "--clearenv", "-- /tmp/staged-runtime version"} {
+	for _, required := range []string{
+		"--unshare-all",
+		"--ro-bind / /",
+		"--tmpfs /tmp",
+		"--ro-bind /tmp/staged-runtime /run/veil-runtime-probe",
+		"--clearenv",
+		"-- /run/veil-runtime-probe version",
+	} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("bubblewrap probe missing %q: %s", required, joined)
 		}
