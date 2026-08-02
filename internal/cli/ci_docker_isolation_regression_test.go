@@ -55,3 +55,21 @@ func TestDockerCIBackendDoesNotShareHostNetworkOrRuntimeNamespace(t *testing.T) 
 		}
 	}
 }
+
+func TestHostedRuntimeProbeUsesPrivilegedBubblewrapSandbox(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "ci", "runtimes.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	for _, required := range []string{
+		`command -v bwrap`,
+		`[ ! -S /run/systemd/private ]`,
+		`sudo -- "${veil_bin}" runtime install --only naiveproxy`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("hosted runtime installation is missing %q", required)
+		}
+	}
+}
