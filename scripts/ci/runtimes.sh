@@ -49,11 +49,11 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
 
   # caddy with naive forward_proxy: source-built with product-pinned modules.
   if [ -n "${veil_bin}" ] && [ -x "${veil_bin}" ]; then
-    # Ubuntu hosted runners restrict unprivileged user namespaces, so bwrap's
-    # network/filesystem sandbox must be entered with the runner's explicitly
-    # provisioned passwordless sudo. Production systemd hosts and root-owned
-    # Docker CI containers do not take this branch.
-    if [ "$(id -u)" -ne 0 ] && command -v bwrap >/dev/null 2>&1 && [ ! -S /run/systemd/private ]; then
+    # Hosted runners require authorization for systemd transient units and
+    # restrict unprivileged Bubblewrap namespaces. Enter either sandbox through
+    # the runner's explicitly provisioned passwordless sudo. Root-owned Docker
+    # CI containers do not take this branch.
+    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
       sudo -- "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
     else
       "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"

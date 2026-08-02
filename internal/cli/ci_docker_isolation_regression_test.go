@@ -56,7 +56,7 @@ func TestDockerCIBackendDoesNotShareHostNetworkOrRuntimeNamespace(t *testing.T) 
 	}
 }
 
-func TestHostedRuntimeProbeUsesPrivilegedBubblewrapSandbox(t *testing.T) {
+func TestHostedRuntimeProbeUsesPrivilegedSandbox(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "ci", "runtimes.sh")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -64,8 +64,8 @@ func TestHostedRuntimeProbeUsesPrivilegedBubblewrapSandbox(t *testing.T) {
 	}
 	script := string(data)
 	for _, required := range []string{
-		`command -v bwrap`,
-		`[ ! -S /run/systemd/private ]`,
+		`[ "$(id -u)" -ne 0 ]`,
+		`command -v sudo`,
 		`sudo -- "${veil_bin}" runtime install --only naiveproxy`,
 	} {
 		if !strings.Contains(script, required) {
