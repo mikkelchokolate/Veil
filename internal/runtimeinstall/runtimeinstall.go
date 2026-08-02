@@ -206,7 +206,10 @@ const defaultBinDir = "/usr/local/bin"
 func DefaultBinDir() string { return defaultBinDir }
 
 func runtimeVersionProbeArgs(binary string, args []string) []string {
-	const sandboxBinary = "/run/veil-runtime-probe"
+	return runtimeVersionProbeArgsAt(binary, "/var/tmp/veil-runtime-probe", args)
+}
+
+func runtimeVersionProbeArgsAt(binary, sandboxBinary string, args []string) []string {
 	probe := []string{
 		"--quiet", "--pipe", "--wait", "--collect",
 		"--property=Type=exec", "--property=NoNewPrivileges=yes",
@@ -225,7 +228,7 @@ func runtimeVersionProbeArgs(binary string, args []string) []string {
 }
 
 func bubblewrapVersionProbeArgs(binary string, args []string) []string {
-	const sandboxBinary = "/run/veil-runtime-probe"
+	const sandboxBinary = "/var/tmp/veil-runtime-probe"
 	probe := []string{
 		"--die-with-parent", "--new-session", "--unshare-all",
 		"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
@@ -237,7 +240,7 @@ func bubblewrapVersionProbeArgs(binary string, args []string) []string {
 
 func runSandboxedVersionProbe(ctx context.Context, binary string, args []string) (string, error) {
 	command := "systemd-run"
-	commandArgs := runtimeVersionProbeArgs(binary, args)
+	commandArgs := []string(nil)
 	if _, err := os.Stat("/run/systemd/private"); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("inspect systemd manager: %w", err)
@@ -248,6 +251,20 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 			return "", errors.New("no supported runtime version-probe sandbox is available")
 		}
 		commandArgs = bubblewrapVersionProbeArgs(binary, args)
+	} else {
+		placeholder, createErr := os.CreateTemp("/var/tmp", "veil-runtime-probe-*")
+		if createErr != nil {
+			return "", fmt.Errorf("create systemd probe placeholder: %w", createErr)
+		}
+		placeholderPath := placeholder.Name()
+		defer os.Remove(placeholderPath)
+		if closeErr := placeholder.Close(); closeErr != nil {
+			return "", fmt.Errorf("close systemd probe placeholder: %w", closeErr)
+		}
+		if chmodErr := os.Chmod(placeholderPath, 0500); chmodErr != nil {
+			return "", fmt.Errorf("secure systemd probe placeholder: %w", chmodErr)
+		}
+		commandArgs = runtimeVersionProbeArgsAt(binary, placeholderPath, args)
 	}
 	output, err := exec.CommandContext(ctx, command, commandArgs...).CombinedOutput()
 	if err != nil {

@@ -1,9 +1,12 @@
 package runtimeinstall
 
 import (
+	"context"
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
@@ -27,10 +30,10 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 		}
 	}
 	separator := slices.Index(args, "--")
-	if separator < 0 || separator+1 >= len(args) || args[separator+1] != "/run/veil-runtime-probe" {
+	if separator < 0 || separator+1 >= len(args) || args[separator+1] != "/var/tmp/veil-runtime-probe" {
 		t.Fatalf("runtime command is not isolated after --: %q", args)
 	}
-	bind := "--property=BindReadOnlyPaths=" + binary + ":/run/veil-runtime-probe"
+	bind := "--property=BindReadOnlyPaths=" + binary + ":/var/tmp/veil-runtime-probe"
 	if !slices.Contains(args[:separator], bind) {
 		t.Fatalf("staged runtime is not bound into the systemd sandbox: %q", args)
 	}
@@ -48,9 +51,9 @@ func TestRuntimeVersionProbeBubblewrapFallbackIsReadOnlyAndNetworkIsolated(t *te
 		"--unshare-all",
 		"--ro-bind / /",
 		"--tmpfs /tmp",
-		"--ro-bind /tmp/staged-runtime /run/veil-runtime-probe",
+		"--ro-bind /tmp/staged-runtime /var/tmp/veil-runtime-probe",
 		"--clearenv",
-		"-- /run/veil-runtime-probe version",
+		"-- /var/tmp/veil-runtime-probe version",
 	} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("bubblewrap probe missing %q: %s", required, joined)
@@ -58,5 +61,23 @@ func TestRuntimeVersionProbeBubblewrapFallbackIsReadOnlyAndNetworkIsolated(t *te
 	}
 	if strings.Contains(joined, "--share-net") || strings.Contains(joined, "--bind / /") {
 		t.Fatalf("bubblewrap probe exposes host capabilities: %s", joined)
+	}
+}
+
+func TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("systemd sandbox integration requires root")
+	}
+	if _, err := os.Stat("/run/systemd/private"); err != nil {
+		t.Skip("systemd manager is unavailable")
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := runSandboxedVersionProbe(ctx, binary, []string{"-test.run=^$"}); err != nil {
+		t.Fatal(err)
 	}
 }
