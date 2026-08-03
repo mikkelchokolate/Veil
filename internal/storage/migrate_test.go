@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +38,17 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 	if before != after {
 		t.Fatalf("idempotent migrate changed count: before=%d after=%d", before, after)
+	}
+}
+
+func TestMigrationChecksumDetectsEditedHistory(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE schema_migrations SET checksum='deadbeef' WHERE version=1`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(db); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("edited historical migration was not rejected: %v", err)
 	}
 }
 

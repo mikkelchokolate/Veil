@@ -33,6 +33,9 @@ func TestApplyFencingAcrossOSProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := NewSnapshotStore(db).Save(revision, []byte(`{"effectiveAt":1}`)); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +119,7 @@ func TestApplyFenceSubprocessHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(_ context.Context, _ uint64) (Result, error) {
+	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
 		if owner == "process-a" {
 			if err := os.WriteFile(os.Getenv("VEIL_APPLY_FENCE_STARTED"), []byte("started"), 0o600); err != nil {
 				return Result{}, err
@@ -132,7 +135,10 @@ func TestApplyFenceSubprocessHelper(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		return Result{Success: true, Operations: []OperationResult{{Type: "runtime", Target: owner, Success: true}}}, nil
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true, Operations: []OperationResult{{Type: "runtime", Target: owner, Success: true}}}, nil
 	}))
 	if owner == "process-a" {
 		runner.leaseTTL = time.Second

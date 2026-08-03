@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -503,6 +505,210 @@ ALTER TABLE subscription_tokens ADD COLUMN label TEXT NOT NULL DEFAULT '';
 UPDATE subscription_tokens SET label=created_by,created_by='';
 `,
 	},
+	{
+		version: 21,
+		name:    "staged_apply_jobs",
+		sql: `
+DROP TRIGGER validate_apply_job_insert;
+DROP TRIGGER validate_apply_job_update;
+CREATE TRIGGER validate_apply_job_insert BEFORE INSERT ON apply_jobs
+WHEN NEW.status NOT IN ('pending','planning','validating','applying','health_check','staged','recovery_pending','succeeded','failed','rolling_back','rolled_back','rollback_failed')
+  OR NEW.desired_revision < 0 OR NEW.base_revision < 0
+BEGIN SELECT RAISE(ABORT, 'invalid apply job domain values'); END;
+CREATE TRIGGER validate_apply_job_update BEFORE UPDATE ON apply_jobs
+WHEN NEW.status NOT IN ('pending','planning','validating','applying','health_check','staged','recovery_pending','succeeded','failed','rolling_back','rolled_back','rollback_failed')
+  OR NEW.desired_revision < 0 OR NEW.base_revision < 0
+BEGIN SELECT RAISE(ABORT, 'invalid apply job domain values'); END;
+`,
+	},
+	{
+		version: 22,
+		name:    "runtime_publication_state_machine",
+		sql: `
+ALTER TABLE runtime_publications ADD COLUMN base_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE runtime_publications ADD COLUMN service_plan_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE runtime_publications ADD COLUMN previous_service_states_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE runtime_publications ADD COLUMN expected_service_generation TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN expected_config_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN firewall_transaction_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN previous_firewall_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN intended_firewall_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE runtime_publications ADD COLUMN health_evidence_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE runtime_publications ADD COLUMN disposition TEXT NOT NULL DEFAULT '';
+UPDATE runtime_publications
+SET base_revision=COALESCE((SELECT base_revision FROM apply_jobs WHERE apply_jobs.id=runtime_publications.job_id),0);
+CREATE TABLE runtime_publication_phases (
+  job_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  generation INTEGER NOT NULL CHECK(generation > 0),
+  evidence_json TEXT NOT NULL CHECK(json_valid(evidence_json)),
+  committed_at INTEGER NOT NULL,
+  PRIMARY KEY(job_id,phase),
+  FOREIGN KEY(job_id) REFERENCES runtime_publications(job_id) ON DELETE CASCADE
+);
+INSERT INTO runtime_publication_phases(job_id,phase,generation,evidence_json,committed_at)
+SELECT job_id,phase,generation,'{}',updated_at FROM runtime_publications;
+CREATE INDEX idx_runtime_publication_phase_active
+ON runtime_publications(phase,revision,updated_at,job_id);
+CREATE TABLE runtime_publication_history (
+  job_id TEXT PRIMARY KEY,
+  revision INTEGER NOT NULL,
+  base_revision INTEGER NOT NULL,
+  final_phase TEXT NOT NULL,
+  receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)),
+  phases_json TEXT NOT NULL CHECK(json_valid(phases_json)),
+  finalized_at INTEGER NOT NULL,
+  FOREIGN KEY(job_id) REFERENCES apply_jobs(id) ON DELETE CASCADE
+);
+`,
+	},
+	{
+		version: 23,
+		name:    "runtime_verification_state",
+		sql: `
+CREATE TABLE runtime_verification (
+  id INTEGER PRIMARY KEY CHECK (id=1),
+  historical_applied_revision INTEGER NOT NULL DEFAULT 0,
+  verified_revision INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('verified','unknown','recovering')),
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+INSERT INTO runtime_verification(id,historical_applied_revision,verified_revision,status)
+SELECT 1,COALESCE(applied_revision,0),COALESCE(applied_revision,0),'verified' FROM revisions WHERE id=1;
+INSERT OR IGNORE INTO runtime_verification(id,historical_applied_revision,verified_revision,status)
+VALUES(1,0,0,'verified');
+`,
+	},
+	{
+		version: 24,
+		name:    "idempotency_lease_and_domain_operations",
+		sql: `
+ALTER TABLE idempotency_records ADD COLUMN heartbeat_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE idempotency_records ADD COLUMN domain_operation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotency_records ADD COLUMN outcome_class TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotency_records ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'public';
+ALTER TABLE idempotency_records ADD COLUMN resource_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotency_records ADD COLUMN secret_generation INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE domain_operations (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  operation_generation INTEGER NOT NULL CHECK(operation_generation>0),
+  state TEXT NOT NULL CHECK(state IN ('reserved','mutation_committed','committed','abandoned')),
+  result_record_id TEXT,
+  domain_result_json TEXT NOT NULL DEFAULT '{}',
+  mutation_bound_at INTEGER,
+  created_at INTEGER NOT NULL,
+  committed_at INTEGER,
+  UNIQUE(scope,operation_generation),
+  FOREIGN KEY(result_record_id) REFERENCES idempotency_results(id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_domain_operations_scope_state ON domain_operations(scope,state,operation_generation DESC);
+CREATE TRIGGER validate_idempotency_result_reference_insert BEFORE INSERT ON idempotency_records
+WHEN NEW.result_record_id IS NOT NULL AND NEW.result_record_id<>'' AND NOT EXISTS (SELECT 1 FROM idempotency_results WHERE id=NEW.result_record_id)
+BEGIN SELECT RAISE(ABORT,'invalid idempotency result reference'); END;
+CREATE TRIGGER validate_idempotency_result_reference_update BEFORE UPDATE OF result_record_id ON idempotency_records
+WHEN NEW.result_record_id IS NOT NULL AND NEW.result_record_id<>'' AND NOT EXISTS (SELECT 1 FROM idempotency_results WHERE id=NEW.result_record_id)
+BEGIN SELECT RAISE(ABORT,'invalid idempotency result reference'); END;
+`,
+	},
+	{
+		version: 25,
+		name:    "enforcement_target_generations",
+		sql: `
+DROP INDEX IF EXISTS idx_quota_enforcement_retry;
+ALTER TABLE quota_enforcement RENAME TO quota_enforcement_legacy;
+CREATE TABLE quota_enforcement (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  target_generation INTEGER NOT NULL CHECK(target_generation>0),
+  target_payload_hash TEXT NOT NULL CHECK(length(target_payload_hash)=64),
+  target_depleted INTEGER NOT NULL CHECK(target_depleted IN (0,1)),
+  target_period_epoch INTEGER NOT NULL DEFAULT 0,
+  target_expires_at INTEGER NOT NULL DEFAULT 0,
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  superseded_revision INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','failed','enforced','superseded')),
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(client_id,target_generation)
+);
+INSERT INTO quota_enforcement(client_id,target_generation,target_payload_hash,target_depleted,desired_revision,applied_revision,state,next_retry_at,last_error,attempts,updated_at)
+SELECT q.client_id,1,printf('%064x',q.rowid),COALESCE(c.depleted,0),q.desired_revision,q.applied_revision,q.state,q.next_retry_at,q.last_error,q.attempts,q.updated_at
+FROM quota_enforcement_legacy q JOIN clients c ON c.id=q.client_id;
+DROP TABLE quota_enforcement_legacy;
+CREATE UNIQUE INDEX idx_quota_enforcement_active_target ON quota_enforcement(client_id) WHERE state<>'superseded';
+CREATE INDEX idx_quota_enforcement_retry ON quota_enforcement(state,next_retry_at,client_id,target_generation);
+DROP INDEX IF EXISTS idx_expiration_enforcement_retry;
+ALTER TABLE expiration_enforcement RENAME TO expiration_enforcement_legacy;
+CREATE TABLE expiration_enforcement (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  target_generation INTEGER NOT NULL CHECK(target_generation>0),
+  target_payload_hash TEXT NOT NULL CHECK(length(target_payload_hash)=64),
+  target_depleted INTEGER NOT NULL DEFAULT 1 CHECK(target_depleted IN (0,1)),
+  target_period_epoch INTEGER NOT NULL DEFAULT 0,
+  target_expires_at INTEGER NOT NULL,
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  superseded_revision INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','enforced','failed','superseded')),
+  effective_at INTEGER NOT NULL,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(client_id,target_generation)
+);
+INSERT INTO expiration_enforcement(client_id,target_generation,target_payload_hash,target_expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at)
+SELECT client_id,1,printf('%064x',rowid),expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at FROM expiration_enforcement_legacy;
+DROP TABLE expiration_enforcement_legacy;
+CREATE UNIQUE INDEX idx_expiration_enforcement_active_target ON expiration_enforcement(client_id) WHERE state<>'superseded';
+CREATE INDEX idx_expiration_enforcement_retry ON expiration_enforcement(state,next_retry_at,target_expires_at,client_id,target_generation);
+CREATE INDEX idx_clients_next_expiry ON clients(enabled,expires_at,created_at,id);
+`,
+	},
+	{
+		version: 26,
+		name:    "runtime_and_enforcement_query_guards",
+		sql: `
+CREATE INDEX idx_apply_jobs_status_created ON apply_jobs(status,created_at DESC,id);
+CREATE INDEX idx_clients_next_expiry_active ON clients(enabled,expires_at,created_at,id) WHERE expires_at IS NOT NULL;
+CREATE TRIGGER runtime_publications_validate_insert
+BEFORE INSERT ON runtime_publications
+WHEN NEW.phase NOT IN ('intent','publishing','artifacts_prepared','artifacts_committed','services_planned','services_converged','health_verified','firewall_committed','side_effect_planned','side_effect_committed','side_effect_verified','published','finalization_pending','rolled_back','recovery_transferred')
+ OR json_valid(NEW.artifacts_json)=0 OR json_valid(NEW.operations_json)=0 OR json_valid(NEW.confirmations_json)=0
+BEGIN SELECT RAISE(ABORT,'invalid runtime publication'); END;
+CREATE TRIGGER runtime_publications_validate_update
+BEFORE UPDATE ON runtime_publications
+WHEN NEW.phase NOT IN ('intent','publishing','artifacts_prepared','artifacts_committed','services_planned','services_converged','health_verified','firewall_committed','side_effect_planned','side_effect_committed','side_effect_verified','published','finalization_pending','rolled_back','recovery_transferred')
+ OR json_valid(NEW.artifacts_json)=0 OR json_valid(NEW.operations_json)=0 OR json_valid(NEW.confirmations_json)=0
+BEGIN SELECT RAISE(ABORT,'invalid runtime publication'); END;
+CREATE TRIGGER quota_enforcement_target_insert
+BEFORE INSERT ON quota_enforcement
+WHEN NEW.target_generation<=0 OR length(NEW.target_payload_hash)<>64 OR NEW.state NOT IN ('pending','applying','enforced','failed','superseded')
+BEGIN SELECT RAISE(ABORT,'invalid quota enforcement target'); END;
+CREATE TRIGGER quota_enforcement_target_update
+BEFORE UPDATE ON quota_enforcement
+WHEN NEW.target_generation<=0 OR length(NEW.target_payload_hash)<>64 OR NEW.state NOT IN ('pending','applying','enforced','failed','superseded')
+BEGIN SELECT RAISE(ABORT,'invalid quota enforcement target'); END;
+CREATE TRIGGER expiration_enforcement_target_insert
+BEFORE INSERT ON expiration_enforcement
+WHEN NEW.target_generation<=0 OR length(NEW.target_payload_hash)<>64 OR NEW.state NOT IN ('pending','applying','enforced','failed','superseded')
+BEGIN SELECT RAISE(ABORT,'invalid expiration enforcement target'); END;
+CREATE TRIGGER expiration_enforcement_target_update
+BEFORE UPDATE ON expiration_enforcement
+WHEN NEW.target_generation<=0 OR length(NEW.target_payload_hash)<>64 OR NEW.state NOT IN ('pending','applying','enforced','failed','superseded')
+BEGIN SELECT RAISE(ABORT,'invalid expiration enforcement target'); END;
+`,
+	},
+}
+
+func migrationChecksum(m migration) string {
+	digest := sha256.Sum256([]byte(m.name + "\x00" + m.sql))
+	return hex.EncodeToString(digest[:])
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
@@ -512,26 +718,50 @@ func Migrate(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 	  version INTEGER PRIMARY KEY,
 	  name TEXT NOT NULL,
+	  checksum TEXT NOT NULL DEFAULT '',
 	  applied_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 	)`); err != nil {
 		return fmt.Errorf("storage: create schema_migrations: %w", err)
 	}
+	var hasChecksum int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('schema_migrations') WHERE name='checksum'`).Scan(&hasChecksum); err != nil {
+		return fmt.Errorf("storage: inspect schema_migrations: %w", err)
+	}
+	if hasChecksum == 0 {
+		if _, err := db.Exec(`ALTER TABLE schema_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("storage: add migration checksum: %w", err)
+		}
+	}
 
-	rows, err := db.Query(`SELECT version, name FROM schema_migrations ORDER BY version`)
+	rows, err := db.Query(`SELECT version, name, checksum FROM schema_migrations ORDER BY version`)
 	if err != nil {
 		return fmt.Errorf("storage: read migration history: %w", err)
 	}
 	current := 0
+	missingChecksums := make([]struct {
+		version  int
+		checksum string
+	}, 0)
 	for rows.Next() {
 		var version int
-		var name string
-		if err := rows.Scan(&version, &name); err != nil {
+		var name, checksum string
+		if err := rows.Scan(&version, &name, &checksum); err != nil {
 			rows.Close()
 			return err
 		}
 		if version != current+1 || version > len(migrations) || migrations[version-1].name != name {
 			rows.Close()
 			return fmt.Errorf("storage: invalid ordered migration history at version %d", version)
+		}
+		expectedChecksum := migrationChecksum(migrations[version-1])
+		if checksum == "" {
+			missingChecksums = append(missingChecksums, struct {
+				version  int
+				checksum string
+			}{version: version, checksum: expectedChecksum})
+		} else if checksum != expectedChecksum {
+			rows.Close()
+			return fmt.Errorf("storage: historical migration checksum mismatch at version %d", version)
 		}
 		current = version
 	}
@@ -541,6 +771,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if err := rows.Close(); err != nil {
 		return err
+	}
+	for _, missing := range missingChecksums {
+		if _, err := db.Exec(`UPDATE schema_migrations SET checksum=? WHERE version=? AND checksum=''`, missing.checksum, missing.version); err != nil {
+			return fmt.Errorf("storage: backfill migration checksum %d: %w", missing.version, err)
+		}
 	}
 
 	for _, m := range migrations {
@@ -555,13 +790,36 @@ func Migrate(db *sql.DB) error {
 			tx.Rollback()
 			return fmt.Errorf("storage: migration %d (%s): %w", m.version, m.name, err)
 		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, name) VALUES(?, ?)`, m.version, m.name); err != nil {
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, name, checksum) VALUES(?, ?, ?)`, m.version, m.name, migrationChecksum(m)); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("storage: record migration %d: %w", m.version, err)
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("storage: commit migration %d: %w", m.version, err)
 		}
+	}
+	quickRows, err := db.Query(`PRAGMA quick_check`)
+	if err != nil {
+		return fmt.Errorf("storage: quick_check: %w", err)
+	}
+	quickOK := false
+	for quickRows.Next() {
+		var result string
+		if err := quickRows.Scan(&result); err != nil {
+			quickRows.Close()
+			return fmt.Errorf("storage: quick_check result: %w", err)
+		}
+		if result != "ok" {
+			quickRows.Close()
+			return fmt.Errorf("storage: quick_check failed")
+		}
+		quickOK = true
+	}
+	if err := quickRows.Close(); err != nil {
+		return fmt.Errorf("storage: close quick_check: %w", err)
+	}
+	if !quickOK {
+		return fmt.Errorf("storage: quick_check returned no result")
 	}
 	var fkTable string
 	if err := db.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&fkTable); err != nil && err != sql.ErrNoRows {
@@ -580,10 +838,17 @@ func validateDomainIntegrity(db *sql.DB) error {
 		name  string
 		query string
 	}{
-		{"apply jobs", `SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status NOT IN ('pending','planning','validating','applying','health_check','succeeded','failed','rolling_back','rolled_back','rollback_failed') OR desired_revision < 0 OR base_revision < 0)`},
+		{"apply jobs", `SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status NOT IN ('pending','planning','validating','applying','health_check','staged','recovery_pending','succeeded','failed','rolling_back','rolled_back','rollback_failed') OR desired_revision < 0 OR base_revision < 0)`},
+		{"revision ordering", `SELECT EXISTS(SELECT 1 FROM revisions WHERE desired_revision < applied_revision OR desired_revision < 0 OR applied_revision < 0)`},
+		{"applied revision evidence", `SELECT EXISTS(SELECT 1 FROM revisions r WHERE r.applied_revision > 0 AND (NOT EXISTS (SELECT 1 FROM revision_snapshots s WHERE s.revision=r.applied_revision) OR NOT EXISTS (SELECT 1 FROM runtime_verification v WHERE v.id=1 AND v.status='verified' AND v.verified_revision=r.applied_revision)))`},
+		{"runtime verification", `SELECT EXISTS(SELECT 1 FROM runtime_verification WHERE id<>1 OR historical_applied_revision<0 OR verified_revision<0 OR status NOT IN ('verified','unknown','recovering') OR (status='unknown' AND verified_revision<>0))`},
+		{"snapshot JSON", `SELECT EXISTS(SELECT 1 FROM revision_snapshots WHERE revision > 0 AND (json_valid(payload)=0 OR trim(payload)=''))`},
+		{"publication receipts", `SELECT EXISTS(SELECT 1 FROM runtime_publications WHERE phase NOT IN ('intent','artifacts_prepared','artifacts_committed','services_planned','services_converged','health_verified','firewall_committed','side_effect_planned','side_effect_committed','side_effect_verified','published','finalization_pending','rolled_back','recovery_transferred') OR json_valid(artifacts_json)=0 OR json_valid(operations_json)=0 OR json_valid(confirmations_json)=0 OR json_valid(service_plan_json)=0 OR json_valid(previous_service_states_json)=0 OR json_valid(health_evidence_json)=0 OR (revision > 0 AND length(snapshot_sha256)<>64))`},
+		{"apply lease", `SELECT EXISTS(SELECT 1 FROM apply_lease WHERE id<>1 OR generation<0 OR lease_expires_at<0 OR ((owner_process='' OR current_operation='') AND NOT (owner_process='' AND current_operation='')))`},
 		{"clients", `SELECT EXISTS(SELECT 1 FROM clients WHERE enabled NOT IN (0,1) OR depleted NOT IN (0,1) OR quota_bytes < 0 OR device_limit < 0 OR quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR version < 1)`},
+		{"credentials", `SELECT EXISTS(SELECT 1 FROM client_credentials WHERE length(encrypted_value)<=12 OR key_version<1 OR credential_version<1) OR EXISTS(SELECT 1 FROM client_credentials WHERE revoked_at IS NULL GROUP BY binding_id,kind HAVING COUNT(*)>1)`},
 		{"bindings", `SELECT EXISTS(SELECT 1 FROM client_bindings WHERE enabled NOT IN (0,1) OR version < 1)`},
-		{"tokens", `SELECT EXISTS(SELECT 1 FROM subscription_tokens WHERE enabled NOT IN (0,1))`},
+		{"tokens", `SELECT EXISTS(SELECT 1 FROM subscription_tokens WHERE enabled NOT IN (0,1) OR length(token_hash)<>32)`},
 		{"traffic counters", `SELECT EXISTS(SELECT 1 FROM traffic_counters t WHERE upload_bytes < 0 OR download_bytes < 0 OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=t.client_id) OR (t.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings b WHERE b.id=t.binding_id AND b.client_id=t.client_id)))`},
 		{"traffic samples", `SELECT EXISTS(SELECT 1 FROM traffic_samples t WHERE bucket_start < 0 OR upload_delta < 0 OR download_delta < 0 OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=t.client_id) OR (t.binding_id <> '' AND NOT EXISTS (SELECT 1 FROM client_bindings b WHERE b.id=t.binding_id AND b.client_id=t.client_id)))`},
 	}

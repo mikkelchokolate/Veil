@@ -36,13 +36,19 @@ func TestExpiredLeaseOwnerCannotFinalizeAfterSuccessor(t *testing.T) {
 	var resumeOnce sync.Once
 	defer resumeOnce.Do(func() { close(resumeA) })
 
-	runnerA := NewRunner(revisionsA, jobsA, ContextExecutorFunc(func(context.Context, uint64) (Result, error) {
+	runnerA := NewRunner(revisionsA, jobsA, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
 		close(startedA)
 		<-resumeA
-		return Result{Success: true, Operations: []OperationResult{{Type: "runtime", Target: "process-a", Success: true}}}, nil
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true, Operations: []OperationResult{{Type: "runtime", Target: "process-a", Success: true}}}, nil
 	}))
-	runnerB := NewRunner(revisionsB, jobsB, ContextExecutorFunc(func(context.Context, uint64) (Result, error) {
-		return Result{Success: true, Operations: []OperationResult{{Type: "runtime", Target: "process-b", Success: true}}}, nil
+	runnerB := NewRunner(revisionsB, jobsB, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true, Operations: []OperationResult{{Type: "runtime", Target: "process-b", Success: true}}}, nil
 	}))
 
 	base := time.Unix(2_000_000_000, 0).UTC()

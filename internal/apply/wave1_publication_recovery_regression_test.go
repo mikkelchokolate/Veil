@@ -40,7 +40,10 @@ FROM runtime_publications WHERE revision=?`, gotRevision).
 			return Result{}, errors.New("incomplete publication intent before executor mutation")
 		}
 		observed = true
-		return Result{Success: true}, nil
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	}))
 	defer runner.Close()
 	if _, err := runner.RunContext(context.Background(), revision, "manual", "actor"); err != nil {
@@ -71,8 +74,11 @@ BEGIN
 END;`); err != nil {
 		t.Fatal(err)
 	}
-	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(context.Context, uint64) (Result, error) {
-		return Result{Success: true, Operations: []OperationResult{{Type: "promote", Target: "runtime", Success: true}}}, nil
+	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true, Operations: []OperationResult{{Type: "promote", Target: "runtime", Success: true}}}, nil
 	}))
 	defer runner.Close()
 	job, runErr := runner.RunContext(context.Background(), revision, "mutation", "actor")
@@ -114,7 +120,9 @@ func TestRunnerRecoversStaleJobBeforeEveryAcquisition(t *testing.T) {
 	if err := NewSnapshotStore(db).Save(revision, []byte(`{"effectiveAt":1}`)); err != nil {
 		t.Fatal(err)
 	}
-	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) { return Result{Success: true}, nil })
+	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	})
 	defer runner.Close()
 	started := time.Now().Add(-time.Minute).Unix()
 	stale := Job{

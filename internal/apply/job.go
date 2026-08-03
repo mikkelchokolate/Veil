@@ -11,16 +11,18 @@ import "time"
 // Job status values. A job moves forward through these states; terminal states
 // are StatusSucceeded, StatusFailed, StatusRolledBack, and StatusRollbackFailed.
 const (
-	StatusPending        = "pending"
-	StatusPlanning       = "planning"
-	StatusValidating     = "validating"
-	StatusApplying       = "applying"
-	StatusHealthCheck    = "health_check"
-	StatusSucceeded      = "succeeded"
-	StatusFailed         = "failed"
-	StatusRollingBack    = "rolling_back"
-	StatusRolledBack     = "rolled_back"
-	StatusRollbackFailed = "rollback_failed"
+	StatusPending         = "pending"
+	StatusPlanning        = "planning"
+	StatusValidating      = "validating"
+	StatusApplying        = "applying"
+	StatusHealthCheck     = "health_check"
+	StatusStaged          = "staged"
+	StatusRecoveryPending = "recovery_pending"
+	StatusSucceeded       = "succeeded"
+	StatusFailed          = "failed"
+	StatusRollingBack     = "rolling_back"
+	StatusRolledBack      = "rolled_back"
+	StatusRollbackFailed  = "rollback_failed"
 )
 
 // System states derived from desired/applied revisions and the latest job.
@@ -65,7 +67,7 @@ type Job struct {
 // Terminal reports whether the job has finished (successfully or not).
 func (j Job) Terminal() bool {
 	switch j.Status {
-	case StatusSucceeded, StatusFailed, StatusRolledBack, StatusRollbackFailed:
+	case StatusStaged, StatusSucceeded, StatusFailed, StatusRolledBack, StatusRollbackFailed:
 		return true
 	}
 	return false

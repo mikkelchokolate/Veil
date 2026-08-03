@@ -96,7 +96,7 @@ func TestWorkflowStagesOnlyWithConfirm(t *testing.T) {
 	if err != nil || status != http.StatusOK {
 		t.Fatalf("stage-only should succeed: status=%d err=%v", status, err)
 	}
-	if !resp.Applied || resp.LiveApplied || resp.ServicesApplied {
+	if resp.Applied || resp.LiveApplied || resp.ServicesApplied {
 		t.Fatalf("stage-only flags wrong: %+v", resp)
 	}
 	if len(state.history) != 1 || state.history[0] != "staged" {
@@ -192,8 +192,47 @@ func TestWorkflowRollsBackOnHealthFailure(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("health failure must 400, got %d", status)
 	}
-	if !resp.RolledBack {
-		t.Fatalf("expected rollback on health failure, got %+v", resp)
+	if resp.RolledBack || !resp.Ambiguous {
+		t.Fatalf("unhealthy rollback must remain recovery-pending, got %+v", resp)
+	}
+}
+
+func TestWorkflowLeavesRecoveryPendingWhenRestoredServiceActionFails(t *testing.T) {
+	state := &fakeState{
+		plan:            model.ApplyPlanResponse{Valid: true},
+		liveFiles:       []string{"/live/x"},
+		serviceActions:  []model.ServiceActionResult{{Name: "veil-mieru.service", Success: false, Error: "reload failed"}},
+		rollbackFiles:   []string{"/live/x"},
+		rollbackActions: []model.ServiceActionResult{{Name: "veil-mieru.service", Success: false, Error: "restart previous generation failed"}},
+	}
+	resp, status, _ := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status=%d response=%+v", status, resp)
+	}
+	if resp.RolledBack || resp.RollbackComplete || !resp.Ambiguous {
+		t.Fatalf("failed service restoration was reported complete: %+v", resp)
+	}
+}
+
+func TestWorkflowLeavesRecoveryPendingWhenRestoredServiceUnhealthy(t *testing.T) {
+	checks := 0
+	health := func([]model.ServiceActionResult) []model.ServiceHealthResult {
+		checks++
+		return []model.ServiceHealthResult{{Name: "veil-mieru.service", Healthy: false, Error: "restored generation unhealthy"}}
+	}
+	state := &fakeState{
+		plan:            model.ApplyPlanResponse{Valid: true},
+		liveFiles:       []string{"/live/x"},
+		serviceActions:  []model.ServiceActionResult{{Name: "veil-mieru.service", Success: true}},
+		rollbackFiles:   []string{"/live/x"},
+		rollbackActions: []model.ServiceActionResult{{Name: "veil-mieru.service", Success: true}},
+	}
+	resp, status, _ := NewWorkflow(state, health).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if status != http.StatusBadRequest || checks != 2 {
+		t.Fatalf("status=%d checks=%d response=%+v", status, checks, resp)
+	}
+	if resp.RolledBack || resp.PostRollbackHealthPass || resp.RollbackComplete || !resp.Ambiguous {
+		t.Fatalf("unhealthy restored service was reported complete: %+v", resp)
 	}
 }
 

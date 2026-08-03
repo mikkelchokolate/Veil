@@ -142,6 +142,34 @@ func (s *JobStore) List(limit int) ([]Job, error) {
 	return out, rows.Err()
 }
 
+func (s *JobStore) LatestWithStatus(status string) (Job, bool, error) {
+	job, err := scanJob(s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
+  created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
+  FROM apply_jobs WHERE status=? ORDER BY created_at DESC,rowid DESC LIMIT 1`, status))
+	if err == sql.ErrNoRows {
+		return Job{}, false, nil
+	}
+	return job, err == nil, err
+}
+
+func (s *JobStore) LatestFailed() (Job, bool, error) {
+	job, err := scanJob(s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
+  created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
+  FROM apply_jobs WHERE status IN ('failed','rolled_back','rollback_failed') ORDER BY created_at DESC,rowid DESC LIMIT 1`))
+	if err == sql.ErrNoRows {
+		return Job{}, false, nil
+	}
+	return job, err == nil, err
+}
+
+func (s *JobStore) RecoveryPendingDue(cutoff int64) (bool, error) {
+	var exists int
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status='recovery_pending' AND updated_at<=?)`, cutoff).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists == 1, nil
+}
+
 // MarkStatus transitions a job to a non-terminal status, setting started_at on
 // first transition out of pending.
 func (s *JobStore) MarkStatus(id, status, code, message string) error {

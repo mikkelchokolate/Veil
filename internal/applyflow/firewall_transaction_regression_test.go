@@ -13,6 +13,7 @@ type firewallTransactionalWorkflowState struct {
 	events      []string
 	reloadOK    bool
 	firewallTxn string
+	rollbackErr error
 }
 
 func (s *firewallTransactionalWorkflowState) BuildApplyPlanLocked() model.ApplyPlanResponse {
@@ -53,7 +54,20 @@ func (s *firewallTransactionalWorkflowState) RollbackFirewallLocked(transactionI
 		return errors.New("wrong firewall transaction")
 	}
 	s.events = append(s.events, "rollback-firewall")
-	return nil
+	return s.rollbackErr
+}
+
+func TestWorkflowDoesNotIgnoreFirewallRollbackFailure(t *testing.T) {
+	state := &firewallTransactionalWorkflowState{reloadOK: false, rollbackErr: errors.New("firewall restore failed")}
+	response, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{
+		Confirm: true, ApplyLive: true, ApplyServices: true,
+	})
+	if err == nil || status != http.StatusInternalServerError {
+		t.Fatalf("firewall rollback failure was hidden: status=%d response=%+v err=%v", status, response, err)
+	}
+	if response.RolledBack {
+		t.Fatalf("partial rollback was reported complete: %+v", response)
+	}
 }
 
 func TestWorkflowRollsBackPreparedFirewallOnDownstreamFailure(t *testing.T) {
@@ -79,7 +93,7 @@ func TestWorkflowRollsBackPreparedFirewallOnDownstreamFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if status != http.StatusBadRequest || !response.RolledBack {
+			if status != http.StatusBadRequest || response.RolledBack || !response.Ambiguous {
 				t.Fatalf("response=%+v status=%d", response, status)
 			}
 			if !reflect.DeepEqual(state.events, test.wantEvents) {

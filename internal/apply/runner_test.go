@@ -18,7 +18,7 @@ func (f *fakeExecutor) apply(rev uint64) (Result, error) {
 	if f.err != nil {
 		return Result{ErrorCode: "HEALTH_CHECK_FAILED", ErrorMessage: f.err.Error()}, f.err
 	}
-	return Result{Success: true}, nil
+	return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 }
 
 func TestRunnerRunContextCancelsContextAwareExecutor(t *testing.T) {
@@ -117,7 +117,7 @@ func TestRunnerSerializesConcurrentJobs(t *testing.T) {
 	blocking := func(rev uint64) (Result, error) {
 		close(started)
 		<-release // hold the apply open so a concurrent Run sees "busy"
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	}
 	r := NewRunner(rs, js, blocking)
 

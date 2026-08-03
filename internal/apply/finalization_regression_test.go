@@ -27,9 +27,12 @@ END;`); err != nil {
 		t.Fatal(err)
 	}
 
-	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(context.Context, uint64) (Result, error) {
+	runner := NewRunner(revisions, jobs, ContextExecutorFunc(func(ctx context.Context, _ uint64) (Result, error) {
+		if err := markTestRuntimeConverged(ctx); err != nil {
+			return Result{}, err
+		}
 		return Result{
-			Success: true,
+			Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true,
 			Operations: []OperationResult{{
 				Type: "promote", Target: "runtime", Success: true,
 			}},

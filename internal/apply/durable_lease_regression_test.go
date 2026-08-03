@@ -37,12 +37,12 @@ func TestIndependentRunnersShareDurableApplyLease(t *testing.T) {
 	first := NewRunner(rs1, js1, func(uint64) (Result, error) {
 		close(started)
 		<-release
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
 	var secondExecutions atomic.Int32
 	second := NewRunner(rs2, js2, func(uint64) (Result, error) {
 		secondExecutions.Add(1)
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
 	firstDone := make(chan error, 1)
 	go func() {
@@ -80,7 +80,7 @@ func TestNewRunnerMarksStaleApplyingJobsInterrupted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = NewRunner(NewRevisionStore(db), jobs, func(uint64) (Result, error) {
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
 	got, err := jobs.Get(job.ID)
 	if err != nil {

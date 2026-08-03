@@ -26,7 +26,7 @@ func TestRunnerRejectsHistoricalRetryWithoutTouchingRuntimeOrRevisions(t *testin
 	executed := make([]uint64, 0, 1)
 	runner := NewRunner(revisions, jobs, func(revision uint64) (Result, error) {
 		executed = append(executed, revision)
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
 	before, err := jobs.List(100)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestRunnerRejectsNonCurrentDesiredRetryEvenWhenAboveApplied(t *testing.T) {
 	executed := false
 	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
 		executed = true
-		return Result{Success: true}, nil
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
 	if job, err := runner.Run(8, "retry", "admin"); err == nil {
 		t.Fatalf("non-current desired retry unexpectedly succeeded: %+v", job)

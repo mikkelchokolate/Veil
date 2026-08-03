@@ -2,6 +2,7 @@ package apply
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -31,13 +32,45 @@ type Fence struct {
 type fenceContextKey struct{}
 type publicationContextKey struct{}
 
+const (
+	PublicationPhaseIntent              = "intent"
+	PublicationPhaseArtifactsPrepared   = "artifacts_prepared"
+	PublicationPhaseArtifactsCommitted  = "artifacts_committed"
+	PublicationPhaseServicesPlanned     = "services_planned"
+	PublicationPhaseServicesConverged   = "services_converged"
+	PublicationPhaseHealthVerified      = "health_verified"
+	PublicationPhaseFirewallCommitted   = "firewall_committed"
+	PublicationPhaseSideEffectPlanned   = "side_effect_planned"
+	PublicationPhaseSideEffectCommitted = "side_effect_committed"
+	PublicationPhaseSideEffectVerified  = "side_effect_verified"
+	PublicationPhasePublished           = "published"
+	PublicationPhaseFinalized           = "finalized"
+	PublicationPhaseRolledBack          = "rolled_back"
+	PublicationPhaseRecoveryTransferred = "recovery_transferred"
+)
+
 type PublicationDetails struct {
-	ExpectedLiveManifestSHA256 string
-	PreviousLiveManifestSHA256 string
-	Artifacts                  []string
-	ServicePhase               string
-	FirewallPhase              string
-	LiveRoot                   string
+	ExpectedLiveManifestSHA256 string            `json:"expectedLiveManifestSHA256,omitempty"`
+	PreviousLiveManifestSHA256 string            `json:"previousLiveManifestSHA256,omitempty"`
+	Artifacts                  []string          `json:"artifacts,omitempty"`
+	LiveRoot                   string            `json:"liveRoot,omitempty"`
+	ServicePhase               string            `json:"servicePhase,omitempty"`
+	FirewallPhase              string            `json:"firewallPhase,omitempty"`
+	ServiceActionPlan          []string          `json:"serviceActionPlan,omitempty"`
+	PreviousServiceStates      map[string]string `json:"previousServiceStates,omitempty"`
+	ExpectedServiceGeneration  string            `json:"expectedServiceGeneration,omitempty"`
+	ExpectedConfigDigest       string            `json:"expectedConfigDigest,omitempty"`
+	FirewallTransactionID      string            `json:"firewallTransactionId,omitempty"`
+	PreviousFirewallDigest     string            `json:"previousFirewallDigest,omitempty"`
+	IntendedFirewallDigest     string            `json:"intendedFirewallDigest,omitempty"`
+	HealthEvidence             []string          `json:"healthEvidence,omitempty"`
+	UpdateTransactionID        string            `json:"updateTransactionId,omitempty"`
+	ExpectedBinaryDigest       string            `json:"expectedBinaryDigest,omitempty"`
+	OldBinaryDigest            string            `json:"oldBinaryDigest,omitempty"`
+	InstalledInode             string            `json:"installedInode,omitempty"`
+	TargetVersion              string            `json:"targetVersion,omitempty"`
+	ActivationManifest         string            `json:"activationManifest,omitempty"`
+	CommitPhase                string            `json:"commitPhase,omitempty"`
 }
 
 type fenceContextState struct {
@@ -74,12 +107,20 @@ func updateFenceExpiry(ctx context.Context, expiresAt int64) {
 // MarkRuntimeMutationStarting durably advances the publication transaction
 // before the first live side effect. It is a no-op for untracked test/dev
 // workflows that have no Runner-owned publication context.
+func MarkSideEffectStarting(ctx context.Context, details PublicationDetails) error {
+	return AdvanceRuntimePublication(ctx, PublicationPhaseSideEffectPlanned, details)
+}
+
 func MarkRuntimeMutationStarting(ctx context.Context, details PublicationDetails) error {
+	return AdvanceRuntimePublication(ctx, PublicationPhaseArtifactsPrepared, details)
+}
+
+func AdvanceRuntimePublication(ctx context.Context, phase string, details PublicationDetails) error {
 	if ctx == nil {
 		return nil
 	}
-	if record, ok := ctx.Value(publicationContextKey{}).(func(PublicationDetails) error); ok {
-		return record(details)
+	if record, ok := ctx.Value(publicationContextKey{}).(func(string, PublicationDetails) error); ok {
+		return record(phase, details)
 	}
 	return nil
 }
@@ -94,17 +135,74 @@ type ContextExecutor interface {
 }
 
 type Result struct {
-	Success       bool
-	RolledBack    bool
-	ErrorCode     string
-	ErrorMessage  string
-	Operations    []OperationResult
-	Confirmations []EnforcementConfirmation
+	Success          bool
+	Disposition      ApplyDisposition
+	MarkRevisionLive bool
+	RuntimeMutation  RuntimeMutationOutcome
+	RolledBack       bool
+	ErrorCode        string
+	ErrorMessage     string
+	Operations       []OperationResult
+	Confirmations    []EnforcementConfirmation
+}
+
+type confirmationExecutor struct {
+	underlying    Executor
+	confirmations []EnforcementConfirmation
+}
+
+func (e confirmationExecutor) Execute(revision uint64) (Result, error) {
+	return e.ExecuteContext(context.Background(), revision)
+}
+
+func (e confirmationExecutor) ExecuteContext(ctx context.Context, revision uint64) (Result, error) {
+	var result Result
+	var err error
+	if contextual, ok := e.underlying.(ContextExecutor); ok {
+		result, err = contextual.ExecuteContext(ctx, revision)
+	} else {
+		result, err = e.underlying.Execute(revision)
+	}
+	result.Confirmations = append(result.Confirmations, e.confirmations...)
+	return result, err
+}
+
+func (e confirmationExecutor) RequiresDurablePhases() bool {
+	_, contextual := e.underlying.(ContextExecutor)
+	return contextual
+}
+
+type executorPhasePolicy interface {
+	RequiresDurablePhases() bool
+}
+
+type ApplyDisposition string
+
+const (
+	ApplyDispositionPlanned            ApplyDisposition = "planned"
+	ApplyDispositionStaged             ApplyDisposition = "staged"
+	ApplyDispositionArtifactsCommitted ApplyDisposition = "artifacts_committed"
+	ApplyDispositionRuntimeConverged   ApplyDisposition = "runtime_converged"
+)
+
+type RuntimeMutationOutcome struct {
+	MutationStarted        bool
+	ArtifactsChanged       bool
+	ServicesChanged        bool
+	FirewallChanged        bool
+	ArtifactsRestored      bool
+	ServicesRestored       bool
+	FirewallRestored       bool
+	PostRollbackHealthPass bool
+	RollbackComplete       bool
+	Ambiguous              bool
 }
 
 type EnforcementConfirmation struct {
-	Kind     string `json:"kind"`
-	ClientID string `json:"clientId"`
+	Kind              string `json:"kind"`
+	ClientID          string `json:"clientId"`
+	TargetGeneration  int64  `json:"targetGeneration"`
+	TargetPayloadHash string `json:"targetPayloadHash"`
 }
 
 type ExecutorFunc func(revision uint64) (Result, error)
@@ -171,6 +269,11 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		close(runner.monitorDone)
 		return runner
 	}
+	if err := runner.resumeRecoveryPending(context.Background()); err != nil {
+		runner.startupErr = err
+		go runner.monitorRecovery()
+		return runner
+	}
 	go runner.monitorRecovery()
 	return runner
 }
@@ -235,6 +338,19 @@ func (r *Runner) monitorRecovery() {
 				continue
 			}
 			now := r.now()
+			if lease.Owner == r.ownerID && lease.ExpiresAt > now.Unix() {
+				due, dueErr := r.jobs.RecoveryPendingDue(now.Add(-5 * time.Second).Unix())
+				if dueErr != nil {
+					r.setRecoveryError(dueErr)
+					continue
+				}
+				if !due {
+					continue
+				}
+				r.setRecoveryError(nil)
+				r.setRecoveryError(r.resumeRecoveryPending(context.Background()))
+				continue
+			}
 			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
 				continue
 			}
@@ -246,6 +362,10 @@ func (r *Runner) monitorRecovery() {
 			}
 			recoveryErr := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL)
 			if recoveryErr == nil {
+				r.setRecoveryError(nil)
+				recoveryErr = r.resumeRecoveryPending(context.Background())
+			}
+			if recoveryErr == nil {
 				recoveryErr = r.jobs.MarkApplyingInterrupted("apply job had no valid durable lease during continuous recovery")
 			}
 			r.setRecoveryError(recoveryErr)
@@ -253,10 +373,56 @@ func (r *Runner) monitorRecovery() {
 	}
 }
 
+func (r *Runner) resumeRecoveryPending(ctx context.Context) error {
+	if r == nil || r.revs == nil || r.revs.db == nil {
+		return nil
+	}
+	var job Job
+	var servicePhase string
+	err := r.revs.db.QueryRowContext(ctx, `SELECT j.id,j.desired_revision,j.base_revision,j.trigger,j.actor_id,j.owner_process,j.lease_generation,p.service_phase
+FROM apply_jobs j JOIN runtime_publications p ON p.job_id=j.id
+WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Scan(
+		&job.ID, &job.DesiredRevision, &job.BaseRevision, &job.Trigger, &job.ActorID,
+		&job.OwnerProcess, &job.LeaseGeneration, &servicePhase)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("apply: read recovery-pending publication: %w", err)
+	}
+	if servicePhase == "restart-panel" || servicePhase == "update-install" {
+		return fmt.Errorf("apply: side-effect publication %s requires helper-owned commit evidence", job.ID)
+	}
+	if job.OwnerProcess != r.ownerID || job.LeaseGeneration == 0 {
+		return fmt.Errorf("apply: recovery-pending publication %s is not fenced to this runner", job.ID)
+	}
+	if err := advanceRuntimePublicationPhase(r.revs.db, job.ID, job.LeaseGeneration, PublicationPhaseRecoveryTransferred, PublicationDetails{}, r.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("apply: transfer recovery evidence: %w", err)
+	}
+	if err := finalizeFencedJob(r.revs.db, r.ownerID, job.LeaseGeneration, r.now(), job, StatusFailed,
+		"PUBLICATION_RECOVERY_TRANSFERRED", "runtime publication evidence transferred to a fresh full-convergence attempt", nil, nil, false, false); err != nil {
+		return fmt.Errorf("apply: finalize transferred recovery job: %w", err)
+	}
+	_, err = r.runContext(ctx, job.DesiredRevision, "publication-recovery", "system", r.executor)
+	if err != nil {
+		return fmt.Errorf("apply: resume full convergence for revision %d: %w", job.DesiredRevision, err)
+	}
+	return r.resumeRecoveryPending(ctx)
+}
+
 func (r *Runner) setRecoveryError(err error) {
 	r.mu.Lock()
 	r.startupErr = err
 	r.mu.Unlock()
+}
+
+func (r *Runner) ReadinessError() error {
+	if r == nil {
+		return errors.New("apply: runner is unavailable")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.startupErr
 }
 
 func (r *Runner) Close() {
@@ -283,17 +449,7 @@ func (r *Runner) RunOperationContext(ctx context.Context, revision uint64, trigg
 }
 
 func (r *Runner) RunContextWithConfirmations(ctx context.Context, revision uint64, trigger, actor string, confirmations ...EnforcementConfirmation) (Job, error) {
-	executor := ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (Result, error) {
-		var result Result
-		var err error
-		if contextual, ok := r.executor.(ContextExecutor); ok {
-			result, err = contextual.ExecuteContext(operationContext, pinnedRevision)
-		} else {
-			result, err = r.executor.Execute(pinnedRevision)
-		}
-		result.Confirmations = append(result.Confirmations, confirmations...)
-		return result, err
-	})
+	executor := confirmationExecutor{underlying: r.executor, confirmations: confirmations}
 	return r.runContext(ctx, revision, trigger, actor, executor)
 }
 
@@ -377,8 +533,8 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 	execCtx := ContextWithFence(ctx, Fence{
 		Owner: r.ownerID, Generation: lease.Generation, OperationID: lease.Operation, LeaseExpiresAt: lease.ExpiresAt,
 	})
-	execCtx = context.WithValue(execCtx, publicationContextKey{}, func(details PublicationDetails) error {
-		return markRuntimePublicationPublishing(r.revs.db, job.ID, lease.Generation, details, r.now().UTC().Unix())
+	execCtx = context.WithValue(execCtx, publicationContextKey{}, func(phase string, details PublicationDetails) error {
+		return advanceRuntimePublicationPhase(r.revs.db, job.ID, lease.Generation, phase, details, r.now().UTC().Unix())
 	})
 	execCtx, cancelExecutor := context.WithCancel(execCtx)
 	stopHeartbeat := make(chan struct{})
@@ -409,13 +565,14 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 		if code == "" {
 			code = "apply_failed"
 		}
-		safeRollback := result.RolledBack || len(result.Operations) == 0
+		safeRollback := !result.RuntimeMutation.MutationStarted ||
+			(result.RuntimeMutation.RollbackComplete && !result.RuntimeMutation.Ambiguous)
 		if !safeRollback {
 			pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, execErr)
 			if pendingErr == nil {
 				leaseReleased = true
 			}
-			job.Status = StatusApplying
+			job.Status = StatusRecoveryPending
 			job.ErrorCode = "RECOVERY_PENDING"
 			job.ErrorMessage = execErr.Error()
 			job.Operations = result.Operations
@@ -437,22 +594,42 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 		return job, errors.Join(execErr, finishErr)
 	}
 
-	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Operations, result.Confirmations, r.now().UTC().Unix()); err != nil {
+	if result.Disposition == "" {
+		return job, errors.New("apply: successful executor result has no disposition")
+	}
+	if result.MarkRevisionLive != (result.Disposition == ApplyDispositionRuntimeConverged) {
+		return job, errors.New("apply: revision-live marker does not match runtime convergence disposition")
+	}
+	if result.Disposition == ApplyDispositionStaged {
+		if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusStaged, "", "", result.Operations, nil, false, false); err != nil {
+			return job, err
+		}
+		leaseReleased = true
+		job.Status = StatusStaged
+		job.Operations = result.Operations
+		return job, nil
+	}
+
+	_, strictPhases := executor.(ContextExecutor)
+	if policy, ok := executor.(executorPhasePolicy); ok {
+		strictPhases = policy.RequiresDurablePhases()
+	}
+	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Disposition, result.Operations, result.Confirmations, !strictPhases, r.now().UTC().Unix()); err != nil {
 		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
 		if pendingErr == nil {
 			leaseReleased = true
 		}
-		job.Status = StatusApplying
+		job.Status = StatusRecoveryPending
 		job.ErrorCode = "PUBLICATION_RECEIPT_PENDING"
 		job.ErrorMessage = err.Error()
 		return job, errors.Join(err, pendingErr)
 	}
-	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, result.Confirmations, true, false); err != nil {
+	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, result.Confirmations, result.MarkRevisionLive, false); err != nil {
 		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
 		if pendingErr == nil {
 			leaseReleased = true
 		}
-		job.Status = StatusApplying
+		job.Status = StatusRecoveryPending
 		job.ErrorCode = "FINALIZATION_PENDING"
 		job.ErrorMessage = err.Error()
 		return job, errors.Join(err, pendingErr)

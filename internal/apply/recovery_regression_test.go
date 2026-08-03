@@ -21,7 +21,9 @@ func TestRunnerRecoversPendingJobWithoutValidLease(t *testing.T) {
 	if err := jobs.Create(job); err != nil {
 		t.Fatal(err)
 	}
-	_ = NewRunner(revisions, jobs, func(uint64) (Result, error) { return Result{Success: true}, nil })
+	_ = NewRunner(revisions, jobs, func(uint64) (Result, error) {
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	})
 	got, err := jobs.Get(job.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +52,9 @@ func TestRunnerRecoversApplyingJobWhenLeaseExpiresAfterStartup(t *testing.T) {
 	if err != nil || !acquired {
 		t.Fatalf("seed lease: acquired=%v err=%v", acquired, err)
 	}
-	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) { return Result{Success: true}, nil })
+	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	})
 	defer func() {
 		if closeMethod := reflect.ValueOf(runner).MethodByName("Close"); closeMethod.IsValid() {
 			closeMethod.Call(nil)
@@ -86,7 +90,9 @@ func TestRunnerRecordsRuntimePublicationRecoveryFailure(t *testing.T) {
 	if err != nil || !acquired {
 		t.Fatalf("seed lease: acquired=%v err=%v", acquired, err)
 	}
-	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) { return Result{Success: true}, nil })
+	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	})
 	defer runner.Close()
 	if _, err := db.Exec(`DROP TABLE runtime_publications`); err != nil {
 		t.Fatal(err)
@@ -133,7 +139,9 @@ func TestRunnerRecoversJobOwnedByDeadProcessBeforeLeaseExpiry(t *testing.T) {
 		fmt.Sprintf("pid:%d:dead-owner", deadPID), time.Now().Add(time.Hour).Unix(), time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
-	_ = NewRunner(revisions, jobs, func(uint64) (Result, error) { return Result{Success: true}, nil })
+	_ = NewRunner(revisions, jobs, func(uint64) (Result, error) {
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	})
 	got, err := jobs.Get(job.ID)
 	if err != nil {
 		t.Fatal(err)

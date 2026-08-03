@@ -210,6 +210,20 @@ type ApplyResponse struct {
 	ServiceActions  []ServiceActionResult    `json:"serviceActions,omitempty"`
 	HealthChecks    []ServiceHealthResult    `json:"healthChecks,omitempty"`
 	RollbackActions []ServiceActionResult    `json:"rollbackActions,omitempty"`
+
+	// Runtime mutation evidence is intentionally not serialized in the public
+	// response. The durable Runner consumes it to decide whether finalization or
+	// recovery is safe; HTTP status and response flags are not convergence proof.
+	MutationStarted        bool `json:"mutationStarted,omitempty"`
+	ArtifactsChanged       bool `json:"artifactsChanged,omitempty"`
+	ServicesChanged        bool `json:"servicesChanged,omitempty"`
+	FirewallChanged        bool `json:"firewallChanged,omitempty"`
+	ArtifactsRestored      bool `json:"artifactsRestored,omitempty"`
+	ServicesRestored       bool `json:"servicesRestored,omitempty"`
+	FirewallRestored       bool `json:"firewallRestored,omitempty"`
+	PostRollbackHealthPass bool `json:"postRollbackHealthPass,omitempty"`
+	RollbackComplete       bool `json:"rollbackComplete,omitempty"`
+	Ambiguous              bool `json:"ambiguous,omitempty"`
 }
 
 type ApplyHistoryEntry struct {
