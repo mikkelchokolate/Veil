@@ -15,11 +15,12 @@ type blockingTrafficProvider struct {
 }
 
 func (p *blockingTrafficProvider) Key() string { return p.key }
-func (p *blockingTrafficProvider) Read() (map[string]ProviderReading, error) {
+func (p *blockingTrafficProvider) Read() (ProviderBatch, error) {
 	p.once.Do(func() { close(p.entered) })
 	<-p.release
-	return map[string]ProviderReading{
-		p.binding: {BindingID: p.binding, UploadBytes: 10, DownloadBytes: 20},
+	return ProviderBatch{
+		Readings:   []ProviderReading{{BindingID: p.binding, UploadBytes: 10, DownloadBytes: 20}},
+		ObservedAt: time.Now().UTC(), RuntimeInstance: p.key,
 	}, nil
 }
 

@@ -50,10 +50,10 @@ func TestStatsProviderUsesAuthenticatedOfficialTrafficAPI(t *testing.T) {
 	if requests.Load() != 1 {
 		t.Fatalf("API requests = %d, want 1", requests.Load())
 	}
-	if len(readings) != 1 {
-		t.Fatalf("readings = %d, want only the scoped known identity", len(readings))
+	if len(readings.Readings) != 1 {
+		t.Fatalf("readings = %d, want only the scoped known identity", len(readings.Readings))
 	}
-	reading := readings["binding-one"]
+	reading := readings.Readings[0]
 	if reading.BindingID != "binding-one" || reading.UploadBytes != 514 || reading.DownloadBytes != 4017 {
 		t.Errorf("reading = %+v, want tx/rx attributed through RuntimeIdentity", reading)
 	}

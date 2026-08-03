@@ -11,14 +11,21 @@ import (
 	"time"
 )
 
-// TrafficProvider reads absolute byte counters from a live runtime keyed by binding.
+// TrafficProvider reads one validated batch of absolute byte counters.
 type TrafficProvider interface {
 	Key() string
-	Read() (map[string]ProviderReading, error)
+	Read() (ProviderBatch, error)
 }
 
 type ContextTrafficProvider interface {
-	ReadContext(context.Context) (map[string]ProviderReading, error)
+	ReadContext(context.Context) (ProviderBatch, error)
+}
+
+type ProviderBatch struct {
+	Readings          []ProviderReading
+	UnknownIdentities []string
+	ObservedAt        time.Time
+	RuntimeInstance   string
 }
 
 type ProviderReading struct {
@@ -62,20 +69,46 @@ func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(cl
 	return &Collector{store: store, interval: interval, onExhaust: onExhaust, health: make(map[string]providerHealthState)}
 }
 
-func (c *Collector) Register(provider TrafficProvider) {
+func (c *Collector) Register(provider TrafficProvider) error {
+	if provider == nil || strings.TrimSpace(provider.Key()) == "" {
+		return errors.New("traffic provider key is required")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for _, existing := range c.providers {
+		if existing.Key() == provider.Key() {
+			return fmt.Errorf("duplicate traffic provider key %q", provider.Key())
+		}
+	}
 	c.providers = append(c.providers, provider)
 	c.ensureProviderHealthLocked(provider.Key())
+	return nil
 }
 
-func (c *Collector) ResetProviders(providers []TrafficProvider) {
+func (c *Collector) ResetProductionProviders(providers []TrafficProvider) error {
+	for _, provider := range providers {
+		if _, ok := provider.(ContextTrafficProvider); !ok {
+			return fmt.Errorf("traffic provider %q is not context-aware", provider.Key())
+		}
+	}
+	return c.ResetProviders(providers)
+}
+
+func (c *Collector) ResetProviders(providers []TrafficProvider) error {
+	current := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		if provider == nil || strings.TrimSpace(provider.Key()) == "" {
+			return errors.New("traffic provider key is required")
+		}
+		if _, duplicate := current[provider.Key()]; duplicate {
+			return fmt.Errorf("duplicate traffic provider key %q", provider.Key())
+		}
+		current[provider.Key()] = struct{}{}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.providers = append([]TrafficProvider(nil), providers...)
-	current := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
-		current[provider.Key()] = struct{}{}
 		c.ensureProviderHealthLocked(provider.Key())
 	}
 	for key := range c.health {
@@ -83,12 +116,43 @@ func (c *Collector) ResetProviders(providers []TrafficProvider) {
 			delete(c.health, key)
 		}
 	}
+	return nil
 }
 
 func (c *Collector) ensureProviderHealthLocked(key string) {
 	if _, ok := c.health[key]; !ok {
 		c.health[key] = providerHealthState{ProviderHealth: ProviderHealth{Key: key, State: "unknown"}}
 	}
+}
+
+func validateProviderBatch(batch ProviderBatch) error {
+	if batch.ObservedAt.IsZero() || batch.ObservedAt.After(time.Now().Add(5*time.Minute)) {
+		return errors.New("traffic provider batch has invalid observation time")
+	}
+	if !providerKeyPattern.MatchString(batch.RuntimeInstance) {
+		return errors.New("traffic provider batch has invalid runtime instance")
+	}
+	seenReadings := make(map[string]struct{}, len(batch.Readings))
+	for _, reading := range batch.Readings {
+		if reading.BindingID == "" || reading.UploadBytes < 0 || reading.DownloadBytes < 0 {
+			return errors.New("traffic provider batch has invalid reading")
+		}
+		if _, duplicate := seenReadings[reading.BindingID]; duplicate {
+			return errors.New("traffic provider batch has duplicate binding")
+		}
+		seenReadings[reading.BindingID] = struct{}{}
+	}
+	seenUnknown := make(map[string]struct{}, len(batch.UnknownIdentities))
+	for _, identity := range batch.UnknownIdentities {
+		if strings.TrimSpace(identity) == "" {
+			return errors.New("traffic provider batch has empty unknown identity")
+		}
+		if _, duplicate := seenUnknown[identity]; duplicate {
+			return errors.New("traffic provider batch has duplicate unknown identity")
+		}
+		seenUnknown[identity] = struct{}{}
+	}
+	return nil
 }
 
 func (c *Collector) CollectOnce() error {
@@ -105,29 +169,37 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 	now := time.Now().Unix()
 	var collectionErrors []error
 	for _, provider := range providers {
-		var readings map[string]ProviderReading
+		var batch ProviderBatch
 		var err error
 		if contextual, ok := provider.(ContextTrafficProvider); ok {
 			providerCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			readings, err = contextual.ReadContext(providerCtx)
+			batch, err = contextual.ReadContext(providerCtx)
 			cancel()
 		} else {
-			readings, err = provider.Read()
+			batch, err = provider.Read()
 		}
 		if err == nil {
-			for _, reading := range readings {
-				if c.store == nil {
-					err = errors.New("traffic store is unavailable")
-					break
+			err = validateProviderBatch(batch)
+		}
+		if err == nil {
+			if c.store == nil {
+				err = errors.New("traffic store is unavailable")
+			} else {
+				samples := make([]Sample, 0, len(batch.Readings))
+				for _, reading := range batch.Readings {
+					samples = append(samples, Sample{
+						BindingID: reading.BindingID, UploadBytes: reading.UploadBytes, DownloadBytes: reading.DownloadBytes,
+						AtUnix: batch.ObservedAt.Unix(), Monotonic: true,
+						ProviderKey: batch.RuntimeInstance + ":" + reading.BindingID,
+					})
 				}
-				if recordErr := c.store.RecordSample(Sample{
-					BindingID: reading.BindingID, UploadBytes: reading.UploadBytes, DownloadBytes: reading.DownloadBytes,
-					AtUnix: now, Monotonic: true, ProviderKey: provider.Key() + ":" + reading.BindingID,
-				}); recordErr != nil {
-					err = fmt.Errorf("record provider %s binding %s sample: %w", provider.Key(), reading.BindingID, recordErr)
-					break
+				if recordErr := c.store.RecordSamples(samples); recordErr != nil {
+					err = fmt.Errorf("record provider %s batch: %w", provider.Key(), recordErr)
 				}
 			}
+		}
+		if err == nil && len(batch.UnknownIdentities) > 0 {
+			err = fmt.Errorf("unknown runtime identities: %s", strings.Join(batch.UnknownIdentities, ","))
 		}
 		if err != nil {
 			wrapped := fmt.Errorf("traffic provider %s: %w", provider.Key(), err)
@@ -138,6 +210,13 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 		c.recordSuccess(provider.Key(), now)
 	}
 	return errors.Join(collectionErrors...)
+}
+
+func (c *Collector) MarkDegraded(key string, err error) {
+	if err == nil {
+		return
+	}
+	c.recordFailure(key, err, time.Now().Unix())
 }
 
 func (c *Collector) recordSuccess(key string, now int64) {
@@ -250,9 +329,6 @@ func (c *Collector) Stop() {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		c.recordFailure("collector", errors.New("traffic provider shutdown timed out"), time.Now().Unix())
-		c.mu.Lock()
-		c.running = true
-		c.mu.Unlock()
 		return
 	}
 	c.mu.Lock()

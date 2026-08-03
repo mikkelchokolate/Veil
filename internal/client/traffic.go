@@ -41,15 +41,22 @@ func (s *TrafficStore) WithRecordLock(fn func() error) error {
 	return fn()
 }
 
-// RecordSample attributes a sample to its binding/client, bumping the
-// absolute counter and writing a bucketed delta. For monotonic samples the
-// delta is computed against the provider's last raw reading.
-func (s *TrafficStore) RecordSample(sm Sample) error {
+func validateTrafficSample(sm Sample) error {
 	if sm.UploadBytes < 0 || sm.DownloadBytes < 0 || sm.AtUnix < 0 || sm.AtUnix > time.Now().Add(5*time.Minute).Unix() {
 		return fmt.Errorf("client: traffic sample counters and timestamp are outside valid bounds")
 	}
 	if sm.Monotonic && !providerKeyPattern.MatchString(sm.ProviderKey) {
 		return fmt.Errorf("client: invalid traffic provider key")
+	}
+	return nil
+}
+
+// RecordSample attributes a sample to its binding/client, bumping the
+// absolute counter and writing a bucketed delta. For monotonic samples the
+// delta is computed against the provider's last raw reading.
+func (s *TrafficStore) RecordSample(sm Sample) error {
+	if err := validateTrafficSample(sm); err != nil {
+		return err
 	}
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
@@ -60,6 +67,44 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	}
 	defer tx.Rollback()
 
+	if err := s.recordSampleTx(tx, sm); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("client: commit traffic sample transaction: %w", err)
+	}
+	return nil
+}
+
+func (s *TrafficStore) RecordSamples(samples []Sample) error {
+	seenProviderKeys := make(map[string]struct{}, len(samples))
+	for _, sample := range samples {
+		if err := validateTrafficSample(sample); err != nil {
+			return err
+		}
+		if sample.Monotonic {
+			if _, exists := seenProviderKeys[sample.ProviderKey]; exists {
+				return fmt.Errorf("client: duplicate traffic provider key in batch")
+			}
+			seenProviderKeys[sample.ProviderKey] = struct{}{}
+		}
+	}
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, sample := range samples {
+		if err := s.recordSampleTx(tx, sample); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	clientID := sm.ClientID
 	if sm.BindingID != "" {
 		var owner string
@@ -150,9 +195,6 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	    download_delta=download_delta+excluded.download_delta`,
 		bucket, clientID, sm.BindingID, upDelta, downDelta); err != nil {
 		return fmt.Errorf("client: traffic sample: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("client: commit traffic sample transaction: %w", err)
 	}
 	return nil
 }

@@ -77,13 +77,21 @@ func setCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext s
 		return Credential{}, fmt.Errorf("%w: binding %s has ambiguous active %s credentials", ErrValidation, bindingID, kind)
 	}
 	if active == 0 {
-		return insertCredentialQ(q, cipher, bindingID, kind, plaintext, nextVersionForQ(q, bindingID, kind))
+		version, err := nextVersionForQ(q, bindingID, kind)
+		if err != nil {
+			return Credential{}, err
+		}
+		return insertCredentialQ(q, cipher, bindingID, kind, plaintext, version)
 	}
 	now := nowUnix()
 	if _, err := q.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
 		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
 	}
-	credential, err := insertCredentialQ(q, cipher, bindingID, kind, plaintext, nextVersionForQ(q, bindingID, kind))
+	version, err := nextVersionForQ(q, bindingID, kind)
+	if err != nil {
+		return Credential{}, err
+	}
+	credential, err := insertCredentialQ(q, cipher, bindingID, kind, plaintext, version)
 	if err != nil {
 		return Credential{}, err
 	}
@@ -148,7 +156,11 @@ func (t *Tx) RotateCredential(creds *CredentialStore, bindingID, kind, plaintext
 	if _, err := t.q.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
 		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
 	}
-	newCred, err := insertCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext, nextVersionForQ(t.q, bindingID, kind))
+	version, err := nextVersionForQ(t.q, bindingID, kind)
+	if err != nil {
+		return Credential{}, err
+	}
+	newCred, err := insertCredentialQ(t.q, creds.cipher, bindingID, kind, plaintext, version)
 	if err != nil {
 		return Credential{}, err
 	}
@@ -223,7 +235,11 @@ func (s *CredentialStore) Rotate(bindingID, kind, plaintext string) (Credential,
 	if _, err := tx.Exec(`UPDATE client_credentials SET revoked_at=? WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, now, bindingID, kind); err != nil {
 		return Credential{}, fmt.Errorf("client: revoke old credential: %w", err)
 	}
-	newCred, err := insertCredentialQ(tx, s.cipher, bindingID, kind, plaintext, nextVersionForQ(tx, bindingID, kind))
+	version, err := nextVersionForQ(tx, bindingID, kind)
+	if err != nil {
+		return Credential{}, err
+	}
+	newCred, err := insertCredentialQ(tx, s.cipher, bindingID, kind, plaintext, version)
 	if err != nil {
 		return Credential{}, err
 	}
@@ -334,8 +350,10 @@ func scanCredential(row scanner, withValue bool) (Credential, error) {
 // called with a *sql.Tx it sees uncommitted rows in the same transaction.
 func nextVersionForQ(q interface {
 	QueryRow(query string, args ...any) *sql.Row
-}, bindingID, kind string) int {
+}, bindingID, kind string) (int, error) {
 	var max int
-	_ = q.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max)
-	return max + 1
+	if err := q.QueryRow(`SELECT COALESCE(MAX(credential_version),0) FROM client_credentials WHERE binding_id=? AND kind=?`, bindingID, kind).Scan(&max); err != nil {
+		return 0, fmt.Errorf("client: query next credential version: %w", err)
+	}
+	return max + 1, nil
 }

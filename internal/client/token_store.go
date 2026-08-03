@@ -1,10 +1,12 @@
 package client
 
 import (
+	"container/list"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -29,13 +31,31 @@ type IssuedToken struct {
 // TokenStore manages subscription tokens. Tokens are high-entropy random
 // values; only their SHA-256 hash is stored so a database leak does not expose
 // usable tokens.
-type TokenStore struct {
-	db      *sql.DB
-	usageMu sync.Mutex
-	usage   map[string]int64
+type tokenUsageEvent struct {
+	id string
+	at int64
 }
 
-func NewTokenStore(db *sql.DB) *TokenStore { return &TokenStore{db: db, usage: make(map[string]int64)} }
+type TokenStore struct {
+	db            *sql.DB
+	usageMu       sync.Mutex
+	usage         map[string]int64
+	usageOrder    *list.List
+	usageElements map[string]*list.Element
+	telemetry     chan tokenUsageEvent
+	stop          chan struct{}
+	done          chan struct{}
+	closeOnce     sync.Once
+}
+
+func NewTokenStore(db *sql.DB) *TokenStore {
+	store := &TokenStore{
+		db: db, usage: make(map[string]int64), usageOrder: list.New(), usageElements: make(map[string]*list.Element),
+		telemetry: make(chan tokenUsageEvent, 1024), stop: make(chan struct{}), done: make(chan struct{}),
+	}
+	go store.runTelemetry()
+	return store
+}
 
 // Issue creates a new token for a client, returning the plaintext once.
 // Optional expiry (unix seconds) bounds how long the token grants access.
@@ -87,27 +107,18 @@ func (s *TokenStore) IssueBy(clientID, label, createdBy string, expiresAt *int64
 	return IssuedToken{Token: t, Plaintext: plaintext}, nil
 }
 
-// LookupByPlaintext resolves an active token and records best-effort throttled
-// usage telemetry. Telemetry failure never prevents subscription delivery.
+// LookupByPlaintext resolves an active token using a read-only query and queues
+// bounded, coalesced usage telemetry.
 func (s *TokenStore) LookupByPlaintext(plaintext string) (*SubscriptionToken, error) {
-	if plaintext == "" {
-		return nil, nil
+	token, err := s.LookupReadOnly(plaintext)
+	if err != nil || token == nil {
+		return token, err
 	}
 	now := nowUnix()
-	row := s.db.QueryRow(`UPDATE subscription_tokens SET enabled=enabled
- WHERE token_hash=? AND revoked_at IS NULL AND enabled=1 AND (expires_at IS NULL OR expires_at>?)
- RETURNING id,client_id,token_hash,token_prefix,enabled,expires_at,created_at,last_used_at,revoked_at,created_by,label`, []byte(hashToken(plaintext)), now)
-	token, err := scanToken(row, true)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("client: claim token: %w", err)
-	}
 	if telemetryErr := s.MarkUsedThrottled(token.ID); telemetryErr == nil {
 		token.LastUsedAt = &now
 	}
-	return &token, nil
+	return token, nil
 }
 
 func (s *TokenStore) LookupReadOnly(plaintext string) (*SubscriptionToken, error) {
@@ -136,10 +147,99 @@ func (s *TokenStore) MarkUsedThrottled(id string) error {
 		s.usageMu.Unlock()
 		return nil
 	}
-	s.usage[id] = now
 	s.usageMu.Unlock()
-	_, err := s.db.Exec(`UPDATE subscription_tokens SET last_used_at=? WHERE id=?`, now, id)
-	return err
+	select {
+	case s.telemetry <- tokenUsageEvent{id: id, at: now}:
+		s.usageMu.Lock()
+		s.usage[id] = now
+		if element := s.usageElements[id]; element != nil {
+			s.usageOrder.MoveToFront(element)
+		} else {
+			s.usageElements[id] = s.usageOrder.PushFront(id)
+		}
+		for s.usageOrder.Len() > 4096 {
+			oldest := s.usageOrder.Back()
+			oldID := oldest.Value.(string)
+			delete(s.usage, oldID)
+			delete(s.usageElements, oldID)
+			s.usageOrder.Remove(oldest)
+		}
+		s.usageMu.Unlock()
+		return nil
+	default:
+		return errors.New("client: token telemetry queue is full")
+	}
+}
+
+func (s *TokenStore) forgetUsage(id string) {
+	s.usageMu.Lock()
+	defer s.usageMu.Unlock()
+	delete(s.usage, id)
+	if element := s.usageElements[id]; element != nil {
+		delete(s.usageElements, id)
+		s.usageOrder.Remove(element)
+	}
+}
+
+func (s *TokenStore) flushTelemetry(pending map[string]int64) {
+	if len(pending) == 0 {
+		return
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		for id := range pending {
+			s.forgetUsage(id)
+		}
+		return
+	}
+	defer tx.Rollback()
+	for id, at := range pending {
+		result, updateErr := tx.Exec(`UPDATE subscription_tokens SET last_used_at=? WHERE id=? AND revoked_at IS NULL AND enabled=1 AND (expires_at IS NULL OR expires_at>?)`, at, id, at)
+		if updateErr != nil {
+			err = updateErr
+			break
+		}
+		if rows, _ := result.RowsAffected(); rows != 1 {
+			s.forgetUsage(id)
+		}
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		for id := range pending {
+			s.forgetUsage(id)
+		}
+	}
+}
+
+func (s *TokenStore) runTelemetry() {
+	defer close(s.done)
+	pending := make(map[string]int64)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case event := <-s.telemetry:
+			pending[event.id] = event.at
+		case <-ticker.C:
+			s.flushTelemetry(pending)
+			pending = make(map[string]int64)
+		case <-s.stop:
+			s.flushTelemetry(pending)
+			return
+		}
+	}
+}
+
+func (s *TokenStore) Close() {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		<-s.done
+	})
 }
 
 func validateTokenMetadata(label string, expiresAt *int64) error {
@@ -161,6 +261,7 @@ func (s *TokenStore) Revoke(id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	s.forgetUsage(id)
 	return nil
 }
 
@@ -183,6 +284,9 @@ func (s *TokenStore) SetEnabled(id string, enabled bool) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	if !enabled {
+		s.forgetUsage(id)
 	}
 	return nil
 }
@@ -209,6 +313,7 @@ func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplie
 	if err := raw.Commit(); err != nil {
 		return IssuedToken{}, err
 	}
+	s.forgetUsage(id)
 	return issued, nil
 }
 

@@ -299,7 +299,14 @@ func (s *Service) AddBindingWithIdentityEnabledTx(tx *Tx, clientID, inboundID, r
 
 // RemoveBindingTx is the transactional variant of RemoveBinding.
 func (s *Service) RemoveBindingTx(tx *Tx, bindingID, clientID string) error {
-	return tx.DeleteBinding(bindingID)
+	result, err := tx.q.Exec(`DELETE FROM client_bindings WHERE id=? AND client_id=?`, bindingID, clientID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetCredentialTx is the transactional variant of SetCredential.

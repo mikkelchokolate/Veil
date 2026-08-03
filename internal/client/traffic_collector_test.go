@@ -2,9 +2,11 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"log"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeProvider struct {
@@ -13,8 +15,65 @@ type fakeProvider struct {
 }
 
 func (f *fakeProvider) Key() string { return f.key }
-func (f *fakeProvider) Read() (map[string]ProviderReading, error) {
-	return f.readings, nil
+func (f *fakeProvider) Read() (ProviderBatch, error) {
+	readings := make([]ProviderReading, 0, len(f.readings))
+	for _, reading := range f.readings {
+		readings = append(readings, reading)
+	}
+	return ProviderBatch{Readings: readings, ObservedAt: time.Now().UTC(), RuntimeInstance: f.key}, nil
+}
+
+type batchProvider struct {
+	key   string
+	batch ProviderBatch
+}
+
+func (p *batchProvider) Key() string                                        { return p.key }
+func (p *batchProvider) Read() (ProviderBatch, error)                       { return p.batch, nil }
+func (p *batchProvider) ReadContext(context.Context) (ProviderBatch, error) { return p.batch, nil }
+
+func TestUnknownHysteriaIdentityDoesNotDiscardValidBatchReadings(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	store := NewTrafficStore(db)
+	row, err := repo.Create(Client{Name: "mixed-identities", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: row.ID, InboundID: "hy-mixed", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &batchProvider{key: "hysteria2:hy-mixed"}
+	provider.batch = ProviderBatch{
+		Readings:          []ProviderReading{{BindingID: binding.ID, UploadBytes: 100, DownloadBytes: 200}},
+		UnknownIdentities: []string{"foreign-user"}, ObservedAt: time.Now().UTC(), RuntimeInstance: provider.key,
+	}
+	collector := NewCollector(store, time.Second, nil)
+	if err := collector.Register(provider); err != nil {
+		t.Fatal(err)
+	}
+	if err := collector.CollectOnce(); err == nil || !strings.Contains(err.Error(), "unknown runtime identities") {
+		t.Fatalf("first mixed batch error=%v", err)
+	}
+	provider.batch.Readings[0].UploadBytes = 160
+	provider.batch.Readings[0].DownloadBytes = 260
+	provider.batch.ObservedAt = time.Now().UTC()
+	if err := collector.CollectOnce(); err == nil {
+		t.Fatal("mixed batch should keep provider degraded")
+	}
+	up, down, err := store.TotalsForClient(row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up != 60 || down != 60 {
+		t.Fatalf("valid reading was discarded: totals=%d/%d", up, down)
+	}
+	status := collector.ProviderHealth()
+	if len(status) != 1 || status[0].State != "degraded" {
+		t.Fatalf("provider health=%+v", status)
+	}
 }
 
 func TestCollectorAttributesSamplesToClients(t *testing.T) {
@@ -129,8 +188,8 @@ func TestCollectorReportsTrafficStoreWriteFailure(t *testing.T) {
 type brokenProvider struct{ key string }
 
 func (b *brokenProvider) Key() string { return b.key }
-func (b *brokenProvider) Read() (map[string]ProviderReading, error) {
-	return nil, errBrokenProvider
+func (b *brokenProvider) Read() (ProviderBatch, error) {
+	return ProviderBatch{}, errBrokenProvider
 }
 
 var errBrokenProvider = errTest("provider down")

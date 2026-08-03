@@ -1,7 +1,9 @@
 package client
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -12,10 +14,13 @@ import (
 // QuotaMutation is one atomic quota-state transition. ResetPeriod clears only
 // current-period counters; NextResetAt is the first future UTC boundary.
 type QuotaMutation struct {
-	ClientID    string
-	Depleted    bool
-	ResetPeriod bool
-	NextResetAt *int64
+	ClientID          string
+	Depleted          bool
+	ResetPeriod       bool
+	NextResetAt       *int64
+	TargetGeneration  int64
+	TargetPayloadHash string
+	TargetPeriodEpoch int64
 }
 
 // Reconciler periodically evaluates current-period usage. Production supplies
@@ -80,13 +85,15 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, planErr))
 				continue
 			}
-			pending, pendingErr := r.enforcementPending(current.ID)
+			pending, pendingMutation, pendingErr := r.pendingEnforcementTarget(current.ID)
 			if pendingErr != nil {
 				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s enforcement state: %w", current.ID, pendingErr))
 				continue
 			}
-			if !needed && pending {
-				mutation = QuotaMutation{ClientID: current.ID, Depleted: current.Depleted}
+			if needed {
+				mutation = BindQuotaTarget(current, mutation)
+			} else if pending {
+				mutation = pendingMutation
 				needed = true
 			}
 			if needed {
@@ -95,7 +102,7 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 		}
 		pendingUpdates := make([]enforcementUpdate, 0, len(planned))
 		for _, item := range planned {
-			pendingUpdates = append(pendingUpdates, enforcementUpdate{clientID: item.clientID, state: "pending"})
+			pendingUpdates = append(pendingUpdates, enforcementUpdate{clientID: item.clientID, state: "pending", mutation: item.mutation})
 		}
 		if markErr := r.markEnforcementBatch(pendingUpdates, now.Unix()); markErr != nil {
 			reconcileErrors = append(reconcileErrors, fmt.Errorf("reserve quota enforcement keyset after %s: %w", afterID, markErr))
@@ -108,11 +115,11 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 		terminalUpdates := make([]enforcementUpdate, 0, len(planned))
 		for _, item := range planned {
 			if applyErr := r.applyMutation(item.mutation); applyErr != nil {
-				terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "failed", cause: applyErr})
+				terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "failed", cause: applyErr, mutation: item.mutation})
 				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", item.clientID, applyErr))
 				continue
 			}
-			terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "enforced"})
+			terminalUpdates = append(terminalUpdates, enforcementUpdate{clientID: item.clientID, state: "enforced", mutation: item.mutation})
 			changed++
 		}
 		if markErr := r.markEnforcementBatch(terminalUpdates, now.Unix()); markErr != nil {
@@ -126,29 +133,51 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 	return changed, errors.Join(reconcileErrors...)
 }
 
-func (r *Reconciler) enforcementPending(clientID string) (bool, error) {
-	if r == nil || r.repo == nil || r.repo.db == nil {
-		return false, nil
+func BindQuotaTarget(current Client, mutation QuotaMutation) QuotaMutation {
+	mutation.TargetGeneration = int64(current.Version) + 1
+	if current.QuotaResetAt != nil {
+		mutation.TargetPeriodEpoch = *current.QuotaResetAt
 	}
+	nextReset := int64(0)
+	if mutation.NextResetAt != nil {
+		nextReset = *mutation.NextResetAt
+	}
+	digest := sha256.Sum256([]byte(fmt.Sprintf("client=%s;generation=%d;depleted=%t;reset=%t;period=%d;next=%d",
+		mutation.ClientID, mutation.TargetGeneration, mutation.Depleted, mutation.ResetPeriod, mutation.TargetPeriodEpoch, nextReset)))
+	mutation.TargetPayloadHash = hex.EncodeToString(digest[:])
+	return mutation
+}
+
+func (r *Reconciler) pendingEnforcementTarget(clientID string) (bool, QuotaMutation, error) {
+	if r == nil || r.repo == nil || r.repo.db == nil {
+		return false, QuotaMutation{}, nil
+	}
+	var mutation QuotaMutation
+	mutation.ClientID = clientID
 	var state string
 	var nextRetry int64
-	err := r.repo.db.QueryRow(`SELECT state,next_retry_at FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&state, &nextRetry)
+	var depleted int
+	err := r.repo.db.QueryRow(`SELECT state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch
+FROM quota_enforcement WHERE client_id=? AND state<>'superseded'`, clientID).
+		Scan(&state, &nextRetry, &mutation.TargetGeneration, &mutation.TargetPayloadHash, &depleted, &mutation.TargetPeriodEpoch)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return false, QuotaMutation{}, nil
 	}
 	if err != nil {
-		return false, err
+		return false, QuotaMutation{}, err
 	}
+	mutation.Depleted = depleted != 0
 	if state == "failed" && nextRetry > r.now().UTC().Unix() {
-		return false, nil
+		return false, QuotaMutation{}, nil
 	}
-	return state == "pending" || state == "applying" || state == "failed", nil
+	return state == "pending" || state == "applying" || state == "failed", mutation, nil
 }
 
 type enforcementUpdate struct {
 	clientID string
 	state    string
 	cause    error
+	mutation QuotaMutation
 }
 
 func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64) error {
@@ -160,20 +189,6 @@ func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64
 		return err
 	}
 	defer tx.Rollback()
-	statement, err := tx.Prepare(`INSERT INTO quota_enforcement
-  (client_id,state,next_retry_at,last_error,attempts,updated_at)
-  SELECT ?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
-  ON CONFLICT(client_id) DO UPDATE SET
-    state=excluded.state,
-    next_retry_at=CASE WHEN quota_enforcement.desired_revision>0 AND excluded.state='failed'
-                       THEN quota_enforcement.next_retry_at ELSE excluded.next_retry_at END,
-    last_error=excluded.last_error,
-    attempts=CASE WHEN excluded.state='pending' THEN quota_enforcement.attempts+1 ELSE quota_enforcement.attempts END,
-    updated_at=excluded.updated_at`)
-	if err != nil {
-		return err
-	}
-	defer statement.Close()
 	for _, update := range updates {
 		message := ""
 		if update.cause != nil {
@@ -183,12 +198,35 @@ func (r *Reconciler) markEnforcementBatch(updates []enforcementUpdate, now int64
 		if update.state != "enforced" {
 			nextRetry = now
 		}
-		if _, err := statement.Exec(update.clientID, update.state, nextRetry, message, now, update.clientID); err != nil {
+		mutation := update.mutation
+		if update.state == "pending" {
+			if _, err := tx.Exec(`UPDATE quota_enforcement SET state='superseded',superseded_revision=desired_revision,updated_at=?
+WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_payload_hash<>?)`,
+				now, update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash); err != nil {
+				return err
+			}
+			depleted := 0
+			if mutation.Depleted {
+				depleted = 1
+			}
+			if _, err := tx.Exec(`INSERT INTO quota_enforcement
+  (client_id,target_generation,target_payload_hash,target_depleted,target_period_epoch,state,next_retry_at,last_error,attempts,updated_at)
+  SELECT ?,?,?,?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
+  ON CONFLICT(client_id,target_generation) DO UPDATE SET
+    state=CASE WHEN quota_enforcement.state='superseded' THEN quota_enforcement.state ELSE excluded.state END,
+    next_retry_at=excluded.next_retry_at,last_error=excluded.last_error,
+    attempts=quota_enforcement.attempts+1,updated_at=excluded.updated_at`,
+				update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash, depleted, mutation.TargetPeriodEpoch,
+				update.state, nextRetry, message, now, update.clientID); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE quota_enforcement SET state=?,next_retry_at=?,last_error=?,updated_at=?
+WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
+			update.state, nextRetry, message, now, update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash); err != nil {
 			return err
 		}
-	}
-	if err := statement.Close(); err != nil {
-		return err
 	}
 	return tx.Commit()
 }
