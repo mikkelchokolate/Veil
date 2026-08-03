@@ -27,28 +27,7 @@ func TestPanelMieruHTML(t *testing.T) {
 }
 
 func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
-	originalValidator := stagedConfigValidator
-	originalRunner := serviceActionRunner
-	originalHealth := serviceHealthChecker
-	originalFirewall := firewallApplierInstance
-	t.Cleanup(func() {
-		stagedConfigValidator = originalValidator
-		serviceActionRunner = originalRunner
-		serviceHealthChecker = originalHealth
-		firewallApplierInstance = originalFirewall
-	})
-	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
-		results := make([]ConfigValidationResult, 0, len(paths))
-		for _, path := range paths {
-			results = append(results, ConfigValidationResult{Name: path, Config: path, Valid: true})
-		}
-		return results
-	}
-	serviceActionRunner = func(command []string) ServiceActionResult {
-		return ServiceActionResult{Command: command, Success: true}
-	}
-	serviceHealthChecker = func(name string) ServiceHealthResult { return ServiceHealthResult{Name: name, Healthy: true} }
-	firewallApplierInstance = &fakeFirewallApplier{}
+	stubManagementApplySideEffects(t)
 	dir := t.TempDir()
 	applyRoot := filepath.Join(dir, "apply")
 	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})

@@ -8,10 +8,18 @@ import (
 )
 
 func TestManagementAPICreatesMieruTCPAndUDPInbounds(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	stubManagementApplySideEffects(t)
+	r, reloader := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	if state, ok := reloader.(*managementState); ok {
+		t.Cleanup(func() {
+			if err := state.Close(); err != nil {
+				t.Errorf("close management state: %v", err)
+			}
+		})
+	}
 	for _, body := range []string{
-		`{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true}`,
-		`{"name":"mieru-udp","protocol":"mieru","transport":"udp","port":443,"enabled":true}`,
+		`{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"profiles":[{"name":"test","password":"test-password","enabled":true}]}`,
+		`{"name":"mieru-udp","protocol":"mieru","transport":"udp","port":443,"enabled":true,"password":"test-password"}`,
 	} {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(body)))

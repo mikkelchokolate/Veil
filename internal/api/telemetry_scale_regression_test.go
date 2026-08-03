@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -14,31 +13,26 @@ func TestTrafficSummaryAggregatesAllTenThousandAndOneClients(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientStatement, err := tx.Prepare(`INSERT INTO clients
-	  (id,name,enabled,quota_bytes,quota_reset_policy,depleted,created_at,updated_at,version)
-	  VALUES(?,?,1,?,'never',0,?,?,1)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	counterStatement, err := tx.Prepare(`INSERT INTO traffic_counters
-	  (client_id,binding_id,upload_bytes,download_bytes,last_observed_at,telemetry_state,updated_at)
-	  VALUES(?,'',1,2,?,'observed',?)`)
-	if err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().Unix()
 	quota := int64(1)
-	for index := 0; index < 10001; index++ {
-		id := fmt.Sprintf("scale-client-%05d", index)
-		if _, err := clientStatement.Exec(id, id, quota, now, now); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := counterStatement.Exec(id, now, now); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := tx.Exec(`WITH RECURSIVE sequence(index_value) AS (
+	  VALUES(0)
+	  UNION ALL
+	  SELECT index_value + 1 FROM sequence WHERE index_value < 10000
+	)
+	INSERT INTO clients
+	  (id,name,enabled,quota_bytes,quota_reset_policy,depleted,created_at,updated_at,version)
+	SELECT printf('scale-client-%05d', index_value), printf('scale-client-%05d', index_value),
+	       1, ?, 'never', 0, ?, ?, 1
+	FROM sequence`, quota, now, now); err != nil {
+		t.Fatal(err)
 	}
-	_ = clientStatement.Close()
-	_ = counterStatement.Close()
+	if _, err := tx.Exec(`INSERT INTO traffic_counters
+	  (client_id,binding_id,upload_bytes,download_bytes,last_observed_at,telemetry_state,updated_at)
+	SELECT id, '', 1, 2, ?, 'observed', ?
+	FROM clients WHERE id LIKE 'scale-client-%'`, now, now); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
