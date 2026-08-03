@@ -26,7 +26,12 @@ func degradedStateMiddleware(state *managementState, next http.Handler) http.Han
 			state.mu.Lock()
 			storageUnavailable := state.storageDegradedErr != nil || (state.requireApplyTracking && state.db == nil)
 			stateUnavailable := state.startupStateLoadFailed
+			privilegedUnavailable := state.startupPrivilegedFailure
 			state.mu.Unlock()
+			if privilegedUnavailable {
+				writePrivilegedHelperUnavailable(w)
+				return
+			}
 			if storageUnavailable || stateUnavailable {
 				code := "state_unavailable"
 				component := "state_store"

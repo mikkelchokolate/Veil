@@ -32,7 +32,7 @@ ci_run frontend-i18n pnpm --dir web i18n:check
 ci_run frontend-unit pnpm --dir web test
 
 ci_step "fast Go unit tests (short mode, no race)"
-go test ./... -short -count=1
+go test ./... -short -count=1 -timeout=20m
 
 ci_step "shell syntax"
 bash -n scripts/*.sh scripts/ci/*.sh

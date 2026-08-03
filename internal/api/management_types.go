@@ -59,6 +59,7 @@ type managementState struct {
 	allowDevAnonymous              bool
 	startupStateLoadFailed         bool
 	startupStateLoadErr            error
+	startupPrivilegedFailure       bool
 	storageDegradedErr             error
 	subscriptionLimiter            subscriptionRateLimiter
 	appliedProjectionMu            sync.Mutex

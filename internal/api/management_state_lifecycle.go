@@ -178,6 +178,8 @@ func newManagementState(info ServerInfo) *managementState {
 		if info.StatePath != "" {
 			state.startupStateLoadFailed = true
 			state.startupStateLoadErr = err
+			var privilegedErr *privileged.Error
+			state.startupPrivilegedFailure = errors.As(err, &privilegedErr)
 			state.allowDevAnonymous = false
 		}
 	}
